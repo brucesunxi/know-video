@@ -2,7 +2,6 @@ import {
   Bell,
   Box,
   ChevronDown,
-  Clapperboard,
   Clock3,
   Download,
   Film,
@@ -25,9 +24,10 @@ import {
   WandSparkles,
   Zap
 } from "lucide-react";
-import { demoMessages, demoProject, lightThemeEditPlan } from "@/lib/mock-data";
+import { lightThemeEditPlan } from "@/lib/mock-data";
 import { pipelineSteps } from "@/lib/architecture";
-import type { EditChange, Scene } from "@/lib/types";
+import { getCurrentProjectSnapshot } from "@/lib/project-store";
+import type { ChatMessage, EditChange, EditPlan, Project, Scene } from "@/lib/types";
 
 function Sidebar() {
   return (
@@ -57,18 +57,19 @@ function Sidebar() {
   );
 }
 
-function TopBar() {
+function TopBar({ project, source }: { project: Project; source: "database" | "mock" }) {
   return (
     <header className="topbar">
       <div className="engine-picker">
         <Zap size={18} />
-        <span>{demoProject.engine}</span>
+        <span>{project.engine}</span>
         <ChevronDown size={16} />
       </div>
-      <h1>{demoProject.title}</h1>
+      <h1>{project.title}</h1>
       <div className="topbar-actions">
+        <div className={`source-pill ${source}`}>{source === "database" ? "Neon" : "Mock"}</div>
         <div className="credits">
-          {demoProject.plan} · {demoProject.credits} credits · <span>Get more</span>
+          {project.plan} · {project.credits} credits · <span>Get more</span>
         </div>
         <button aria-label="Theme">
           <Moon size={22} />
@@ -87,7 +88,7 @@ function TopBar() {
   );
 }
 
-function VideoPreview() {
+function VideoPreview({ firstScene, durationSeconds }: { firstScene?: Scene; durationSeconds: number }) {
   return (
     <section className="video-shell" aria-label="Video preview">
       <div className="preview-toolbar">
@@ -123,12 +124,12 @@ function VideoPreview() {
           </button>
           <div className="watermark">powered by <strong>K</strong> nowlify</div>
           <div className="caption">
-            VYBEA is a project-level accountability governance operating environment built for entertainment IPs.
+            {firstScene?.voiceover ?? "Your video voiceover will appear here."}
           </div>
           <div className="player-controls">
             <Play size={22} fill="currentColor" />
             <span className="volume" />
-            <span>0:00 / 0:34</span>
+            <span>0:00 / 0:{String(durationSeconds).padStart(2, "0")}</span>
           </div>
           <div className="fullscreen">□</div>
         </div>
@@ -179,12 +180,12 @@ function ToolDock() {
   );
 }
 
-function VoiceoverPanel() {
+function VoiceoverPanel({ firstScene }: { firstScene?: Scene }) {
   return (
     <section className="voiceover">
       <div>
         <span className="eyebrow">Voiceover</span>
-        <p>VYBEA is a project-level accountability governance operating environment built for entertainment IPs.</p>
+        <p>{firstScene?.voiceover ?? "Select a scene to edit its voiceover."}</p>
       </div>
       <button>Edit</button>
     </section>
@@ -217,8 +218,8 @@ function ChangeCard({ change }: { change: EditChange }) {
   );
 }
 
-function EditorPanel() {
-  const visibleChanges = lightThemeEditPlan.changes.slice(3, 5);
+function EditorPanel({ messages, editPlan }: { messages: ChatMessage[]; editPlan: EditPlan }) {
+  const visibleChanges = editPlan.changes.slice(-2);
 
   return (
     <aside className="editor">
@@ -231,7 +232,7 @@ function EditorPanel() {
             <p>Here is the plan to revert the entire video back to the original premium dark theme...</p>
           </div>
         </div>
-        {demoMessages.map((message) => {
+        {messages.map((message) => {
           if (message.type === "version") {
             return (
               <div className="version-pill" key={message.id}>
@@ -257,7 +258,7 @@ function EditorPanel() {
               <div className="plan-card">
                 <p>{message.content}</p>
                 <ul>
-                  <li><strong>Affected scenes:</strong> {message.editPlan?.affectedScenes.join(", ")}</li>
+                  <li><strong>Affected scenes:</strong> {(message.editPlan ?? editPlan).affectedScenes.join(", ")}</li>
                   <li><strong>Regenerate:</strong> scene images, clips, thumbnails, final render</li>
                   <li><strong>Keep:</strong> timing, narration, captions, project structure</li>
                 </ul>
@@ -311,21 +312,24 @@ function ArchitecturePanel() {
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  const { project, messages, source } = await getCurrentProjectSnapshot();
+  const firstScene = project.currentVersion.scenes[0];
+
   return (
     <main className="app-frame">
       <Sidebar />
       <div className="workspace">
-        <TopBar />
+        <TopBar project={project} source={source} />
         <div className="content-grid">
           <div className="studio">
-            <VideoPreview />
-            <SceneTimeline scenes={demoProject.currentVersion.scenes} />
+            <VideoPreview firstScene={firstScene} durationSeconds={project.currentVersion.durationSeconds} />
+            <SceneTimeline scenes={project.currentVersion.scenes} />
             <ToolDock />
-            <VoiceoverPanel />
+            <VoiceoverPanel firstScene={firstScene} />
             <ArchitecturePanel />
           </div>
-          <EditorPanel />
+          <EditorPanel messages={messages} editPlan={lightThemeEditPlan} />
         </div>
       </div>
     </main>

@@ -157,6 +157,25 @@ button {
   text-decoration: underline;
 }
 
+.source-pill {
+  border-radius: 999px;
+  padding: 8px 11px;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.source-pill.database {
+  background: #e9fbef;
+  color: #14743c;
+}
+
+.source-pill.mock {
+  background: #eeeef8;
+  color: #5353a3;
+}
+
 .notification {
   position: relative;
 }

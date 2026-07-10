@@ -23,6 +23,9 @@ create table if not exists project_versions (
 );
 
 alter table projects
+  drop constraint if exists projects_current_version_fk;
+
+alter table projects
   add constraint projects_current_version_fk
   foreign key (current_version_id)
   references project_versions(id)

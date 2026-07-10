@@ -53,6 +53,15 @@ The important design decision is that every conversational edit creates an `edit
 
 Apply the schema in `db/schema.sql` to Neon.
 
+```bash
+npm run db:init
+npm run db:seed
+```
+
+`db:init` applies the schema. `db:seed` inserts the demo VYBEA project used by the current editor screen.
+
+The app reads from Neon when `DATABASE_URL` is configured. If no project exists or the database is unavailable, it falls back to mock data so the UI still runs.
+
 ## API Routes
 
 - `POST /api/edit-plan`
