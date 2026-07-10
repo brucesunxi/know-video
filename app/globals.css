@@ -304,6 +304,25 @@ button {
   color: #fff;
 }
 
+.player-frame.light-scene {
+  background:
+    radial-gradient(circle at 52% 45%, rgba(22, 184, 199, 0.18), transparent 12%),
+    linear-gradient(90deg, transparent 49.95%, rgba(20, 30, 42, 0.08) 49.95% 50.05%, transparent 50.05%),
+    linear-gradient(#ffffff, #ecf3f3);
+  box-shadow: inset 0 -62px 80px rgba(102, 120, 128, 0.16);
+  color: #15202b;
+}
+
+.scene-title-overlay {
+  position: absolute;
+  left: 34px;
+  top: 30px;
+  max-width: 48%;
+  color: currentColor;
+  font-size: 24px;
+  font-weight: 850;
+}
+
 .play-button {
   position: absolute;
   left: 50%;
@@ -327,6 +346,13 @@ button {
   padding: 7px 9px;
   color: rgba(255, 255, 255, 0.7);
   font-size: 14px;
+}
+
+.light-scene .watermark,
+.light-scene .caption {
+  background: rgba(255, 255, 255, 0.84);
+  color: #20272d;
+  box-shadow: 0 8px 28px rgba(22, 36, 45, 0.12);
 }
 
 .watermark strong {
@@ -405,6 +431,21 @@ button {
   background: #07111d;
 }
 
+.scene-thumb {
+  border: 2px solid transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.scene-thumb.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(22, 184, 199, 0.16);
+}
+
+.scene-thumb.light {
+  background: linear-gradient(135deg, #ffffff, #dfeeee);
+}
+
 .mini-grid {
   position: absolute;
   inset: 10px;
@@ -421,6 +462,23 @@ button {
   color: #fff;
   font-size: 13px;
   font-weight: 850;
+}
+
+.scene-thumb strong {
+  position: absolute;
+  left: 32px;
+  right: 8px;
+  bottom: 7px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-thumb.light span,
+.scene-thumb.light strong {
+  color: #111827;
 }
 
 .insert-scene {
@@ -460,6 +518,7 @@ button {
 }
 
 .voiceover,
+.scene-inspector,
 .architecture-panel {
   display: flex;
   align-items: flex-start;
@@ -469,6 +528,42 @@ button {
   border-radius: 14px;
   background: #ededeb;
   padding: 14px 18px;
+}
+
+.scene-inspector {
+  display: grid;
+  gap: 16px;
+}
+
+.scene-inspector h2 {
+  margin: 6px 0 0;
+  font-size: 20px;
+}
+
+.scene-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.scene-fields div {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
+.scene-fields strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #393936;
+}
+
+.scene-fields p {
+  margin: 0;
+  color: #5b5b56;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .eyebrow {
@@ -764,8 +859,13 @@ button {
 
 .input-actions .send {
   margin-left: auto;
-  color: #b8b8b2;
+  color: #111;
   font-size: 24px;
+}
+
+.input-actions .send:disabled {
+  color: #b8b8b2;
+  cursor: not-allowed;
 }
 
 @media (max-width: 1180px) {
@@ -817,6 +917,10 @@ button {
   }
 
   .architecture-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .scene-fields {
     grid-template-columns: 1fr;
   }
 
