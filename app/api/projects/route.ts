@@ -9,6 +9,8 @@ const requestSchema = z.object({
   baseProject: z.unknown().optional()
 });
 
+export const maxDuration = 120;
+
 function publicEngine(engine: string) {
   return engine === "heuristic" ? "heuristic" : "ai";
 }
