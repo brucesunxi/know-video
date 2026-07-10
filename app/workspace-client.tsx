@@ -2,243 +2,295 @@
 
 import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
 import {
-  Bell,
-  Box,
-  ChevronDown,
-  Clock3,
+  ArrowRight,
+  Check,
+  ChevronRight,
+  Clapperboard,
   Download,
   Film,
-  Gift,
-  Grid2X2,
-  Image,
-  MessageCirclePlus,
-  Mic,
-  Moon,
-  Music2,
+  ImagePlus,
+  Layers3,
+  Loader2,
+  MessageSquareText,
+  Mic2,
+  PanelRightOpen,
   Play,
   Plus,
-  RotateCcw,
-  Search,
-  Share2,
+  RefreshCcw,
+  Send,
+  Settings2,
   Sparkles,
-  Subtitles,
   Upload,
-  User,
-  WandSparkles,
-  Zap
+  WandSparkles
 } from "lucide-react";
-import { pipelineSteps } from "@/lib/architecture";
 import type { ChatMessage, EditChange, EditPlan, Project, Scene } from "@/lib/types";
 
 type Source = "database" | "mock";
+type Stage = "brief" | "generating" | "studio";
+type Engine = "deepseek-flash" | "openai" | "heuristic";
 
-function Sidebar() {
-  return (
-    <aside className="sidebar" aria-label="Workspace navigation">
-      <div className="brand-mark">K</div>
-      <nav className="side-nav">
-        <button aria-label="Account">
-          <User size={18} />
-        </button>
-        <button className="active" aria-label="New conversation">
-          <MessageCirclePlus size={20} />
-        </button>
-        <button aria-label="Search">
-          <Search size={20} />
-        </button>
-        <button aria-label="Projects">
-          <Grid2X2 size={20} />
-        </button>
-      </nav>
-      <div className="side-footer">
-        <button aria-label="Help">?</button>
-        <button aria-label="Billing">
-          <Box size={18} />
-        </button>
-      </div>
-    </aside>
-  );
+const promptExamples = [
+  "生成一个 30 秒的 AI 视频生成平台产品介绍视频，风格高级、节奏快、适合官网首屏。",
+  "做一个关于跨境电商库存管理 SaaS 的解释视频，目标客户是运营负责人。",
+  "制作一个教育产品宣传视频，展示老师如何用 AI 快速生成课程内容。"
+];
+
+const progressSteps = [
+  "解析视频目标",
+  "拆分场景和镜头",
+  "撰写旁白与字幕",
+  "生成视觉和运动提示词",
+  "保存项目版本"
+];
+
+function durationLabel(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return minutes > 0 ? `${minutes}:${String(rest).padStart(2, "0")}` : `0:${String(rest).padStart(2, "0")}`;
 }
 
-function TopBar({ project, source }: { project: Project; source: Source }) {
-  return (
-    <header className="topbar">
-      <div className="engine-picker">
-        <Zap size={18} />
-        <span>{project.engine}</span>
-        <ChevronDown size={16} />
-      </div>
-      <h1>{project.title}</h1>
-      <div className="topbar-actions">
-        <div className={`source-pill ${source}`}>{source === "database" ? "Neon" : "Local state"}</div>
-        <div className="credits">
-          {project.plan} · {project.credits} credits · <span>Get more</span>
-        </div>
-        <button aria-label="Theme">
-          <Moon size={22} />
-        </button>
-        <button className="notification" aria-label="Notifications">
-          <Bell size={22} />
-          <span>2</span>
-        </button>
-        <button aria-label="Rewards">
-          <Gift size={22} />
-        </button>
-        <div className="slack-dot" aria-label="Slack integration" />
-        <div className="avatar">S</div>
-      </div>
-    </header>
-  );
+function uniqueRegenerate(plan: EditPlan) {
+  return Array.from(new Set(plan.changes.flatMap((change) => change.regenerate))).join(", ");
 }
 
-function VideoPreview({
-  scene,
-  durationSeconds,
-  isRendering
+function Shell({
+  children,
+  project,
+  source,
+  stage,
+  onNewVideo
 }: {
-  scene?: Scene;
-  durationSeconds: number;
-  isRendering: boolean;
+  children: React.ReactNode;
+  project: Project;
+  source: Source;
+  stage: Stage;
+  onNewVideo: () => void;
 }) {
-  const isLight = scene?.style.theme.includes("light");
+  return (
+    <main className="kv-shell">
+      <aside className="kv-sidebar">
+        <div className="kv-logo">K</div>
+        <nav className="kv-nav">
+          <button className={stage === "brief" ? "active" : ""} onClick={onNewVideo} type="button">
+            <Plus size={18} />
+          </button>
+          <button className={stage === "studio" ? "active" : ""} type="button">
+            <Clapperboard size={18} />
+          </button>
+          <button type="button">
+            <Layers3 size={18} />
+          </button>
+          <button type="button">
+            <Settings2 size={18} />
+          </button>
+        </nav>
+      </aside>
+      <section className="kv-app">
+        <header className="kv-topbar">
+          <div>
+            <span className="kv-eyebrow">AI Video Studio</span>
+            <h1>{stage === "brief" ? "Create a video from one request" : project.title}</h1>
+          </div>
+          <div className="kv-status-row">
+            <span>{source === "database" ? "Neon connected" : "Local fallback"}</span>
+            <span>DeepSeek flash</span>
+            <span>R2 storage</span>
+          </div>
+        </header>
+        {children}
+      </section>
+    </main>
+  );
+}
+
+function BriefScreen({
+  prompt,
+  isBusy,
+  currentProject,
+  onPromptChange,
+  onUseExample,
+  onSubmit,
+  onOpenStudio
+}: {
+  prompt: string;
+  isBusy: boolean;
+  currentProject: Project;
+  onPromptChange: (value: string) => void;
+  onUseExample: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onOpenStudio: () => void;
+}) {
+  return (
+    <div className="kv-brief">
+      <section className="kv-brief-main">
+        <div className="kv-section-heading">
+          <span className="kv-pill">Text to video</span>
+          <h2>Describe the video. The system plans scenes, script, motion, and edit checkpoints.</h2>
+        </div>
+        <form className="kv-prompt-box" onSubmit={onSubmit}>
+          <textarea
+            onChange={(event) => onPromptChange(event.target.value)}
+            placeholder="例如：生成一个 30 秒产品介绍视频，展示用户输入需求、AI 自动分镜、生成视频并能聊天修改..."
+            value={prompt}
+          />
+          <div className="kv-prompt-tools">
+            <button type="button">
+              <Upload size={18} />
+              参考素材
+            </button>
+            <button type="button">
+              <Mic2 size={18} />
+              语音输入
+            </button>
+            <button className="kv-primary" disabled={isBusy || prompt.trim().length < 4} type="submit">
+              {isBusy ? <Loader2 className="kv-spin" size={18} /> : <Sparkles size={18} />}
+              开始生成
+            </button>
+          </div>
+        </form>
+        <div className="kv-example-grid">
+          {promptExamples.map((example) => (
+            <button key={example} onClick={() => onUseExample(example)} type="button">
+              <span>{example}</span>
+              <ArrowRight size={16} />
+            </button>
+          ))}
+        </div>
+      </section>
+      <aside className="kv-brief-side">
+        <div className="kv-side-panel">
+          <span className="kv-eyebrow">Current project</span>
+          <h3>{currentProject.title}</h3>
+          <p>{currentProject.currentVersion.scenes.length} scenes · {durationLabel(currentProject.currentVersion.durationSeconds)}</p>
+          <button onClick={onOpenStudio} type="button">
+            打开工作室
+            <ChevronRight size={16} />
+          </button>
+        </div>
+        <div className="kv-side-panel">
+          <span className="kv-eyebrow">Pipeline</span>
+          <ol className="kv-mini-steps">
+            <li>DeepSeek flash creates storyboard JSON</li>
+            <li>Neon stores projects, versions, scenes</li>
+            <li>R2 stores uploads and generated assets</li>
+            <li>Chat edits create reviewable plans</li>
+          </ol>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function GeneratingScreen({ prompt, progress }: { prompt: string; progress: number }) {
+  const activeIndex = Math.min(progressSteps.length - 1, Math.floor(progress / 22));
 
   return (
-    <section className="video-shell" aria-label="Video preview">
-      <div className="preview-toolbar">
-        <div className="view-switch">
-          <button className="selected">
-            <Film size={14} />
-            Video
-          </button>
-          <button>
-            <Grid2X2 size={14} />
-            Storyboard
-          </button>
+    <div className="kv-generating">
+      <div className="kv-render-orbit">
+        <Film size={44} />
+        <span />
+      </div>
+      <div className="kv-section-heading centered">
+        <span className="kv-pill">Generating</span>
+        <h2>Building your video plan with DeepSeek flash</h2>
+        <p>{prompt}</p>
+      </div>
+      <div className="kv-progress">
+        <div style={{ width: `${progress}%` }} />
+      </div>
+      <div className="kv-progress-steps">
+        {progressSteps.map((step, index) => (
+          <div className={index <= activeIndex ? "done" : ""} key={step}>
+            {index < activeIndex ? <Check size={16} /> : index === activeIndex ? <Loader2 className="kv-spin" size={16} /> : <span />}
+            <p>{step}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PreviewCanvas({ scene, isBusy }: { scene?: Scene; isBusy: boolean }) {
+  const light = scene?.style.theme.toLowerCase().includes("light");
+
+  return (
+    <section className={`kv-preview ${light ? "light" : ""}`}>
+      <div className="kv-preview-meta">
+        <span>Scene {scene?.sceneNumber ?? 1}</span>
+        <strong>{scene?.title ?? "No scene selected"}</strong>
+      </div>
+      <div className="kv-preview-grid">
+        <div className="kv-preview-card wide">
+          <span>{scene?.style.mood ?? "planning"}</span>
         </div>
-        <div className="preview-actions">
-          <button className="dark">
-            <Share2 size={15} />
-            Share
-          </button>
-          <button>
-            <Sparkles size={15} />
-            Render plan
-          </button>
-          <button>
-            <Download size={15} />
-            Export
-          </button>
+        <div className="kv-preview-card">
+          <span>{scene?.durationSeconds ?? 0}s</span>
+        </div>
+        <div className="kv-preview-card">
+          <span>{scene?.style.theme ?? "theme"}</span>
         </div>
       </div>
-      <div className="player-card">
-        <div className={`player-frame ${isLight ? "light-scene" : ""}`}>
-          <div className="scene-title-overlay">{scene?.title ?? "Create a video to begin"}</div>
-          <button className="play-button" aria-label="Play video">
-            <Play size={30} fill="currentColor" />
-          </button>
-          <div className="watermark">interactive storyboard</div>
-          <div className="caption">
-            {isRendering ? "Applying scene changes and preparing render tasks..." : scene?.voiceover ?? "Describe a video in the editor to generate scenes."}
-          </div>
-          <div className="player-controls">
-            <Play size={22} fill="currentColor" />
-            <span className="volume" />
-            <span>0:00 / 0:{String(durationSeconds).padStart(2, "0")}</span>
-          </div>
-          <div className="fullscreen">□</div>
-        </div>
-      </div>
+      <button className="kv-play" type="button">
+        {isBusy ? <Loader2 className="kv-spin" size={28} /> : <Play fill="currentColor" size={30} />}
+      </button>
+      <p className="kv-caption">{isBusy ? "Updating video plan..." : scene?.voiceover ?? "Generate a video to preview scenes."}</p>
     </section>
   );
 }
 
-function SceneTimeline({
+function Storyboard({
   scenes,
   selectedScene,
-  onSelectScene
+  onSelect
 }: {
   scenes: Scene[];
   selectedScene: number;
-  onSelectScene: (sceneNumber: number) => void;
+  onSelect: (scene: number) => void;
 }) {
   return (
-    <section className="timeline" aria-label="Scene timeline">
-      {scenes.map((scene) => {
-        const isLight = scene.style.theme.includes("light");
-        return (
-          <div className="timeline-item" key={scene.id}>
-            <button
-              className={`scene-thumb ${selectedScene === scene.sceneNumber ? "selected" : ""} ${isLight ? "light" : ""}`}
-              onClick={() => onSelectScene(scene.sceneNumber)}
-              type="button"
-            >
-              <div className="mini-grid" />
-              <span>S{scene.sceneNumber}</span>
-              <strong>{scene.title}</strong>
-            </button>
-            {scene.sceneNumber < scenes.length ? (
-              <button className="insert-scene" aria-label="Insert scene">
-                <Plus size={12} />
-              </button>
-            ) : null}
-          </div>
-        );
-      })}
-    </section>
-  );
-}
-
-function ToolDock({ onUploadClick }: { onUploadClick: () => void }) {
-  const tools = [
-    { label: "Add music", icon: Music2 },
-    { label: "Add logo", icon: Image },
-    { label: "Upload media", icon: Upload },
-    { label: "Captions", icon: Subtitles, active: true },
-    { label: "Add interaction", icon: WandSparkles },
-    { label: "Change voice", icon: Mic },
-    { label: "Speed", icon: Clock3 }
-  ];
-
-  return (
-    <section className="tool-dock" aria-label="Video tools">
-      {tools.map((tool) => {
-        const Icon = tool.icon;
-        return (
+    <section className="kv-storyboard">
+      <div className="kv-strip-heading">
+        <h3>Storyboard</h3>
+        <span>{scenes.length} scenes</span>
+      </div>
+      <div className="kv-scene-strip">
+        {scenes.map((scene) => (
           <button
-            className={tool.active ? "active" : ""}
-            key={tool.label}
-            onClick={tool.label === "Upload media" ? onUploadClick : undefined}
+            className={scene.sceneNumber === selectedScene ? "active" : ""}
+            key={scene.id}
+            onClick={() => onSelect(scene.sceneNumber)}
             type="button"
           >
-            <Icon size={22} />
-            <span>{tool.label}</span>
+            <span>S{scene.sceneNumber}</span>
+            <strong>{scene.title}</strong>
+            <small>{scene.durationSeconds}s</small>
           </button>
-        );
-      })}
+        ))}
+      </div>
     </section>
   );
 }
 
-function SceneInspector({ scene }: { scene?: Scene }) {
+function ScenePanel({ scene }: { scene?: Scene }) {
   return (
-    <section className="scene-inspector">
-      <div>
-        <span className="eyebrow">Selected scene</span>
-        <h2>{scene?.title ?? "No scene selected"}</h2>
+    <section className="kv-scene-panel">
+      <div className="kv-strip-heading">
+        <h3>Scene direction</h3>
+        <span>{scene?.style.theme ?? "theme"}</span>
       </div>
-      <div className="scene-fields">
-        <div>
-          <strong>Voiceover</strong>
-          <p>{scene?.voiceover ?? "Generate a video first."}</p>
-        </div>
-        <div>
-          <strong>Visual prompt</strong>
-          <p>{scene?.visualPrompt ?? "Scene visual prompt will appear here."}</p>
-        </div>
-        <div>
-          <strong>Motion</strong>
-          <p>{scene?.motionPrompt ?? "Motion prompt will appear here."}</p>
-        </div>
+      <div className="kv-scene-grid">
+        <article>
+          <span>Voiceover</span>
+          <p>{scene?.voiceover ?? "No voiceover yet."}</p>
+        </article>
+        <article>
+          <span>Visual prompt</span>
+          <p>{scene?.visualPrompt ?? "No visual prompt yet."}</p>
+        </article>
+        <article>
+          <span>Motion prompt</span>
+          <p>{scene?.motionPrompt ?? "No motion prompt yet."}</p>
+        </article>
       </div>
     </section>
   );
@@ -246,55 +298,25 @@ function SceneInspector({ scene }: { scene?: Scene }) {
 
 function ChangeCard({ change }: { change: EditChange }) {
   return (
-    <article className="change-card">
-      <div className="change-title">
+    <article className="kv-change">
+      <div>
         <strong>Scene {change.sceneNumber}</strong>
         <span>{change.status}</span>
       </div>
-      <div className="before-after">
-        <div>
-          <small>Before</small>
-          <div className={`diff-preview ${change.before.thumbnailTone}`}>
-            <span>{change.before.title}</span>
-          </div>
-        </div>
-        <div className="arrow">→</div>
-        <div>
-          <small>After</small>
-          <div className={`diff-preview ${change.after.thumbnailTone}`}>
-            <span>{change.after.title}</span>
-          </div>
-        </div>
-      </div>
+      <p>{change.after.visualPrompt}</p>
     </article>
   );
 }
 
-function ArchitecturePanel() {
-  return (
-    <section className="architecture-panel">
-      <div>
-        <span className="eyebrow">Build plan</span>
-        <h2>Conversational video engineering loop</h2>
-      </div>
-      <ol>
-        {pipelineSteps.map((step) => (
-          <li key={step}>{step}</li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-function EditorPanel({
+function ChatPanel({
   messages,
   pendingPlan,
   input,
   isBusy,
   onInput,
   onSubmit,
-  onApplyPlan,
-  onCancelPlan
+  onApply,
+  onCancel
 }: {
   messages: ChatMessage[];
   pendingPlan?: EditPlan;
@@ -302,90 +324,140 @@ function EditorPanel({
   isBusy: boolean;
   onInput: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onApplyPlan: () => void;
-  onCancelPlan: () => void;
+  onApply: () => void;
+  onCancel: () => void;
 }) {
   return (
-    <aside className="editor">
-      <div className="editor-header">Editor</div>
-      <div className="chat-stream">
-        <div className="reply-context">
-          <RotateCcw size={17} />
-          <div>
-            <strong>Live planning mode</strong>
-            <p>Describe a new video, or ask for scene-level edits such as “make scene 2 lighter”.</p>
-          </div>
+    <aside className="kv-chat">
+      <header>
+        <div>
+          <span className="kv-eyebrow">Conversational editing</span>
+          <h3>Adjust the video</h3>
         </div>
-        {messages.map((message) => {
-          if (message.type === "version") {
-            return (
-              <div className="version-pill" key={message.id}>
-                <ChevronDown size={16} />
-                <span>{message.content}</span>
-                <button>Restore</button>
+        <PanelRightOpen size={20} />
+      </header>
+      <div className="kv-chat-log">
+        {messages.map((message) => (
+          <div className={`kv-msg ${message.role}`} key={message.id}>
+            <p>{message.content}</p>
+            {message.editPlan ? (
+              <div className="kv-plan-summary">
+                <span>Affected: {message.editPlan.affectedScenes.join(", ")}</span>
+                <span>Regenerate: {uniqueRegenerate(message.editPlan)}</span>
               </div>
-            );
-          }
-
-          if (message.role === "user") {
-            return (
-              <div className="message user-message" key={message.id}>
-                <p>{message.content}</p>
-                <div className="avatar small">S</div>
-              </div>
-            );
-          }
-
-          return (
-            <div className="message assistant-message" key={message.id}>
-              <div className="assistant-avatar">K</div>
-              <div className="plan-card">
-                <p>{message.content}</p>
-                {message.editPlan ? (
-                  <ul>
-                    <li><strong>Affected scenes:</strong> {message.editPlan.affectedScenes.join(", ")}</li>
-                    <li><strong>Regenerate:</strong> {Array.from(new Set(message.editPlan.changes.flatMap((change) => change.regenerate))).join(", ")}</li>
-                    <li><strong>Status:</strong> waiting for your confirmation</li>
-                  </ul>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
-        {pendingPlan ? (
-          <div className="diff-stack">
-            {pendingPlan.changes.map((change) => (
-              <ChangeCard change={change} key={change.sceneNumber} />
-            ))}
-            <p className="confirm-copy">Apply this plan and create a new editable version?</p>
-            <div className="confirm-actions">
-              <button className="primary" onClick={onApplyPlan} type="button">Yes, apply</button>
-              <button onClick={onCancelPlan} type="button">No, cancel</button>
-            </div>
+            ) : null}
           </div>
+        ))}
+        {pendingPlan ? (
+          <section className="kv-review-plan">
+            <div className="kv-strip-heading">
+              <h3>Review edit plan</h3>
+              <span>{pendingPlan.changes.length} changes</span>
+            </div>
+            <p>{pendingPlan.summary}</p>
+            <div className="kv-change-list">
+              {pendingPlan.changes.map((change) => (
+                <ChangeCard change={change} key={change.sceneNumber} />
+              ))}
+            </div>
+            <div className="kv-review-actions">
+              <button className="kv-primary" disabled={isBusy} onClick={onApply} type="button">
+                {isBusy ? <Loader2 className="kv-spin" size={16} /> : <Check size={16} />}
+                应用修改
+              </button>
+              <button onClick={onCancel} type="button">取消</button>
+            </div>
+          </section>
         ) : null}
       </div>
-      <form className="chat-input" onSubmit={onSubmit}>
+      <form className="kv-chat-form" onSubmit={onSubmit}>
         <textarea
           disabled={isBusy}
           onChange={(event) => onInput(event.target.value)}
-          placeholder="Create a product video about... / Make scene 3 more cinematic..."
+          placeholder="例如：把第 2 场景改成浅色；让整体更电影感；缩短旁白..."
           value={input}
         />
-        <div className="input-actions">
-          <button type="button">
-            <Image size={20} />
-          </button>
-          <button type="button">@</button>
-          <button type="button">
-            <Mic size={20} />
-          </button>
-          <button className="send" disabled={isBusy || input.trim().length === 0} type="submit">
-            ↑
-          </button>
-        </div>
+        <button disabled={isBusy || input.trim().length === 0} type="submit">
+          {isBusy ? <Loader2 className="kv-spin" size={18} /> : <Send size={18} />}
+        </button>
       </form>
     </aside>
+  );
+}
+
+function StudioScreen({
+  project,
+  messages,
+  pendingPlan,
+  input,
+  selectedScene,
+  isBusy,
+  onInput,
+  onSubmit,
+  onApply,
+  onCancel,
+  onSelectScene,
+  onUpload
+}: {
+  project: Project;
+  messages: ChatMessage[];
+  pendingPlan?: EditPlan;
+  input: string;
+  selectedScene: number;
+  isBusy: boolean;
+  onInput: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onApply: () => void;
+  onCancel: () => void;
+  onSelectScene: (scene: number) => void;
+  onUpload: () => void;
+}) {
+  const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === selectedScene) ?? project.currentVersion.scenes[0];
+
+  return (
+    <div className="kv-studio">
+      <section className="kv-studio-main">
+        <div className="kv-actionbar">
+          <div className="kv-tabs">
+            <button className="active" type="button">
+              <Film size={16} />
+              Preview
+            </button>
+            <button type="button">
+              <Layers3 size={16} />
+              Storyboard
+            </button>
+          </div>
+          <div className="kv-actions">
+            <button onClick={onUpload} type="button">
+              <ImagePlus size={16} />
+              素材
+            </button>
+            <button type="button">
+              <RefreshCcw size={16} />
+              重新渲染
+            </button>
+            <button className="kv-primary" type="button">
+              <Download size={16} />
+              导出
+            </button>
+          </div>
+        </div>
+        <PreviewCanvas isBusy={isBusy} scene={scene} />
+        <Storyboard onSelect={onSelectScene} scenes={project.currentVersion.scenes} selectedScene={selectedScene} />
+        <ScenePanel scene={scene} />
+      </section>
+      <ChatPanel
+        input={input}
+        isBusy={isBusy}
+        messages={messages}
+        onApply={onApply}
+        onCancel={onCancel}
+        onInput={onInput}
+        onSubmit={onSubmit}
+        pendingPlan={pendingPlan}
+      />
+    </div>
   );
 }
 
@@ -399,102 +471,119 @@ export function WorkspaceClient({
   source: Source;
 }) {
   const [project, setProject] = useState(initialProject);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      type: "text",
-      content: "Tell me what video you want to create. I will break it into scenes, then you can refine any scene through chat."
-    },
-    ...initialMessages
-  ]);
-  const [input, setInput] = useState("");
+  const [stage, setStage] = useState<Stage>("brief");
+  const [briefPrompt, setBriefPrompt] = useState("");
+  const [chatInput, setChatInput] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [selectedScene, setSelectedScene] = useState(1);
   const [pendingPlan, setPendingPlan] = useState<EditPlan | undefined>();
   const [isBusy, setIsBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const currentScene = useMemo(
-    () => project.currentVersion.scenes.find((scene) => scene.sceneNumber === selectedScene) ?? project.currentVersion.scenes[0],
-    [project.currentVersion.scenes, selectedScene]
-  );
+  const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
 
   function pushMessage(message: Omit<ChatMessage, "id">) {
     setMessages((current) => [...current, { ...message, id: crypto.randomUUID() }]);
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function createVideo(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const request = input.trim();
-    if (!request) return;
+    const prompt = generationPrompt;
+    if (!prompt) return;
 
     setIsBusy(true);
-    setInput("");
+    setProgress(8);
+    setStage("generating");
+
+    const timer = window.setInterval(() => {
+      setProgress((value) => Math.min(92, value + 12));
+    }, 520);
+
+    try {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt })
+      });
+      if (!response.ok) throw new Error("Failed to create project.");
+      const data = await response.json() as {
+        project: Project;
+        messages: ChatMessage[];
+        engine: Engine;
+      };
+
+      setProject(data.project);
+      setMessages([
+        ...data.messages,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          type: "text",
+          content: data.engine === "deepseek-flash"
+            ? "DeepSeek flash 已完成脚本、分镜和镜头提示词。你可以继续用右侧对话改片。"
+            : data.engine === "openai"
+              ? "OpenAI 已完成脚本、分镜和镜头提示词。你可以继续用右侧对话改片。"
+              : "已用本地规则生成初版分镜。"
+        }
+      ]);
+      setSelectedScene(1);
+      setPendingPlan(undefined);
+      setProgress(100);
+      window.setTimeout(() => setStage("studio"), 350);
+    } catch (error) {
+      console.error(error);
+      setStage("brief");
+      pushMessage({
+        role: "assistant",
+        type: "text",
+        content: "生成失败。请检查模型 Key、Vercel 日志或数据库连接。"
+      });
+    } finally {
+      window.clearInterval(timer);
+      setIsBusy(false);
+    }
+  }
+
+  async function submitChat(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const request = chatInput.trim();
+    if (!request) return;
+
+    setChatInput("");
+    setIsBusy(true);
     pushMessage({ role: "user", type: "text", content: request });
 
     try {
-      const createIntent = /create|generate|make|做|生成|创建|制作/i.test(request)
-        && !/scene|第\d|修改|adjust|change|edit|改/i.test(request);
-
-      if (createIntent) {
-        const response = await fetch("/api/projects", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ prompt: request })
-        });
-        if (!response.ok) throw new Error("Failed to create project.");
-        const data = await response.json() as {
-          project: Project;
-          messages: ChatMessage[];
-          engine: "deepseek-flash" | "openai" | "heuristic";
-        };
-        setProject(data.project);
-        setMessages([
-          ...data.messages,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            type: "text",
-            content: data.engine === "openai"
-              ? "This storyboard was generated by OpenAI and saved to Neon."
-              : data.engine === "deepseek-flash"
-                ? "This storyboard was generated by DeepSeek flash and saved to Neon."
-                : "This storyboard was generated by the local planning engine and saved to Neon. Configure DeepSeek flash or OpenAI to switch to model generation."
-          }
-        ]);
-        setSelectedScene(1);
-        setPendingPlan(undefined);
-      } else {
-        const response = await fetch("/api/edit-plan", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            projectId: project.id,
-            versionId: project.currentVersion.id,
-            request
-          })
-        });
-        if (!response.ok) throw new Error("Failed to create edit plan.");
-        const data = await response.json() as {
-          editPlan: EditPlan;
-          messages: ChatMessage[];
-        };
-        setPendingPlan(data.editPlan);
-        setMessages((current) => [...current, ...data.messages.filter((message) => message.role === "assistant")]);
-      }
+      const response = await fetch("/api/edit-plan", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          versionId: project.currentVersion.id,
+          request
+        })
+      });
+      if (!response.ok) throw new Error("Failed to create edit plan.");
+      const data = await response.json() as {
+        editPlan: EditPlan;
+        messages: ChatMessage[];
+      };
+      setPendingPlan(data.editPlan);
+      setMessages((current) => [...current, ...data.messages.filter((message) => message.role === "assistant")]);
     } catch (error) {
       console.error(error);
       pushMessage({
         role: "assistant",
         type: "text",
-        content: "I could not complete that request. Check the server logs or environment variables, then try again."
+        content: "没有生成修改计划。请稍后重试或检查服务端日志。"
       });
     } finally {
       setIsBusy(false);
     }
   }
 
-  async function handleApplyPlan() {
+  async function applyPlan() {
     if (!pendingPlan) return;
 
     setIsBusy(true);
@@ -508,7 +597,6 @@ export function WorkspaceClient({
       const data = await response.json() as {
         project: Project;
         message: ChatMessage;
-        renderJobId?: string;
       };
       setProject(data.project);
       setPendingPlan(undefined);
@@ -518,23 +606,14 @@ export function WorkspaceClient({
       pushMessage({
         role: "assistant",
         type: "text",
-        content: "I could not apply that plan. Please try again after checking the deployment logs."
+        content: "应用修改失败。请检查 Vercel 日志。"
       });
     } finally {
       setIsBusy(false);
     }
   }
 
-  function handleCancelPlan() {
-    setPendingPlan(undefined);
-    pushMessage({
-      role: "assistant",
-      type: "text",
-      content: "Plan canceled. Send another instruction and I will create a new scene-level plan."
-    });
-  }
-
-  async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
+  async function uploadAsset(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
@@ -548,64 +627,64 @@ export function WorkspaceClient({
         method: "POST",
         body: form
       });
-      if (!response.ok) throw new Error("Failed to upload asset.");
+      if (!response.ok) throw new Error("Upload failed.");
       const data = await response.json() as { asset: { r2Key: string; metadata?: { name?: string } } };
       pushMessage({
         role: "assistant",
         type: "text",
-        content: `Uploaded ${data.asset.metadata?.name ?? "asset"} to R2 at ${data.asset.r2Key}.`
+        content: `素材已上传到 R2：${data.asset.metadata?.name ?? "asset"}。路径：${data.asset.r2Key}`
       });
     } catch (error) {
       console.error(error);
       pushMessage({
         role: "assistant",
         type: "text",
-        content: "Upload failed. Check R2 environment variables and bucket permissions."
+        content: "素材上传失败，请检查 R2 配置。"
       });
     } finally {
       setIsBusy(false);
     }
   }
 
+  function resetToBrief() {
+    setStage("brief");
+    setPendingPlan(undefined);
+    setChatInput("");
+  }
+
   return (
-    <main className="app-frame">
-      <Sidebar />
-      <div className="workspace">
-        <TopBar project={project} source={source} />
-        <div className="content-grid">
-          <div className="studio">
-            <input
-              hidden
-              onChange={handleUpload}
-              ref={fileInputRef}
-              type="file"
-            />
-            <VideoPreview
-              durationSeconds={project.currentVersion.durationSeconds}
-              isRendering={isBusy}
-              scene={currentScene}
-            />
-            <SceneTimeline
-              onSelectScene={setSelectedScene}
-              scenes={project.currentVersion.scenes}
-              selectedScene={selectedScene}
-            />
-            <ToolDock onUploadClick={() => fileInputRef.current?.click()} />
-            <SceneInspector scene={currentScene} />
-            <ArchitecturePanel />
-          </div>
-          <EditorPanel
-            input={input}
-            isBusy={isBusy}
-            messages={messages}
-            onApplyPlan={handleApplyPlan}
-            onCancelPlan={handleCancelPlan}
-            onInput={setInput}
-            onSubmit={handleSubmit}
-            pendingPlan={pendingPlan}
-          />
-        </div>
-      </div>
-    </main>
+    <Shell onNewVideo={resetToBrief} project={project} source={source} stage={stage}>
+      <input hidden onChange={uploadAsset} ref={fileInputRef} type="file" />
+      {stage === "brief" ? (
+        <BriefScreen
+          currentProject={project}
+          isBusy={isBusy}
+          onOpenStudio={() => setStage("studio")}
+          onPromptChange={setBriefPrompt}
+          onSubmit={createVideo}
+          onUseExample={setBriefPrompt}
+          prompt={briefPrompt}
+        />
+      ) : null}
+      {stage === "generating" ? (
+        <GeneratingScreen progress={progress} prompt={generationPrompt} />
+      ) : null}
+      {stage === "studio" ? (
+        <StudioScreen
+          input={chatInput}
+          isBusy={isBusy}
+          messages={messages}
+          onApply={applyPlan}
+          onCancel={() => setPendingPlan(undefined)}
+          onInput={setChatInput}
+          onSelectScene={setSelectedScene}
+          onSubmit={submitChat}
+          onUpload={() => fileInputRef.current?.click()}
+          pendingPlan={pendingPlan}
+          project={project}
+          selectedScene={selectedScene}
+        />
+      ) : null}
+    </Shell>
   );
 }
