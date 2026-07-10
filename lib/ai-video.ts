@@ -3,6 +3,8 @@ import { z } from "zod";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
 import type { EditPlan, Project, ProjectVersion, Scene } from "@/lib/types";
 
+type AiEngine = "deepseek-flash" | "openai" | "heuristic";
+
 const sceneSchema = z.object({
   title: z.string().min(1),
   voiceover: z.string().min(1),
@@ -43,14 +45,39 @@ const editPlanPayloadSchema = z.object({
   )
 });
 
-function getOpenAI() {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return undefined;
-  return new OpenAI({ apiKey });
+function getTextModel() {
+  if (process.env.DEEPSEEK_API_KEY) {
+    const configuredModel = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+    const model = configuredModel === "deepseek-v4-flash" ? configuredModel : "deepseek-v4-flash";
+
+    return {
+      client: new OpenAI({
+        apiKey: process.env.DEEPSEEK_API_KEY,
+        baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
+      }),
+      model,
+      engine: "deepseek-flash" as const
+    };
+  }
+
+  if (process.env.OPENAI_API_KEY) {
+    return {
+      client: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      engine: "openai" as const
+    };
+  }
+
+  return undefined;
 }
 
-function modelName() {
-  return process.env.OPENAI_MODEL || "gpt-4o-mini";
+function getVisionModel() {
+  if (!process.env.OPENAI_API_KEY) return undefined;
+  return {
+    client: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
+    model: process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini",
+    engine: "openai" as const
+  };
 }
 
 function extractJson(content: string) {
@@ -60,16 +87,16 @@ function extractJson(content: string) {
 
 export async function createStoryboardProject(prompt: string, baseProject?: Project): Promise<{
   project: Project;
-  engine: "openai" | "heuristic";
+  engine: AiEngine;
 }> {
-  const client = getOpenAI();
-  if (!client) {
+  const textModel = getTextModel();
+  if (!textModel) {
     return { project: generateProjectFromPrompt(prompt, baseProject), engine: "heuristic" };
   }
 
   try {
-    const completion = await client.chat.completions.create({
-      model: modelName(),
+    const completion = await textModel.client.chat.completions.create({
+      model: textModel.model,
       response_format: { type: "json_object" },
       messages: [
         {
@@ -99,7 +126,7 @@ export async function createStoryboardProject(prompt: string, baseProject?: Proj
     }));
 
     return {
-      engine: "openai",
+      engine: textModel.engine,
       project: {
         ...(baseProject ?? {
           id: crypto.randomUUID(),
@@ -128,15 +155,15 @@ export async function createEditPlan(params: {
   request: string;
   version: ProjectVersion;
   editNumber: number;
-}): Promise<{ editPlan: EditPlan; engine: "openai" | "heuristic" }> {
-  const client = getOpenAI();
-  if (!client) {
+}): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
+  const textModel = getTextModel();
+  if (!textModel) {
     return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
   }
 
   try {
-    const completion = await client.chat.completions.create({
-      model: modelName(),
+    const completion = await textModel.client.chat.completions.create({
+      model: textModel.model,
       response_format: { type: "json_object" },
       messages: [
         {
@@ -154,7 +181,7 @@ export async function createEditPlan(params: {
 
     const payload = editPlanPayloadSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
     return {
-      engine: "openai",
+      engine: textModel.engine,
       editPlan: {
         id: crypto.randomUUID(),
         editNumber: params.editNumber,
@@ -171,4 +198,17 @@ export async function createEditPlan(params: {
     console.error("[ai-video] Falling back to heuristic edit plan:", error);
     return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
   }
+}
+
+export function describeAiRouting() {
+  return {
+    text: process.env.DEEPSEEK_API_KEY
+      ? { provider: "deepseek", model: "deepseek-v4-flash" }
+      : process.env.OPENAI_API_KEY
+        ? { provider: "openai", model: process.env.OPENAI_MODEL || "gpt-4o-mini" }
+        : { provider: "heuristic", model: "local-rules" },
+    vision: getVisionModel()
+      ? { provider: "openai", model: process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini" }
+      : { provider: "not-configured", model: "none" }
+  };
 }
