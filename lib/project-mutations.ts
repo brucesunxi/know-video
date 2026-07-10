@@ -1,6 +1,8 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
+import { generateProjectSceneImages } from "@/lib/image-assets";
+import { assetUrlForKey } from "@/lib/r2";
 import { applyEditPlan } from "@/lib/video-brain";
-import type { ChatMessage, EditPlan, Project, ProjectVersion, Scene } from "@/lib/types";
+import type { ChatMessage, EditPlan, Project, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
 
 type IdRow = { id: string };
 
@@ -12,7 +14,7 @@ async function insertScenes(versionId: string, scenes: Scene[]) {
   const sql = getSql();
 
   for (const scene of scenes) {
-    await sql`
+    const sceneRows = await sql`
       insert into scenes (
         version_id,
         scene_number,
@@ -33,8 +35,67 @@ async function insertScenes(versionId: string, scenes: Scene[]) {
         ${scene.durationSeconds},
         ${JSON.stringify(scene.style)}
       )
-    `;
+      returning id
+    ` as IdRow[];
+
+    const sceneId = sceneRows[0]?.id;
+    if (!sceneId || scene.assets.length === 0) continue;
+
+    for (const asset of scene.assets) {
+      await sql`
+        insert into scene_assets (
+          scene_id,
+          asset_type,
+          r2_key,
+          public_url,
+          metadata_json
+        )
+        values (
+          ${sceneId},
+          ${asset.type},
+          ${asset.r2Key},
+          ${asset.url},
+          ${JSON.stringify(asset.metadata ?? {})}
+        )
+      `;
+    }
   }
+}
+
+async function loadSceneAssets(sceneIds: string[]) {
+  if (sceneIds.length === 0) return new Map<string, SceneAsset[]>();
+
+  const sql = getSql();
+  const rows = await sql`
+    select id, scene_id, asset_type, r2_key, public_url, metadata_json
+    from scene_assets
+    where scene_id = any(${sceneIds})
+    order by created_at asc
+  ` as Array<{
+    id: string;
+    scene_id: string;
+    asset_type: SceneAsset["type"];
+    r2_key: string;
+    public_url: string | null;
+    metadata_json: unknown;
+  }>;
+
+  const byScene = new Map<string, SceneAsset[]>();
+  for (const row of rows) {
+    const current = byScene.get(row.scene_id) ?? [];
+    current.push({
+      id: row.id,
+      type: row.asset_type,
+      r2Key: row.r2_key,
+      url: assetUrlForKey(row.r2_key, row.public_url ?? undefined),
+      metadata: row.metadata_json && typeof row.metadata_json === "object"
+        ? row.metadata_json as Record<string, unknown>
+        : {}
+    });
+    byScene.set(row.scene_id, current);
+  }
+
+  return byScene;
 }
 
 export async function persistGeneratedProject(params: {
@@ -174,6 +235,8 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
     style_json: unknown;
   }>;
 
+  const assetMap = await loadSceneAssets(scenes.map((scene) => scene.id));
+
   return {
     id: version.id,
     label: "current",
@@ -190,7 +253,7 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
       motionPrompt: scene.motion_prompt,
       durationSeconds: scene.duration_seconds,
       style: scene.style_json as Scene["style"],
-      assets: []
+      assets: assetMap.get(scene.id) ?? []
     }))
   };
 }
@@ -275,7 +338,13 @@ export async function applyPersistedEditPlan(params: {
   project: Project;
   editPlan: EditPlan;
 }): Promise<{ project: Project; message: ChatMessage; renderJobId?: string }> {
-  const nextProject = applyEditPlan(params.project, params.editPlan);
+  const nextProject = await generateProjectSceneImages(
+    applyEditPlan(params.project, params.editPlan),
+    {
+      replaceExistingImages: true,
+      sceneNumbers: params.editPlan.affectedScenes
+    }
+  );
 
   if (!canPersist()) {
     return {

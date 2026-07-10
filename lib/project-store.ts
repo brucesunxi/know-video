@@ -1,6 +1,7 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { demoMessages, demoProject } from "@/lib/mock-data";
-import type { ChatMessage, Project, ProjectVersion, Scene } from "@/lib/types";
+import { assetUrlForKey } from "@/lib/r2";
+import type { ChatMessage, Project, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
 
 type ProjectRow = {
   id: string;
@@ -37,6 +38,15 @@ type MessageRow = {
   metadata_json: unknown;
 };
 
+type AssetRow = {
+  id: string;
+  scene_id: string;
+  asset_type: SceneAsset["type"];
+  r2_key: string;
+  public_url: string | null;
+  metadata_json: unknown;
+};
+
 function cleanBrand(value: string) {
   return value
     .replaceAll("VYBEA", "Know Video")
@@ -55,7 +65,7 @@ function cleanBrandInJson<T>(value: T): T {
   }
 }
 
-function toScene(row: SceneRow): Scene {
+function toScene(row: SceneRow, assets: SceneAsset[] = []): Scene {
   const style = row.style_json && typeof row.style_json === "object"
     ? row.style_json as Scene["style"]
     : { theme: "premium dark", palette: ["#07111d", "#38d5e5"], mood: "strategic" };
@@ -69,7 +79,19 @@ function toScene(row: SceneRow): Scene {
     motionPrompt: cleanBrand(row.motion_prompt),
     durationSeconds: row.duration_seconds,
     style,
-    assets: []
+    assets
+  };
+}
+
+function toAsset(row: AssetRow): SceneAsset {
+  return {
+    id: row.id,
+    type: row.asset_type,
+    r2Key: row.r2_key,
+    url: assetUrlForKey(row.r2_key, row.public_url ?? undefined),
+    metadata: row.metadata_json && typeof row.metadata_json === "object"
+      ? row.metadata_json as Record<string, unknown>
+      : {}
   };
 }
 
@@ -138,7 +160,21 @@ export async function getCurrentProjectSnapshot(): Promise<{
       limit 50
     ` as MessageRow[];
 
-    const scenes = sceneRows.map(toScene);
+    const assetRows = sceneRows.length > 0 ? await sql`
+      select id, scene_id, asset_type, r2_key, public_url, metadata_json
+      from scene_assets
+      where scene_id = any(${sceneRows.map((scene) => scene.id)})
+      order by created_at asc
+    ` as AssetRow[] : [];
+
+    const assetMap = new Map<string, SceneAsset[]>();
+    for (const asset of assetRows) {
+      const current = assetMap.get(asset.scene_id) ?? [];
+      current.push(toAsset(asset));
+      assetMap.set(asset.scene_id, current);
+    }
+
+    const scenes = sceneRows.map((scene) => toScene(scene, assetMap.get(scene.id) ?? []));
     const project: Project = {
       id: projectRow.id,
       title: cleanBrand(projectRow.title),

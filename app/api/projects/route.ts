@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createStoryboardProject } from "@/lib/ai-video";
+import { generateProjectSceneImages } from "@/lib/image-assets";
 import { persistGeneratedProject } from "@/lib/project-mutations";
 
 const requestSchema = z.object({
@@ -15,9 +16,10 @@ function publicEngine(engine: string) {
 export async function POST(request: Request) {
   const body = requestSchema.parse(await request.json());
   const { project, engine } = await createStoryboardProject(body.prompt);
+  const projectWithImages = await generateProjectSceneImages(project);
   const persisted = await persistGeneratedProject({
     prompt: body.prompt,
-    project,
+    project: projectWithImages,
     engine
   });
 

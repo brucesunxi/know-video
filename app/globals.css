@@ -450,6 +450,21 @@ button:disabled {
   box-shadow: var(--shadow);
 }
 
+.kv-preview.has-image {
+  background-position: center;
+  background-size: cover;
+}
+
+.kv-preview.has-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 42%, transparent 0, transparent 34%, rgba(3, 7, 18, 0.34) 72%),
+    linear-gradient(180deg, rgba(3, 7, 18, 0.1), rgba(3, 7, 18, 0.74));
+  pointer-events: none;
+}
+
 .kv-preview.light {
   background:
     radial-gradient(circle at 72% 28%, rgba(18, 183, 166, 0.22), transparent 16%),
@@ -476,6 +491,13 @@ button:disabled {
     linear-gradient(rgba(15, 23, 42, 0.07) 1px, transparent 1px) 0 0 / 100% 56px;
 }
 
+.kv-preview.has-image::before {
+  inset: 18px;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
 .kv-preview-meta {
   position: absolute;
   left: 38px;
@@ -483,6 +505,14 @@ button:disabled {
   z-index: 1;
   display: grid;
   gap: 8px;
+}
+
+.kv-preview.has-image .kv-preview-meta,
+.kv-preview.has-image .kv-caption,
+.kv-preview.has-image .kv-player-bar,
+.kv-preview.has-image .kv-play,
+.kv-preview.has-image .kv-image-credit {
+  z-index: 2;
 }
 
 .kv-preview-meta span {
@@ -547,6 +577,36 @@ button:disabled {
 
 .kv-preview-card.wide {
   grid-column: span 2;
+}
+
+.kv-image-credit {
+  position: absolute;
+  right: 42px;
+  top: 38px;
+  display: grid;
+  max-width: min(360px, 34vw);
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 14px;
+  background: rgba(3, 7, 18, 0.32);
+  padding: 13px 15px;
+  color: #fff;
+  text-align: right;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+}
+
+.kv-image-credit span {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+  text-transform: uppercase;
+}
+
+.kv-image-credit strong {
+  font-size: 15px;
+  line-height: 1.25;
 }
 
 .kv-scene-composition {
@@ -737,6 +797,7 @@ button:disabled {
 }
 
 .kv-scene-strip button {
+  position: relative;
   display: grid;
   min-height: 112px;
   grid-template-rows: auto 1fr auto;
@@ -748,6 +809,18 @@ button:disabled {
   color: var(--text);
   text-align: left;
   transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.kv-thumb-dot {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  display: block;
+  height: 8px;
+  width: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(18, 183, 166, 0.12);
 }
 
 .kv-scene-strip button.active {

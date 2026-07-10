@@ -245,37 +245,50 @@ function PreviewCanvas({
   const visual = compactText(scene?.visualPrompt, "Scene visual will appear here.", 110);
   const motion = compactText(scene?.motionPrompt, "Camera and animation direction will appear here.", 96);
   const voice = compactText(scene?.voiceover, "Narration will appear here.", 88);
+  const imageAsset = scene?.assets.find((asset) => asset.type === "image" && asset.url);
 
   return (
-    <section className={`kv-preview ${light ? "light" : ""}`}>
+    <section
+      className={`kv-preview ${light ? "light" : ""} ${imageAsset ? "has-image" : ""}`}
+      style={imageAsset ? { backgroundImage: `linear-gradient(180deg, rgba(6, 14, 27, 0.1), rgba(6, 14, 27, 0.78)), url("${imageAsset.url}")` } : undefined}
+    >
       <div className="kv-preview-meta">
         <span>Scene {scene?.sceneNumber ?? 1}</span>
         <strong>{scene?.title ?? "No scene selected"}</strong>
       </div>
-      <div className="kv-preview-grid">
-        <div className="kv-preview-card wide">
-          <small>画面重点</small>
-          <span>{visual}</span>
+      {imageAsset ? (
+        <div className="kv-image-credit">
+          <span>Generated scene visual</span>
+          <strong>{scene?.title ?? "Scene"}</strong>
         </div>
-        <div className="kv-preview-card">
-          <small>镜头运动</small>
-          <span>{motion}</span>
-        </div>
-        <div className="kv-preview-card">
-          <small>旁白意图</small>
-          <span>{voice}</span>
-        </div>
-      </div>
-      <div className="kv-scene-composition" aria-hidden="true">
-        <div className="kv-composition-main">
-          <span>{scene?.title ?? "Scene"}</span>
-        </div>
-        <div className="kv-composition-stack">
-          <i />
-          <i />
-          <i />
-        </div>
-      </div>
+      ) : (
+        <>
+          <div className="kv-preview-grid">
+            <div className="kv-preview-card wide">
+              <small>画面重点</small>
+              <span>{visual}</span>
+            </div>
+            <div className="kv-preview-card">
+              <small>镜头运动</small>
+              <span>{motion}</span>
+            </div>
+            <div className="kv-preview-card">
+              <small>旁白意图</small>
+              <span>{voice}</span>
+            </div>
+          </div>
+          <div className="kv-scene-composition" aria-hidden="true">
+            <div className="kv-composition-main">
+              <span>{scene?.title ?? "Scene"}</span>
+            </div>
+            <div className="kv-composition-stack">
+              <i />
+              <i />
+              <i />
+            </div>
+          </div>
+        </>
+      )}
       <button className={`kv-play ${isPlaying ? "playing" : ""}`} onClick={onTogglePlayback} type="button">
         {isBusy ? <Loader2 className="kv-spin" size={28} /> : isPlaying ? <span className="kv-pause-icon" /> : <Play fill="currentColor" size={30} />}
       </button>
@@ -314,6 +327,7 @@ function Storyboard({
             onClick={() => onSelect(scene.sceneNumber)}
             type="button"
           >
+            {scene.assets.some((asset) => asset.type === "image") ? <i className="kv-thumb-dot" /> : null}
             <span>S{scene.sceneNumber}</span>
             <strong>{scene.title}</strong>
             <small>{scene.durationSeconds}s</small>

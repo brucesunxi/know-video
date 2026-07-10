@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getOptionalEnv, getRequiredEnv } from "@/lib/env";
 
 export function createR2Client() {
@@ -36,4 +36,26 @@ export async function uploadToR2(input: {
     key: input.key,
     publicUrl: publicBaseUrl ? `${publicBaseUrl.replace(/\/$/, "")}/${input.key}` : undefined
   };
+}
+
+export async function getFromR2(key: string) {
+  const bucket = getRequiredEnv("R2_BUCKET");
+  const client = createR2Client();
+
+  const response = await client.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key
+    })
+  );
+
+  return {
+    body: response.Body,
+    contentType: response.ContentType || "application/octet-stream"
+  };
+}
+
+export function assetUrlForKey(key: string, publicUrl?: string) {
+  if (publicUrl) return publicUrl;
+  return `/api/assets/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
