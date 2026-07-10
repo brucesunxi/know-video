@@ -3,8 +3,18 @@ import { getOptionalEnv } from "@/lib/env";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 
-function canGenerateImages() {
-  return Boolean(getOptionalEnv("OPENAI_API_KEY"));
+function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
+  const apiKey = getOptionalEnv("OPENAI_API_KEY");
+  if (!apiKey) return "missing_key";
+  if (!apiKey.startsWith("sk-")) return "invalid_key";
+  return undefined;
+}
+
+function classifyImageError(error: unknown): NonNullable<Project["currentVersion"]["assetErrorCode"]> {
+  const candidate = error as { status?: number; code?: string; name?: string };
+  if (candidate.status === 401 || candidate.code === "invalid_api_key") return "invalid_key";
+  if (candidate.name?.includes("S3") || candidate.code?.includes("Bucket")) return "storage_failed";
+  return "generation_failed";
 }
 
 function imageModel() {
@@ -28,8 +38,6 @@ function buildSceneImagePrompt(scene: Scene, projectTitle: string) {
 }
 
 async function generateSceneImage(scene: Scene, project: Project): Promise<SceneAsset | undefined> {
-  if (!canGenerateImages()) return undefined;
-
   const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
   const prompt = buildSceneImagePrompt(scene, project.title);
 
@@ -70,14 +78,20 @@ export async function generateProjectSceneImages(
   project: Project,
   options: { replaceExistingImages?: boolean; sceneNumbers?: number[] } = {}
 ) {
-  if (!canGenerateImages()) {
+  const credentialIssue = imageCredentialIssue();
+  if (credentialIssue) {
     return {
       ...project,
-      currentVersion: { ...project.currentVersion, assetStatus: "failed" as const }
+      currentVersion: {
+        ...project.currentVersion,
+        assetStatus: "failed" as const,
+        assetErrorCode: credentialIssue
+      }
     };
   }
 
   const selectedScenes = options.sceneNumbers ? new Set(options.sceneNumbers) : undefined;
+  const failures: NonNullable<Project["currentVersion"]["assetErrorCode"]>[] = [];
   const scenes = await Promise.all(
     project.currentVersion.scenes.map(async (scene) => {
       if (selectedScenes && !selectedScenes.has(scene.sceneNumber)) return scene;
@@ -92,6 +106,7 @@ export async function generateProjectSceneImages(
 
         return { ...scene, assets: [image, ...existingAssets] };
       } catch (error) {
+        failures.push(classifyImageError(error));
         console.error(`[image-assets] Scene ${scene.sceneNumber} image generation failed:`, error);
         return scene;
       }
@@ -107,6 +122,7 @@ export async function generateProjectSceneImages(
     currentVersion: {
       ...project.currentVersion,
       assetStatus,
+      assetErrorCode: failures[0],
       scenes
     }
   };

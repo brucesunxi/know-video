@@ -621,7 +621,11 @@ export function WorkspaceClient({
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
 
   function pushMessage(message: Omit<ChatMessage, "id">) {
-    setMessages((current) => [...current, { ...message, id: crypto.randomUUID() }]);
+    setMessages((current) => {
+      const last = current[current.length - 1];
+      if (last?.role === message.role && last.content === message.content) return current;
+      return [...current, { ...message, id: crypto.randomUUID() }];
+    });
   }
 
   useEffect(() => {
@@ -700,7 +704,17 @@ export function WorkspaceClient({
         }
       ]);
       if (data.project.currentVersion.assetStatus !== "ready") {
-        setErrorMessage("脚本和分镜已经完成，但部分场景画面生成失败。可在工作室中逐个重试，未生成画面的场景不会冒充成片。");
+        const errorMessages = {
+          missing_key: "脚本和分镜已经完成，但图片服务尚未配置。",
+          invalid_key: "脚本和分镜已经完成，但图片服务凭证无效，请更新 Vercel 中的 OPENAI_API_KEY。",
+          storage_failed: "脚本和分镜已经完成，但场景图片写入云端存储失败。",
+          generation_failed: "脚本和分镜已经完成，但部分场景画面生成失败。"
+        } as const;
+        setErrorMessage(
+          data.project.currentVersion.assetErrorCode
+            ? errorMessages[data.project.currentVersion.assetErrorCode]
+            : "脚本和分镜已经完成，但部分场景画面生成失败。"
+        );
       }
       setSelectedScene(1);
       setElapsedSeconds(0);

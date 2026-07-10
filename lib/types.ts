@@ -32,6 +32,7 @@ export type ProjectVersion = {
   durationSeconds: number;
   renderUrl?: string;
   assetStatus?: "pending" | "partial" | "ready" | "failed";
+  assetErrorCode?: "missing_key" | "invalid_key" | "storage_failed" | "generation_failed";
   scenes: Scene[];
 };
 
