@@ -23,6 +23,16 @@ const storyboardSchema = z.object({
   scenes: z.array(sceneSchema).min(3).max(8)
 });
 
+const genericSceneNames = [
+  "customization",
+  "user interface",
+  "overview",
+  "features",
+  "benefits",
+  "conclusion",
+  "introduction"
+];
+
 const editPlanPayloadSchema = z.object({
   summary: z.string().min(1),
   affectedScenes: z.array(z.number().int().positive()).min(1),
@@ -85,6 +95,19 @@ function extractJson(content: string) {
   return JSON.parse(fenced?.[1] ?? content);
 }
 
+function storyboardLooksGeneric(scenes: Array<{ title: string; visualPrompt: string }>) {
+  return scenes.some((scene) => {
+    const title = scene.title.toLowerCase().trim();
+    const visual = scene.visualPrompt.toLowerCase();
+    return genericSceneNames.includes(title) || (
+      genericSceneNames.some((name) => title.includes(name)) &&
+      !visual.includes("video") &&
+      !visual.includes("storyboard") &&
+      !visual.includes("生成")
+    );
+  });
+}
+
 export async function createStoryboardProject(prompt: string, baseProject?: Project): Promise<{
   project: Project;
   engine: AiEngine;
@@ -102,17 +125,34 @@ export async function createStoryboardProject(prompt: string, baseProject?: Proj
         {
           role: "system",
           content:
-            "You are a senior AI video director. Return strict JSON only. Create a concise 5-scene video storyboard with production-ready voiceover, visual prompts, motion prompts, durationSeconds, and style."
+            [
+              "You are a serious AI video director for a text-to-video product.",
+              "Return strict JSON only.",
+              "Create exactly 5 scenes unless the user explicitly asks for another count.",
+              "The storyboard must be a real video narrative, not a generic SaaS page outline.",
+              "Never use generic section titles such as Customization, User Interface, Benefits, Features, Overview, or Conclusion.",
+              "Every scene must visually show concrete moments from the user's requested subject.",
+              "If the subject is an AI video generation platform, the scenes should cover: request intake, AI storyboard planning, asset/video generation, conversational revision, and export/share.",
+              "Scene titles should be short, concrete, and in the same language as the user's request.",
+              "Voiceover should sound like finished narration, not internal notes.",
+              "Visual prompts must describe what appears on screen, including UI objects, people/product context when useful, composition, and style.",
+              "Motion prompts must describe camera movement and element animation."
+            ].join(" ")
         },
         {
           role: "user",
-          content: `Create a video storyboard for this request:\n${prompt}\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
+          content: `User request:\n${prompt}\n\nReturn JSON in this exact shape:\n{ "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }\n\nQuality bar:\n- Make each scene specific to the request.\n- Do not write generic software sections.\n- For a 30 second video, total duration should be close to 30 seconds.\n- The final video should feel like something a user could actually preview and approve.`
         }
       ],
-      temperature: 0.7
+      temperature: 0.45
     });
 
     const parsed = storyboardSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+    if (storyboardLooksGeneric(parsed.scenes)) {
+      console.error("[ai-video] Model returned generic storyboard, using focused heuristic fallback.");
+      return { project: generateProjectFromPrompt(prompt, baseProject), engine: "heuristic" };
+    }
+
     const scenes: Scene[] = parsed.scenes.map((scene, index) => ({
       id: crypto.randomUUID(),
       sceneNumber: index + 1,

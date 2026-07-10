@@ -21,11 +21,100 @@ function titleFromPrompt(prompt: string) {
   return first.length > 0 ? first : "Untitled Video";
 }
 
+function isVideoGenerationPrompt(prompt: string) {
+  const lower = prompt.toLowerCase();
+  return (
+    lower.includes("video generation") ||
+    lower.includes("text-to-video") ||
+    lower.includes("ai video") ||
+    prompt.includes("视频生成") ||
+    prompt.includes("生成视频") ||
+    prompt.includes("分镜")
+  );
+}
+
 export function generateProjectFromPrompt(prompt: string, baseProject?: Project): Project {
   const title = titleFromPrompt(prompt);
   const tone = detectTone(prompt);
   const palette = palettes[tone];
   const subject = title.toUpperCase();
+  const videoGenerationScenes: Scene[] = [
+    {
+      id: crypto.randomUUID(),
+      sceneNumber: 1,
+      title: "输入制作请求",
+      voiceover: "用户只需要描述想做的视频，Know Video 就会把目标、受众、时长和风格整理成清晰的制作 brief。",
+      visualPrompt: `${tone} product video scene: a creator types a video request into Know Video, the prompt expands into audience, goal, tone, and duration chips.`,
+      motionPrompt: "Camera pushes toward the prompt box, then the request fans out into structured production cards.",
+      durationSeconds: 6,
+      style: { theme: tone, palette, mood: "focused" },
+      assets: []
+    },
+    {
+      id: crypto.randomUUID(),
+      sceneNumber: 2,
+      title: "AI 自动分镜",
+      voiceover: "系统自动拆出脚本、旁白、镜头画面和运动提示词，让创意从一句话变成可执行的分镜。",
+      visualPrompt: `${tone} storyboard workspace with five scene cards, narration lines, visual prompt panels, and timing markers generated from the request.`,
+      motionPrompt: "Five scene cards slide into a timeline while script lines type in below each card.",
+      durationSeconds: 7,
+      style: { theme: tone, palette, mood: "systematic" },
+      assets: []
+    },
+    {
+      id: crypto.randomUUID(),
+      sceneNumber: 3,
+      title: "生成视频预览",
+      voiceover: "每个镜头都会进入预览播放器，用户可以先看整体节奏，再决定哪里需要调整。",
+      visualPrompt: `${tone} video preview player showing an AI-generated product video with progress bar, scene thumbnails, and animated UI elements.`,
+      motionPrompt: "The playhead moves across the timeline, preview panels animate, and the current scene enlarges.",
+      durationSeconds: 6,
+      style: { theme: tone, palette, mood: "polished" },
+      assets: []
+    },
+    {
+      id: crypto.randomUUID(),
+      sceneNumber: 4,
+      title: "聊天改片",
+      voiceover: "如果画面、节奏或风格不满意，直接用对话提出修改，系统会生成逐场景的修改计划。",
+      visualPrompt: `${tone} split-screen editor: video preview on the left, chat instruction on the right, before-after scene diff cards appearing below.`,
+      motionPrompt: "A chat message transforms into highlighted before-and-after cards for affected scenes.",
+      durationSeconds: 6,
+      style: { theme: tone, palette, mood: "responsive" },
+      assets: []
+    },
+    {
+      id: crypto.randomUUID(),
+      sceneNumber: 5,
+      title: "确认并导出",
+      voiceover: "确认修改后，Know Video 会生成新版本并进入导出流程，把视频制作变成可反复优化的工作流。",
+      visualPrompt: `${tone} final export scene with Know Video version history, approved edit plan, render complete status, and export/share buttons.`,
+      motionPrompt: "The accepted version moves to the front, render status reaches complete, and export buttons glow subtly.",
+      durationSeconds: 5,
+      style: { theme: tone, palette, mood: "confident" },
+      assets: []
+    }
+  ];
+  if (isVideoGenerationPrompt(prompt)) {
+    return {
+      ...(baseProject ?? {
+        id: crypto.randomUUID(),
+        engine: "Animation Engine",
+        credits: 996,
+        plan: "Free"
+      }),
+      title: "Know Video 产品介绍",
+      currentVersion: {
+        id: crypto.randomUUID(),
+        label: "draft 1",
+        status: "planning",
+        createdAt: new Date().toISOString(),
+        durationSeconds: videoGenerationScenes.reduce((sum, scene) => sum + scene.durationSeconds, 0),
+        scenes: videoGenerationScenes
+      }
+    };
+  }
+
   const scenes: Scene[] = [
     {
       id: crypto.randomUUID(),

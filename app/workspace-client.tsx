@@ -26,6 +26,7 @@ import type { ChatMessage, EditChange, EditPlan, Project, Scene } from "@/lib/ty
 type Source = "database" | "mock";
 type Stage = "brief" | "generating" | "studio";
 type Engine = "deepseek-flash" | "openai" | "heuristic";
+type StudioView = "preview" | "storyboard";
 
 const promptExamples = [
   "生成一个 30 秒的 AI 视频生成平台产品介绍视频，风格高级、节奏快、适合官网首屏。",
@@ -49,6 +50,12 @@ function durationLabel(seconds: number) {
 
 function uniqueRegenerate(plan: EditPlan) {
   return Array.from(new Set(plan.changes.flatMap((change) => change.regenerate))).join(", ");
+}
+
+function compactText(text: string | undefined, fallback: string, maxLength = 72) {
+  if (!text) return fallback;
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 1)}…` : trimmed;
 }
 
 function sceneAtTime(scenes: Scene[], seconds: number) {
@@ -235,6 +242,9 @@ function PreviewCanvas({
 }) {
   const light = scene?.style.theme.toLowerCase().includes("light");
   const progress = totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0;
+  const visual = compactText(scene?.visualPrompt, "Scene visual will appear here.", 110);
+  const motion = compactText(scene?.motionPrompt, "Camera and animation direction will appear here.", 96);
+  const voice = compactText(scene?.voiceover, "Narration will appear here.", 88);
 
   return (
     <section className={`kv-preview ${light ? "light" : ""}`}>
@@ -244,13 +254,26 @@ function PreviewCanvas({
       </div>
       <div className="kv-preview-grid">
         <div className="kv-preview-card wide">
-          <span>{scene?.style.mood ?? "planning"}</span>
+          <small>画面重点</small>
+          <span>{visual}</span>
         </div>
         <div className="kv-preview-card">
-          <span>{scene?.durationSeconds ?? 0}s</span>
+          <small>镜头运动</small>
+          <span>{motion}</span>
         </div>
         <div className="kv-preview-card">
-          <span>{scene?.style.theme ?? "theme"}</span>
+          <small>旁白意图</small>
+          <span>{voice}</span>
+        </div>
+      </div>
+      <div className="kv-scene-composition" aria-hidden="true">
+        <div className="kv-composition-main">
+          <span>{scene?.title ?? "Scene"}</span>
+        </div>
+        <div className="kv-composition-stack">
+          <i />
+          <i />
+          <i />
         </div>
       </div>
       <button className={`kv-play ${isPlaying ? "playing" : ""}`} onClick={onTogglePlayback} type="button">
@@ -322,6 +345,27 @@ function ScenePanel({ scene }: { scene?: Scene }) {
           <p>{scene?.motionPrompt ?? "No motion prompt yet."}</p>
         </article>
       </div>
+    </section>
+  );
+}
+
+function StoryboardBoard({ scenes }: { scenes: Scene[] }) {
+  return (
+    <section className="kv-board">
+      {scenes.map((scene) => (
+        <article key={scene.id}>
+          <div>
+            <span>S{scene.sceneNumber}</span>
+            <strong>{scene.title}</strong>
+            <small>{scene.durationSeconds}s</small>
+          </div>
+          <p>{scene.voiceover}</p>
+          <ul>
+            <li>{compactText(scene.visualPrompt, "Visual prompt", 120)}</li>
+            <li>{compactText(scene.motionPrompt, "Motion prompt", 120)}</li>
+          </ul>
+        </article>
+      ))}
     </section>
   );
 }
@@ -421,6 +465,7 @@ function StudioScreen({
   pendingPlan,
   input,
   selectedScene,
+  view,
   isPlaying,
   elapsedSeconds,
   isBusy,
@@ -429,6 +474,7 @@ function StudioScreen({
   onApply,
   onCancel,
   onSelectScene,
+  onViewChange,
   onTogglePlayback,
   onUpload
 }: {
@@ -437,6 +483,7 @@ function StudioScreen({
   pendingPlan?: EditPlan;
   input: string;
   selectedScene: number;
+  view: StudioView;
   isPlaying: boolean;
   elapsedSeconds: number;
   isBusy: boolean;
@@ -445,6 +492,7 @@ function StudioScreen({
   onApply: () => void;
   onCancel: () => void;
   onSelectScene: (scene: number) => void;
+  onViewChange: (view: StudioView) => void;
   onTogglePlayback: () => void;
   onUpload: () => void;
 }) {
@@ -455,11 +503,11 @@ function StudioScreen({
       <section className="kv-studio-main">
         <div className="kv-actionbar">
           <div className="kv-tabs">
-            <button className="active" type="button">
+            <button className={view === "preview" ? "active" : ""} onClick={() => onViewChange("preview")} type="button">
               <Film size={16} />
               Preview
             </button>
-            <button type="button">
+            <button className={view === "storyboard" ? "active" : ""} onClick={() => onViewChange("storyboard")} type="button">
               <Layers3 size={16} />
               Storyboard
             </button>
@@ -479,16 +527,22 @@ function StudioScreen({
             </button>
           </div>
         </div>
-        <PreviewCanvas
-          elapsedSeconds={elapsedSeconds}
-          isBusy={isBusy}
-          isPlaying={isPlaying}
-          onTogglePlayback={onTogglePlayback}
-          scene={scene}
-          totalSeconds={project.currentVersion.durationSeconds}
-        />
-        <Storyboard onSelect={onSelectScene} scenes={project.currentVersion.scenes} selectedScene={selectedScene} />
-        <ScenePanel scene={scene} />
+        {view === "preview" ? (
+          <>
+            <PreviewCanvas
+              elapsedSeconds={elapsedSeconds}
+              isBusy={isBusy}
+              isPlaying={isPlaying}
+              onTogglePlayback={onTogglePlayback}
+              scene={scene}
+              totalSeconds={project.currentVersion.durationSeconds}
+            />
+            <Storyboard onSelect={onSelectScene} scenes={project.currentVersion.scenes} selectedScene={selectedScene} />
+            <ScenePanel scene={scene} />
+          </>
+        ) : (
+          <StoryboardBoard scenes={project.currentVersion.scenes} />
+        )}
       </section>
       <ChatPanel
         input={input}
@@ -524,6 +578,7 @@ export function WorkspaceClient({
   const [progress, setProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [studioView, setStudioView] = useState<StudioView>("preview");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
@@ -609,6 +664,7 @@ export function WorkspaceClient({
       setElapsedSeconds(0);
       setIsPlaying(false);
       setPendingPlan(undefined);
+      setStudioView("preview");
       setProgress(100);
       window.setTimeout(() => setStage("studio"), 350);
     } catch (error) {
@@ -767,9 +823,11 @@ export function WorkspaceClient({
           onSubmit={submitChat}
           onTogglePlayback={togglePlayback}
           onUpload={() => fileInputRef.current?.click()}
+          onViewChange={setStudioView}
           pendingPlan={pendingPlan}
           project={project}
           selectedScene={selectedScene}
+          view={studioView}
         />
       ) : null}
     </Shell>
