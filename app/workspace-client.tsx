@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -11,7 +11,6 @@ import {
   ImagePlus,
   Layers3,
   Loader2,
-  MessageSquareText,
   Mic2,
   PanelRightOpen,
   Play,
@@ -20,8 +19,7 @@ import {
   Send,
   Settings2,
   Sparkles,
-  Upload,
-  WandSparkles
+  Upload
 } from "lucide-react";
 import type { ChatMessage, EditChange, EditPlan, Project, Scene } from "@/lib/types";
 
@@ -51,6 +49,16 @@ function durationLabel(seconds: number) {
 
 function uniqueRegenerate(plan: EditPlan) {
   return Array.from(new Set(plan.changes.flatMap((change) => change.regenerate))).join(", ");
+}
+
+function sceneAtTime(scenes: Scene[], seconds: number) {
+  let cursor = 0;
+  for (const scene of scenes) {
+    cursor += scene.durationSeconds;
+    if (seconds < cursor) return scene.sceneNumber;
+  }
+
+  return scenes[scenes.length - 1]?.sceneNumber ?? 1;
 }
 
 function Shell({
@@ -210,8 +218,23 @@ function GeneratingScreen({ prompt, progress }: { prompt: string; progress: numb
   );
 }
 
-function PreviewCanvas({ scene, isBusy }: { scene?: Scene; isBusy: boolean }) {
+function PreviewCanvas({
+  scene,
+  isBusy,
+  isPlaying,
+  elapsedSeconds,
+  totalSeconds,
+  onTogglePlayback
+}: {
+  scene?: Scene;
+  isBusy: boolean;
+  isPlaying: boolean;
+  elapsedSeconds: number;
+  totalSeconds: number;
+  onTogglePlayback: () => void;
+}) {
   const light = scene?.style.theme.toLowerCase().includes("light");
+  const progress = totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0;
 
   return (
     <section className={`kv-preview ${light ? "light" : ""}`}>
@@ -230,10 +253,17 @@ function PreviewCanvas({ scene, isBusy }: { scene?: Scene; isBusy: boolean }) {
           <span>{scene?.style.theme ?? "theme"}</span>
         </div>
       </div>
-      <button className="kv-play" type="button">
-        {isBusy ? <Loader2 className="kv-spin" size={28} /> : <Play fill="currentColor" size={30} />}
+      <button className={`kv-play ${isPlaying ? "playing" : ""}`} onClick={onTogglePlayback} type="button">
+        {isBusy ? <Loader2 className="kv-spin" size={28} /> : isPlaying ? <span className="kv-pause-icon" /> : <Play fill="currentColor" size={30} />}
       </button>
       <p className="kv-caption">{isBusy ? "Updating video plan..." : scene?.voiceover ?? "Generate a video to preview scenes."}</p>
+      <div className="kv-player-bar">
+        <span>{durationLabel(Math.floor(elapsedSeconds))}</span>
+        <div>
+          <i style={{ width: `${progress}%` }} />
+        </div>
+        <span>{durationLabel(totalSeconds)}</span>
+      </div>
     </section>
   );
 }
@@ -391,12 +421,15 @@ function StudioScreen({
   pendingPlan,
   input,
   selectedScene,
+  isPlaying,
+  elapsedSeconds,
   isBusy,
   onInput,
   onSubmit,
   onApply,
   onCancel,
   onSelectScene,
+  onTogglePlayback,
   onUpload
 }: {
   project: Project;
@@ -404,12 +437,15 @@ function StudioScreen({
   pendingPlan?: EditPlan;
   input: string;
   selectedScene: number;
+  isPlaying: boolean;
+  elapsedSeconds: number;
   isBusy: boolean;
   onInput: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onApply: () => void;
   onCancel: () => void;
   onSelectScene: (scene: number) => void;
+  onTogglePlayback: () => void;
   onUpload: () => void;
 }) {
   const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === selectedScene) ?? project.currentVersion.scenes[0];
@@ -443,7 +479,14 @@ function StudioScreen({
             </button>
           </div>
         </div>
-        <PreviewCanvas isBusy={isBusy} scene={scene} />
+        <PreviewCanvas
+          elapsedSeconds={elapsedSeconds}
+          isBusy={isBusy}
+          isPlaying={isPlaying}
+          onTogglePlayback={onTogglePlayback}
+          scene={scene}
+          totalSeconds={project.currentVersion.durationSeconds}
+        />
         <Storyboard onSelect={onSelectScene} scenes={project.currentVersion.scenes} selectedScene={selectedScene} />
         <ScenePanel scene={scene} />
       </section>
@@ -479,12 +522,47 @@ export function WorkspaceClient({
   const [pendingPlan, setPendingPlan] = useState<EditPlan | undefined>();
   const [isBusy, setIsBusy] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
 
   function pushMessage(message: Omit<ChatMessage, "id">) {
     setMessages((current) => [...current, { ...message, id: crypto.randomUUID() }]);
+  }
+
+  useEffect(() => {
+    if (!isPlaying || stage !== "studio") return undefined;
+
+    const timer = window.setInterval(() => {
+      setElapsedSeconds((current) => {
+        const next = current + 0.25;
+        if (next >= project.currentVersion.durationSeconds) {
+          window.clearInterval(timer);
+          setIsPlaying(false);
+          return project.currentVersion.durationSeconds;
+        }
+
+        setSelectedScene(sceneAtTime(project.currentVersion.scenes, next));
+        return next;
+      });
+    }, 250);
+
+    return () => window.clearInterval(timer);
+  }, [isPlaying, project.currentVersion.durationSeconds, project.currentVersion.scenes, stage]);
+
+  function togglePlayback() {
+    if (project.currentVersion.scenes.length === 0) return;
+
+    setIsPlaying((current) => {
+      if (!current && elapsedSeconds >= project.currentVersion.durationSeconds) {
+        setElapsedSeconds(0);
+        setSelectedScene(1);
+      }
+
+      return !current;
+    });
   }
 
   async function createVideo(event: FormEvent<HTMLFormElement>) {
@@ -528,6 +606,8 @@ export function WorkspaceClient({
         }
       ]);
       setSelectedScene(1);
+      setElapsedSeconds(0);
+      setIsPlaying(false);
       setPendingPlan(undefined);
       setProgress(100);
       window.setTimeout(() => setStage("studio"), 350);
@@ -599,6 +679,8 @@ export function WorkspaceClient({
         message: ChatMessage;
       };
       setProject(data.project);
+      setElapsedSeconds(0);
+      setIsPlaying(false);
       setPendingPlan(undefined);
       setMessages((current) => [...current, data.message]);
     } catch (error) {
@@ -650,6 +732,8 @@ export function WorkspaceClient({
     setStage("brief");
     setPendingPlan(undefined);
     setChatInput("");
+    setIsPlaying(false);
+    setElapsedSeconds(0);
   }
 
   return (
@@ -672,13 +756,16 @@ export function WorkspaceClient({
       {stage === "studio" ? (
         <StudioScreen
           input={chatInput}
+          elapsedSeconds={elapsedSeconds}
           isBusy={isBusy}
+          isPlaying={isPlaying}
           messages={messages}
           onApply={applyPlan}
           onCancel={() => setPendingPlan(undefined)}
           onInput={setChatInput}
           onSelectScene={setSelectedScene}
           onSubmit={submitChat}
+          onTogglePlayback={togglePlayback}
           onUpload={() => fileInputRef.current?.click()}
           pendingPlan={pendingPlan}
           project={project}

@@ -4,10 +4,10 @@ const darkScenes: Scene[] = [
   {
     id: "scene-1",
     sceneNumber: 1,
-    title: "Three-Phase Governance Architecture",
-    voiceover: "VYBEA is a project-level accountability governance operating environment built for entertainment IPs.",
-    visualPrompt: "Dark premium product dashboard with three governance columns, cyan connectors, and executive console styling.",
-    motionPrompt: "Panels glide forward, cyan data lines connect the columns, and a central status node pulses softly.",
+    title: "Prompt to Video Brief",
+    voiceover: "Know Video turns a single production request into a structured video brief, script, and scene plan.",
+    visualPrompt: "Premium product interface showing a text prompt transforming into a concise video production brief.",
+    motionPrompt: "The prompt expands into structured cards for audience, goal, tone, and duration.",
     durationSeconds: 7,
     style: {
       theme: "premium dark",
@@ -19,10 +19,10 @@ const darkScenes: Scene[] = [
   {
     id: "scene-2",
     sceneNumber: 2,
-    title: "Project Cycle Map",
-    voiceover: "It organizes decisions, tasks, approvals, and risks into one shared operating layer.",
-    visualPrompt: "Circular project map on a dark navy board with small nodes orbiting a central governance hub.",
-    motionPrompt: "Nodes orbit slowly, then lock into phase markers as labels fade in.",
+    title: "Scene Breakdown",
+    voiceover: "The system breaks the idea into scenes, each with narration, visual direction, motion, and timing.",
+    visualPrompt: "Storyboard timeline with five scene cards, voiceover snippets, and motion prompt indicators.",
+    motionPrompt: "Scene cards slide into a timeline and connect with subtle teal progress lines.",
     durationSeconds: 6,
     style: {
       theme: "premium dark",
@@ -34,10 +34,10 @@ const darkScenes: Scene[] = [
   {
     id: "scene-3",
     sceneNumber: 3,
-    title: "Accountability Flow",
-    voiceover: "Each team member sees the exact responsibility path from strategy to execution.",
-    visualPrompt: "Dark interface with vertical accountability lanes, teal milestones, and connected owner cards.",
-    motionPrompt: "Milestones drop into place, ownership cards slide in, and connecting lines trace the flow.",
+    title: "Conversational Editing",
+    voiceover: "After the first version, creators can ask for precise changes in natural language.",
+    visualPrompt: "Split editor with video preview on the left and chat-based edit instructions on the right.",
+    motionPrompt: "A user message becomes a before-and-after edit plan with highlighted affected scenes.",
     durationSeconds: 7,
     style: {
       theme: "premium dark",
@@ -49,10 +49,10 @@ const darkScenes: Scene[] = [
   {
     id: "scene-4",
     sceneNumber: 4,
-    title: "Executive Review",
-    voiceover: "Leaders can review progress, identify blockers, and keep creative work aligned with business outcomes.",
-    visualPrompt: "Dark executive review dashboard with project cards, risk badges, approval indicators, and a large progress panel.",
-    motionPrompt: "Project cards fan into the frame, risk badges resolve, and an approval panel slides up.",
+    title: "Version Control",
+    voiceover: "Every accepted change creates a new version, so teams can iterate without losing the original direction.",
+    visualPrompt: "Clean version history panel with accepted edit plans, render status, and scene diffs.",
+    motionPrompt: "Version chips stack upward while the current version is promoted into the preview.",
     durationSeconds: 8,
     style: {
       theme: "premium dark",
@@ -64,10 +64,10 @@ const darkScenes: Scene[] = [
   {
     id: "scene-5",
     sceneNumber: 5,
-    title: "VYBEA Closing Mark",
-    voiceover: "The result is a clearer governance rhythm for complex entertainment projects.",
-    visualPrompt: "Dark closing card with the VYBEA wordmark centered and a subtle constellation of governance points.",
-    motionPrompt: "The wordmark fades in, points connect behind it, and the scene settles into a calm hold.",
+    title: "Know Video Export",
+    voiceover: "Know Video brings planning, generation, review, and export into one focused production workflow.",
+    visualPrompt: "Dark closing card with the Know Video wordmark, export button, and completed render timeline.",
+    motionPrompt: "The Know Video mark fades in as the final render progress reaches complete.",
     durationSeconds: 6,
     style: {
       theme: "premium dark",
@@ -79,8 +79,8 @@ const darkScenes: Scene[] = [
 ];
 
 export const demoProject: Project = {
-  id: "project-vybea",
-  title: "VYBEA Governance Platform",
+  id: "project-know-video",
+  title: "Know Video Product Demo",
   engine: "Animation Engine",
   credits: 996,
   plan: "Free",

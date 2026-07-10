@@ -37,6 +37,18 @@ type MessageRow = {
   metadata_json: unknown;
 };
 
+function cleanBrand(value: string) {
+  return value.replaceAll("VYBEA", "Know Video").replaceAll("vybea", "know video");
+}
+
+function cleanBrandInJson<T>(value: T): T {
+  try {
+    return JSON.parse(cleanBrand(JSON.stringify(value))) as T;
+  } catch {
+    return value;
+  }
+}
+
 function toScene(row: SceneRow): Scene {
   const style = row.style_json && typeof row.style_json === "object"
     ? row.style_json as Scene["style"]
@@ -45,10 +57,10 @@ function toScene(row: SceneRow): Scene {
   return {
     id: row.id,
     sceneNumber: row.scene_number,
-    title: row.title,
-    voiceover: row.voiceover,
-    visualPrompt: row.visual_prompt,
-    motionPrompt: row.motion_prompt,
+    title: cleanBrand(row.title),
+    voiceover: cleanBrand(row.voiceover),
+    visualPrompt: cleanBrand(row.visual_prompt),
+    motionPrompt: cleanBrand(row.motion_prompt),
     durationSeconds: row.duration_seconds,
     style,
     assets: []
@@ -64,9 +76,9 @@ function toMessage(row: MessageRow): ChatMessage {
     id: row.id,
     role: row.role,
     type: row.message_type,
-    content: row.content,
+    content: cleanBrand(row.content),
     versionId: row.version_id ?? undefined,
-    editPlan: metadata.editPlan
+    editPlan: metadata.editPlan ? cleanBrandInJson(metadata.editPlan) : undefined
   };
 }
 
@@ -123,7 +135,7 @@ export async function getCurrentProjectSnapshot(): Promise<{
     const scenes = sceneRows.map(toScene);
     const project: Project = {
       id: projectRow.id,
-      title: projectRow.title,
+      title: cleanBrand(projectRow.title),
       engine: "Animation Engine",
       credits: demoProject.credits,
       plan: demoProject.plan,
