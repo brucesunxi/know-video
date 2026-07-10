@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertCircle,
   ArrowRight,
   Check,
   ChevronRight,
@@ -21,6 +22,7 @@ import {
   Sparkles,
   Upload
 } from "lucide-react";
+import { exportProjectWebm } from "@/lib/client-video-export";
 import type { ChatMessage, EditChange, EditPlan, Project, Scene } from "@/lib/types";
 
 type Source = "database" | "mock";
@@ -39,6 +41,7 @@ const progressSteps = [
   "拆分场景和镜头",
   "撰写旁白与字幕",
   "生成视觉和运动提示词",
+  "生成场景画面",
   "保存项目版本"
 ];
 
@@ -86,16 +89,16 @@ function Shell({
       <aside className="kv-sidebar">
         <div className="kv-logo">K</div>
         <nav className="kv-nav">
-          <button className={stage === "brief" ? "active" : ""} onClick={onNewVideo} type="button">
+          <button aria-label="新建视频" className={stage === "brief" ? "active" : ""} onClick={onNewVideo} type="button">
             <Plus size={18} />
           </button>
-          <button className={stage === "studio" ? "active" : ""} type="button">
+          <button aria-label="视频工作室" className={stage === "studio" ? "active" : ""} type="button">
             <Clapperboard size={18} />
           </button>
-          <button type="button">
+          <button aria-label="项目列表" type="button">
             <Layers3 size={18} />
           </button>
-          <button type="button">
+          <button aria-label="设置" type="button">
             <Settings2 size={18} />
           </button>
         </nav>
@@ -103,13 +106,13 @@ function Shell({
       <section className="kv-app">
         <header className="kv-topbar">
           <div>
-            <span className="kv-eyebrow">AI Video Studio</span>
-            <h1>{stage === "brief" ? "Create a video from one request" : project.title}</h1>
+            <span className="kv-eyebrow">Know Video 智能视频工作室</span>
+            <h1>{stage === "brief" ? "用一句需求，完成一支视频" : project.title}</h1>
           </div>
           <div className="kv-status-row">
-            <span>{source === "database" ? "Neon connected" : "Local fallback"}</span>
-            <span>AI planning engine</span>
-            <span>R2 storage</span>
+            <span>{source === "database" ? "项目已保存" : "本地预览"}</span>
+            <span>智能分镜</span>
+            <span>云端素材</span>
           </div>
         </header>
         {children}
@@ -125,7 +128,8 @@ function BriefScreen({
   onPromptChange,
   onUseExample,
   onSubmit,
-  onOpenStudio
+  onOpenStudio,
+  errorMessage
 }: {
   prompt: string;
   isBusy: boolean;
@@ -134,13 +138,14 @@ function BriefScreen({
   onUseExample: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onOpenStudio: () => void;
+  errorMessage?: string;
 }) {
   return (
     <div className="kv-brief">
       <section className="kv-brief-main">
         <div className="kv-section-heading">
-          <span className="kv-pill">Text to video</span>
-          <h2>Describe the video. The system plans scenes, script, motion, and edit checkpoints.</h2>
+          <span className="kv-pill">文字生成视频</span>
+          <h2>描述你想做的视频，脚本、分镜、画面和动态预览一次完成。</h2>
         </div>
         <form className="kv-prompt-box" onSubmit={onSubmit}>
           <textarea
@@ -163,6 +168,12 @@ function BriefScreen({
             </button>
           </div>
         </form>
+        {errorMessage ? (
+          <div className="kv-inline-error" role="alert">
+            <AlertCircle size={18} />
+            <span>{errorMessage}</span>
+          </div>
+        ) : null}
         <div className="kv-example-grid">
           {promptExamples.map((example) => (
             <button key={example} onClick={() => onUseExample(example)} type="button">
@@ -174,7 +185,7 @@ function BriefScreen({
       </section>
       <aside className="kv-brief-side">
         <div className="kv-side-panel">
-          <span className="kv-eyebrow">Current project</span>
+          <span className="kv-eyebrow">最近项目</span>
           <h3>{currentProject.title}</h3>
           <p>{currentProject.currentVersion.scenes.length} scenes · {durationLabel(currentProject.currentVersion.durationSeconds)}</p>
           <button onClick={onOpenStudio} type="button">
@@ -183,12 +194,12 @@ function BriefScreen({
           </button>
         </div>
         <div className="kv-side-panel">
-          <span className="kv-eyebrow">Pipeline</span>
+          <span className="kv-eyebrow">制作流程</span>
           <ol className="kv-mini-steps">
-            <li>AI engine creates storyboard JSON</li>
-            <li>Neon stores projects, versions, scenes</li>
-            <li>R2 stores uploads and generated assets</li>
-            <li>Chat edits create reviewable plans</li>
+            <li>理解需求并完成脚本与分镜</li>
+            <li>为每个场景生成独立视觉素材</li>
+            <li>组合为可播放的动态预览</li>
+            <li>通过对话逐场景修改并保留版本</li>
           </ol>
         </div>
       </aside>
@@ -197,7 +208,7 @@ function BriefScreen({
 }
 
 function GeneratingScreen({ prompt, progress }: { prompt: string; progress: number }) {
-  const activeIndex = Math.min(progressSteps.length - 1, Math.floor(progress / 22));
+  const activeIndex = Math.min(progressSteps.length - 1, Math.floor(progress / (100 / progressSteps.length)));
 
   return (
     <div className="kv-generating">
@@ -206,8 +217,8 @@ function GeneratingScreen({ prompt, progress }: { prompt: string; progress: numb
         <span />
       </div>
       <div className="kv-section-heading centered">
-        <span className="kv-pill">Generating</span>
-        <h2>Building your video plan with the AI engine</h2>
+        <span className="kv-pill">正在制作</span>
+        <h2>正在生成脚本、分镜和场景画面</h2>
         <p>{prompt}</p>
       </div>
       <div className="kv-progress">
@@ -231,7 +242,9 @@ function PreviewCanvas({
   isPlaying,
   elapsedSeconds,
   totalSeconds,
-  onTogglePlayback
+  onTogglePlayback,
+  onRegenerate,
+  canPlay
 }: {
   scene?: Scene;
   isBusy: boolean;
@@ -239,60 +252,45 @@ function PreviewCanvas({
   elapsedSeconds: number;
   totalSeconds: number;
   onTogglePlayback: () => void;
+  onRegenerate: () => void;
+  canPlay: boolean;
 }) {
-  const light = scene?.style.theme.toLowerCase().includes("light");
   const progress = totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0;
-  const visual = compactText(scene?.visualPrompt, "Scene visual will appear here.", 110);
-  const motion = compactText(scene?.motionPrompt, "Camera and animation direction will appear here.", 96);
-  const voice = compactText(scene?.voiceover, "Narration will appear here.", 88);
   const imageAsset = scene?.assets.find((asset) => asset.type === "image" && asset.url);
 
   return (
-    <section
-      className={`kv-preview ${light ? "light" : ""} ${imageAsset ? "has-image" : ""}`}
-      style={imageAsset ? { backgroundImage: `linear-gradient(180deg, rgba(6, 14, 27, 0.1), rgba(6, 14, 27, 0.78)), url("${imageAsset.url}")` } : undefined}
-    >
-      <div className="kv-preview-meta">
-        <span>Scene {scene?.sceneNumber ?? 1}</span>
-        <strong>{scene?.title ?? "No scene selected"}</strong>
-      </div>
+    <section className={`kv-preview ${imageAsset ? "has-image" : "missing-image"}`}>
       {imageAsset ? (
-        <div className="kv-image-credit">
-          <span>Generated scene visual</span>
-          <strong>{scene?.title ?? "Scene"}</strong>
-        </div>
+        <div
+          className={`kv-scene-image ${isPlaying ? "is-playing" : ""}`}
+          key={imageAsset.id}
+          style={{ backgroundImage: `url("${imageAsset.url}")` }}
+        />
       ) : (
-        <>
-          <div className="kv-preview-grid">
-            <div className="kv-preview-card wide">
-              <small>画面重点</small>
-              <span>{visual}</span>
-            </div>
-            <div className="kv-preview-card">
-              <small>镜头运动</small>
-              <span>{motion}</span>
-            </div>
-            <div className="kv-preview-card">
-              <small>旁白意图</small>
-              <span>{voice}</span>
-            </div>
-          </div>
-          <div className="kv-scene-composition" aria-hidden="true">
-            <div className="kv-composition-main">
-              <span>{scene?.title ?? "Scene"}</span>
-            </div>
-            <div className="kv-composition-stack">
-              <i />
-              <i />
-              <i />
-            </div>
-          </div>
-        </>
+        <div className="kv-missing-visual">
+          <ImagePlus size={34} />
+          <strong>这个场景还没有生成画面</strong>
+          <p>当前看到的不是成片。重新生成视觉素材后，才能播放和导出。</p>
+          <button disabled={isBusy} onClick={onRegenerate} type="button">
+            {isBusy ? <Loader2 className="kv-spin" size={16} /> : <RefreshCcw size={16} />}
+            生成本场景画面
+          </button>
+        </div>
       )}
-      <button className={`kv-play ${isPlaying ? "playing" : ""}`} onClick={onTogglePlayback} type="button">
+      <div className="kv-preview-meta">
+        <span>场景 {scene?.sceneNumber ?? 1}</span>
+        <strong>{scene?.title ?? "未选择场景"}</strong>
+      </div>
+      <button
+        aria-label={isPlaying ? "暂停预览" : "播放预览"}
+        className={`kv-play ${isPlaying ? "playing" : ""}`}
+        disabled={!canPlay || isBusy}
+        onClick={onTogglePlayback}
+        type="button"
+      >
         {isBusy ? <Loader2 className="kv-spin" size={28} /> : isPlaying ? <span className="kv-pause-icon" /> : <Play fill="currentColor" size={30} />}
       </button>
-      <p className="kv-caption">{isBusy ? "Updating video plan..." : scene?.voiceover ?? "Generate a video to preview scenes."}</p>
+      <p className="kv-caption">{isBusy ? "正在更新场景画面..." : scene?.voiceover ?? "生成视频后可在这里预览。"}</p>
       <div className="kv-player-bar">
         <span>{durationLabel(Math.floor(elapsedSeconds))}</span>
         <div>
@@ -316,8 +314,8 @@ function Storyboard({
   return (
     <section className="kv-storyboard">
       <div className="kv-strip-heading">
-        <h3>Storyboard</h3>
-        <span>{scenes.length} scenes</span>
+        <h3>分镜时间线</h3>
+        <span>{scenes.length} 个场景</span>
       </div>
       <div className="kv-scene-strip">
         {scenes.map((scene) => (
@@ -327,10 +325,15 @@ function Storyboard({
             onClick={() => onSelect(scene.sceneNumber)}
             type="button"
           >
-            {scene.assets.some((asset) => asset.type === "image") ? <i className="kv-thumb-dot" /> : null}
-            <span>S{scene.sceneNumber}</span>
+            {scene.assets.find((asset) => asset.type === "image" && asset.url) ? (
+              <span
+                className="kv-scene-thumb"
+                style={{ backgroundImage: `url("${scene.assets.find((asset) => asset.type === "image" && asset.url)?.url}")` }}
+              />
+            ) : <span className="kv-scene-thumb empty"><ImagePlus size={18} /></span>}
+            <span className="kv-scene-number">S{scene.sceneNumber}</span>
             <strong>{scene.title}</strong>
-            <small>{scene.durationSeconds}s</small>
+            <small>{scene.durationSeconds} 秒</small>
           </button>
         ))}
       </div>
@@ -342,20 +345,20 @@ function ScenePanel({ scene }: { scene?: Scene }) {
   return (
     <section className="kv-scene-panel">
       <div className="kv-strip-heading">
-        <h3>Scene direction</h3>
+        <h3>场景制作说明</h3>
         <span>{scene?.style.theme ?? "theme"}</span>
       </div>
       <div className="kv-scene-grid">
         <article>
-          <span>Voiceover</span>
+          <span>旁白</span>
           <p>{scene?.voiceover ?? "No voiceover yet."}</p>
         </article>
         <article>
-          <span>Visual prompt</span>
+          <span>画面设计</span>
           <p>{scene?.visualPrompt ?? "No visual prompt yet."}</p>
         </article>
         <article>
-          <span>Motion prompt</span>
+          <span>镜头运动</span>
           <p>{scene?.motionPrompt ?? "No motion prompt yet."}</p>
         </article>
       </div>
@@ -368,6 +371,12 @@ function StoryboardBoard({ scenes }: { scenes: Scene[] }) {
     <section className="kv-board">
       {scenes.map((scene) => (
         <article key={scene.id}>
+          {scene.assets.find((asset) => asset.type === "image" && asset.url) ? (
+            <div
+              className="kv-board-image"
+              style={{ backgroundImage: `url("${scene.assets.find((asset) => asset.type === "image" && asset.url)?.url}")` }}
+            />
+          ) : <div className="kv-board-image empty"><ImagePlus size={24} /><span>等待生成画面</span></div>}
           <div>
             <span>S{scene.sceneNumber}</span>
             <strong>{scene.title}</strong>
@@ -388,7 +397,7 @@ function ChangeCard({ change }: { change: EditChange }) {
   return (
     <article className="kv-change">
       <div>
-        <strong>Scene {change.sceneNumber}</strong>
+        <strong>场景 {change.sceneNumber}</strong>
         <span>{change.status}</span>
       </div>
       <p>{change.after.visualPrompt}</p>
@@ -419,8 +428,8 @@ function ChatPanel({
     <aside className="kv-chat">
       <header>
         <div>
-          <span className="kv-eyebrow">Conversational editing</span>
-          <h3>Adjust the video</h3>
+          <span className="kv-eyebrow">对话式改片</span>
+          <h3>告诉我你想怎么改</h3>
         </div>
         <PanelRightOpen size={20} />
       </header>
@@ -430,8 +439,8 @@ function ChatPanel({
             <p>{message.content}</p>
             {message.editPlan ? (
               <div className="kv-plan-summary">
-                <span>Affected: {message.editPlan.affectedScenes.join(", ")}</span>
-                <span>Regenerate: {uniqueRegenerate(message.editPlan)}</span>
+                <span>影响场景：{message.editPlan.affectedScenes.join(", ")}</span>
+                <span>重新生成：{uniqueRegenerate(message.editPlan)}</span>
               </div>
             ) : null}
           </div>
@@ -439,8 +448,8 @@ function ChatPanel({
         {pendingPlan ? (
           <section className="kv-review-plan">
             <div className="kv-strip-heading">
-              <h3>Review edit plan</h3>
-              <span>{pendingPlan.changes.length} changes</span>
+              <h3>确认修改方案</h3>
+              <span>{pendingPlan.changes.length} 项修改</span>
             </div>
             <p>{pendingPlan.summary}</p>
             <div className="kv-change-list">
@@ -490,7 +499,10 @@ function StudioScreen({
   onSelectScene,
   onViewChange,
   onTogglePlayback,
-  onUpload
+  onUpload,
+  onRegenerate,
+  onExport,
+  exportProgress
 }: {
   project: Project;
   messages: ChatMessage[];
@@ -509,8 +521,15 @@ function StudioScreen({
   onViewChange: (view: StudioView) => void;
   onTogglePlayback: () => void;
   onUpload: () => void;
+  onRegenerate: (sceneNumbers?: number[]) => void;
+  onExport: () => void;
+  exportProgress?: number;
 }) {
   const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === selectedScene) ?? project.currentVersion.scenes[0];
+  const missingSceneNumbers = project.currentVersion.scenes
+    .filter((item) => !item.assets.some((asset) => asset.type === "image" && asset.url))
+    .map((item) => item.sceneNumber);
+  const canPlay = missingSceneNumbers.length === 0;
 
   return (
     <div className="kv-studio">
@@ -519,11 +538,11 @@ function StudioScreen({
           <div className="kv-tabs">
             <button className={view === "preview" ? "active" : ""} onClick={() => onViewChange("preview")} type="button">
               <Film size={16} />
-              Preview
+              动态预览
             </button>
             <button className={view === "storyboard" ? "active" : ""} onClick={() => onViewChange("storyboard")} type="button">
               <Layers3 size={16} />
-              Storyboard
+              分镜板
             </button>
           </div>
           <div className="kv-actions">
@@ -531,13 +550,13 @@ function StudioScreen({
               <ImagePlus size={16} />
               素材
             </button>
-            <button type="button">
+            <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers.length > 0 ? missingSceneNumbers : undefined)} type="button">
               <RefreshCcw size={16} />
-              重新渲染
+              重新生成画面
             </button>
-            <button className="kv-primary" type="button">
-              <Download size={16} />
-              导出
+            <button className="kv-primary" disabled={isBusy || exportProgress !== undefined} onClick={onExport} type="button">
+              {exportProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <Download size={16} />}
+              {exportProgress !== undefined ? `导出中 ${exportProgress}%` : "导出 WebM"}
             </button>
           </div>
         </div>
@@ -548,8 +567,10 @@ function StudioScreen({
               isBusy={isBusy}
               isPlaying={isPlaying}
               onTogglePlayback={onTogglePlayback}
+              onRegenerate={() => onRegenerate([scene.sceneNumber])}
               scene={scene}
               totalSeconds={project.currentVersion.durationSeconds}
+              canPlay={canPlay}
             />
             <Storyboard onSelect={onSelectScene} scenes={project.currentVersion.scenes} selectedScene={selectedScene} />
             <ScenePanel scene={scene} />
@@ -593,6 +614,8 @@ export function WorkspaceClient({
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [studioView, setStudioView] = useState<StudioView>("preview");
+  const [errorMessage, setErrorMessage] = useState<string | undefined>();
+  const [exportProgress, setExportProgress] = useState<number | undefined>();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
@@ -640,6 +663,7 @@ export function WorkspaceClient({
     if (!prompt) return;
 
     setIsBusy(true);
+    setErrorMessage(undefined);
     setProgress(8);
     setStage("generating");
 
@@ -653,7 +677,10 @@ export function WorkspaceClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ prompt })
       });
-      if (!response.ok) throw new Error("Failed to create project.");
+      if (!response.ok) {
+        const failure = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(failure.error || "视频项目创建失败。");
+      }
       const data = await response.json() as {
         project: Project;
         messages: ChatMessage[];
@@ -672,6 +699,9 @@ export function WorkspaceClient({
             : "已用本地规则生成初版分镜。"
         }
       ]);
+      if (data.project.currentVersion.assetStatus !== "ready") {
+        setErrorMessage("脚本和分镜已经完成，但部分场景画面生成失败。可在工作室中逐个重试，未生成画面的场景不会冒充成片。");
+      }
       setSelectedScene(1);
       setElapsedSeconds(0);
       setIsPlaying(false);
@@ -682,6 +712,7 @@ export function WorkspaceClient({
     } catch (error) {
       console.error(error);
       setStage("brief");
+      setErrorMessage(error instanceof Error ? error.message : "生成失败，请稍后重试。");
       pushMessage({
         role: "assistant",
         type: "text",
@@ -796,12 +827,58 @@ export function WorkspaceClient({
     }
   }
 
+  async function regenerateImages(sceneNumbers?: number[]) {
+    setIsBusy(true);
+    setErrorMessage(undefined);
+    setIsPlaying(false);
+    try {
+      const response = await fetch("/api/assets/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ project, sceneNumbers })
+      });
+      const data = await response.json() as { project?: Project; error?: string };
+      if (!response.ok || !data.project) throw new Error(data.error || "场景画面生成失败。");
+      setProject(data.project);
+      pushMessage({
+        role: "assistant",
+        type: "text",
+        content: sceneNumbers?.length === 1
+          ? `场景 ${sceneNumbers[0]} 的画面已经重新生成。`
+          : "场景画面已经重新生成，可以继续播放或导出。"
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "场景画面生成失败。";
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function exportVideo() {
+    setErrorMessage(undefined);
+    setExportProgress(0);
+    setIsPlaying(false);
+    try {
+      await exportProjectWebm(project, setExportProgress);
+      pushMessage({ role: "assistant", type: "text", content: "视频已导出为 WebM 文件。" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "视频导出失败。";
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
+    } finally {
+      setExportProgress(undefined);
+    }
+  }
+
   function resetToBrief() {
     setStage("brief");
     setPendingPlan(undefined);
     setChatInput("");
     setIsPlaying(false);
     setElapsedSeconds(0);
+    setErrorMessage(undefined);
   }
 
   return (
@@ -816,6 +893,7 @@ export function WorkspaceClient({
           onSubmit={createVideo}
           onUseExample={setBriefPrompt}
           prompt={briefPrompt}
+          errorMessage={errorMessage}
         />
       ) : null}
       {stage === "generating" ? (
@@ -835,6 +913,9 @@ export function WorkspaceClient({
           onSubmit={submitChat}
           onTogglePlayback={togglePlayback}
           onUpload={() => fileInputRef.current?.click()}
+          onRegenerate={regenerateImages}
+          onExport={exportVideo}
+          exportProgress={exportProgress}
           onViewChange={setStudioView}
           pendingPlan={pendingPlan}
           project={project}

@@ -11,6 +11,7 @@
     "start": "next start",
     "db:init": "node --env-file=.env.local scripts/init-db.mjs",
     "db:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
+    "services:check": "node --env-file=.env.local scripts/diagnose-services.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -175,6 +175,7 @@ export async function getCurrentProjectSnapshot(): Promise<{
     }
 
     const scenes = sceneRows.map((scene) => toScene(scene, assetMap.get(scene.id) ?? []));
+    const imageCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image")).length;
     const project: Project = {
       id: projectRow.id,
       title: cleanBrand(projectRow.title),
@@ -188,6 +189,7 @@ export async function getCurrentProjectSnapshot(): Promise<{
         createdAt: new Date(versionRow.created_at).toISOString(),
         durationSeconds: versionRow.duration_seconds,
         renderUrl: versionRow.render_url ?? undefined,
+        assetStatus: imageCount === scenes.length ? "ready" : imageCount > 0 ? "partial" : "failed",
         scenes: scenes.length > 0 ? scenes : demoProject.currentVersion.scenes
       }
     };

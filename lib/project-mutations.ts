@@ -10,6 +10,10 @@ export function canPersist() {
   return hasDatabaseUrl();
 }
 
+function versionStatus(project: Project): ProjectVersion["status"] {
+  return project.currentVersion.assetStatus === "failed" ? "failed" : "ready";
+}
+
 async function insertScenes(versionId: string, scenes: Scene[]) {
   const sql = getSql();
 
@@ -115,7 +119,9 @@ export async function persistGeneratedProject(params: {
         id: crypto.randomUUID(),
         role: "assistant",
         type: "version",
-        content: `Generated ${params.project.currentVersion.scenes.length} scenes with the AI planning engine.`,
+        content: params.project.currentVersion.assetStatus === "ready"
+          ? `已完成 ${params.project.currentVersion.scenes.length} 个场景和全部视觉素材。`
+          : `已完成 ${params.project.currentVersion.scenes.length} 个场景，但部分视觉素材需要重试。`,
         versionId: params.project.currentVersion.id
       }
     ];
@@ -123,6 +129,7 @@ export async function persistGeneratedProject(params: {
   }
 
   const sql = getSql();
+  const status = versionStatus(params.project);
   const projectRows = await sql`
     insert into projects (title)
     values (${params.project.title})
@@ -139,7 +146,7 @@ export async function persistGeneratedProject(params: {
     )
     values (
       ${projectId},
-      ${params.project.currentVersion.status},
+      ${status},
       ${JSON.stringify(params.project.currentVersion.scenes)},
       ${params.project.currentVersion.durationSeconds}
     )
@@ -161,7 +168,9 @@ export async function persistGeneratedProject(params: {
     returning id
   ` as IdRow[];
 
-  const assistantContent = `Generated ${params.project.currentVersion.scenes.length} scenes with the AI planning engine. You can now revise any scene through chat.`;
+  const assistantContent = params.project.currentVersion.assetStatus === "ready"
+    ? `已完成 ${params.project.currentVersion.scenes.length} 个场景和全部视觉素材。你可以播放预览，或通过对话逐场景修改。`
+    : `已完成 ${params.project.currentVersion.scenes.length} 个场景，但视觉素材没有全部生成。请在工作室中重试缺失的场景。`;
   const assistantRows = await sql`
     insert into chat_messages (project_id, version_id, role, message_type, content)
     values (${projectId}, ${versionId}, 'assistant', 'version', ${assistantContent})
@@ -174,6 +183,7 @@ export async function persistGeneratedProject(params: {
     currentVersion: {
       ...params.project.currentVersion,
       id: versionId,
+      status,
       scenes: params.project.currentVersion.scenes
     }
   };
@@ -236,6 +246,18 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
   }>;
 
   const assetMap = await loadSceneAssets(scenes.map((scene) => scene.id));
+  const hydratedScenes = scenes.map((scene) => ({
+    id: scene.id,
+    sceneNumber: scene.scene_number,
+    title: scene.title,
+    voiceover: scene.voiceover,
+    visualPrompt: scene.visual_prompt,
+    motionPrompt: scene.motion_prompt,
+    durationSeconds: scene.duration_seconds,
+    style: scene.style_json as Scene["style"],
+    assets: assetMap.get(scene.id) ?? []
+  }));
+  const imageCount = hydratedScenes.filter((scene) => scene.assets.some((asset) => asset.type === "image")).length;
 
   return {
     id: version.id,
@@ -244,18 +266,43 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
     createdAt: new Date(version.created_at).toISOString(),
     durationSeconds: version.duration_seconds,
     renderUrl: version.render_url ?? undefined,
-    scenes: scenes.map((scene) => ({
-      id: scene.id,
-      sceneNumber: scene.scene_number,
-      title: scene.title,
-      voiceover: scene.voiceover,
-      visualPrompt: scene.visual_prompt,
-      motionPrompt: scene.motion_prompt,
-      durationSeconds: scene.duration_seconds,
-      style: scene.style_json as Scene["style"],
-      assets: assetMap.get(scene.id) ?? []
-    }))
+    assetStatus: imageCount === hydratedScenes.length ? "ready" : imageCount > 0 ? "partial" : "failed",
+    scenes: hydratedScenes
   };
+}
+
+export async function persistGeneratedSceneAssets(versionId: string, scenes: Scene[]) {
+  if (!canPersist()) return;
+
+  const sql = getSql();
+  const rows = await sql`
+    select id, scene_number
+    from scenes
+    where version_id = ${versionId}
+  ` as Array<{ id: string; scene_number: number }>;
+  const sceneIdByNumber = new Map(rows.map((row) => [row.scene_number, row.id]));
+
+  for (const scene of scenes) {
+    const sceneId = sceneIdByNumber.get(scene.sceneNumber);
+    if (!sceneId) continue;
+
+    for (const asset of scene.assets.filter((item) => item.type === "image")) {
+      await sql`
+        insert into scene_assets (scene_id, asset_type, r2_key, public_url, metadata_json)
+        select ${sceneId}, ${asset.type}, ${asset.r2Key}, ${asset.url}, ${JSON.stringify(asset.metadata ?? {})}
+        where not exists (
+          select 1 from scene_assets where scene_id = ${sceneId} and r2_key = ${asset.r2Key}
+        )
+      `;
+    }
+  }
+
+  const imageCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image")).length;
+  await sql`
+    update project_versions
+    set status = ${imageCount > 0 ? "ready" : "failed"}
+    where id = ${versionId}
+  `;
 }
 
 export async function persistEditPlan(params: {
@@ -372,7 +419,7 @@ export async function applyPersistedEditPlan(params: {
     values (
       ${params.project.id},
       ${params.project.currentVersion.id},
-      'planning',
+      ${versionStatus(nextProject)},
       ${JSON.stringify(nextProject.currentVersion.scenes)},
       ${nextProject.currentVersion.durationSeconds}
     )

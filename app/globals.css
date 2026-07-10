@@ -25,6 +25,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-x: hidden;
 }
 
 button,
@@ -96,6 +97,7 @@ button:disabled {
   display: grid;
   min-width: 0;
   grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .kv-topbar {
@@ -122,6 +124,9 @@ button:disabled {
 .kv-topbar h1 {
   margin-top: 3px;
   font-size: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kv-eyebrow {
@@ -212,8 +217,9 @@ button:disabled {
 
 .kv-section-heading h2 {
   margin-top: 14px;
-  font-size: clamp(32px, 4vw, 58px);
-  line-height: 1.02;
+  font-size: 46px;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
 }
 
 .kv-section-heading p {
@@ -381,7 +387,7 @@ button:disabled {
 .kv-progress-steps {
   display: grid;
   width: min(760px, 92vw);
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 10px;
 }
 
@@ -422,6 +428,7 @@ button:disabled {
 
 .kv-studio-main {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 18px;
   overflow: auto;
@@ -1065,14 +1072,240 @@ button:disabled {
   color: #fff;
 }
 
-@media (max-width: 1180px) {
+.kv-inline-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff7f7;
+  padding: 12px 14px;
+  color: #9f1c1c;
+  line-height: 1.45;
+}
+
+.kv-studio,
+.kv-studio-main,
+.kv-actionbar {
+  min-width: 0;
+}
+
+.kv-actionbar {
+  flex-wrap: wrap;
+}
+
+.kv-preview {
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background: #07111d;
+  isolation: isolate;
+}
+
+.kv-preview::before,
+.kv-preview.has-image::after {
+  display: none;
+}
+
+.kv-scene-image {
+  position: absolute;
+  inset: -2%;
+  z-index: -2;
+  background-position: center;
+  background-size: cover;
+  transform: scale(1.03);
+  animation: kv-scene-enter 0.55s ease both;
+}
+
+.kv-scene-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(2, 7, 16, 0.32), transparent 34%),
+    linear-gradient(180deg, transparent 48%, rgba(2, 7, 16, 0.88));
+}
+
+.kv-scene-image.is-playing {
+  animation: kv-ken-burns 8s linear both;
+}
+
+@keyframes kv-scene-enter {
+  from { opacity: 0; transform: scale(1.07); }
+  to { opacity: 1; transform: scale(1.03); }
+}
+
+@keyframes kv-ken-burns {
+  from { transform: scale(1.03) translate3d(-0.4%, 0, 0); }
+  to { transform: scale(1.11) translate3d(0.8%, -0.5%, 0); }
+}
+
+.kv-missing-visual {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 32px;
+  background: #0d1726;
+  color: #e6edf6;
+  text-align: center;
+}
+
+.kv-missing-visual strong {
+  font-size: 20px;
+}
+
+.kv-missing-visual p {
+  max-width: 460px;
+  margin: 0;
+  color: #9eacbf;
+  line-height: 1.5;
+}
+
+.kv-missing-visual button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 13px;
+  color: #101828;
+  font-weight: 800;
+}
+
+.kv-preview.missing-image .kv-preview-meta,
+.kv-preview.missing-image .kv-caption,
+.kv-preview.missing-image .kv-player-bar {
+  display: none;
+}
+
+.kv-preview-meta {
+  left: 30px;
+  top: 26px;
+}
+
+.kv-preview-meta strong {
+  max-width: 620px;
+  font-size: 38px;
+  line-height: 1.08;
+}
+
+.kv-play {
+  height: 66px;
+  width: 66px;
+  background: rgba(8, 15, 28, 0.58);
+  color: #fff;
+}
+
+.kv-play:disabled {
+  display: none;
+}
+
+.kv-caption {
+  bottom: 56px;
+  left: 30px;
+  right: 30px;
+  border-radius: 6px;
+  background: rgba(3, 8, 18, 0.7);
+  padding: 11px 14px;
+  font-size: 15px;
+  backdrop-filter: blur(10px);
+}
+
+.kv-player-bar {
+  bottom: 20px;
+  left: 30px;
+  right: 30px;
+}
+
+.kv-storyboard,
+.kv-scene-panel {
+  border-radius: 8px;
+}
+
+.kv-scene-strip {
+  grid-auto-columns: minmax(190px, 1fr);
+}
+
+.kv-scene-strip button {
+  min-height: 158px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: 86px auto;
+  align-items: center;
+  border-radius: 7px;
+  padding: 8px;
+}
+
+.kv-scene-thumb {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 86px;
+  border-radius: 5px;
+  background-position: center;
+  background-size: cover;
+}
+
+.kv-scene-thumb.empty {
+  display: grid;
+  place-items: center;
+  background: #e8edf2;
+  color: #8794a5;
+}
+
+.kv-scene-number {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.kv-scene-strip button strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv-board article {
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.kv-board article > .kv-board-image {
+  display: flex;
+  width: calc(100% + 32px);
+  height: 220px;
+  margin: -16px -16px 2px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-position: center;
+  background-size: cover;
+}
+
+.kv-board-image.empty {
+  background: #e8edf2;
+  color: #667085;
+}
+
+.kv-board-image.empty span {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+@media (max-width: 1380px) {
   .kv-brief,
   .kv-studio {
     grid-template-columns: 1fr;
   }
 
   .kv-chat {
-    min-height: 720px;
+    min-height: 620px;
     border-left: 0;
     border-top: 1px solid var(--line);
   }
@@ -1102,6 +1335,10 @@ button:disabled {
     padding: 18px;
   }
 
+  .kv-section-heading h2 {
+    font-size: 32px;
+  }
+
   .kv-example-grid,
   .kv-progress-steps,
   .kv-scene-grid,
@@ -1116,23 +1353,49 @@ button:disabled {
     flex-direction: column;
   }
 
+  .kv-actionbar,
+  .kv-actions,
+  .kv-tabs,
+  .kv-actions button {
+    width: 100%;
+  }
+
+  .kv-tabs button {
+    flex: 1;
+    justify-content: center;
+  }
+
   .kv-prompt-tools .kv-primary {
     margin-left: 0;
   }
 
-  .kv-preview-grid {
-    display: none;
+  .kv-preview-meta {
+    left: 18px;
+    top: 16px;
   }
 
-  .kv-scene-composition {
-    left: 24px;
-    right: 24px;
-    top: 170px;
-    width: auto;
-    grid-template-columns: 1fr;
+  .kv-preview-meta strong {
+    max-width: 76vw;
+    font-size: 24px;
   }
 
-  .kv-composition-stack {
+  .kv-caption {
+    bottom: 45px;
+    left: 16px;
+    right: 16px;
+    max-height: 54px;
+    overflow: hidden;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .kv-player-bar {
+    bottom: 12px;
+    left: 16px;
+    right: 16px;
+  }
+
+  .kv-missing-visual p {
     display: none;
   }
 }

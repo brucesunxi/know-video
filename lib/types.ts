@@ -31,6 +31,7 @@ export type ProjectVersion = {
   createdAt: string;
   durationSeconds: number;
   renderUrl?: string;
+  assetStatus?: "pending" | "partial" | "ready" | "failed";
   scenes: Scene[];
 };
 

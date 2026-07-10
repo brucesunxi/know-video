@@ -20,9 +20,10 @@ function buildSceneImagePrompt(scene: Scene, projectTitle: string) {
     `Visual direction: ${scene.visualPrompt}`,
     `Motion direction to imply: ${scene.motionPrompt}`,
     `Mood: ${scene.style.mood}. Theme: ${scene.style.theme}. Palette: ${palette}.`,
-    "Make it cinematic and concrete, with strong composition, depth, premium lighting, and clear subject focus.",
-    "Prefer expressive product UI, spatial layers, real workflow objects, and branded-but-generic visual polish.",
-    "Avoid clutter, lorem ipsum, random text, fake logos, watermarks, distorted interface text, and generic abstract cards."
+    "Make it a finished cinematic frame rather than a wireframe or a presentation slide: strong composition, depth, premium lighting, and one clear subject.",
+    "Show the actual human workflow, device, environment, and product interaction described by the scene. Use spatial layers and purposeful visual storytelling.",
+    "Use little or no text inside the generated image. Never show prompt instructions, layout annotations, labels, lorem ipsum, fake logos, watermarks, or generic floating cards.",
+    "Keep important subjects inside a 16:9 center-safe area so the 3:2 source can be cropped cleanly."
   ].join("\n");
 }
 
@@ -36,7 +37,7 @@ async function generateSceneImage(scene: Scene, project: Project): Promise<Scene
     model: imageModel(),
     prompt,
     size: "1536x1024",
-    quality: "low",
+    quality: "medium",
     n: 1
   } as never);
 
@@ -69,7 +70,12 @@ export async function generateProjectSceneImages(
   project: Project,
   options: { replaceExistingImages?: boolean; sceneNumbers?: number[] } = {}
 ) {
-  if (!canGenerateImages()) return project;
+  if (!canGenerateImages()) {
+    return {
+      ...project,
+      currentVersion: { ...project.currentVersion, assetStatus: "failed" as const }
+    };
+  }
 
   const selectedScenes = options.sceneNumbers ? new Set(options.sceneNumbers) : undefined;
   const scenes = await Promise.all(
@@ -92,10 +98,15 @@ export async function generateProjectSceneImages(
     })
   );
 
+  const imageCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image")).length;
+  const assetStatus: NonNullable<Project["currentVersion"]["assetStatus"]> =
+    imageCount === scenes.length ? "ready" : imageCount > 0 ? "partial" : "failed";
+
   return {
     ...project,
     currentVersion: {
       ...project.currentVersion,
+      assetStatus,
       scenes
     }
   };
