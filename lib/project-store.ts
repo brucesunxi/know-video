@@ -38,7 +38,13 @@ type MessageRow = {
 };
 
 function cleanBrand(value: string) {
-  return value.replaceAll("VYBEA", "Know Video").replaceAll("vybea", "know video");
+  return value
+    .replaceAll("VYBEA", "Know Video")
+    .replaceAll("vybea", "know video")
+    .replaceAll("DeepSeek flash", "AI")
+    .replaceAll("deepseek-flash", "AI")
+    .replaceAll("DeepSeek", "AI")
+    .replaceAll("deepseek", "AI");
 }
 
 function cleanBrandInJson<T>(value: T): T {

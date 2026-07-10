@@ -54,7 +54,7 @@ export async function persistGeneratedProject(params: {
         id: crypto.randomUUID(),
         role: "assistant",
         type: "version",
-        content: `Generated ${params.project.currentVersion.scenes.length} scenes with ${params.engine}.`,
+        content: `Generated ${params.project.currentVersion.scenes.length} scenes with the AI planning engine.`,
         versionId: params.project.currentVersion.id
       }
     ];
@@ -100,7 +100,7 @@ export async function persistGeneratedProject(params: {
     returning id
   ` as IdRow[];
 
-  const assistantContent = `Generated ${params.project.currentVersion.scenes.length} scenes with ${params.engine}. You can now revise any scene through chat.`;
+  const assistantContent = `Generated ${params.project.currentVersion.scenes.length} scenes with the AI planning engine. You can now revise any scene through chat.`;
   const assistantRows = await sql`
     insert into chat_messages (project_id, version_id, role, message_type, content)
     values (${projectId}, ${versionId}, 'assistant', 'version', ${assistantContent})

@@ -8,6 +8,10 @@ const requestSchema = z.object({
   baseProject: z.unknown().optional()
 });
 
+function publicEngine(engine: string) {
+  return engine === "heuristic" ? "heuristic" : "ai";
+}
+
 export async function POST(request: Request) {
   const body = requestSchema.parse(await request.json());
   const { project, engine } = await createStoryboardProject(body.prompt);
@@ -17,5 +21,5 @@ export async function POST(request: Request) {
     engine
   });
 
-  return NextResponse.json({ ...persisted, engine });
+  return NextResponse.json({ ...persisted, engine: publicEngine(engine) });
 }

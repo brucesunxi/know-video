@@ -25,7 +25,7 @@ import type { ChatMessage, EditChange, EditPlan, Project, Scene } from "@/lib/ty
 
 type Source = "database" | "mock";
 type Stage = "brief" | "generating" | "studio";
-type Engine = "deepseek-flash" | "openai" | "heuristic";
+type Engine = "ai" | "heuristic";
 type StudioView = "preview" | "storyboard";
 
 const promptExamples = [
@@ -108,7 +108,7 @@ function Shell({
           </div>
           <div className="kv-status-row">
             <span>{source === "database" ? "Neon connected" : "Local fallback"}</span>
-            <span>DeepSeek flash</span>
+            <span>AI planning engine</span>
             <span>R2 storage</span>
           </div>
         </header>
@@ -185,7 +185,7 @@ function BriefScreen({
         <div className="kv-side-panel">
           <span className="kv-eyebrow">Pipeline</span>
           <ol className="kv-mini-steps">
-            <li>DeepSeek flash creates storyboard JSON</li>
+            <li>AI engine creates storyboard JSON</li>
             <li>Neon stores projects, versions, scenes</li>
             <li>R2 stores uploads and generated assets</li>
             <li>Chat edits create reviewable plans</li>
@@ -207,7 +207,7 @@ function GeneratingScreen({ prompt, progress }: { prompt: string; progress: numb
       </div>
       <div className="kv-section-heading centered">
         <span className="kv-pill">Generating</span>
-        <h2>Building your video plan with DeepSeek flash</h2>
+        <h2>Building your video plan with the AI engine</h2>
         <p>{prompt}</p>
       </div>
       <div className="kv-progress">
@@ -653,11 +653,9 @@ export function WorkspaceClient({
           id: crypto.randomUUID(),
           role: "assistant",
           type: "text",
-          content: data.engine === "deepseek-flash"
-            ? "DeepSeek flash 已完成脚本、分镜和镜头提示词。你可以继续用右侧对话改片。"
-            : data.engine === "openai"
-              ? "OpenAI 已完成脚本、分镜和镜头提示词。你可以继续用右侧对话改片。"
-              : "已用本地规则生成初版分镜。"
+          content: data.engine === "ai"
+            ? "AI 已完成脚本、分镜和镜头提示词。你可以继续用右侧对话改片。"
+            : "已用本地规则生成初版分镜。"
         }
       ]);
       setSelectedScene(1);

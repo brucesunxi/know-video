@@ -11,6 +11,10 @@ const requestSchema = z.object({
   versionId: z.string().optional()
 });
 
+function publicEngine(engine: string) {
+  return engine === "heuristic" ? "heuristic" : "ai";
+}
+
 export async function POST(request: Request) {
   const json = await request.json();
   const body = requestSchema.parse(json);
@@ -34,12 +38,12 @@ export async function POST(request: Request) {
       editPlan,
       engine
     });
-    return NextResponse.json({ ...persisted, engine });
+    return NextResponse.json({ ...persisted, engine: publicEngine(engine) });
   }
 
   return NextResponse.json({
     editPlan,
-    engine,
+    engine: publicEngine(engine),
     messages: [
       { id: crypto.randomUUID(), role: "user", type: "text", content: body.request },
       { id: crypto.randomUUID(), role: "assistant", type: "plan", content: editPlan.summary, editPlan }
