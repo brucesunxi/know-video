@@ -31,13 +31,12 @@ npm run dev
 The MVP can run without model keys by falling back to local planning rules. Production generation uses:
 
 - `DATABASE_URL`
-- `DEEPSEEK_API_KEY`
-- `DEEPSEEK_MODEL=deepseek-v4-flash`
+- Primary text-planning model credentials
 - `OPENAI_API_KEY` for fallback and future vision/video-related work
 - R2 credentials: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`
 - `RENDER_WORKER_URL`
 
-Text planning is routed to DeepSeek flash first for cost control. The code intentionally forces the DeepSeek model to `deepseek-v4-flash` even if a different `DEEPSEEK_MODEL` value is supplied.
+Text planning is routed through the low-cost primary planner first, with OpenAI reserved for fallback and future multimodal/video-related work.
 
 ## Core Model
 
