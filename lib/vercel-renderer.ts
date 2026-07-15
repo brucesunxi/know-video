@@ -33,6 +33,32 @@ async function ensureRendererBase() {
     },
     tags: { service: "know-video", role: "renderer-base" },
     onCreate: async (created) => {
+      const systemDependencies = await created.runCommand({
+        cmd: "dnf",
+        args: [
+          "install",
+          "-y",
+          "alsa-lib",
+          "at-spi2-atk",
+          "atk",
+          "cups-libs",
+          "libdrm",
+          "libXcomposite",
+          "libXdamage",
+          "libXext",
+          "libXfixes",
+          "libXrandr",
+          "libxkbcommon",
+          "mesa-libgbm",
+          "nss",
+          "pango"
+        ],
+        sudo: true,
+        timeoutMs: 3 * 60 * 1000
+      });
+      if (systemDependencies.exitCode !== 0) {
+        throw new Error(`渲染系统依赖安装失败：${(await systemDependencies.stderr()).slice(-1200)}`);
+      }
       const install = await created.runCommand("npm", ["ci"], {
         timeoutMs: 8 * 60 * 1000
       });
