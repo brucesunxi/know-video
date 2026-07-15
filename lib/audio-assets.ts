@@ -1,8 +1,13 @@
 import OpenAI from "openai";
+import { generateAzureChineseSpeech, hasAzureSpeech } from "@/lib/azure-speech";
 import { generateCloudflareSpeech, hasCloudflareAI } from "@/lib/cloudflare-ai";
 import { getOptionalEnv } from "@/lib/env";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
+
+function containsChinese(text: string) {
+  return /\p{Script=Han}/u.test(text);
+}
 
 async function generateSceneVoice(scene: Scene, project: Project): Promise<SceneAsset> {
   let body: Buffer;
@@ -10,7 +15,17 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
   let voice: string;
   let contentType: "audio/mpeg" | "audio/wav";
   let extension: "mp3" | "wav";
-  if (hasCloudflareAI()) {
+  if (containsChinese(scene.voiceover)) {
+    if (!hasAzureSpeech()) {
+      throw new Error("Chinese narration requires AZURE_SPEECH_KEY and AZURE_SPEECH_REGION");
+    }
+    const generated = await generateAzureChineseSpeech(scene.voiceover);
+    body = generated.body;
+    model = generated.model;
+    voice = generated.voice;
+    contentType = generated.contentType;
+    extension = generated.extension;
+  } else if (hasCloudflareAI()) {
     const generated = await generateCloudflareSpeech(scene.voiceover);
     body = generated.body;
     model = generated.model;
@@ -45,7 +60,10 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
 }
 
 export async function generateProjectVoices(project: Project, sceneNumbers?: number[]) {
-  if ((!hasCloudflareAI() && !getOptionalEnv("OPENAI_API_KEY")) || getOptionalEnv("ENABLE_TTS") === "false") return project;
+  if (
+    (!hasAzureSpeech() && !hasCloudflareAI() && !getOptionalEnv("OPENAI_API_KEY"))
+    || getOptionalEnv("ENABLE_TTS") === "false"
+  ) return project;
   const selected = sceneNumbers ? new Set(sceneNumbers) : undefined;
   const scenes = await Promise.all(project.currentVersion.scenes.map(async (scene) => {
     if (selected && !selected.has(scene.sceneNumber)) return scene;
@@ -54,7 +72,10 @@ export async function generateProjectVoices(project: Project, sceneNumbers?: num
       return { ...scene, assets: [voice, ...scene.assets.filter((asset) => asset.type !== "audio")] };
     } catch (error) {
       console.error(`[audio-assets] Scene ${scene.sceneNumber} voice generation failed:`, error);
-      return scene;
+      // A failed Chinese regeneration must not leave a previously broken MeloTTS track active.
+      return containsChinese(scene.voiceover)
+        ? { ...scene, assets: scene.assets.filter((asset) => asset.type !== "audio") }
+        : scene;
     }
   }));
 

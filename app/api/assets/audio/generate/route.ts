@@ -16,7 +16,9 @@ export async function POST(request: Request) {
   const project = body.project as Project;
   const updated = await generateProjectVoices(project, body.sceneNumbers);
 
-  await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes);
+  await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
+    replaceAudio: true
+  });
 
   const targets = body.sceneNumbers?.length
     ? updated.currentVersion.scenes.filter((scene) => body.sceneNumbers?.includes(scene.sceneNumber))
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
 
   if (failed.length > 0) {
     return NextResponse.json(
-      { error: "部分场景配音生成失败，请检查语音服务额度后重试。", project: updated },
+      { error: "部分场景配音生成失败，请检查中文语音服务配置后重试。", project: updated },
       { status: 502 }
     );
   }

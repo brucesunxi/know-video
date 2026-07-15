@@ -288,7 +288,11 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
   };
 }
 
-export async function persistGeneratedSceneAssets(versionId: string, scenes: Scene[]) {
+export async function persistGeneratedSceneAssets(
+  versionId: string,
+  scenes: Scene[],
+  options: { replaceAudio?: boolean } = {}
+) {
   if (!canPersist()) return;
 
   const sql = getSql();
@@ -302,6 +306,13 @@ export async function persistGeneratedSceneAssets(versionId: string, scenes: Sce
   for (const scene of scenes) {
     const sceneId = sceneIdByNumber.get(scene.sceneNumber);
     if (!sceneId) continue;
+
+    if (options.replaceAudio) {
+      await sql`
+        delete from scene_assets
+        where scene_id = ${sceneId} and asset_type = 'audio'
+      `;
+    }
 
     for (const asset of scene.assets) {
       await sql`
