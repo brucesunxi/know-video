@@ -771,14 +771,34 @@ export function WorkspaceClient({
         body: JSON.stringify({ projectId: project.id, versionId: project.currentVersion.id })
       });
       const data = await response.json() as { renderJob?: RenderJob; error?: string };
-      if (!response.ok || !data.renderJob?.renderUrl) throw new Error(data.error || "MP4 渲染失败。");
+      if (!response.ok || !data.renderJob) throw new Error(data.error || "MP4 渲染任务启动失败。");
+      let completed = data.renderJob;
+      const startedAt = Date.now();
+      while (completed.status === "queued" || completed.status === "running") {
+        if (Date.now() - startedAt > 45 * 60 * 1000) {
+          throw new Error("视频渲染超时，请稍后在项目中重试导出。");
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        const statusResponse = await fetch(`/api/render-jobs?id=${encodeURIComponent(completed.id)}`, {
+          cache: "no-store"
+        });
+        const statusData = await statusResponse.json() as { renderJob?: RenderJob; error?: string };
+        if (!statusResponse.ok || !statusData.renderJob) {
+          throw new Error(statusData.error || "无法读取视频渲染进度。");
+        }
+        completed = statusData.renderJob;
+        setExportProgress(completed.progress);
+      }
+      if (completed.status !== "ready" || !completed.renderUrl) {
+        throw new Error(completed.error || "MP4 渲染失败。");
+      }
       setExportProgress(100);
       setProject((current) => ({
         ...current,
-        currentVersion: { ...current.currentVersion, renderUrl: data.renderJob?.renderUrl, status: "ready" }
+        currentVersion: { ...current.currentVersion, renderUrl: completed.renderUrl, status: "ready" }
       }));
       const anchor = document.createElement("a");
-      anchor.href = data.renderJob.renderUrl;
+      anchor.href = completed.renderUrl;
       anchor.download = `${project.title}.mp4`;
       anchor.click();
       pushMessage({ role: "assistant", type: "text", content: "1080p MP4 已完成合成并保存到云端。" });

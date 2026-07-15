@@ -10,7 +10,7 @@ flowchart TD
   D --> E["Affected scene queue"]
   E --> F["Image / TTS / clip generation"]
   F --> G["Cloudflare R2 assets"]
-  G --> H["Remotion render worker"]
+  G --> H["Vercel Sandbox + Remotion"]
   H --> I["R2 MP4 output"]
   I --> J["Video workspace"]
 ```
@@ -31,7 +31,7 @@ Instead:
 
 This makes edits auditable, reversible, and cheaper.
 
-## Render Worker Boundary
+## Render Boundary
 
 Vercel should handle orchestration, not MP4 rendering.
 
@@ -43,7 +43,7 @@ The render worker should:
 - Upload output to R2
 - Update `render_jobs` and `project_versions`
 
-The production worker is packaged by `Dockerfile.renderer` for Cloud Run. Vercel creates and tracks jobs; the worker owns Chromium, Remotion and FFmpeg.
+Vercel creates and tracks jobs in Neon. A version-pinned base Sandbox stores the installed renderer dependencies as a short-lived snapshot. Every export forks an isolated Sandbox from that snapshot, owns Chromium and Remotion for the duration of the render, uploads the MP4 to R2, and then shuts down. This keeps long renders outside the serverless request lifecycle without adding another cloud provider.
 
 ## Versioning Rules
 

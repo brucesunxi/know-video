@@ -1,28 +1,26 @@
-# Render Worker Contract
+# Sandbox Renderer Contract
 
-The app should call a worker endpoint when an edit plan is approved.
+The app starts an isolated Vercel Sandbox when the user exports a video. The request route returns as soon as the detached render process starts; the browser reads progress from Neon through `GET /api/render-jobs?id=...`.
 
 ## Request
 
 ```json
 {
   "jobId": "render-job-id",
-  "projectId": "project-id",
-  "versionId": "version-id",
-  "affectedScenes": [1, 4, 5],
+  "project": { "id": "project-id", "currentVersion": {} },
+  "assetBaseUrl": "https://your-vercel-app.com",
   "callbackUrl": "https://your-vercel-app.com/api/render-jobs/callback"
 }
 ```
 
 ## Worker Steps
 
-1. Validate shared secret.
-2. Load project version and scenes from Neon.
-3. Regenerate missing/affected assets.
-4. Upload assets to R2.
-5. Render MP4 through Remotion.
-6. Upload MP4 to R2.
-7. Send callback with final status.
+1. Fork the version-pinned renderer snapshot.
+2. Write the immutable project input into the isolated filesystem.
+3. Render MP4 through the shared Remotion composition.
+4. Upload the MP4 to R2.
+5. Send authenticated progress and final callbacks.
+6. Stop the job Sandbox after a terminal callback.
 
 ## Callback
 
@@ -31,7 +29,7 @@ The app should call a worker endpoint when an edit plan is approved.
   "jobId": "render-job-id",
   "status": "ready",
   "progress": 100,
-  "outputR2Key": "renders/project/version/output.mp4",
-  "renderUrl": "https://cdn.example.com/renders/project/version/output.mp4"
+  "outputR2Key": "renders/project/version/job-id.mp4",
+  "sandboxName": "know-video-job-render-job-id"
 }
 ```

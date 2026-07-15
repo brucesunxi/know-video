@@ -20,7 +20,7 @@ This project is the first implementation pass for a Knowlify-style workflow:
 - AI: OpenAI-compatible planner/generator layer
 - Preview and render: one shared Remotion composition
 - Encoding: FFmpeg / H.264 MP4 / AAC
-- Render runtime: Docker worker on Cloud Run
+- Render runtime: isolated Vercel Sandbox jobs
 
 ## Local Setup
 
@@ -36,7 +36,9 @@ The MVP can run without model keys by falling back to local planning rules. Prod
 - Primary text-planning model credentials
 - `OPENAI_API_KEY` for fallback and future vision/video-related work
 - R2 credentials: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`
-- `RENDER_WORKER_URL`
+- `WORKER_SHARED_SECRET` for authenticated render callbacks
+
+Vercel Sandbox authentication is automatic on deployments through Vercel OIDC. No Google Cloud project or long-lived Vercel access token is required.
 
 Text planning is routed through the low-cost primary planner first, with OpenAI reserved for fallback and future multimodal/video-related work.
 
@@ -91,17 +93,12 @@ The app reads from Neon when `DATABASE_URL` is configured. If no project exists 
 
 ## Next Milestones
 
-1. Deploy `Dockerfile.renderer` to Cloud Run and set `RENDER_WORKER_URL`.
-2. Add OpenAI video clips selectively for motion-critical scenes.
-3. Add authentication and per-user project ownership.
+1. Add generated video clips selectively for motion-critical scenes.
+2. Add authentication and per-user project ownership.
+3. Add render cancellation and an export history panel.
 
 ## Renderer
 
-The renderer shares the exact composition used by the browser player. Build and run it with Node 20:
+The renderer shares the exact composition used by the browser player. The first export for a deployment creates a version-pinned Vercel Sandbox, installs dependencies, and stores a seven-day base snapshot. Each export then forks that snapshot into an isolated job, renders a 1920x1080 H.264/AAC MP4, uploads it to R2, reports progress through the authenticated callback route, and shuts down.
 
-```bash
-docker build -f Dockerfile.renderer -t know-video-renderer .
-docker run --env-file .env.local -p 8080:8080 know-video-renderer
-```
-
-Set the same `WORKER_SHARED_SECRET` in Vercel and the renderer. The worker renders a 1920x1080 H.264 MP4, uploads it to R2, and reports progress through the authenticated callback route.
+`WORKER_SHARED_SECRET` must be present in the Vercel project. Only R2 credentials and this callback secret are passed to render jobs; model credentials remain in the application runtime.
