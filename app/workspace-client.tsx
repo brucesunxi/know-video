@@ -327,6 +327,8 @@ function StoryboardBoard({ scenes }: { scenes: Scene[] }) {
 function ChangeCard({ change }: { change: EditChange }) {
   const voiceoverChanged = change.after.voiceover
     && change.after.voiceover !== change.before.voiceover;
+  const motionPromptChanged = change.after.motionPrompt
+    && change.after.motionPrompt !== change.before.motionPrompt;
 
   return (
     <article className="kv-change">
@@ -334,13 +336,26 @@ function ChangeCard({ change }: { change: EditChange }) {
         <strong>场景 {change.sceneNumber}</strong>
         <span>{change.status}</span>
       </div>
+      <div className="kv-change-field">
+        <span>新标题</span>
+        <p>{change.after.title}</p>
+      </div>
       {voiceoverChanged ? (
-        <div className="kv-change-voiceover">
+        <div className="kv-change-field accent">
           <span>新旁白</span>
           <p>{change.after.voiceover}</p>
         </div>
       ) : null}
-      <p>{change.after.visualPrompt}</p>
+      <div className="kv-change-field">
+        <span>画面描述</span>
+        <p>{change.after.visualPrompt}</p>
+      </div>
+      {motionPromptChanged ? (
+        <div className="kv-change-field">
+          <span>镜头运动</span>
+          <p>{change.after.motionPrompt}</p>
+        </div>
+      ) : null}
     </article>
   );
 }

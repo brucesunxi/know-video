@@ -221,13 +221,15 @@ export function buildEditPlanFromRequest(params: {
         title: scene.title,
         voiceover: scene.voiceover,
         thumbnailTone: scene.style.theme.includes("light") ? "light" : "dark",
-        visualPrompt: scene.visualPrompt
+        visualPrompt: scene.visualPrompt,
+        motionPrompt: scene.motionPrompt
       },
       after: {
         title: scene.title,
         voiceover: scene.voiceover,
         thumbnailTone: tone === "light" ? "light" : "dark",
-        visualPrompt: `${scene.visualPrompt} Revision request: ${params.request}. Apply a ${tone} art direction, keep layout readable, and preserve the scene purpose.`
+        visualPrompt: `${scene.visualPrompt} Revision request: ${params.request}. Apply a ${tone} art direction, keep layout readable, and preserve the scene purpose.`,
+        motionPrompt: scene.motionPrompt
       },
       regenerate: ["image", "clip", "thumbnail", "render"]
     })),
@@ -246,6 +248,7 @@ export function applyEditPlan(project: Project, plan: EditPlan): Project {
       title: change.after.title || scene.title,
       voiceover: change.after.voiceover || scene.voiceover,
       visualPrompt: change.after.visualPrompt,
+      motionPrompt: change.after.motionPrompt || scene.motionPrompt,
       style: {
         ...scene.style,
         theme,

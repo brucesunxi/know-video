@@ -24,11 +24,23 @@ export async function POST(request: Request) {
   const workingVersion: ProjectVersion = version ?? demoProject.currentVersion;
   const editNumber = Math.max(1, Math.round(Date.now() / 1000) % 10000);
 
-  const { editPlan, engine } = await createEditPlan({
-    request: body.request,
-    version: workingVersion,
-    editNumber
-  });
+  let editPlan;
+  let engine;
+  try {
+    const result = await createEditPlan({
+      request: body.request,
+      version: workingVersion,
+      editNumber
+    });
+    editPlan = result.editPlan;
+    engine = result.engine;
+  } catch (error) {
+    console.error("[edit-plan] Plan generation failed:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "修改计划生成失败，请重试。" },
+      { status: 502 }
+    );
+  }
 
   if (body.projectId && body.versionId) {
     const persisted = await persistEditPlan({

@@ -70,18 +70,82 @@ const editPlanPayloadSchema = z.object({
         title: z.string(),
         voiceover: z.string().optional(),
         thumbnailTone: z.string(),
-        visualPrompt: z.string()
+        visualPrompt: z.string(),
+        motionPrompt: z.string().optional()
       }),
       after: z.object({
         title: z.string(),
         voiceover: z.string().optional(),
         thumbnailTone: z.string(),
-        visualPrompt: z.string()
+        visualPrompt: z.string(),
+        motionPrompt: z.string().optional()
       }),
       regenerate: z.array(z.enum(["image", "audio", "clip", "thumbnail", "caption", "render"]))
     })
   )
 });
+
+type EditPlanPayload = z.infer<typeof editPlanPayloadSchema>;
+
+function isGlobalChineseRewrite(request: string) {
+  const wantsChinese = /中文|汉语|简体/u.test(request);
+  const wantsGlobal = /所有|全部|全片|整体|都/u.test(request);
+  return wantsChinese && wantsGlobal;
+}
+
+function hasChinese(value?: string) {
+  return Boolean(value && /\p{Script=Han}/u.test(value));
+}
+
+function validGlobalChinesePayload(payload: EditPlanPayload, version: ProjectVersion) {
+  const changes = new Map(payload.changes.map((change) => [change.sceneNumber, change]));
+  return version.scenes.every((scene) => {
+    const after = changes.get(scene.sceneNumber)?.after;
+    return after
+      && hasChinese(after.title)
+      && hasChinese(after.voiceover)
+      && hasChinese(after.visualPrompt)
+      && hasChinese(after.motionPrompt);
+  });
+}
+
+function normalizeEditPayload(
+  payload: EditPlanPayload,
+  version: ProjectVersion,
+  globalChineseRewrite: boolean
+): EditPlanPayload {
+  const sceneByNumber = new Map(version.scenes.map((scene) => [scene.sceneNumber, scene]));
+  const changes = payload.changes.map((change) => {
+    const scene = sceneByNumber.get(change.sceneNumber);
+    if (!scene) return change;
+    return {
+      ...change,
+      before: {
+        title: scene.title,
+        voiceover: scene.voiceover,
+        thumbnailTone: scene.style.theme.includes("light") ? "light" : "dark",
+        visualPrompt: scene.visualPrompt,
+        motionPrompt: scene.motionPrompt
+      },
+      after: {
+        ...change.after,
+        motionPrompt: change.after.motionPrompt ?? scene.motionPrompt
+      },
+      regenerate: globalChineseRewrite
+        ? (["audio", "image", "caption", "render"] as EditPlanPayload["changes"][number]["regenerate"])
+        : change.regenerate
+    };
+  });
+
+  return globalChineseRewrite
+    ? {
+        ...payload,
+        summary: `将全部 ${version.scenes.length} 个场景的标题、旁白、画面描述、镜头运动和字幕统一改为中文。`,
+        affectedScenes: version.scenes.map((scene) => scene.sceneNumber),
+        changes
+      }
+    : { ...payload, changes };
+}
 
 function getTextModel() {
   if (process.env.DEEPSEEK_API_KEY) {
@@ -389,30 +453,49 @@ export async function createEditPlan(params: {
   version: ProjectVersion;
   editNumber: number;
 }): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
+  const globalChineseRewrite = isGlobalChineseRewrite(params.request);
   const textModel = getTextModel();
   if (!textModel) {
+    if (globalChineseRewrite) {
+      throw new Error("全片中文转换需要文字改写服务，请稍后重试。");
+    }
     return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
   }
+  const activeTextModel = textModel;
 
-  try {
-    const completion = await textModel.client.chat.completions.create({
-      model: textModel.model,
+  const globalDirective = globalChineseRewrite
+    ? `\n\nThis is a GLOBAL Simplified Chinese localization. You MUST return one updated change for every scene. Every after.title, after.voiceover, after.visualPrompt, and after.motionPrompt must be written in Simplified Chinese. Do not limit visual translation to scenes that visibly contain text. affectedScenes must contain every scene number. regenerate must include audio, image, caption, and render.`
+    : "";
+
+  async function requestPayload(retry = false) {
+    const completion = await activeTextModel.client.chat.completions.create({
+      model: activeTextModel.model,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
           content:
-            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. When the user requests a language or narration change, rewrite title and voiceover in the requested language and include audio in regenerate. Return strict JSON only."
+            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. Return strict JSON only."
         },
         {
           role: "user",
-          content: `Current version scenes:\n${JSON.stringify(params.version.scenes, null, 2)}\n\nUser edit request:\n${params.request}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated"|"added"|"deleted"|"unchanged", "before": { "title": string, "voiceover": string, "thumbnailTone": string, "visualPrompt": string }, "after": { "title": string, "voiceover": string, "thumbnailTone": string, "visualPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
+          content: `Current version scenes:\n${JSON.stringify(params.version.scenes, null, 2)}\n\nUser edit request:\n${params.request}${globalDirective}${retry ? "\n\nYour previous attempt was incomplete. Rebuild the entire plan and satisfy every requirement above." : ""}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated"|"added"|"deleted"|"unchanged", "before": { "title": string, "voiceover": string, "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
         }
       ],
-      temperature: 0.45
+      temperature: globalChineseRewrite ? 0.2 : 0.45
     });
+    return editPlanPayloadSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+  }
 
-    const payload = editPlanPayloadSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+  try {
+    let payload = await requestPayload();
+    if (globalChineseRewrite && !validGlobalChinesePayload(payload, params.version)) {
+      payload = await requestPayload(true);
+    }
+    if (globalChineseRewrite && !validGlobalChinesePayload(payload, params.version)) {
+      throw new Error("Global Chinese edit plan did not cover every scene and field");
+    }
+    const normalized = normalizeEditPayload(payload, params.version, globalChineseRewrite);
     return {
       engine: textModel.engine,
       editPlan: {
@@ -421,13 +504,17 @@ export async function createEditPlan(params: {
         baseVersionId: params.version.id,
         status: "proposed",
         userRequest: params.request,
-        summary: payload.summary,
-        affectedScenes: payload.affectedScenes,
-        changes: payload.changes,
+        summary: normalized.summary,
+        affectedScenes: normalized.affectedScenes,
+        changes: normalized.changes,
         createdAt: new Date().toISOString()
       }
     };
   } catch (error) {
+    if (globalChineseRewrite) {
+      console.error("[ai-video] Global Chinese edit plan failed validation:", error);
+      throw new Error("全片中文修改计划未通过完整性检查，请重试。", { cause: error });
+    }
     console.error("[ai-video] Falling back to heuristic edit plan:", error);
     return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
   }

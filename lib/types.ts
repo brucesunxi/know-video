@@ -67,12 +67,14 @@ export type EditChange = {
     voiceover?: string;
     thumbnailTone: string;
     visualPrompt: string;
+    motionPrompt?: string;
   };
   after: {
     title: string;
     voiceover?: string;
     thumbnailTone: string;
     visualPrompt: string;
+    motionPrompt?: string;
   };
   regenerate: AssetType[];
 };

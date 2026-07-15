@@ -1063,25 +1063,33 @@ button:disabled {
   line-height: 1.45;
 }
 
-.kv-change .kv-change-voiceover {
+.kv-change .kv-change-field {
   display: grid;
   justify-content: stretch;
   gap: 5px;
   margin-top: 10px;
   border: 0;
   border-radius: 8px;
-  background: #eef8f6;
+  background: #f1f5f9;
   padding: 9px 10px;
 }
 
-.kv-change .kv-change-voiceover span {
+.kv-change .kv-change-field.accent {
+  background: #eef8f6;
+}
+
+.kv-change .kv-change-field span {
   justify-self: start;
   padding: 0;
   background: transparent;
+  color: #667085;
+}
+
+.kv-change .kv-change-field.accent span {
   color: #087568;
 }
 
-.kv-change .kv-change-voiceover p {
+.kv-change .kv-change-field p {
   margin: 0;
   color: #344054;
 }

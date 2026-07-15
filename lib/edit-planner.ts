@@ -12,13 +12,15 @@ export const editPlanSchema = z.object({
         title: z.string(),
         voiceover: z.string().optional(),
         thumbnailTone: z.string(),
-        visualPrompt: z.string()
+        visualPrompt: z.string(),
+        motionPrompt: z.string().optional()
       }),
       after: z.object({
         title: z.string(),
         voiceover: z.string().optional(),
         thumbnailTone: z.string(),
-        visualPrompt: z.string()
+        visualPrompt: z.string(),
+        motionPrompt: z.string().optional()
       }),
       regenerate: z.array(z.enum(["image", "audio", "clip", "thumbnail", "caption", "render"]))
     })
