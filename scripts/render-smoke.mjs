@@ -19,8 +19,8 @@ await renderMedia({
   audioCodec: "aac",
   outputLocation: output,
   frameRange: [0, 59],
-  browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE
-    || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  ...(process.env.REMOTION_BROWSER_EXECUTABLE
+    ? { browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE }
+    : {})
 });
 console.log(`RENDER_SMOKE_OK ${output} ${(await stat(output)).size} bytes`);
-
