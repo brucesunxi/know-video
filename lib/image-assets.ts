@@ -39,12 +39,34 @@ function buildSceneImagePrompt(scene: Scene, projectTitle: string) {
   ].join("\n");
 }
 
+function buildBrandSafeImagePrompt(scene: Scene, projectTitle: string) {
+  return [
+    `Create a brand-safe 16:9 cinematic key visual for the product video "${projectTitle}".`,
+    `Scene ${scene.sceneNumber}: ${scene.title}.`,
+    `Use an elegant abstract visual metaphor built from architecture, light, layered materials, and purposeful motion.`,
+    `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
+    "Premium commercial art direction, strong depth, one clear focal point, refined lighting, and generous negative space.",
+    "Do not depict people, faces, bodies, weapons, conflict, politics, medical content, brands, logos, readable text, dashboards, presentation slides, or floating UI cards."
+  ].join("\n");
+}
+
+function isSafetyFiltered(error: unknown) {
+  return (error as { code?: string }).code === "3030";
+}
+
 async function generateSceneImage(scene: Scene, project: Project): Promise<SceneAsset | undefined> {
-  const prompt = buildSceneImagePrompt(scene, project.title);
+  let prompt = buildSceneImagePrompt(scene, project.title);
   let body: Buffer;
   let model: string;
   if (hasCloudflareAI()) {
-    const generated = await generateCloudflareImage(prompt);
+    let generated;
+    try {
+      generated = await generateCloudflareImage(prompt);
+    } catch (error) {
+      if (!isSafetyFiltered(error)) throw error;
+      prompt = buildBrandSafeImagePrompt(scene, project.title);
+      generated = await generateCloudflareImage(prompt);
+    }
     body = generated.body;
     model = generated.model;
   } else {
