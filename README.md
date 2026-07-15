@@ -99,6 +99,6 @@ The app reads from Neon when `DATABASE_URL` is configured. If no project exists 
 
 ## Renderer
 
-The renderer shares the exact composition used by the browser player. The first export for a deployment creates a version-pinned Vercel Sandbox, installs dependencies, and stores a seven-day base snapshot. Each export then forks that snapshot into an isolated job, renders a 1920x1080 H.264/AAC MP4, uploads it to R2, reports progress through the authenticated callback route, and shuts down.
+The renderer shares the exact composition used by the browser player. The first export for a deployment creates a version-pinned Vercel Sandbox, installs dependencies and Chromium, and stores a seven-day base snapshot. Each export then forks that snapshot into an isolated job, renders a 1920x1080 H.264/AAC MP4, uploads it to R2, reports progress through the authenticated callback route, and shuts down.
 
 `WORKER_SHARED_SECRET` must be present in the Vercel project. Only R2 credentials and this callback secret are passed to render jobs; model credentials remain in the application runtime.

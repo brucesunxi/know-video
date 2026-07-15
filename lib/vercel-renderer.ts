@@ -39,6 +39,19 @@ async function ensureRendererBase() {
       if (install.exitCode !== 0) {
         throw new Error(`渲染环境安装失败：${(await install.stderr()).slice(-1200)}`);
       }
+      const browser = await created.runCommand({
+        cmd: "node",
+        args: [
+          "--input-type=module",
+          "-e",
+          "import { ensureBrowser } from '@remotion/renderer'; await ensureBrowser({logLevel: 'warn'});"
+        ],
+        cwd: SANDBOX_ROOT,
+        timeoutMs: 3 * 60 * 1000
+      });
+      if (browser.exitCode !== 0) {
+        throw new Error(`渲染浏览器安装失败：${(await browser.stderr()).slice(-1200)}`);
+      }
     }
   });
 
