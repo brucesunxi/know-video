@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   if (failedTargets.length > 0) {
     const messages = {
       missing_key: "图片服务尚未配置，请先设置有效的图片 API Key。",
-      invalid_key: "图片服务凭证无效，请在 Vercel 中更新 OPENAI_API_KEY。",
+      invalid_key: "图片服务凭证无效，请在 Vercel 中更新服务配置。",
       storage_failed: "图片已经生成，但写入云端存储失败，请检查 R2 配置。",
       generation_failed: "场景画面生成失败，请稍后重试。"
     } as const;

@@ -602,7 +602,7 @@ export function WorkspaceClient({
       if (data.project.currentVersion.assetStatus !== "ready") {
         const errorMessages = {
           missing_key: "脚本和分镜已经完成，但图片服务尚未配置。",
-          invalid_key: "脚本和分镜已经完成，但图片服务凭证无效，请更新 Vercel 中的 OPENAI_API_KEY。",
+          invalid_key: "脚本和分镜已经完成，但图片服务凭证无效，请更新 Vercel 中的服务配置。",
           storage_failed: "脚本和分镜已经完成，但场景图片写入云端存储失败。",
           generation_failed: "脚本和分镜已经完成，但部分场景画面生成失败。"
         } as const;

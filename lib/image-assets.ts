@@ -1,9 +1,11 @@
 import OpenAI from "openai";
+import { generateCloudflareImage, hasCloudflareAI } from "@/lib/cloudflare-ai";
 import { getOptionalEnv } from "@/lib/env";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 
 function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
+  if (hasCloudflareAI()) return undefined;
   const apiKey = getOptionalEnv("OPENAI_API_KEY");
   if (!apiKey) return "missing_key";
   if (!apiKey.startsWith("sk-")) return "invalid_key";
@@ -38,25 +40,33 @@ function buildSceneImagePrompt(scene: Scene, projectTitle: string) {
 }
 
 async function generateSceneImage(scene: Scene, project: Project): Promise<SceneAsset | undefined> {
-  const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
   const prompt = buildSceneImagePrompt(scene, project.title);
-
-  const result = await client.images.generate({
-    model: imageModel(),
-    prompt,
-    size: "1536x1024",
-    quality: "medium",
-    n: 1
-  } as never);
-
-  const image = result.data?.[0];
-  const base64 = image ? (image as { b64_json?: string }).b64_json : undefined;
-  if (!base64) return undefined;
+  let body: Buffer;
+  let model: string;
+  if (hasCloudflareAI()) {
+    const generated = await generateCloudflareImage(prompt);
+    body = generated.body;
+    model = generated.model;
+  } else {
+    const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
+    const result = await client.images.generate({
+      model: imageModel(),
+      prompt,
+      size: "1536x1024",
+      quality: "medium",
+      n: 1
+    } as never);
+    const image = result.data?.[0];
+    const base64 = image ? (image as { b64_json?: string }).b64_json : undefined;
+    if (!base64) return undefined;
+    body = Buffer.from(base64, "base64");
+    model = imageModel();
+  }
 
   const key = `generated/${project.id}/${project.currentVersion.id}/scene-${scene.sceneNumber}-${crypto.randomUUID()}.png`;
   const uploaded = await uploadToR2({
     key,
-    body: Buffer.from(base64, "base64"),
+    body,
     contentType: "image/png"
   });
 
@@ -66,8 +76,8 @@ async function generateSceneImage(scene: Scene, project: Project): Promise<Scene
     r2Key: uploaded.key,
     url: assetUrlForKey(uploaded.key, uploaded.publicUrl),
     metadata: {
-      source: "ai-image",
-      model: imageModel(),
+      source: "generated-image",
+      model,
       prompt,
       sceneNumber: scene.sceneNumber
     }
