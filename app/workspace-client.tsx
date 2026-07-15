@@ -1,6 +1,7 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
+import type { PlayerRef } from "@remotion/player";
 import {
   AlertCircle,
   ArrowRight,
@@ -14,7 +15,6 @@ import {
   Loader2,
   Mic2,
   PanelRightOpen,
-  Play,
   Plus,
   RefreshCcw,
   Send,
@@ -22,8 +22,9 @@ import {
   Sparkles,
   Upload
 } from "lucide-react";
-import { exportProjectWebm } from "@/lib/client-video-export";
-import type { ChatMessage, EditChange, EditPlan, Project, Scene } from "@/lib/types";
+import { KnowVideoPlayer } from "@/app/video-player";
+import { VIDEO_FPS } from "@/video/config";
+import type { ChatMessage, EditChange, EditPlan, Project, RenderJob, Scene } from "@/lib/types";
 
 type Source = "database" | "mock";
 type Stage = "brief" | "generating" | "studio";
@@ -59,16 +60,6 @@ function compactText(text: string | undefined, fallback: string, maxLength = 72)
   if (!text) return fallback;
   const trimmed = text.replace(/\s+/g, " ").trim();
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 1)}…` : trimmed;
-}
-
-function sceneAtTime(scenes: Scene[], seconds: number) {
-  let cursor = 0;
-  for (const scene of scenes) {
-    cursor += scene.durationSeconds;
-    if (seconds < cursor) return scene.sceneNumber;
-  }
-
-  return scenes[scenes.length - 1]?.sceneNumber ?? 1;
 }
 
 function Shell({
@@ -233,72 +224,6 @@ function GeneratingScreen({ prompt, progress }: { prompt: string; progress: numb
         ))}
       </div>
     </div>
-  );
-}
-
-function PreviewCanvas({
-  scene,
-  isBusy,
-  isPlaying,
-  elapsedSeconds,
-  totalSeconds,
-  onTogglePlayback,
-  onRegenerate,
-  canPlay
-}: {
-  scene?: Scene;
-  isBusy: boolean;
-  isPlaying: boolean;
-  elapsedSeconds: number;
-  totalSeconds: number;
-  onTogglePlayback: () => void;
-  onRegenerate: () => void;
-  canPlay: boolean;
-}) {
-  const progress = totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0;
-  const imageAsset = scene?.assets.find((asset) => asset.type === "image" && asset.url);
-
-  return (
-    <section className={`kv-preview ${imageAsset ? "has-image" : "missing-image"}`}>
-      {imageAsset ? (
-        <div
-          className={`kv-scene-image ${isPlaying ? "is-playing" : ""}`}
-          key={imageAsset.id}
-          style={{ backgroundImage: `url("${imageAsset.url}")` }}
-        />
-      ) : (
-        <div className="kv-missing-visual">
-          <ImagePlus size={34} />
-          <strong>这个场景还没有生成画面</strong>
-          <p>当前看到的不是成片。重新生成视觉素材后，才能播放和导出。</p>
-          <button disabled={isBusy} onClick={onRegenerate} type="button">
-            {isBusy ? <Loader2 className="kv-spin" size={16} /> : <RefreshCcw size={16} />}
-            生成本场景画面
-          </button>
-        </div>
-      )}
-      <div className="kv-preview-meta">
-        <span>场景 {scene?.sceneNumber ?? 1}</span>
-        <strong>{scene?.title ?? "未选择场景"}</strong>
-      </div>
-      <button
-        aria-label={isPlaying ? "暂停预览" : "播放预览"}
-        className={`kv-play ${isPlaying ? "playing" : ""}`}
-        disabled={!canPlay || isBusy}
-        onClick={onTogglePlayback}
-        type="button"
-      >
-        {isBusy ? <Loader2 className="kv-spin" size={28} /> : isPlaying ? <span className="kv-pause-icon" /> : <Play fill="currentColor" size={30} />}
-      </button>
-      <p className="kv-caption">{isBusy ? "正在更新场景画面..." : scene?.voiceover ?? "生成视频后可在这里预览。"}</p>
-      <div className="kv-player-bar">
-        <span>{durationLabel(Math.floor(elapsedSeconds))}</span>
-        <div>
-          <i style={{ width: `${progress}%` }} />
-        </div>
-        <span>{durationLabel(totalSeconds)}</span>
-      </div>
-    </section>
   );
 }
 
@@ -489,8 +414,6 @@ function StudioScreen({
   input,
   selectedScene,
   view,
-  isPlaying,
-  elapsedSeconds,
   isBusy,
   onInput,
   onSubmit,
@@ -498,7 +421,6 @@ function StudioScreen({
   onCancel,
   onSelectScene,
   onViewChange,
-  onTogglePlayback,
   onUpload,
   onRegenerate,
   onExport,
@@ -510,8 +432,6 @@ function StudioScreen({
   input: string;
   selectedScene: number;
   view: StudioView;
-  isPlaying: boolean;
-  elapsedSeconds: number;
   isBusy: boolean;
   onInput: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -519,17 +439,23 @@ function StudioScreen({
   onCancel: () => void;
   onSelectScene: (scene: number) => void;
   onViewChange: (view: StudioView) => void;
-  onTogglePlayback: () => void;
   onUpload: () => void;
   onRegenerate: (sceneNumbers?: number[]) => void;
   onExport: () => void;
   exportProgress?: number;
 }) {
+  const playerRef = useRef<PlayerRef>(null);
   const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === selectedScene) ?? project.currentVersion.scenes[0];
   const missingSceneNumbers = project.currentVersion.scenes
     .filter((item) => !item.assets.some((asset) => asset.type === "image" && asset.url))
     .map((item) => item.sceneNumber);
-  const canPlay = missingSceneNumbers.length === 0;
+  function selectScene(sceneNumber: number) {
+    const seconds = project.currentVersion.scenes
+      .filter((item) => item.sceneNumber < sceneNumber)
+      .reduce((sum, item) => sum + item.durationSeconds, 0);
+    playerRef.current?.seekTo(Math.round(seconds * VIDEO_FPS));
+    onSelectScene(sceneNumber);
+  }
 
   return (
     <div className="kv-studio">
@@ -556,23 +482,28 @@ function StudioScreen({
             </button>
             <button className="kv-primary" disabled={isBusy || exportProgress !== undefined} onClick={onExport} type="button">
               {exportProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <Download size={16} />}
-              {exportProgress !== undefined ? `导出中 ${exportProgress}%` : "导出 WebM"}
+              {exportProgress !== undefined ? `正在合成 MP4 ${exportProgress}%` : "导出 MP4"}
             </button>
           </div>
         </div>
         {view === "preview" ? (
           <>
-            <PreviewCanvas
-              elapsedSeconds={elapsedSeconds}
-              isBusy={isBusy}
-              isPlaying={isPlaying}
-              onTogglePlayback={onTogglePlayback}
-              onRegenerate={() => onRegenerate([scene.sceneNumber])}
-              scene={scene}
-              totalSeconds={project.currentVersion.durationSeconds}
-              canPlay={canPlay}
-            />
-            <Storyboard onSelect={onSelectScene} scenes={project.currentVersion.scenes} selectedScene={selectedScene} />
+            {missingSceneNumbers.length === 0 ? (
+              <KnowVideoPlayer className="kv-remotion-player" project={project} ref={playerRef} />
+            ) : (
+              <section className="kv-preview missing-image">
+                <div className="kv-missing-visual">
+                  <ImagePlus size={34} />
+                  <strong>还有 {missingSceneNumbers.length} 个场景没有画面</strong>
+                  <p>生成缺失素材后，时间轴预览和 MP4 导出才会启用。</p>
+                  <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers)} type="button">
+                    {isBusy ? <Loader2 className="kv-spin" size={16} /> : <RefreshCcw size={16} />}
+                    生成缺失画面
+                  </button>
+                </div>
+              </section>
+            )}
+            <Storyboard onSelect={selectScene} scenes={project.currentVersion.scenes} selectedScene={selectedScene} />
             <ScenePanel scene={scene} />
           </>
         ) : (
@@ -611,8 +542,6 @@ export function WorkspaceClient({
   const [pendingPlan, setPendingPlan] = useState<EditPlan | undefined>();
   const [isBusy, setIsBusy] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [studioView, setStudioView] = useState<StudioView>("preview");
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [exportProgress, setExportProgress] = useState<number | undefined>();
@@ -625,39 +554,6 @@ export function WorkspaceClient({
       const last = current[current.length - 1];
       if (last?.role === message.role && last.content === message.content) return current;
       return [...current, { ...message, id: crypto.randomUUID() }];
-    });
-  }
-
-  useEffect(() => {
-    if (!isPlaying || stage !== "studio") return undefined;
-
-    const timer = window.setInterval(() => {
-      setElapsedSeconds((current) => {
-        const next = current + 0.25;
-        if (next >= project.currentVersion.durationSeconds) {
-          window.clearInterval(timer);
-          setIsPlaying(false);
-          return project.currentVersion.durationSeconds;
-        }
-
-        setSelectedScene(sceneAtTime(project.currentVersion.scenes, next));
-        return next;
-      });
-    }, 250);
-
-    return () => window.clearInterval(timer);
-  }, [isPlaying, project.currentVersion.durationSeconds, project.currentVersion.scenes, stage]);
-
-  function togglePlayback() {
-    if (project.currentVersion.scenes.length === 0) return;
-
-    setIsPlaying((current) => {
-      if (!current && elapsedSeconds >= project.currentVersion.durationSeconds) {
-        setElapsedSeconds(0);
-        setSelectedScene(1);
-      }
-
-      return !current;
     });
   }
 
@@ -717,8 +613,6 @@ export function WorkspaceClient({
         );
       }
       setSelectedScene(1);
-      setElapsedSeconds(0);
-      setIsPlaying(false);
       setPendingPlan(undefined);
       setStudioView("preview");
       setProgress(100);
@@ -792,8 +686,6 @@ export function WorkspaceClient({
         message: ChatMessage;
       };
       setProject(data.project);
-      setElapsedSeconds(0);
-      setIsPlaying(false);
       setPendingPlan(undefined);
       setMessages((current) => [...current, data.message]);
     } catch (error) {
@@ -844,7 +736,6 @@ export function WorkspaceClient({
   async function regenerateImages(sceneNumbers?: number[]) {
     setIsBusy(true);
     setErrorMessage(undefined);
-    setIsPlaying(false);
     try {
       const response = await fetch("/api/assets/generate", {
         method: "POST",
@@ -872,11 +763,25 @@ export function WorkspaceClient({
 
   async function exportVideo() {
     setErrorMessage(undefined);
-    setExportProgress(0);
-    setIsPlaying(false);
+    setExportProgress(5);
     try {
-      await exportProjectWebm(project, setExportProgress);
-      pushMessage({ role: "assistant", type: "text", content: "视频已导出为 WebM 文件。" });
+      const response = await fetch("/api/render-jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, versionId: project.currentVersion.id })
+      });
+      const data = await response.json() as { renderJob?: RenderJob; error?: string };
+      if (!response.ok || !data.renderJob?.renderUrl) throw new Error(data.error || "MP4 渲染失败。");
+      setExportProgress(100);
+      setProject((current) => ({
+        ...current,
+        currentVersion: { ...current.currentVersion, renderUrl: data.renderJob?.renderUrl, status: "ready" }
+      }));
+      const anchor = document.createElement("a");
+      anchor.href = data.renderJob.renderUrl;
+      anchor.download = `${project.title}.mp4`;
+      anchor.click();
+      pushMessage({ role: "assistant", type: "text", content: "1080p MP4 已完成合成并保存到云端。" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "视频导出失败。";
       setErrorMessage(message);
@@ -890,8 +795,6 @@ export function WorkspaceClient({
     setStage("brief");
     setPendingPlan(undefined);
     setChatInput("");
-    setIsPlaying(false);
-    setElapsedSeconds(0);
     setErrorMessage(undefined);
   }
 
@@ -916,16 +819,13 @@ export function WorkspaceClient({
       {stage === "studio" ? (
         <StudioScreen
           input={chatInput}
-          elapsedSeconds={elapsedSeconds}
           isBusy={isBusy}
-          isPlaying={isPlaying}
           messages={messages}
           onApply={applyPlan}
           onCancel={() => setPendingPlan(undefined)}
           onInput={setChatInput}
           onSelectScene={setSelectedScene}
           onSubmit={submitChat}
-          onTogglePlayback={togglePlayback}
           onUpload={() => fileInputRef.current?.click()}
           onRegenerate={regenerateImages}
           onExport={exportVideo}

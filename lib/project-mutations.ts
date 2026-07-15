@@ -1,5 +1,6 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { generateProjectSceneImages } from "@/lib/image-assets";
+import { generateProjectVoices } from "@/lib/audio-assets";
 import { assetUrlForKey } from "@/lib/r2";
 import { applyEditPlan } from "@/lib/video-brain";
 import type { ChatMessage, EditPlan, Project, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
@@ -209,6 +210,22 @@ export async function persistGeneratedProject(params: {
   };
 }
 
+export async function loadProjectForRender(projectId: string, versionId: string): Promise<Project | undefined> {
+  const version = await loadVersion(versionId);
+  if (!version || !canPersist()) return undefined;
+  const sql = getSql();
+  const rows = await sql`select title from projects where id = ${projectId} limit 1` as Array<{ title: string }>;
+  if (!rows[0]) return undefined;
+  return {
+    id: projectId,
+    title: rows[0].title,
+    engine: "Animation Engine",
+    credits: 0,
+    plan: "Free",
+    currentVersion: version
+  };
+}
+
 export async function loadVersion(versionId: string): Promise<ProjectVersion | undefined> {
   if (!canPersist()) return undefined;
 
@@ -286,7 +303,7 @@ export async function persistGeneratedSceneAssets(versionId: string, scenes: Sce
     const sceneId = sceneIdByNumber.get(scene.sceneNumber);
     if (!sceneId) continue;
 
-    for (const asset of scene.assets.filter((item) => item.type === "image")) {
+    for (const asset of scene.assets) {
       await sql`
         insert into scene_assets (scene_id, asset_type, r2_key, public_url, metadata_json)
         select ${sceneId}, ${asset.type}, ${asset.r2Key}, ${asset.url}, ${JSON.stringify(asset.metadata ?? {})}
@@ -385,13 +402,14 @@ export async function applyPersistedEditPlan(params: {
   project: Project;
   editPlan: EditPlan;
 }): Promise<{ project: Project; message: ChatMessage; renderJobId?: string }> {
-  const nextProject = await generateProjectSceneImages(
+  const projectWithImages = await generateProjectSceneImages(
     applyEditPlan(params.project, params.editPlan),
     {
       replaceExistingImages: true,
       sceneNumbers: params.editPlan.affectedScenes
     }
   );
+  const nextProject = await generateProjectVoices(projectWithImages, params.editPlan.affectedScenes);
 
   if (!canPersist()) {
     return {

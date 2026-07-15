@@ -457,6 +457,19 @@ button:disabled {
   box-shadow: var(--shadow);
 }
 
+.kv-remotion-player {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #08111f;
+  box-shadow: var(--shadow);
+}
+
+.kv-remotion-player > div {
+  height: 100%;
+}
+
 .kv-preview.has-image {
   background-position: center;
   background-size: cover;

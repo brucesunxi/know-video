@@ -31,9 +31,23 @@ export type ProjectVersion = {
   createdAt: string;
   durationSeconds: number;
   renderUrl?: string;
+  renderJobId?: string;
   assetStatus?: "pending" | "partial" | "ready" | "failed";
   assetErrorCode?: "missing_key" | "invalid_key" | "storage_failed" | "generation_failed";
   scenes: Scene[];
+};
+
+export type RenderJob = {
+  id: string;
+  projectId: string;
+  versionId: string;
+  status: "queued" | "running" | "ready" | "failed" | "cancelled";
+  progress: number;
+  error?: string;
+  outputR2Key?: string;
+  renderUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type Project = {

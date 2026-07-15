@@ -43,7 +43,7 @@ The render worker should:
 - Upload output to R2
 - Update `render_jobs` and `project_versions`
 
-The worker can start on Railway/Fly/Render and later move to ECS, Modal, or RunPod.
+The production worker is packaged by `Dockerfile.renderer` for Cloud Run. Vercel creates and tracks jobs; the worker owns Chromium, Remotion and FFmpeg.
 
 ## Versioning Rules
 

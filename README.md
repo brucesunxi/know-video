@@ -18,7 +18,9 @@ This project is the first implementation pass for a Knowlify-style workflow:
 - Database: Neon Postgres
 - Storage: Cloudflare R2
 - AI: OpenAI-compatible planner/generator layer
-- Render: external Remotion worker
+- Preview and render: one shared Remotion composition
+- Encoding: FFmpeg / H.264 MP4 / AAC
+- Render runtime: Docker worker on Cloud Run
 
 ## Local Setup
 
@@ -89,7 +91,17 @@ The app reads from Neon when `DATABASE_URL` is configured. If no project exists 
 
 ## Next Milestones
 
-1. Add the Remotion/FFmpeg worker service for MP4 rendering.
-2. Add OpenAI vision or another multimodal model for image/reference analysis.
-3. Generate scene thumbnails and store them in R2.
-4. Add authentication and per-user project ownership.
+1. Deploy `Dockerfile.renderer` to Cloud Run and set `RENDER_WORKER_URL`.
+2. Add OpenAI video clips selectively for motion-critical scenes.
+3. Add authentication and per-user project ownership.
+
+## Renderer
+
+The renderer shares the exact composition used by the browser player. Build and run it with Node 20:
+
+```bash
+docker build -f Dockerfile.renderer -t know-video-renderer .
+docker run --env-file .env.local -p 8080:8080 know-video-renderer
+```
+
+Set the same `WORKER_SHARED_SECRET` in Vercel and the renderer. The worker renders a 1920x1080 H.264 MP4, uploads it to R2, and reports progress through the authenticated callback route.
