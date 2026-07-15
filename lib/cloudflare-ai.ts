@@ -42,6 +42,21 @@ function decodeBase64(value: string) {
   return Buffer.from(encoded, "base64");
 }
 
+function detectedAudioFormat(body: Buffer) {
+  const isWave = body.length >= 12
+    && body.subarray(0, 4).toString("ascii") === "RIFF"
+    && body.subarray(8, 12).toString("ascii") === "WAVE";
+  if (isWave) return { contentType: "audio/wav", extension: "wav" } as const;
+
+  const isMp3 = body.length >= 3 && (
+    body.subarray(0, 3).toString("ascii") === "ID3"
+    || (body[0] === 0xff && (body[1] & 0xe0) === 0xe0)
+  );
+  if (isMp3) return { contentType: "audio/mpeg", extension: "mp3" } as const;
+
+  throw new Error("AI speech service returned an unsupported audio format");
+}
+
 function unwrapResult<T>(payload: CloudflareEnvelope<T> | T) {
   return (payload as CloudflareEnvelope<T>).result ?? payload as T;
 }
@@ -91,11 +106,13 @@ export async function generateCloudflareSpeech(text: string) {
 
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("audio/")) {
-    return { body: Buffer.from(await response.arrayBuffer()), model };
+    const body = Buffer.from(await response.arrayBuffer());
+    return { body, model, ...detectedAudioFormat(body) };
   }
 
   const payload = await response.json() as CloudflareEnvelope<{ audio?: string }> | { audio?: string };
   const result = unwrapResult(payload);
   if (!result?.audio) throw new Error("AI speech service returned no audio");
-  return { body: decodeBase64(result.audio), model };
+  const body = decodeBase64(result.audio);
+  return { body, model, ...detectedAudioFormat(body) };
 }

@@ -423,6 +423,7 @@ function StudioScreen({
   onViewChange,
   onUpload,
   onRegenerate,
+  onRegenerateAudio,
   onExport,
   exportProgress
 }: {
@@ -441,6 +442,7 @@ function StudioScreen({
   onViewChange: (view: StudioView) => void;
   onUpload: () => void;
   onRegenerate: (sceneNumbers?: number[]) => void;
+  onRegenerateAudio: (sceneNumbers?: number[]) => void;
   onExport: () => void;
   exportProgress?: number;
 }) {
@@ -479,6 +481,10 @@ function StudioScreen({
             <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers.length > 0 ? missingSceneNumbers : undefined)} type="button">
               <RefreshCcw size={16} />
               重新生成画面
+            </button>
+            <button disabled={isBusy} onClick={() => onRegenerateAudio([selectedScene])} type="button">
+              <Mic2 size={16} />
+              重做本场景配音
             </button>
             <button className="kv-primary" disabled={isBusy || exportProgress !== undefined} onClick={onExport} type="button">
               {exportProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <Download size={16} />}
@@ -761,6 +767,34 @@ export function WorkspaceClient({
     }
   }
 
+  async function regenerateAudio(sceneNumbers?: number[]) {
+    setIsBusy(true);
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch("/api/assets/audio/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ project, sceneNumbers })
+      });
+      const data = await response.json() as { project?: Project; error?: string };
+      if (!response.ok || !data.project) throw new Error(data.error || "场景配音生成失败。");
+      setProject(data.project);
+      pushMessage({
+        role: "assistant",
+        type: "text",
+        content: sceneNumbers?.length === 1
+          ? `场景 ${sceneNumbers[0]} 的配音已经重新生成。`
+          : "全部场景配音已经重新生成。"
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "场景配音生成失败。";
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   async function exportVideo() {
     setErrorMessage(undefined);
     setExportProgress(5);
@@ -848,6 +882,7 @@ export function WorkspaceClient({
           onSubmit={submitChat}
           onUpload={() => fileInputRef.current?.click()}
           onRegenerate={regenerateImages}
+          onRegenerateAudio={regenerateAudio}
           onExport={exportVideo}
           exportProgress={exportProgress}
           onViewChange={setStudioView}

@@ -8,11 +8,15 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
   let body: Buffer;
   let model: string;
   let voice: string;
+  let contentType: "audio/mpeg" | "audio/wav";
+  let extension: "mp3" | "wav";
   if (hasCloudflareAI()) {
     const generated = await generateCloudflareSpeech(scene.voiceover);
     body = generated.body;
     model = generated.model;
     voice = "default";
+    contentType = generated.contentType;
+    extension = generated.extension;
   } else {
     const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
     model = getOptionalEnv("OPENAI_TTS_MODEL") || "gpt-4o-mini-tts";
@@ -25,16 +29,18 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
       instructions: "Natural, confident product-film narration. Match the language of the text. Keep a composed, premium pace."
     });
     body = Buffer.from(await result.arrayBuffer());
+    contentType = "audio/mpeg";
+    extension = "mp3";
   }
-  const key = `generated/${project.id}/${project.currentVersion.id}/scene-${scene.sceneNumber}-voice-${crypto.randomUUID()}.mp3`;
-  const uploaded = await uploadToR2({ key, body, contentType: "audio/mpeg" });
+  const key = `generated/${project.id}/${project.currentVersion.id}/scene-${scene.sceneNumber}-voice-${crypto.randomUUID()}.${extension}`;
+  const uploaded = await uploadToR2({ key, body, contentType });
 
   return {
     id: crypto.randomUUID(),
     type: "audio",
     r2Key: uploaded.key,
     url: assetUrlForKey(uploaded.key, uploaded.publicUrl),
-    metadata: { source: "ai-speech", model, voice, sceneNumber: scene.sceneNumber }
+    metadata: { source: "ai-speech", model, voice, contentType, sceneNumber: scene.sceneNumber }
   };
 }
 
