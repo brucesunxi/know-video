@@ -54,18 +54,24 @@ function isSafetyFiltered(error: unknown) {
   return (error as { code?: string }).code === "3030";
 }
 
-async function generateSceneImage(scene: Scene, project: Project): Promise<SceneAsset | undefined> {
+type ImageQuality = "standard" | "premium";
+
+async function generateSceneImage(
+  scene: Scene,
+  project: Project,
+  quality: ImageQuality
+): Promise<SceneAsset | undefined> {
   let prompt = buildSceneImagePrompt(scene, project.title);
   let body: Buffer;
   let model: string;
   if (hasCloudflareAI()) {
     let generated;
     try {
-      generated = await generateCloudflareImage(prompt);
+      generated = await generateCloudflareImage(prompt, quality);
     } catch (error) {
       if (!isSafetyFiltered(error)) throw error;
       prompt = buildBrandSafeImagePrompt(scene, project.title);
-      generated = await generateCloudflareImage(prompt);
+      generated = await generateCloudflareImage(prompt, quality);
     }
     body = generated.body;
     model = generated.model;
@@ -100,6 +106,7 @@ async function generateSceneImage(scene: Scene, project: Project): Promise<Scene
     metadata: {
       source: "generated-image",
       model,
+      quality,
       prompt,
       sceneNumber: scene.sceneNumber
     }
@@ -108,7 +115,7 @@ async function generateSceneImage(scene: Scene, project: Project): Promise<Scene
 
 export async function generateProjectSceneImages(
   project: Project,
-  options: { replaceExistingImages?: boolean; sceneNumbers?: number[] } = {}
+  options: { replaceExistingImages?: boolean; sceneNumbers?: number[]; quality?: ImageQuality } = {}
 ) {
   const credentialIssue = imageCredentialIssue();
   if (credentialIssue) {
@@ -129,7 +136,7 @@ export async function generateProjectSceneImages(
       if (selectedScenes && !selectedScenes.has(scene.sceneNumber)) return scene;
 
       try {
-        const image = await generateSceneImage(scene, project);
+        const image = await generateSceneImage(scene, project, options.quality ?? "standard");
         if (!image) return scene;
 
         const existingAssets = options.replaceExistingImages

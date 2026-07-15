@@ -267,11 +267,17 @@ function Storyboard({
 }
 
 function ScenePanel({ scene }: { scene?: Scene }) {
+  const imageMetadata = scene?.assets.find((asset) => asset.type === "image")?.metadata;
+  const qualityLabel = imageMetadata?.quality === "premium"
+    || String(imageMetadata?.model ?? "").includes("klein-9b")
+    ? "精细画质"
+    : "标准画质";
+
   return (
     <section className="kv-scene-panel">
       <div className="kv-strip-heading">
         <h3>场景制作说明</h3>
-        <span>{scene?.style.theme ?? "theme"}</span>
+        <span>{scene?.style.theme ?? "theme"} · {qualityLabel}</span>
       </div>
       <div className="kv-scene-grid">
         <article>
@@ -423,6 +429,7 @@ function StudioScreen({
   onViewChange,
   onUpload,
   onRegenerate,
+  onEnhanceScene,
   onRegenerateAudio,
   onExport,
   exportProgress
@@ -442,6 +449,7 @@ function StudioScreen({
   onViewChange: (view: StudioView) => void;
   onUpload: () => void;
   onRegenerate: (sceneNumbers?: number[]) => void;
+  onEnhanceScene: (sceneNumber: number) => void;
   onRegenerateAudio: (sceneNumbers?: number[]) => void;
   onExport: () => void;
   exportProgress?: number;
@@ -481,6 +489,10 @@ function StudioScreen({
             <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers.length > 0 ? missingSceneNumbers : undefined)} type="button">
               <RefreshCcw size={16} />
               重新生成画面
+            </button>
+            <button disabled={isBusy} onClick={() => onEnhanceScene(selectedScene)} type="button">
+              <Sparkles size={16} />
+              提升本场景画质
             </button>
             <button disabled={isBusy} onClick={() => onRegenerateAudio([selectedScene])} type="button">
               <Mic2 size={16} />
@@ -739,14 +751,14 @@ export function WorkspaceClient({
     }
   }
 
-  async function regenerateImages(sceneNumbers?: number[]) {
+  async function regenerateImages(sceneNumbers?: number[], quality: "standard" | "premium" = "standard") {
     setIsBusy(true);
     setErrorMessage(undefined);
     try {
       const response = await fetch("/api/assets/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ project, sceneNumbers })
+        body: JSON.stringify({ project, sceneNumbers, quality })
       });
       const data = await response.json() as { project?: Project; error?: string };
       if (!response.ok || !data.project) throw new Error(data.error || "场景画面生成失败。");
@@ -755,7 +767,9 @@ export function WorkspaceClient({
         role: "assistant",
         type: "text",
         content: sceneNumbers?.length === 1
-          ? `场景 ${sceneNumbers[0]} 的画面已经重新生成。`
+          ? quality === "premium"
+            ? `场景 ${sceneNumbers[0]} 已经提升为精细画质。`
+            : `场景 ${sceneNumbers[0]} 的画面已经重新生成。`
           : "场景画面已经重新生成，可以继续播放或导出。"
       });
     } catch (error) {
@@ -882,6 +896,7 @@ export function WorkspaceClient({
           onSubmit={submitChat}
           onUpload={() => fileInputRef.current?.click()}
           onRegenerate={regenerateImages}
+          onEnhanceScene={(sceneNumber) => regenerateImages([sceneNumber], "premium")}
           onRegenerateAudio={regenerateAudio}
           onExport={exportVideo}
           exportProgress={exportProgress}

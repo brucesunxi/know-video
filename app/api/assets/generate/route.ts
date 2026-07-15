@@ -6,7 +6,8 @@ import type { Project } from "@/lib/types";
 
 const requestSchema = z.object({
   project: z.unknown(),
-  sceneNumbers: z.array(z.number().int().positive()).optional()
+  sceneNumbers: z.array(z.number().int().positive()).optional(),
+  quality: z.enum(["standard", "premium"]).default("standard")
 });
 
 export const maxDuration = 120;
@@ -16,7 +17,8 @@ export async function POST(request: Request) {
   const project = body.project as Project;
   const updated = await generateProjectSceneImages(project, {
     replaceExistingImages: true,
-    sceneNumbers: body.sceneNumbers
+    sceneNumbers: body.sceneNumbers,
+    quality: body.quality
   });
 
   await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes);

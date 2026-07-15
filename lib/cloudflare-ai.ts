@@ -1,6 +1,7 @@
 import { getOptionalEnv } from "@/lib/env";
 
-const DEFAULT_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
+const STANDARD_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
+const PREMIUM_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
 const DEFAULT_TTS_MODEL = "@cf/myshell-ai/melotts";
 
 type CloudflareEnvelope<T> = {
@@ -61,13 +62,18 @@ function unwrapResult<T>(payload: CloudflareEnvelope<T> | T) {
   return (payload as CloudflareEnvelope<T>).result ?? payload as T;
 }
 
-export async function generateCloudflareImage(prompt: string) {
-  const model = getOptionalEnv("CLOUDFLARE_IMAGE_MODEL") || DEFAULT_IMAGE_MODEL;
+export async function generateCloudflareImage(
+  prompt: string,
+  quality: "standard" | "premium" = "standard"
+) {
+  const model = quality === "premium"
+    ? getOptionalEnv("CLOUDFLARE_PREMIUM_IMAGE_MODEL") || PREMIUM_IMAGE_MODEL
+    : getOptionalEnv("CLOUDFLARE_IMAGE_MODEL") || STANDARD_IMAGE_MODEL;
   const form = new FormData();
   form.append("prompt", prompt);
   form.append("width", "1280");
   form.append("height", "720");
-  form.append("steps", "25");
+  form.append("steps", "4");
 
   const response = await fetch(endpoint(model), {
     method: "POST",
