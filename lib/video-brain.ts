@@ -219,11 +219,13 @@ export function buildEditPlanFromRequest(params: {
       status: "updated",
       before: {
         title: scene.title,
+        voiceover: scene.voiceover,
         thumbnailTone: scene.style.theme.includes("light") ? "light" : "dark",
         visualPrompt: scene.visualPrompt
       },
       after: {
         title: scene.title,
+        voiceover: scene.voiceover,
         thumbnailTone: tone === "light" ? "light" : "dark",
         visualPrompt: `${scene.visualPrompt} Revision request: ${params.request}. Apply a ${tone} art direction, keep layout readable, and preserve the scene purpose.`
       },
@@ -241,6 +243,8 @@ export function applyEditPlan(project: Project, plan: EditPlan): Project {
     const theme = change.after.thumbnailTone === "light" ? "premium light" : scene.style.theme;
     return {
       ...scene,
+      title: change.after.title || scene.title,
+      voiceover: change.after.voiceover || scene.voiceover,
       visualPrompt: change.after.visualPrompt,
       style: {
         ...scene.style,

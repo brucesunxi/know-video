@@ -10,11 +10,13 @@ export const editPlanSchema = z.object({
       status: z.enum(["updated", "added", "deleted", "unchanged"]),
       before: z.object({
         title: z.string(),
+        voiceover: z.string().optional(),
         thumbnailTone: z.string(),
         visualPrompt: z.string()
       }),
       after: z.object({
         title: z.string(),
+        voiceover: z.string().optional(),
         thumbnailTone: z.string(),
         visualPrompt: z.string()
       }),

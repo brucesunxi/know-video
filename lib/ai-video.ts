@@ -68,11 +68,13 @@ const editPlanPayloadSchema = z.object({
       status: z.enum(["updated", "added", "deleted", "unchanged"]),
       before: z.object({
         title: z.string(),
+        voiceover: z.string().optional(),
         thumbnailTone: z.string(),
         visualPrompt: z.string()
       }),
       after: z.object({
         title: z.string(),
+        voiceover: z.string().optional(),
         thumbnailTone: z.string(),
         visualPrompt: z.string()
       }),
@@ -400,11 +402,11 @@ export async function createEditPlan(params: {
         {
           role: "system",
           content:
-            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. Return strict JSON only."
+            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. When the user requests a language or narration change, rewrite title and voiceover in the requested language and include audio in regenerate. Return strict JSON only."
         },
         {
           role: "user",
-          content: `Current version scenes:\n${JSON.stringify(params.version.scenes, null, 2)}\n\nUser edit request:\n${params.request}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated"|"added"|"deleted"|"unchanged", "before": { "title": string, "thumbnailTone": string, "visualPrompt": string }, "after": { "title": string, "thumbnailTone": string, "visualPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
+          content: `Current version scenes:\n${JSON.stringify(params.version.scenes, null, 2)}\n\nUser edit request:\n${params.request}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated"|"added"|"deleted"|"unchanged", "before": { "title": string, "voiceover": string, "thumbnailTone": string, "visualPrompt": string }, "after": { "title": string, "voiceover": string, "thumbnailTone": string, "visualPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
         }
       ],
       temperature: 0.45

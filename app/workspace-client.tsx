@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PlayerRef } from "@remotion/player";
 import {
   AlertCircle,
@@ -325,12 +325,21 @@ function StoryboardBoard({ scenes }: { scenes: Scene[] }) {
 }
 
 function ChangeCard({ change }: { change: EditChange }) {
+  const voiceoverChanged = change.after.voiceover
+    && change.after.voiceover !== change.before.voiceover;
+
   return (
     <article className="kv-change">
       <div>
         <strong>场景 {change.sceneNumber}</strong>
         <span>{change.status}</span>
       </div>
+      {voiceoverChanged ? (
+        <div className="kv-change-voiceover">
+          <span>新旁白</span>
+          <p>{change.after.voiceover}</p>
+        </div>
+      ) : null}
       <p>{change.after.visualPrompt}</p>
     </article>
   );
@@ -355,6 +364,14 @@ function ChatPanel({
   onApply: () => void;
   onCancel: () => void;
 }) {
+  const logRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const log = logRef.current;
+    if (!log) return;
+    log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
+  }, [messages.length, pendingPlan, isBusy]);
+
   return (
     <aside className="kv-chat">
       <header>
@@ -364,7 +381,7 @@ function ChatPanel({
         </div>
         <PanelRightOpen size={20} />
       </header>
-      <div className="kv-chat-log">
+      <div className="kv-chat-log" ref={logRef}>
         {messages.map((message) => (
           <div className={`kv-msg ${message.role}`} key={message.id}>
             <p>{message.content}</p>
@@ -396,6 +413,12 @@ function ChatPanel({
               <button onClick={onCancel} type="button">取消</button>
             </div>
           </section>
+        ) : null}
+        {isBusy && !pendingPlan ? (
+          <div className="kv-msg assistant kv-msg-loading" role="status">
+            <Loader2 className="kv-spin" size={16} />
+            <p>正在理解你的修改要求...</p>
+          </div>
         ) : null}
       </div>
       <form className="kv-chat-form" onSubmit={onSubmit}>
@@ -667,21 +690,29 @@ export function WorkspaceClient({
           projectId: project.id,
           versionId: project.currentVersion.id,
           request
-        })
+        }),
+        signal: AbortSignal.timeout(45_000)
       });
-      if (!response.ok) throw new Error("Failed to create edit plan.");
+      if (!response.ok) {
+        const failure = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(failure.error || "修改计划生成失败，请重试。");
+      }
       const data = await response.json() as {
         editPlan: EditPlan;
         messages: ChatMessage[];
       };
+      if (!data.editPlan || !Array.isArray(data.messages)) {
+        throw new Error("修改计划返回格式异常，请重试。");
+      }
+      const assistantMessages = data.messages.filter((message) => message.role === "assistant");
       setPendingPlan(data.editPlan);
-      setMessages((current) => [...current, ...data.messages.filter((message) => message.role === "assistant")]);
+      setMessages((current) => [...current, ...assistantMessages]);
     } catch (error) {
       console.error(error);
       pushMessage({
         role: "assistant",
         type: "text",
-        content: "没有生成修改计划。请稍后重试或检查服务端日志。"
+        content: error instanceof Error ? error.message : "没有生成修改计划，请稍后重试。"
       });
     } finally {
       setIsBusy(false);

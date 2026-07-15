@@ -64,11 +64,13 @@ export type EditChange = {
   status: "updated" | "added" | "deleted" | "unchanged";
   before: {
     title: string;
+    voiceover?: string;
     thumbnailTone: string;
     visualPrompt: string;
   };
   after: {
     title: string;
+    voiceover?: string;
     thumbnailTone: string;
     visualPrompt: string;
   };

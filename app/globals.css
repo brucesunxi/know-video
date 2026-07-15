@@ -951,7 +951,10 @@ button:disabled {
 }
 
 .kv-chat {
+  position: sticky;
+  top: 0;
   display: grid;
+  height: calc(100vh - 106px);
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr) auto;
   border-left: 1px solid var(--line);
@@ -992,6 +995,13 @@ button:disabled {
 .kv-msg p {
   margin: 0;
   line-height: 1.45;
+}
+
+.kv-msg-loading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
 }
 
 .kv-plan-summary {
@@ -1051,6 +1061,29 @@ button:disabled {
   color: #475467;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.kv-change .kv-change-voiceover {
+  display: grid;
+  justify-content: stretch;
+  gap: 5px;
+  margin-top: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #eef8f6;
+  padding: 9px 10px;
+}
+
+.kv-change .kv-change-voiceover span {
+  justify-self: start;
+  padding: 0;
+  background: transparent;
+  color: #087568;
+}
+
+.kv-change .kv-change-voiceover p {
+  margin: 0;
+  color: #344054;
 }
 
 .kv-review-actions {
@@ -1318,6 +1351,8 @@ button:disabled {
   }
 
   .kv-chat {
+    position: static;
+    height: auto;
     min-height: 620px;
     border-left: 0;
     border-top: 1px solid var(--line);
