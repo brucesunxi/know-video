@@ -1,4 +1,10 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getOptionalEnv, getRequiredEnv } from "@/lib/env";
 
 export function createR2Client() {
@@ -39,21 +45,47 @@ export async function uploadToR2(input: {
   };
 }
 
-export async function getFromR2(key: string) {
+export async function getFromR2(key: string, range?: string) {
   const bucket = getRequiredEnv("R2_BUCKET");
   const client = createR2Client();
 
   const response = await client.send(
     new GetObjectCommand({
       Bucket: bucket,
-      Key: key
+      Key: key,
+      Range: range
     })
   );
 
   return {
     body: response.Body,
-    contentType: response.ContentType || "application/octet-stream"
+    contentType: response.ContentType || "application/octet-stream",
+    contentLength: response.ContentLength,
+    contentRange: response.ContentRange,
+    etag: response.ETag,
+    lastModified: response.LastModified
   };
+}
+
+export async function headR2Object(key: string) {
+  const response = await createR2Client().send(new HeadObjectCommand({
+    Bucket: getRequiredEnv("R2_BUCKET"),
+    Key: key
+  }));
+  return {
+    contentLength: response.ContentLength,
+    contentType: response.ContentType,
+    etag: response.ETag
+  };
+}
+
+export async function createPresignedUpload(input: { key: string; contentType: string }) {
+  const command = new PutObjectCommand({
+    Bucket: getRequiredEnv("R2_BUCKET"),
+    Key: input.key,
+    ContentType: input.contentType
+  });
+  return getSignedUrl(createR2Client(), command, { expiresIn: 15 * 60 });
 }
 
 export function assetUrlForKey(key: string, publicUrl?: string) {

@@ -7,8 +7,7 @@ import {
   Sequence,
   interpolate,
   spring,
-  useCurrentFrame,
-  useVideoConfig
+  useCurrentFrame
 } from "remotion";
 import type { Project, Scene } from "@/lib/types";
 import { VIDEO_FPS } from "@/video/config";
@@ -51,18 +50,55 @@ function motionValues(scene: Scene, frame: number, durationInFrames: number) {
   return { x, scale };
 }
 
-function SceneFrame({ scene, projectTitle }: { scene: Scene; projectTitle: string }) {
+function SceneFrame({
+  scene,
+  projectTitle,
+  contentDurationInFrames,
+  hasTransitionIn,
+  hasTransitionOut,
+  transitionFrames
+}: {
+  scene: Scene;
+  projectTitle: string;
+  contentDurationInFrames: number;
+  hasTransitionIn: boolean;
+  hasTransitionOut: boolean;
+  transitionFrames: number;
+}) {
   const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
   const entrance = spring({ frame, fps: VIDEO_FPS, config: { damping: 18, mass: 0.8 } });
-  const fade = interpolate(
-    frame,
-    [0, 12, Math.max(13, durationInFrames - 12), durationInFrames - 1],
-    [0, 1, 1, 0],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-  );
-  const motion = motionValues(scene, frame, durationInFrames);
-  const caption = activeCaption(scene.voiceover, frame, durationInFrames);
+  const fadeIn = hasTransitionIn
+    ? interpolate(frame, [0, transitionFrames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+    : 1;
+  const fadeOut = hasTransitionOut
+    ? interpolate(
+      frame,
+      [contentDurationInFrames, contentDurationInFrames + transitionFrames],
+      [1, 0],
+      { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+    )
+    : 1;
+  const fade = fadeIn * fadeOut;
+  const copyFadeOut = hasTransitionOut
+    ? interpolate(
+      frame,
+      [Math.max(0, contentDurationInFrames - transitionFrames), contentDurationInFrames],
+      [1, 0],
+      { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+    )
+    : 1;
+  const copyFadeIn = hasTransitionIn
+    ? interpolate(
+      frame,
+      [Math.round(transitionFrames * 0.45), transitionFrames],
+      [0, 1],
+      { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+    )
+    : 1;
+  const copyOpacity = copyFadeIn * copyFadeOut;
+  const visualFrame = Math.min(frame, contentDurationInFrames - 1);
+  const motion = motionValues(scene, visualFrame, contentDurationInFrames);
+  const caption = activeCaption(scene.voiceover, visualFrame, contentDurationInFrames);
   const clip = scene.assets.find((asset) => asset.type === "clip" && asset.url)?.url;
   const image = scene.assets.find((asset) => asset.type === "image" && asset.url)?.url;
   const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url)?.url;
@@ -92,7 +128,16 @@ function SceneFrame({ scene, projectTitle }: { scene: Scene; projectTitle: strin
       <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(2,8,18,.16) 0%, rgba(2,8,18,.02) 42%, rgba(2,8,18,.9) 100%)" }} />
       <AbsoluteFill style={{ background: "linear-gradient(90deg, rgba(2,8,18,.5), transparent 62%)" }} />
       <AbsoluteFill style={{ boxShadow: "inset 0 0 180px rgba(0,0,0,.3)" }} />
-      <div style={{ color: "rgba(255,255,255,.78)", fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif", fontSize: 23, fontWeight: 700, left: 74, position: "absolute", top: 60 }}>
+      {hasTransitionIn && frame < transitionFrames ? (
+        <AbsoluteFill
+          style={{
+            background: "linear-gradient(90deg, transparent 0%, rgba(34,199,184,.24) 48%, transparent 100%)",
+            opacity: interpolate(frame, [0, transitionFrames], [0.7, 0], { extrapolateRight: "clamp" }),
+            transform: `translateX(${interpolate(frame, [0, transitionFrames], [-35, 35])}%)`
+          }}
+        />
+      ) : null}
+      <div style={{ color: "rgba(255,255,255,.78)", fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif", fontSize: 23, fontWeight: 700, left: 74, opacity: copyOpacity, position: "absolute", top: 60 }}>
         KNOW VIDEO&nbsp;&nbsp;/&nbsp;&nbsp;{String(scene.sceneNumber).padStart(2, "0")}
       </div>
       <div
@@ -102,7 +147,7 @@ function SceneFrame({ scene, projectTitle }: { scene: Scene; projectTitle: strin
           fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif",
           left: 74,
           maxWidth: 1320,
-          opacity: entrance,
+          opacity: entrance * copyOpacity,
           position: "absolute",
           right: 74,
           transform: `translateY(${(1 - entrance) * 38}px)`
@@ -125,31 +170,50 @@ function SceneFrame({ scene, projectTitle }: { scene: Scene; projectTitle: strin
           fontSize: 31,
           fontWeight: 600,
           lineHeight: 1.35,
+          opacity: copyOpacity,
           textAlign: "center",
           textShadow: "0 2px 12px rgba(0,0,0,.65)"
         }}
       >{caption}</div>
-      <div style={{ bottom: 52, color: "rgba(255,255,255,.7)", fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif", fontSize: 19, left: 74, position: "absolute" }}>{projectTitle}</div>
-      <div style={{ background: "rgba(255,255,255,.22)", bottom: 56, height: 5, left: 520, position: "absolute", right: 74 }}>
-        <div style={{ background: "#22c7b8", height: "100%", width: `${(frame / Math.max(1, durationInFrames - 1)) * 100}%` }} />
+      <div style={{ bottom: 52, color: "rgba(255,255,255,.7)", fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif", fontSize: 19, left: 74, opacity: copyOpacity, position: "absolute" }}>{projectTitle}</div>
+      <div style={{ background: "rgba(255,255,255,.22)", bottom: 56, height: 5, left: 520, opacity: copyOpacity, position: "absolute", right: 74 }}>
+        <div style={{ background: "#22c7b8", height: "100%", width: `${(visualFrame / Math.max(1, contentDurationInFrames - 1)) * 100}%` }} />
       </div>
-      {audio ? <Audio src={audio} volume={0.96} /> : null}
+      {audio ? (
+        <Sequence durationInFrames={contentDurationInFrames}>
+          <Audio src={audio} volume={0.96} />
+        </Sequence>
+      ) : null}
     </AbsoluteFill>
   );
 }
 
 export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
   let from = 0;
+  const transitionFrames = Math.round(VIDEO_FPS * 0.5);
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#08111f" }}>
-      {project.currentVersion.scenes.map((scene) => {
-        const durationInFrames = Math.max(1, Math.round(scene.durationSeconds * VIDEO_FPS));
+      {project.currentVersion.scenes.map((scene, index) => {
+        const contentDurationInFrames = Math.max(1, Math.round(scene.durationSeconds * VIDEO_FPS));
         const start = from;
-        from += durationInFrames;
+        from += contentDurationInFrames;
+        const hasTransitionOut = index < project.currentVersion.scenes.length - 1;
         return (
-          <Sequence durationInFrames={durationInFrames} from={start} key={scene.id} premountFor={VIDEO_FPS}>
-            <SceneFrame projectTitle={project.title} scene={scene} />
+          <Sequence
+            durationInFrames={contentDurationInFrames + (hasTransitionOut ? transitionFrames : 0)}
+            from={start}
+            key={scene.id}
+            premountFor={VIDEO_FPS}
+          >
+            <SceneFrame
+              contentDurationInFrames={contentDurationInFrames}
+              hasTransitionIn={index > 0}
+              hasTransitionOut={hasTransitionOut}
+              projectTitle={project.title}
+              scene={scene}
+              transitionFrames={transitionFrames}
+            />
           </Sequence>
         );
       })}

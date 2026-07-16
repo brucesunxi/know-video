@@ -90,6 +90,13 @@ The app reads from Neon when `DATABASE_URL` is configured. If no project exists 
 - `POST /api/assets/upload`
   - Input: multipart `file`
   - Output: R2 key and asset metadata
+- `POST /api/assets/upload-url`
+  - Input: project, version, scene, filename, size, and content type
+  - Output: a 15-minute signed R2 upload URL for files larger than 4 MB
+- `POST /api/assets/attach`
+  - Binds a completed direct upload to the selected scene and current version
+- `POST /api/assets/detach`
+  - Removes a scene asset from the current version without deleting history
 
 ## Next Milestones
 
@@ -102,3 +109,5 @@ The app reads from Neon when `DATABASE_URL` is configured. If no project exists 
 The renderer shares the exact composition used by the browser player. The first export for a deployment creates a version-pinned Vercel Sandbox, installs Chromium with its Amazon Linux runtime libraries, and stores a seven-day base snapshot. Each export then forks that snapshot into an isolated job, renders a 1920x1080 H.264/AAC MP4, uploads it to R2, reports progress through the authenticated callback route, and shuts down.
 
 `WORKER_SHARED_SECRET` must be present in the Vercel project. Only R2 credentials and this callback secret are passed to render jobs; model credentials remain in the application runtime.
+
+Files up to 4 MB use the Vercel upload route. Larger files upload directly from the browser to a short-lived signed R2 URL and support progress reporting up to 500 MB. Apply [`docs/r2-cors.json`](docs/r2-cors.json) to the production bucket CORS policy so the canonical production domain can send `PUT` requests. Asset reads support HTTP byte ranges, which keeps uploaded video seeking and Remotion rendering stable without making the bucket public.

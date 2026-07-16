@@ -9,12 +9,14 @@ import {
   ChevronRight,
   Clapperboard,
   Download,
+  FileVideo2,
   Film,
   History,
   ImagePlus,
   Layers3,
   Loader2,
   Mic2,
+  Music2,
   PanelRightOpen,
   Plus,
   RefreshCcw,
@@ -22,6 +24,7 @@ import {
   Send,
   Settings2,
   Sparkles,
+  Trash2,
   Upload
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
@@ -62,6 +65,13 @@ function compactText(text: string | undefined, fallback: string, maxLength = 72)
   if (!text) return fallback;
   const trimmed = text.replace(/\s+/g, " ").trim();
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 1)}…` : trimmed;
+}
+
+function fileSizeLabel(value: unknown) {
+  const bytes = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "云端素材";
+  if (bytes < 1_000_000) return `${Math.max(1, Math.round(bytes / 1_000))} KB`;
+  return `${(bytes / 1_000_000).toFixed(bytes >= 10_000_000 ? 0 : 1)} MB`;
 }
 
 function Shell({
@@ -326,6 +336,58 @@ function StoryboardBoard({ scenes }: { scenes: Scene[] }) {
   );
 }
 
+function SceneAssetsPanel({
+  scene,
+  isBusy,
+  uploadProgress,
+  onUpload,
+  onRemove
+}: {
+  scene: Scene;
+  isBusy: boolean;
+  uploadProgress?: number;
+  onUpload: () => void;
+  onRemove: (assetId: string) => void;
+}) {
+  const assets = scene.assets.filter((asset) => ["image", "clip", "audio"].includes(asset.type));
+  return (
+    <section className="kv-assets-panel">
+      <div className="kv-strip-heading">
+        <div>
+          <span className="kv-eyebrow">场景 {scene.sceneNumber} 素材</span>
+          <h3>管理当前画面、视频片段和配音</h3>
+        </div>
+        <button disabled={isBusy} onClick={onUpload} type="button">
+          {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <Upload size={16} />}
+          {uploadProgress !== undefined ? `上传 ${uploadProgress}%` : "添加或替换"}
+        </button>
+      </div>
+      <div className="kv-asset-list">
+        {assets.length === 0 ? (
+          <div className="kv-assets-empty"><ImagePlus size={20} />这个场景还没有可用素材</div>
+        ) : assets.map((asset) => (
+          <article key={asset.id}>
+            {asset.type === "image" ? (
+              <span className="kv-asset-preview" style={{ backgroundImage: `url("${asset.url}")` }} />
+            ) : (
+              <span className="kv-asset-preview icon">
+                {asset.type === "clip" ? <FileVideo2 size={22} /> : <Music2 size={22} />}
+              </span>
+            )}
+            <div>
+              <strong>{String(asset.metadata?.name ?? (asset.type === "image" ? "场景画面" : asset.type === "clip" ? "视频片段" : "场景配音"))}</strong>
+              <span>{asset.type === "image" ? "图片" : asset.type === "clip" ? "视频" : "音频"} · {fileSizeLabel(asset.metadata?.size)}</span>
+            </div>
+            <button aria-label={`移除 ${String(asset.metadata?.name ?? asset.type)}`} disabled={isBusy} onClick={() => onRemove(asset.id)} title="从当前版本移除" type="button">
+              <Trash2 size={16} />
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ChangeCard({ change }: { change: EditChange }) {
   const voiceoverChanged = change.after.voiceover
     && change.after.voiceover !== change.before.voiceover;
@@ -477,7 +539,11 @@ function StudioScreen({
   versionsOpen,
   versionsLoading,
   onToggleVersions,
-  onRestoreVersion
+  onRestoreVersion,
+  uploadProgress,
+  assetsOpen,
+  onToggleAssets,
+  onRemoveAsset
 }: {
   project: Project;
   messages: ChatMessage[];
@@ -503,6 +569,10 @@ function StudioScreen({
   versionsLoading: boolean;
   onToggleVersions: () => void;
   onRestoreVersion: (versionId: string) => void;
+  uploadProgress?: number;
+  assetsOpen: boolean;
+  onToggleAssets: () => void;
+  onRemoveAsset: (assetId: string) => void;
 }) {
   const playerRef = useRef<PlayerRef>(null);
   const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === selectedScene) ?? project.currentVersion.scenes[0];
@@ -536,9 +606,9 @@ function StudioScreen({
               <History size={16} />
               版本
             </button>
-            <button onClick={onUpload} type="button">
-              <ImagePlus size={16} />
-              素材
+            <button className={assetsOpen ? "active" : ""} disabled={isBusy} onClick={onToggleAssets} type="button">
+              {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <ImagePlus size={16} />}
+              {uploadProgress !== undefined ? `上传 ${uploadProgress}%` : "素材"}
             </button>
             <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers.length > 0 ? missingSceneNumbers : undefined)} type="button">
               <RefreshCcw size={16} />
@@ -589,6 +659,15 @@ function StudioScreen({
               </div>
             )}
           </section>
+        ) : null}
+        {assetsOpen ? (
+          <SceneAssetsPanel
+            isBusy={isBusy}
+            onRemove={onRemoveAsset}
+            onUpload={onUpload}
+            scene={scene}
+            uploadProgress={uploadProgress}
+          />
         ) : null}
         {view === "preview" ? (
           <>
@@ -652,6 +731,8 @@ export function WorkspaceClient({
   const [versions, setVersions] = useState<ProjectVersionSummary[]>([]);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionsLoading, setVersionsLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | undefined>();
+  const [assetsOpen, setAssetsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
@@ -858,7 +939,13 @@ export function WorkspaceClient({
   function toggleVersions() {
     const next = !versionsOpen;
     setVersionsOpen(next);
+    if (next) setAssetsOpen(false);
     if (next) void loadVersions();
+  }
+
+  function toggleAssets() {
+    setAssetsOpen((current) => !current);
+    setVersionsOpen(false);
   }
 
   async function restoreVersion(versionId: string) {
@@ -892,19 +979,24 @@ export function WorkspaceClient({
     if (!file) return;
 
     setIsBusy(true);
+    setUploadProgress(0);
     try {
-      const form = new FormData();
-      form.set("file", file);
-      form.set("projectId", project.id);
-      form.set("versionId", project.currentVersion.id);
-      form.set("sceneNumber", String(selectedScene));
-      const response = await fetch("/api/assets/upload", {
-        method: "POST",
-        body: form
-      });
-      const data = await response.json() as { asset?: SceneAsset; error?: string };
-      if (!response.ok || !data.asset) throw new Error(data.error || "素材上传失败。");
-      const uploadedAsset = data.asset;
+      if (file.size > 500_000_000) throw new Error("单个素材不能超过 500MB。");
+      let uploadedAsset: SceneAsset;
+      if (file.size <= 4_000_000) {
+        const form = new FormData();
+        form.set("file", file);
+        form.set("projectId", project.id);
+        form.set("versionId", project.currentVersion.id);
+        form.set("sceneNumber", String(selectedScene));
+        const response = await fetch("/api/assets/upload", { method: "POST", body: form });
+        const data = await response.json() as { asset?: SceneAsset; error?: string };
+        if (!response.ok || !data.asset) throw new Error(data.error || "素材上传失败。");
+        uploadedAsset = data.asset;
+        setUploadProgress(100);
+      } else {
+        uploadedAsset = await uploadDirectAsset(file);
+      }
       setProject((current) => ({
         ...current,
         currentVersion: {
@@ -929,6 +1021,86 @@ export function WorkspaceClient({
       });
     } finally {
       setIsBusy(false);
+      setUploadProgress(undefined);
+    }
+  }
+
+  async function uploadDirectAsset(file: File): Promise<SceneAsset> {
+    const descriptor = {
+      projectId: project.id,
+      versionId: project.currentVersion.id,
+      sceneNumber: selectedScene,
+      name: file.name,
+      size: file.size,
+      contentType: file.type
+    };
+    const initResponse = await fetch("/api/assets/upload-url", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(descriptor)
+    });
+    const session = await initResponse.json() as {
+      key?: string;
+      uploadUrl?: string;
+      error?: string;
+    };
+    if (!initResponse.ok || !session.key || !session.uploadUrl) {
+      throw new Error(session.error || "无法开始大文件上传。");
+    }
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", session.uploadUrl!);
+      xhr.setRequestHeader("content-type", file.type);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) setUploadProgress(Math.min(96, Math.round((event.loaded / event.total) * 96)));
+      };
+      xhr.onload = () => xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`云端存储拒绝了上传（${xhr.status}）。`));
+      xhr.onerror = () => reject(new Error("大文件直传失败，请检查 R2 Bucket 的 CORS 设置。"));
+      xhr.send(file);
+    });
+    const attachResponse = await fetch("/api/assets/attach", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...descriptor, key: session.key })
+    });
+    const attached = await attachResponse.json() as { asset?: SceneAsset; error?: string };
+    if (!attachResponse.ok || !attached.asset) throw new Error(attached.error || "无法绑定场景素材。");
+    setUploadProgress(100);
+    return attached.asset;
+  }
+
+  async function removeSceneAsset(assetId: string) {
+    setIsBusy(true);
+    try {
+      const response = await fetch("/api/assets/detach", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          versionId: project.currentVersion.id,
+          sceneNumber: selectedScene,
+          assetId
+        })
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || "无法移除素材。");
+      setProject((current) => ({
+        ...current,
+        currentVersion: {
+          ...current.currentVersion,
+          renderUrl: undefined,
+          scenes: current.currentVersion.scenes.map((scene) => scene.sceneNumber === selectedScene
+            ? { ...scene, assets: scene.assets.filter((asset) => asset.id !== assetId) }
+            : scene)
+        }
+      }));
+      pushMessage({ role: "assistant", type: "text", content: `场景 ${selectedScene} 的素材已从当前版本移除。` });
+    } catch (error) {
+      pushMessage({ role: "assistant", type: "text", content: error instanceof Error ? error.message : "无法移除素材。" });
+    } finally {
+      setIsBusy(false);
     }
   }
 
@@ -936,6 +1108,7 @@ export function WorkspaceClient({
     setIsBusy(true);
     setErrorMessage(undefined);
     setVersionsOpen(false);
+    setAssetsOpen(false);
     try {
       const response = await fetch("/api/assets/generate", {
         method: "POST",
@@ -1088,6 +1261,10 @@ export function WorkspaceClient({
           versionsLoading={versionsLoading}
           onToggleVersions={toggleVersions}
           onRestoreVersion={restoreVersion}
+          uploadProgress={uploadProgress}
+          assetsOpen={assetsOpen}
+          onToggleAssets={toggleAssets}
+          onRemoveAsset={removeSceneAsset}
           onViewChange={setStudioView}
           pendingPlan={pendingPlan}
           project={project}
