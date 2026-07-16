@@ -93,6 +93,10 @@ function isGlobalChineseRewrite(request: string) {
   return wantsChinese && wantsGlobal;
 }
 
+function isGlobalScopeRequest(request: string) {
+  return /全片|整个视频|整支视频|所有场景|全部场景|每个场景|所有镜头|全部镜头|整体(?:风格|色调|节奏|画面|旁白|语言)?|都(?:改|换|调整|变成)|entire video|whole video|all scenes|every scene|throughout/iu.test(request);
+}
+
 function hasChinese(value?: string) {
   return Boolean(value && /\p{Script=Han}/u.test(value));
 }
@@ -109,16 +113,53 @@ function validGlobalChinesePayload(payload: EditPlanPayload, version: ProjectVer
   });
 }
 
+function validGlobalScopePayload(payload: EditPlanPayload, version: ProjectVersion) {
+  const affected = new Set(payload.affectedScenes);
+  const changes = new Set(payload.changes.map((change) => change.sceneNumber));
+  return version.scenes.every((scene) => affected.has(scene.sceneNumber) && changes.has(scene.sceneNumber));
+}
+
+const regenerateOrder = ["image", "audio", "clip", "thumbnail", "caption", "render"] as const;
+
+function normalizedRegenerate(
+  change: EditPlanPayload["changes"][number],
+  scene: Scene,
+  globalChineseRewrite: boolean
+) {
+  if (globalChineseRewrite) return ["image", "audio", "caption", "render"] as EditPlanPayload["changes"][number]["regenerate"];
+
+  const regenerate = new Set(change.regenerate);
+  const afterVoiceover = change.after.voiceover ?? scene.voiceover;
+  const afterMotion = change.after.motionPrompt ?? scene.motionPrompt;
+  if (afterVoiceover !== scene.voiceover) {
+    regenerate.add("audio");
+    regenerate.add("caption");
+  }
+  if (
+    change.after.title !== scene.title
+    || change.after.visualPrompt !== scene.visualPrompt
+    || change.after.thumbnailTone !== (scene.style.theme.includes("light") ? "light" : "dark")
+  ) {
+    regenerate.add("image");
+    regenerate.add("thumbnail");
+  }
+  if (afterMotion !== scene.motionPrompt || regenerate.size > 0) regenerate.add("render");
+  return regenerateOrder.filter((type) => regenerate.has(type));
+}
+
 function normalizeEditPayload(
   payload: EditPlanPayload,
   version: ProjectVersion,
-  globalChineseRewrite: boolean
+  globalChineseRewrite: boolean,
+  globalScopeRequest: boolean
 ): EditPlanPayload {
   const sceneByNumber = new Map(version.scenes.map((scene) => [scene.sceneNumber, scene]));
-  const changes = payload.changes.map((change) => {
+  const seen = new Set<number>();
+  const changes = payload.changes.flatMap((change) => {
     const scene = sceneByNumber.get(change.sceneNumber);
-    if (!scene) return change;
-    return {
+    if (!scene || seen.has(change.sceneNumber)) return [];
+    seen.add(change.sceneNumber);
+    return [{
       ...change,
       before: {
         title: scene.title,
@@ -129,12 +170,11 @@ function normalizeEditPayload(
       },
       after: {
         ...change.after,
+        voiceover: change.after.voiceover ?? scene.voiceover,
         motionPrompt: change.after.motionPrompt ?? scene.motionPrompt
       },
-      regenerate: globalChineseRewrite
-        ? (["audio", "image", "caption", "render"] as EditPlanPayload["changes"][number]["regenerate"])
-        : change.regenerate
-    };
+      regenerate: normalizedRegenerate(change, scene, globalChineseRewrite)
+    }];
   });
 
   return globalChineseRewrite
@@ -144,10 +184,17 @@ function normalizeEditPayload(
         affectedScenes: version.scenes.map((scene) => scene.sceneNumber),
         changes
       }
-    : { ...payload, changes };
+    : {
+        ...payload,
+        affectedScenes: globalScopeRequest
+          ? version.scenes.map((scene) => scene.sceneNumber)
+          : changes.map((change) => change.sceneNumber),
+        changes
+      };
 }
 
 function getTextModel() {
+  const timeout = Math.min(30_000, Math.max(8_000, Number(process.env.AI_TEXT_TIMEOUT_MS) || 18_000));
   if (process.env.DEEPSEEK_API_KEY) {
     const configuredModel = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
     const model = configuredModel === "deepseek-v4-flash" ? configuredModel : "deepseek-v4-flash";
@@ -155,7 +202,9 @@ function getTextModel() {
     return {
       client: new OpenAI({
         apiKey: process.env.DEEPSEEK_API_KEY,
-        baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
+        baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+        timeout,
+        maxRetries: 0
       }),
       model,
       engine: "deepseek-flash" as const
@@ -164,7 +213,7 @@ function getTextModel() {
 
   if (process.env.OPENAI_API_KEY) {
     return {
-      client: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
+      client: new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout, maxRetries: 0 }),
       model: process.env.OPENAI_MODEL || "gpt-4o-mini",
       engine: "openai" as const
     };
@@ -185,6 +234,11 @@ function getVisionModel() {
 function extractJson(content: string) {
   const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
   return JSON.parse(fenced?.[1] ?? content);
+}
+
+function isModelConnectionError(error: unknown) {
+  const message = error instanceof Error ? `${error.name} ${error.message}` : String(error);
+  return /timeout|timed out|connection|fetch failed|econn|etimedout|network/i.test(message);
 }
 
 function requestedDuration(prompt: string) {
@@ -454,6 +508,7 @@ export async function createEditPlan(params: {
   editNumber: number;
 }): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
   const globalChineseRewrite = isGlobalChineseRewrite(params.request);
+  const globalScopeRequest = globalChineseRewrite || isGlobalScopeRequest(params.request);
   const textModel = getTextModel();
   if (!textModel) {
     if (globalChineseRewrite) {
@@ -465,7 +520,9 @@ export async function createEditPlan(params: {
 
   const globalDirective = globalChineseRewrite
     ? `\n\nThis is a GLOBAL Simplified Chinese localization. You MUST return one updated change for every scene. Every after.title, after.voiceover, after.visualPrompt, and after.motionPrompt must be written in Simplified Chinese. Do not limit visual translation to scenes that visibly contain text. affectedScenes must contain every scene number. regenerate must include audio, image, caption, and render.`
-    : "";
+    : globalScopeRequest
+      ? `\n\nThis is a GLOBAL edit request. You MUST return one updated change for every scene, preserve each scene's narrative purpose, and include every scene number in affectedScenes.`
+      : "";
 
   async function requestPayload(retry = false) {
     const completion = await activeTextModel.client.chat.completions.create({
@@ -489,13 +546,19 @@ export async function createEditPlan(params: {
 
   try {
     let payload = await requestPayload();
+    if (globalScopeRequest && !validGlobalScopePayload(payload, params.version)) {
+      payload = await requestPayload(true);
+    }
+    if (globalScopeRequest && !validGlobalScopePayload(payload, params.version)) {
+      throw new Error("Global edit plan did not cover every scene");
+    }
     if (globalChineseRewrite && !validGlobalChinesePayload(payload, params.version)) {
       payload = await requestPayload(true);
     }
     if (globalChineseRewrite && !validGlobalChinesePayload(payload, params.version)) {
       throw new Error("Global Chinese edit plan did not cover every scene and field");
     }
-    const normalized = normalizeEditPayload(payload, params.version, globalChineseRewrite);
+    const normalized = normalizeEditPayload(payload, params.version, globalChineseRewrite, globalScopeRequest);
     return {
       engine: textModel.engine,
       editPlan: {
@@ -513,6 +576,9 @@ export async function createEditPlan(params: {
   } catch (error) {
     if (globalChineseRewrite) {
       console.error("[ai-video] Global Chinese edit plan failed validation:", error);
+      if (isModelConnectionError(error)) {
+        throw new Error("文字改写服务连接超时，请稍后重试。", { cause: error });
+      }
       throw new Error("全片中文修改计划未通过完整性检查，请重试。", { cause: error });
     }
     console.error("[ai-video] Falling back to heuristic edit plan:", error);
