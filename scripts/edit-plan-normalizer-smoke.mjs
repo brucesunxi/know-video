@@ -199,4 +199,35 @@ const voiceChange = normalizeEditPlanAgainstScenes({
 assert.equal(voiceChange.changes[0].after.narrationVoice, "female-natural");
 assert.deepEqual(Array.from(voiceChange.changes[0].regenerate), ["audio", "render"]);
 
+const generatedClip = normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "让第 1 场景动起来",
+  changes: [{ sceneNumber: 1, status: "updated", before: side, after: side, regenerate: [] }]
+}, [scene]);
+assert.deepEqual(Array.from(generatedClip.changes[0].regenerate), ["clip", "render"]);
+
+const ambiguousClip = normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "生成动态镜头",
+  changes: [{ sceneNumber: 1, status: "updated", before: side, after: side, regenerate: ["clip"] }]
+}, [scene]);
+assert.deepEqual(Array.from(ambiguousClip.changes), []);
+
+const sceneWithClip = {
+  ...scene,
+  assets: [{ id: "clip-1", type: "clip", url: "/api/assets/clip-1" }]
+};
+const restyledClip = normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "把第 1 场景改成明亮的视觉风格",
+  changes: [{
+    sceneNumber: 1,
+    status: "updated",
+    before: side,
+    after: { ...side, thumbnailTone: "light", visualPrompt: "Bright visual" },
+    regenerate: []
+  }]
+}, [sceneWithClip]);
+assert.deepEqual(Array.from(restyledClip.changes[0].regenerate), ["image", "thumbnail", "clip", "render"]);
+
 console.log("Edit plan normalization smoke checks passed.");

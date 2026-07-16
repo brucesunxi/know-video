@@ -104,6 +104,10 @@ function requestsVisualDirectionChange(request: string) {
   return visualSubject && visualAction;
 }
 
+export function requestsGeneratedClip(request: string) {
+  return /动态(?:视频|镜头|画面)|视频片段|生成(?:一个|本场景|该场景|这个场景|第.{0,6}场景)?视频|让.{0,12}(?:画面|场景|镜头).{0,6}动起来|图生视频|image[- ]?to[- ]?video|generate.{0,12}(?:video|clip)|animate.{0,12}(?:scene|shot|image)/iu.test(request);
+}
+
 export function analyzeEditIntent(request: string, availableSceneNumbers: number[]) {
   const explicitSceneNumbers = extractRequestedSceneNumbers(request, availableSceneNumbers);
   const global = stronglyGlobal(request)

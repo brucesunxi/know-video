@@ -1,4 +1,5 @@
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
@@ -6,11 +7,33 @@ import { renderMedia, selectComposition } from "@remotion/renderer";
 const output = process.argv[2] || "/tmp/know-video-smoke.mp4";
 const frameStart = Number.parseInt(process.argv[3] || "0", 10);
 const frameEnd = Number.parseInt(process.argv[4] || "179", 10);
+const clipPath = process.argv[5];
 if (!Number.isInteger(frameStart) || !Number.isInteger(frameEnd) || frameStart < 0 || frameEnd < frameStart) {
   throw new Error("Frame range must be two positive integers: start end");
 }
 
 const pngDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFUlEQVR42mNkYPj/n4GBgYGJAQoAHgQCAZ7R+8sAAAAASUVORK5CYII=";
+let clipUrl;
+let clipServer;
+if (clipPath) {
+  const clipBody = await readFile(clipPath);
+  clipServer = createServer((request, response) => {
+    if (request.url !== "/clip.mp4") {
+      response.writeHead(404).end();
+      return;
+    }
+    response.writeHead(200, {
+      "accept-ranges": "bytes",
+      "content-length": clipBody.length,
+      "content-type": "video/mp4"
+    });
+    response.end(clipBody);
+  });
+  await new Promise((resolveListen) => clipServer.listen(0, "127.0.0.1", resolveListen));
+  const address = clipServer.address();
+  if (!address || typeof address === "string") throw new Error("Unable to start clip fixture server");
+  clipUrl = `http://127.0.0.1:${address.port}/clip.mp4`;
+}
 
 function wavDataUrl(durationSeconds = 2, frequency = 440) {
   const sampleRate = 24_000;
@@ -59,6 +82,7 @@ const smokeProject = {
         durationSeconds: 2,
         style: { theme: "cinematic", palette: ["#08111f", "#22c7b8"], mood: "precise" },
         assets: [
+          ...(clipUrl ? [{ id: "smoke-clip", type: "clip", url: clipUrl, r2Key: "smoke/clip.mp4", metadata: { duration: 2 } }] : []),
           { id: "smoke-image", type: "image", url: pngDataUrl, r2Key: "smoke/image.png" },
           { id: "smoke-audio", type: "audio", url: wavDataUrl(), r2Key: "smoke/audio.wav" }
         ]
@@ -116,4 +140,5 @@ await renderMedia({
     ? { browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE }
     : {})
 });
+if (clipServer) await new Promise((resolveClose, rejectClose) => clipServer.close((error) => error ? rejectClose(error) : resolveClose()));
 console.log(`RENDER_SMOKE_OK ${output} ${(await stat(output)).size} bytes`);

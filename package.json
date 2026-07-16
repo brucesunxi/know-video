@@ -21,6 +21,7 @@
     "audio:quality:smoke": "node scripts/audio-quality-smoke.mjs",
     "voice:profiles:smoke": "node scripts/voice-profiles-smoke.mjs",
     "asset:policy:smoke": "node scripts/asset-policy-smoke.mjs",
+    "video:response:smoke": "node scripts/cloudflare-video-response-smoke.mjs",
     "version:restore:smoke": "node scripts/version-restore-smoke.mjs",
     "project:create:smoke": "node scripts/project-creation-smoke.mjs",
     "db:init": "node --env-file=.env.local scripts/init-db.mjs",

@@ -1,4 +1,4 @@
-import { analyzeEditIntent } from "@/lib/edit-intent";
+import { analyzeEditIntent, requestsGeneratedClip } from "@/lib/edit-intent";
 import { narrationVoiceFromRequest } from "@/lib/voice-profiles";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
@@ -340,13 +340,18 @@ export function buildEditPlanFromRequest(params: {
 }): EditPlan {
   const tone = detectTone(params.request);
   const requestedVoice = narrationVoiceFromRequest(params.request);
+  const requestedClip = requestsGeneratedClip(params.request);
   const intent = analyzeEditIntent(
     params.request,
     params.version.scenes.map((scene) => scene.sceneNumber)
   );
   const targeted = new Set(intent.explicitSceneNumbers);
   const targetScenes = params.version.scenes.filter((scene) => targeted.has(scene.sceneNumber));
-  const scenes = targetScenes.length > 0 ? targetScenes : params.version.scenes;
+  const scenes = targetScenes.length > 0
+    ? targetScenes
+    : requestedClip && !intent.global
+      ? []
+      : params.version.scenes;
 
   return {
     id: crypto.randomUUID(),
@@ -356,29 +361,37 @@ export function buildEditPlanFromRequest(params: {
     userRequest: params.request,
     summary: `I will update ${scenes.length === params.version.scenes.length ? "the full video" : `scene ${scenes.map((s) => s.sceneNumber).join(", ")}`} according to: "${params.request}". Timing and narration structure are preserved unless the scene text directly asks for content changes.`,
     affectedScenes: scenes.map((scene) => scene.sceneNumber),
-    changes: scenes.map((scene) => ({
-      sceneNumber: scene.sceneNumber,
-      status: "updated",
-      before: {
-        title: scene.title,
-        voiceover: scene.voiceover,
-        narrationVoice: scene.style.narrationVoice,
-        thumbnailTone: scene.style.theme.includes("light") ? "light" : "dark",
-        visualPrompt: scene.visualPrompt,
-        motionPrompt: scene.motionPrompt
-      },
-      after: {
-        title: scene.title,
-        voiceover: scene.voiceover,
-        narrationVoice: requestedVoice ?? scene.style.narrationVoice,
-        thumbnailTone: tone === "light" ? "light" : "dark",
-        visualPrompt: `${scene.visualPrompt} Revision request: ${params.request}. Apply a ${tone} art direction, keep layout readable, and preserve the scene purpose.`,
-        motionPrompt: scene.motionPrompt
-      },
-      regenerate: requestedVoice
-        ? ["audio", "render"]
-        : ["image", "clip", "thumbnail", "render"]
-    })),
+    changes: scenes.map((scene) => {
+      const currentTone = scene.style.theme.includes("light") ? "light" : "dark";
+      const mediaOnly = Boolean(requestedVoice || requestedClip);
+      return {
+        sceneNumber: scene.sceneNumber,
+        status: "updated",
+        before: {
+          title: scene.title,
+          voiceover: scene.voiceover,
+          narrationVoice: scene.style.narrationVoice,
+          thumbnailTone: currentTone,
+          visualPrompt: scene.visualPrompt,
+          motionPrompt: scene.motionPrompt
+        },
+        after: {
+          title: scene.title,
+          voiceover: scene.voiceover,
+          narrationVoice: requestedVoice ?? scene.style.narrationVoice,
+          thumbnailTone: mediaOnly ? currentTone : tone === "light" ? "light" : "dark",
+          visualPrompt: mediaOnly
+            ? scene.visualPrompt
+            : `${scene.visualPrompt} Revision request: ${params.request}. Apply a ${tone} art direction, keep layout readable, and preserve the scene purpose.`,
+          motionPrompt: requestedClip ? `${scene.motionPrompt}. ${params.request}` : scene.motionPrompt
+        },
+        regenerate: requestedVoice
+          ? ["audio", "render"]
+          : requestedClip
+            ? ["clip", "render"]
+            : ["image", "clip", "thumbnail", "render"]
+      };
+    }),
     createdAt: new Date().toISOString()
   };
 }

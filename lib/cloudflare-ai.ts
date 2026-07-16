@@ -1,9 +1,11 @@
 import { getOptionalEnv } from "@/lib/env";
 import { assertUsableSpeechAudio } from "@/lib/audio-quality";
+import { isMp4Buffer, parseCloudflareVideoUrl } from "@/lib/cloudflare-video-response";
 
 const STANDARD_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const PREMIUM_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
 const DEFAULT_TTS_MODEL = "@cf/myshell-ai/melotts";
+const DEFAULT_VIDEO_MODEL = "alibaba/hh1.1-i2v";
 
 type CloudflareEnvelope<T> = {
   success?: boolean;
@@ -25,6 +27,12 @@ function authorizationHeaders() {
   const token = getOptionalEnv("CLOUDFLARE_AI_TOKEN");
   if (!token) throw new Error("Cloudflare AI token is not configured");
   return { authorization: `Bearer ${token}` };
+}
+
+function unifiedEndpoint() {
+  const accountId = getOptionalEnv("CLOUDFLARE_AI_ACCOUNT_ID");
+  if (!accountId) throw new Error("Cloudflare AI account is not configured");
+  return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run`;
 }
 
 async function responseError(response: Response) {
@@ -169,4 +177,51 @@ export async function generateCloudflareSpeech(text: string) {
   const body = decodeBase64(result.audio);
   assertUsableSpeechAudio(body);
   return { body, model, ...detectedAudioFormat(body) };
+}
+
+export async function generateCloudflareVideo(input: {
+  imageUrl: string;
+  prompt: string;
+  duration: number;
+  resolution?: "720P" | "1080P";
+  seed?: number;
+}) {
+  const model = getOptionalEnv("CLOUDFLARE_VIDEO_MODEL") || DEFAULT_VIDEO_MODEL;
+  const response = await fetch(unifiedEndpoint(), {
+    method: "POST",
+    headers: {
+      ...authorizationHeaders(),
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      input: {
+        image: input.imageUrl,
+        prompt: input.prompt.slice(0, 2500),
+        duration: Math.min(15, Math.max(3, Math.round(input.duration))),
+        resolution: input.resolution ?? "720P",
+        seed: input.seed,
+        watermark: false
+      }
+    }),
+    signal: AbortSignal.timeout(280_000)
+  });
+  if (!response.ok) throw await responseError(response);
+
+  const payload = await response.json() as unknown;
+  const videoUrl = parseCloudflareVideoUrl(payload);
+  if (!videoUrl) throw new Error("AI video service did not return a completed video");
+
+  const videoResponse = await fetch(videoUrl, { signal: AbortSignal.timeout(120_000) });
+  if (!videoResponse.ok) throw new Error(`AI video download returned ${videoResponse.status}`);
+  const declaredLength = Number(videoResponse.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > 200_000_000) {
+    throw new Error("AI video output exceeds the 200 MB safety limit");
+  }
+  const body = Buffer.from(await videoResponse.arrayBuffer());
+  if (body.length > 200_000_000) throw new Error("AI video output exceeds the 200 MB safety limit");
+  if (!isMp4Buffer(body)) {
+    throw new Error("AI video service returned an invalid MP4 file");
+  }
+  return { body, model, sourceUrl: videoUrl };
 }

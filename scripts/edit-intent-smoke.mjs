@@ -13,7 +13,7 @@ const output = ts.transpileModule(source, {
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports });
 
-const { analyzeEditIntent, extractRequestedSceneNumbers } = module.exports;
+const { analyzeEditIntent, extractRequestedSceneNumbers, requestsGeneratedClip } = module.exports;
 const scenes = [1, 2, 3, 4, 5, 6];
 
 assert.deepEqual(Array.from(extractRequestedSceneNumbers("只修改第五个镜头", scenes)), [5]);
@@ -23,6 +23,9 @@ assert.deepEqual(Array.from(extractRequestedSceneNumbers("把第2到第4场景�
 assert.deepEqual(Array.from(extractRequestedSceneNumbers("Update scene 2-4", scenes)), [2, 3, 4]);
 assert.deepEqual(Array.from(extractRequestedSceneNumbers("让前三个镜头节奏更快", scenes)), [1, 2, 3]);
 assert.deepEqual(Array.from(extractRequestedSceneNumbers("修改最后一个场景", scenes)), [6]);
+assert.equal(requestsGeneratedClip("让第 2 场景动起来"), true);
+assert.equal(requestsGeneratedClip("把全片生成动态镜头"), true);
+assert.equal(requestsGeneratedClip("把第 2 场景标题改短"), false);
 
 assert.deepEqual(
   JSON.parse(JSON.stringify(analyzeEditIntent("把语言都改为中文", scenes))),

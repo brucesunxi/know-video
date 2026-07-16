@@ -49,6 +49,7 @@ type BusyAction =
   | "planning-edit"
   | "applying-edit"
   | "generating-images"
+  | "generating-video"
   | "generating-audio"
   | "saving-scene"
   | "uploading-asset"
@@ -174,6 +175,8 @@ function busyActionLabel(action?: BusyAction) {
       return "正在保存新版本并更新受影响素材";
     case "generating-images":
       return "正在生成场景画面，请保持页面打开";
+    case "generating-video":
+      return "正在生成动态视频镜头，请保持页面打开";
     case "generating-audio":
       return "正在生成自然配音，请保持页面打开";
     case "saving-scene":
@@ -967,6 +970,7 @@ function StudioScreen({
   onUpload,
   onRegenerate,
   onEnhanceScene,
+  onGenerateClip,
   onRegenerateAudio,
   onExport,
   exportProgress,
@@ -1005,6 +1009,7 @@ function StudioScreen({
   onUpload: () => void;
   onRegenerate: (sceneNumbers?: number[]) => void;
   onEnhanceScene: (sceneNumber: number) => void;
+  onGenerateClip: (sceneNumber: number) => void;
   onRegenerateAudio: (sceneNumbers?: number[]) => void;
   onExport: () => void;
   exportProgress?: number;
@@ -1093,13 +1098,23 @@ function StudioScreen({
               <MessageSquareText size={16} />
               对话改片
             </button>
-            <button className={versionsOpen ? "active" : ""} onClick={onToggleVersions} type="button">
+            <button
+              aria-label="版本历史"
+              className={`kv-icon-action${versionsOpen ? " active" : ""}`}
+              onClick={onToggleVersions}
+              title="版本历史"
+              type="button"
+            >
               <History size={16} />
-              版本
             </button>
-            <button className={exportsOpen ? "active" : ""} onClick={onToggleExports} type="button">
+            <button
+              aria-label="导出记录"
+              className={`kv-icon-action${exportsOpen ? " active" : ""}`}
+              onClick={onToggleExports}
+              title="导出记录"
+              type="button"
+            >
               <FileVideo2 size={16} />
-              导出记录
             </button>
             <button className={assetsOpen ? "active" : ""} disabled={isBusy} onClick={onToggleAssets} type="button">
               {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <ImagePlus size={16} />}
@@ -1107,11 +1122,20 @@ function StudioScreen({
             </button>
             <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers.length > 0 ? missingSceneNumbers : undefined)} type="button">
               <RefreshCcw size={16} />
-              重新生成画面
+              {missingSceneNumbers.length > 0 ? "补齐画面" : "重做画面"}
             </button>
             <button disabled={isBusy} onClick={() => onEnhanceScene(selectedScene)} type="button">
               <Sparkles size={16} />
-              提升本场景画质
+              高清画面
+            </button>
+            <button
+              className="kv-video-action"
+              disabled={isBusy || !scene?.assets.some((asset) => asset.type === "image" && asset.url)}
+              onClick={() => onGenerateClip(selectedScene)}
+              type="button"
+            >
+              <Clapperboard size={16} />
+              {scene?.assets.some((asset) => asset.type === "clip" && asset.url) ? "重做动态" : "生成动态"}
             </button>
             <button
               disabled={isBusy}
@@ -1119,7 +1143,7 @@ function StudioScreen({
               type="button"
             >
               <Mic2 size={16} />
-              {missingAudioSceneNumbers.length > 0 ? `补齐 ${missingAudioSceneNumbers.length} 段配音` : "重做本场景配音"}
+              {missingAudioSceneNumbers.length > 0 ? `补齐 ${missingAudioSceneNumbers.length} 段` : "重做配音"}
             </button>
             <button
               className="kv-primary"
@@ -1614,7 +1638,7 @@ export function WorkspaceClient({
     const data = await response.json() as {
       project: Project;
       message: ChatMessage;
-      regeneration: { imageSceneNumbers: number[]; audioSceneNumbers: number[] };
+      regeneration: { imageSceneNumbers: number[]; audioSceneNumbers: number[]; clipSceneNumbers: number[] };
     };
     let updatedProject = data.project;
     const warnings: string[] = [];
@@ -1671,9 +1695,21 @@ export function WorkspaceClient({
       }
     }
 
+    if (data.regeneration.clipSceneNumbers.length > 0) {
+      setBusyAction("generating-video");
+      try {
+        updatedProject = await requestVideoClips(updatedProject, data.regeneration.clipSceneNumbers, "standard");
+        setProject(updatedProject);
+      } catch (error) {
+        warnings.push(requestErrorMessage(error, "修改场景的动态镜头生成失败。"));
+      }
+    }
+
     const completionMessage = warnings.length > 0
       ? `文字修改和新版本已经保存。${Array.from(new Set(warnings)).join(" ")}`
-      : data.regeneration.imageSceneNumbers.length > 0 || data.regeneration.audioSceneNumbers.length > 0
+      : data.regeneration.imageSceneNumbers.length > 0
+        || data.regeneration.audioSceneNumbers.length > 0
+        || data.regeneration.clipSceneNumbers.length > 0
         ? "修改内容和受影响素材已经全部更新。"
         : "修改内容已经保存。";
     pushMessage({
@@ -2163,6 +2199,56 @@ export function WorkspaceClient({
     }
   }
 
+  async function requestVideoClips(
+    baseProject: Project,
+    sceneNumbers: number[],
+    quality: "standard" | "premium"
+  ) {
+    let updatedProject = baseProject;
+    for (const sceneNumber of sceneNumbers) {
+      const response = await fetch("/api/assets/video/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: updatedProject.id,
+          versionId: updatedProject.currentVersion.id,
+          sceneNumbers: [sceneNumber],
+          quality
+        }),
+        signal: AbortSignal.timeout(295_000)
+      });
+      const data = await response.json() as { project?: Project; error?: string };
+      if (data.project) updatedProject = data.project;
+      if (!response.ok || !data.project) throw new Error(data.error || "动态镜头生成失败。");
+    }
+    return updatedProject;
+  }
+
+  async function generateVideoClips(sceneNumbers: number[], quality: "standard" | "premium" = "standard") {
+    setIsBusy(true);
+    setBusyAction("generating-video");
+    setErrorMessage(undefined);
+    try {
+      const updatedProject = await requestVideoClips(project, sceneNumbers, quality);
+      setProject(updatedProject);
+      pushMessage({
+        role: "assistant",
+        type: "text",
+        content: sceneNumbers.length === 1
+          ? `场景 ${sceneNumbers[0]} 的动态视频镜头已经生成，预览与 MP4 导出将优先使用该镜头。`
+          : `${sceneNumbers.length} 个场景的动态视频镜头已经生成。`,
+        versionId: updatedProject.currentVersion.id
+      }, true);
+    } catch (error) {
+      const message = requestErrorMessage(error, "动态镜头生成失败。");
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
+    } finally {
+      setIsBusy(false);
+      setBusyAction(undefined);
+    }
+  }
+
   async function exportVideo() {
     setErrorMessage(undefined);
     if (project.currentVersion.renderUrl) {
@@ -2400,6 +2486,7 @@ export function WorkspaceClient({
           onUpload={() => fileInputRef.current?.click()}
           onRegenerate={regenerateImages}
           onEnhanceScene={(sceneNumber) => regenerateImages([sceneNumber], "premium")}
+          onGenerateClip={(sceneNumber) => void generateVideoClips([sceneNumber])}
           onRegenerateAudio={regenerateAudio}
           onExport={exportVideo}
           exportProgress={exportProgress}

@@ -341,6 +341,7 @@ export async function persistGeneratedSceneAssets(
   options: {
     replaceAudio?: boolean;
     replaceImages?: boolean;
+    replaceClips?: boolean;
     sceneNumbers?: number[];
     updateStyles?: boolean;
   } = {}
@@ -384,6 +385,14 @@ export async function persistGeneratedSceneAssets(
       queries.push(sql`
         delete from scene_assets
         where scene_id = ${sceneId} and asset_type in ('image', 'clip')
+        returning r2_key
+      `);
+    }
+    if (options.replaceClips) {
+      deletionIndexes.push(queries.length);
+      queries.push(sql`
+        delete from scene_assets
+        where scene_id = ${sceneId} and asset_type = 'clip'
         returning r2_key
       `);
     }
@@ -676,7 +685,7 @@ export async function applyPersistedEditPlan(params: {
 }): Promise<{
   project: Project;
   message: ChatMessage;
-  regeneration: { imageSceneNumbers: number[]; audioSceneNumbers: number[] };
+  regeneration: { imageSceneNumbers: number[]; audioSceneNumbers: number[]; clipSceneNumbers: number[] };
 }> {
   const normalizedPlan = normalizeEditPlanAgainstScenes(
     params.editPlan,
@@ -693,17 +702,22 @@ export async function applyPersistedEditPlan(params: {
   const audioSceneNumbers = normalizedChanges
     .filter((change) => change.regenerate.includes("audio"))
     .map((change) => change.sceneNumber);
+  const clipSceneNumbers = normalizedChanges
+    .filter((change) => change.regenerate.includes("clip"))
+    .map((change) => change.sceneNumber);
   const captionSceneNumbers = normalizedChanges
     .filter((change) => change.regenerate.includes("caption"))
     .map((change) => change.sceneNumber);
   const imageTargets = new Set(imageSceneNumbers);
   const audioTargets = new Set(audioSceneNumbers);
+  const clipTargets = new Set(clipSceneNumbers);
   const captionTargets = new Set(captionSceneNumbers);
   const scenes = changedProject.currentVersion.scenes.map((scene) => ({
     ...scene,
     assets: scene.assets.filter((asset) => {
       if (asset.type === "render") return false;
       if (imageTargets.has(scene.sceneNumber) && ["image", "clip", "thumbnail"].includes(asset.type)) return false;
+      if (clipTargets.has(scene.sceneNumber) && asset.type === "clip") return false;
       if (audioTargets.has(scene.sceneNumber) && asset.type === "audio") return false;
       if (captionTargets.has(scene.sceneNumber) && asset.type === "caption") return false;
       return true;
@@ -721,8 +735,8 @@ export async function applyPersistedEditPlan(params: {
       scenes
     }
   };
-  const regeneration = { imageSceneNumbers, audioSceneNumbers };
-  const pendingMedia = imageSceneNumbers.length > 0 || audioSceneNumbers.length > 0;
+  const regeneration = { imageSceneNumbers, audioSceneNumbers, clipSceneNumbers };
+  const pendingMedia = imageSceneNumbers.length > 0 || audioSceneNumbers.length > 0 || clipSceneNumbers.length > 0;
 
   if (!canPersist()) {
     return {

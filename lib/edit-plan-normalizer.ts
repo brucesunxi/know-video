@@ -1,15 +1,17 @@
 import type { AssetType, EditPlan, Scene } from "@/lib/types";
-import { analyzeEditIntent } from "@/lib/edit-intent";
+import { analyzeEditIntent, requestsGeneratedClip } from "@/lib/edit-intent";
 
 export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) {
   const sceneByNumber = new Map(scenes.map((scene) => [scene.sceneNumber, scene]));
   const intent = analyzeEditIntent(plan.userRequest, scenes.map((scene) => scene.sceneNumber));
   const preserveVisualAssets = intent.preserveVisualAssetsOnLocalization;
+  const clipRequested = requestsGeneratedClip(plan.userRequest);
+  const ambiguousClipRequest = clipRequested && intent.explicitSceneNumbers.length === 0 && !intent.global;
   const explicitlyAllowed = intent.explicitSceneNumbers.length > 0
     ? new Set(intent.explicitSceneNumbers)
     : undefined;
   const seen = new Set<number>();
-  const changes = plan.changes.flatMap((change) => {
+  const changes = (ambiguousClipRequest ? [] : plan.changes).flatMap((change) => {
     const scene = sceneByNumber.get(change.sceneNumber);
     if (
       !scene
@@ -35,7 +37,7 @@ export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) 
     const audioChanged = voiceoverChanged || voiceChanged;
     const captionChanged = title !== scene.title || voiceoverChanged;
     const motionChanged = motionPrompt !== scene.motionPrompt;
-    if (!visualChanged && !audioChanged && !captionChanged && !motionChanged) return [];
+    if (!visualChanged && !audioChanged && !captionChanged && !motionChanged && !clipRequested) return [];
     const regenerate = new Set<AssetType>();
     if (visualChanged) {
       regenerate.add("image");
@@ -43,7 +45,10 @@ export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) 
     }
     if (audioChanged) regenerate.add("audio");
     if (captionChanged) regenerate.add("caption");
-    if (visualChanged || audioChanged || captionChanged || motionChanged) {
+    if (clipRequested || ((motionChanged || visualChanged) && scene.assets.some((asset) => asset.type === "clip"))) {
+      regenerate.add("clip");
+    }
+    if (visualChanged || audioChanged || captionChanged || motionChanged || clipRequested) {
       regenerate.add("render");
     }
 

@@ -2,6 +2,7 @@ import React from "react";
 import {
   AbsoluteFill,
   Audio,
+  Freeze,
   Img,
   OffthreadVideo,
   Sequence,
@@ -207,7 +208,12 @@ function SceneFrame({
   );
   const transition = transitionKind(scene);
   const accent = scene.style.palette.find((color) => /^#[0-9a-f]{6}$/i.test(color)) ?? "#22c7b8";
-  const clip = scene.assets.find((asset) => asset.type === "clip" && asset.url)?.url;
+  const clipAsset = scene.assets.find((asset) => asset.type === "clip" && asset.url);
+  const clip = clipAsset?.url;
+  const declaredClipDuration = Number(clipAsset?.metadata?.duration);
+  const lastClipFrame = Number.isFinite(declaredClipDuration) && declaredClipDuration > 0
+    ? Math.max(0, Math.round(declaredClipDuration * VIDEO_FPS) - 1)
+    : Math.max(0, contentDurationInFrames - 1);
   const image = scene.assets.find((asset) => asset.type === "image" && asset.url)?.url;
   const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url)?.url;
 
@@ -221,19 +227,21 @@ function SceneFrame({
       }}
     >
       {clip ? (
-        <OffthreadVideo
-          muted
-          src={clip}
-          style={{
-            height: "106%",
-            left: `${motion.x}%`,
-            objectFit: "cover",
-            position: "absolute",
-            top: `${-3 + motion.y}%`,
-            transform: `scale(${motion.scale})`,
-            width: "106%"
-          }}
-        />
+        <Freeze active={(currentFrame) => currentFrame > lastClipFrame} frame={lastClipFrame}>
+          <OffthreadVideo
+            muted
+            src={clip}
+            style={{
+              height: "106%",
+              left: `${motion.x}%`,
+              objectFit: "cover",
+              position: "absolute",
+              top: `${-3 + motion.y}%`,
+              transform: `scale(${motion.scale})`,
+              width: "106%"
+            }}
+          />
+        </Freeze>
       ) : image ? (
         <Img
           src={image}
