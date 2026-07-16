@@ -18,6 +18,7 @@
     "speech:timing:smoke": "node scripts/speech-timing-smoke.mjs",
     "asset:policy:smoke": "node scripts/asset-policy-smoke.mjs",
     "version:restore:smoke": "node scripts/version-restore-smoke.mjs",
+    "project:create:smoke": "node scripts/project-creation-smoke.mjs",
     "db:init": "node --env-file=.env.local scripts/init-db.mjs",
     "db:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
     "services:check": "node --env-file=.env.local scripts/diagnose-services.mjs",

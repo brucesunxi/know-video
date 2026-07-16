@@ -2,6 +2,7 @@ import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { editPlanSchema } from "@/lib/edit-plan-schema";
 import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import { demoProject } from "@/lib/mock-data";
+import { initialVersionStatus, materializeNewProject } from "@/lib/project-creation";
 import { assetUrlForKey } from "@/lib/r2";
 import { invalidateVersionRender } from "@/lib/render-jobs";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
@@ -142,51 +143,96 @@ export async function persistGeneratedProject(params: {
   }
 
   const sql = getSql();
-  const status = versionStatus(params.project);
-  const projectRows = await sql`
-    insert into projects (title)
-    values (${params.project.title})
-    returning id
-  ` as IdRow[];
-  const projectId = projectRows[0].id;
-
-  const versionRows = await sql`
-    insert into project_versions (
-      project_id,
-      status,
-      scene_plan_json,
-      duration_seconds
-    )
-    values (
-      ${projectId},
-      ${status},
-      ${JSON.stringify(params.project.currentVersion.scenes)},
-      ${params.project.currentVersion.durationSeconds}
-    )
-    returning id
-  ` as IdRow[];
-  const versionId = versionRows[0].id;
-
-  const persistedScenes = await insertScenes(versionId, params.project.currentVersion.scenes);
-
-  await sql`
-    update projects
-    set current_version_id = ${versionId}, updated_at = now()
-    where id = ${projectId}
-  `;
-
-  const userRows = await sql`
-    insert into chat_messages (project_id, version_id, role, message_type, content)
-    values (${projectId}, ${versionId}, 'user', 'text', ${params.prompt})
-    returning id
-  ` as IdRow[];
-
+  const status = initialVersionStatus(params.project);
+  const materialized = materializeNewProject(params.project);
+  const {
+    projectId,
+    versionId,
+    userMessageId,
+    assistantMessageId,
+    scenes: persistedScenes
+  } = materialized;
   const assistantContent = `脚本和 ${params.project.currentVersion.scenes.length} 个分镜已经完成，正在继续生成画面与配音。`;
-  const assistantRows = await sql`
-    insert into chat_messages (project_id, version_id, role, message_type, content)
-    values (${projectId}, ${versionId}, 'assistant', 'version', ${assistantContent})
-    returning id
-  ` as IdRow[];
+  const queries = [
+    sql`
+      insert into projects (id, title)
+      values (${projectId}, ${params.project.title})
+    `,
+    sql`
+      insert into project_versions (
+        id,
+        project_id,
+        status,
+        scene_plan_json,
+        duration_seconds
+      )
+      values (
+        ${versionId},
+        ${projectId},
+        ${status},
+        ${JSON.stringify(persistedScenes)},
+        ${params.project.currentVersion.durationSeconds}
+      )
+    `,
+    ...persistedScenes.flatMap((scene) => [
+      sql`
+        insert into scenes (
+          id,
+          version_id,
+          scene_number,
+          title,
+          voiceover,
+          visual_prompt,
+          motion_prompt,
+          duration_seconds,
+          style_json
+        )
+        values (
+          ${scene.id},
+          ${versionId},
+          ${scene.sceneNumber},
+          ${scene.title},
+          ${scene.voiceover},
+          ${scene.visualPrompt},
+          ${scene.motionPrompt},
+          ${scene.durationSeconds},
+          ${JSON.stringify(scene.style)}
+        )
+      `,
+      ...scene.assets.map((asset) => sql`
+        insert into scene_assets (
+          id,
+          scene_id,
+          asset_type,
+          r2_key,
+          public_url,
+          metadata_json
+        )
+        values (
+          ${asset.id},
+          ${scene.id},
+          ${asset.type},
+          ${asset.r2Key},
+          ${asset.url},
+          ${JSON.stringify(asset.metadata ?? {})}
+        )
+      `)
+    ]),
+    sql`
+      update projects
+      set current_version_id = ${versionId}, updated_at = now()
+      where id = ${projectId}
+    `,
+    sql`
+      insert into chat_messages (id, project_id, version_id, role, message_type, content)
+      values (${userMessageId}, ${projectId}, ${versionId}, 'user', 'text', ${params.prompt})
+    `,
+    sql`
+      insert into chat_messages (id, project_id, version_id, role, message_type, content)
+      values (${assistantMessageId}, ${projectId}, ${versionId}, 'assistant', 'version', ${assistantContent})
+    `
+  ];
+  await sql.transaction(queries);
 
   const project: Project = {
     ...params.project,
@@ -203,14 +249,14 @@ export async function persistGeneratedProject(params: {
     project,
     messages: [
       {
-        id: userRows[0].id,
+        id: userMessageId,
         role: "user",
         type: "text",
         content: params.prompt,
         versionId
       },
       {
-        id: assistantRows[0].id,
+        id: assistantMessageId,
         role: "assistant",
         type: "version",
         content: assistantContent,
