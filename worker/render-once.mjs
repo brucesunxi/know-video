@@ -102,10 +102,14 @@ async function render(input) {
     await progressCallbacks;
     await callback(input, { jobId: input.jobId, status: "running", progress: 96 });
     const key = `renders/${project.id}/${project.currentVersion.id}/${input.jobId}.mp4`;
+    const outputBody = await readFile(output);
+    if (outputBody.length < 50_000) {
+      throw new Error(`Rendered MP4 is unexpectedly small (${outputBody.length} bytes)`);
+    }
     await r2.send(new PutObjectCommand({
       Bucket: process.env.R2_BUCKET,
       Key: key,
-      Body: await readFile(output),
+      Body: outputBody,
       ContentType: "video/mp4"
     }));
     await callback(input, {

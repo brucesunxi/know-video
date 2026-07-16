@@ -325,7 +325,23 @@ function storyboardQualityIssues(
   if (storyboardLooksGeneric(scenes)) issues.push("scene structure is generic");
   if (scenes.some((scene) => scene.visualPrompt.split("\n")[0].length < 100)) issues.push("visual direction lacks concrete detail");
   if (scenes.some((scene) => scene.motionPrompt.split(" Camera language:")[0].length < 50)) issues.push("camera or motion direction lacks detail");
-  if (scenes.some((scene) => scene.voiceover.length < 12)) issues.push("voiceover is too short");
+  if (scenes.some((scene) => {
+    const hanCharacters = (scene.voiceover.match(/\p{Script=Han}/gu) ?? []).length;
+    const latinWords = (scene.voiceover.match(/[A-Za-z0-9]+/g) ?? []).length;
+    return hanCharacters > 0
+      ? hanCharacters < Math.max(4, Math.floor(scene.durationSeconds * 2.1))
+      : latinWords < Math.max(3, Math.floor(scene.durationSeconds * 1.15));
+  })) {
+    issues.push("voiceover is too short for the available scene duration");
+  }
+  if (scenes.some((scene) => {
+    const hanCharacters = (scene.voiceover.match(/\p{Script=Han}/gu) ?? []).length;
+    const latinWords = (scene.voiceover.match(/[A-Za-z0-9]+/g) ?? []).length;
+    const estimatedSeconds = hanCharacters / 4.15 + latinWords / 2.7;
+    return estimatedSeconds > Math.max(1, scene.durationSeconds - 0.25) * 1.12;
+  })) {
+    issues.push("voiceover does not fit comfortably inside its scene duration");
+  }
   if (options?.language === "中文" && scenes.some((scene) => !hasChinese(scene.title) || !hasChinese(scene.voiceover))) {
     issues.push("scene titles or narration are not fully localized in Chinese");
   }

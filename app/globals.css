@@ -790,6 +790,33 @@ button:disabled {
   justify-content: space-between;
 }
 
+.kv-media-warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #f0cf8d;
+  border-radius: 8px;
+  background: #fffaf0;
+  padding: 11px 13px;
+  color: #7a4b08;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.kv-media-warning > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #ddb566;
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px 10px;
+  color: #744908;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
 .kv-actions button.active {
   border-color: #9bded6;
   background: #edf9f7;
@@ -2125,6 +2152,16 @@ button:disabled {
   .kv-actionbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .kv-media-warning {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .kv-media-warning > button {
+    grid-column: 1 / -1;
+    justify-content: center;
+    width: 100%;
   }
 
   .kv-actionbar,

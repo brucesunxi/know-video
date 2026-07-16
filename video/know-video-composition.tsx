@@ -15,10 +15,38 @@ import { VIDEO_FPS } from "@/video/config";
 export type KnowVideoCompositionProps = { project: Project };
 
 function captionParts(text: string) {
-  const parts = text.match(/[^，。！？；,.!?]+[，。！？；,.!?]?/g)
+  const sentences = text.match(/[^，。！？；,.!?]+[，。！？；,.!?]?/g)
     ?.map((part) => part.trim())
     .filter(Boolean);
-  return parts?.length ? parts : [text];
+  const parts = (sentences?.length ? sentences : [text]).flatMap((part) => {
+    const maxLength = hasCjk(part) ? 20 : 54;
+    if (part.length <= maxLength) return [part];
+    const chunks: string[] = [];
+    for (let index = 0; index < part.length; index += maxLength) {
+      chunks.push(part.slice(index, index + maxLength));
+    }
+    return chunks;
+  });
+  return parts.length ? parts : [text];
+}
+
+function hasCjk(text: string) {
+  return /\p{Script=Han}/u.test(text);
+}
+
+function titleFontSize(title: string) {
+  const weightedLength = Array.from(title).reduce((sum, character) => sum + (hasCjk(character) ? 1.75 : 1), 0);
+  if (weightedLength > 46) return 46;
+  if (weightedLength > 34) return 54;
+  if (weightedLength > 24) return 61;
+  return 68;
+}
+
+function captionFontSize(caption: string) {
+  const weightedLength = Array.from(caption).reduce((sum, character) => sum + (hasCjk(character) ? 1.7 : 1), 0);
+  if (weightedLength > 48) return 25;
+  if (weightedLength > 36) return 28;
+  return 31;
 }
 
 function activeCaption(text: string, frame: number, durationInFrames: number) {
@@ -153,7 +181,22 @@ function SceneFrame({
           transform: `translateY(${(1 - entrance) * 38}px)`
         }}
       >
-        <div style={{ fontSize: 68, fontWeight: 800, lineHeight: 1.1, maxWidth: 1320, textShadow: "0 4px 30px rgba(0,0,0,.42)" }}>{scene.title}</div>
+        <div
+          style={{
+            display: "-webkit-box",
+            fontSize: titleFontSize(scene.title),
+            fontWeight: 800,
+            letterSpacing: 0,
+            lineHeight: 1.12,
+            maxWidth: 1320,
+            overflow: "hidden",
+            textShadow: "0 4px 30px rgba(0,0,0,.42)",
+            WebkitBoxOrient: "vertical",
+            WebkitLineClamp: 2
+          }}
+        >
+          {scene.title}
+        </div>
       </div>
       <div
         style={{
@@ -167,9 +210,11 @@ function SceneFrame({
           background: "rgba(2,8,18,.76)",
           color: "#fff",
           fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif",
-          fontSize: 31,
+          fontSize: captionFontSize(caption),
           fontWeight: 600,
+          letterSpacing: 0,
           lineHeight: 1.35,
+          overflowWrap: "anywhere",
           opacity: copyOpacity,
           textAlign: "center",
           textShadow: "0 2px 12px rgba(0,0,0,.65)"

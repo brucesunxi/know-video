@@ -52,9 +52,56 @@ function selectNarrativeScenes<T>(scenes: T[], count: number) {
   return indexes.map((index) => scenes[index]);
 }
 
+function fitFallbackNarration(scene: Scene, durationSeconds: number, chinese: boolean) {
+  if (chinese) {
+    const maxCharacters = Math.max(4, Math.floor((durationSeconds - 0.35) * 4));
+    const microNarration: Record<string, string> = {
+      输入制作请求: "一句话，说清创意。",
+      智能规划脚本: "自动规划每个镜头。",
+      生成统一画面: "统一生成视觉画面。",
+      通过对话改片: "对话即可改片。",
+      保留创作版本: "版本随时恢复。",
+      完成并导出: "一键导出成片。",
+      开场钩子: "先抓住注意力。",
+      问题情境: "问题就在眼前。",
+      解决路径: "路径变得清晰。",
+      效果证明: "结果清楚可见。",
+      价值升华: "改变真正发生。",
+      成果收束: "让价值被记住。"
+    };
+    if (durationSeconds <= 3.2 && microNarration[scene.title]) return microNarration[scene.title];
+    const compactVoiceover = scene.voiceover.replace(/\s+/g, "").trim();
+    if (compactVoiceover.replace(/[，。！？；]/g, "").length <= maxCharacters) return compactVoiceover;
+    const firstClause = scene.voiceover.split(/[，。！？；]/)[0]?.trim();
+    if (firstClause && firstClause.length <= maxCharacters) return `${firstClause}。`;
+    return `${scene.voiceover.replace(/[，。！？；\s]/g, "").slice(0, maxCharacters)}。`;
+  }
+
+  const maxWords = Math.max(3, Math.floor((durationSeconds - 0.35) * 2.45));
+  const microNarration: Record<string, string> = {
+    "Describe the idea": "Start with one clear idea.",
+    "Plan the story": "Every shot is planned.",
+    "Create the visuals": "Visuals stay consistent.",
+    "Revise through chat": "Revise it through chat.",
+    "Keep every version": "Every version stays safe.",
+    "Finish and export": "Export the finished film.",
+    "Opening Hook": "Earn attention immediately.",
+    "Problem Context": "Make the problem visible.",
+    "Solution Flow": "Reveal a clear path.",
+    "Proof Moment": "Show the result clearly.",
+    "Human Outcome": "Make the change meaningful.",
+    "Final Resolve": "End on lasting value."
+  };
+  if (durationSeconds <= 3.2 && microNarration[scene.title]) return microNarration[scene.title];
+  const words = scene.voiceover.replace(/[,.!?]/g, "").trim().split(/\s+/);
+  if (words.length <= maxWords) return scene.voiceover;
+  return `${words.slice(0, maxWords).join(" ")}.`;
+}
+
 function applyFallbackConstraints(
   scenes: Scene[],
-  options?: GenerationOptions
+  options?: GenerationOptions,
+  chinese = true
 ) {
   const count = options?.sceneCount === "auto" || !options?.sceneCount
     ? 5
@@ -65,7 +112,8 @@ function applyFallbackConstraints(
     ...scene,
     id: crypto.randomUUID(),
     sceneNumber: index + 1,
-    durationSeconds: durations[index]
+    durationSeconds: durations[index],
+    voiceover: fitFallbackNarration(scene, durations[index], chinese)
   }));
 }
 
@@ -162,7 +210,7 @@ export function generateProjectFromPrompt(
     }
   ];
   if (isVideoGenerationPrompt(prompt)) {
-    const videoGenerationScenes = applyFallbackConstraints(videoGenerationBlueprints, options);
+    const videoGenerationScenes = applyFallbackConstraints(videoGenerationBlueprints, options, chinese);
     return {
       ...(baseProject ?? {
         id: crypto.randomUUID(),
@@ -262,7 +310,7 @@ export function generateProjectFromPrompt(
       assets: []
     }
   ];
-  const scenes = applyFallbackConstraints(genericBlueprints, options);
+  const scenes = applyFallbackConstraints(genericBlueprints, options, chinese);
 
   return {
     ...(baseProject ?? {

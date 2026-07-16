@@ -829,6 +829,9 @@ function StudioScreen({
   const missingSceneNumbers = project.currentVersion.scenes
     .filter((item) => !sceneVisualAsset(item))
     .map((item) => item.sceneNumber);
+  const missingAudioSceneNumbers = project.currentVersion.scenes
+    .filter((item) => !item.assets.some((asset) => asset.type === "audio" && asset.url))
+    .map((item) => item.sceneNumber);
   function selectScene(sceneNumber: number) {
     const seconds = project.currentVersion.scenes
       .filter((item) => item.sceneNumber < sceneNumber)
@@ -868,11 +871,20 @@ function StudioScreen({
               <Sparkles size={16} />
               提升本场景画质
             </button>
-            <button disabled={isBusy} onClick={() => onRegenerateAudio([selectedScene])} type="button">
+            <button
+              disabled={isBusy}
+              onClick={() => onRegenerateAudio(missingAudioSceneNumbers.length > 0 ? missingAudioSceneNumbers : [selectedScene])}
+              type="button"
+            >
               <Mic2 size={16} />
-              重做本场景配音
+              {missingAudioSceneNumbers.length > 0 ? `补齐 ${missingAudioSceneNumbers.length} 段配音` : "重做本场景配音"}
             </button>
-            <button className="kv-primary" disabled={isBusy || exportProgress !== undefined || missingSceneNumbers.length > 0} onClick={onExport} type="button">
+            <button
+              className="kv-primary"
+              disabled={isBusy || exportProgress !== undefined || missingSceneNumbers.length > 0 || missingAudioSceneNumbers.length > 0}
+              onClick={onExport}
+              type="button"
+            >
               {exportProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <Download size={16} />}
               {exportProgress !== undefined
                 ? `正在合成 MP4 ${exportProgress}%`
@@ -882,6 +894,16 @@ function StudioScreen({
             </button>
           </div>
         </div>
+        {missingAudioSceneNumbers.length > 0 ? (
+          <div className="kv-media-warning" role="status">
+            <Mic2 size={17} />
+            <span>还有 {missingAudioSceneNumbers.length} 个场景缺少配音。补齐后才能导出 MP4，避免生成静音或旁白不完整的视频。</span>
+            <button disabled={isBusy} onClick={() => onRegenerateAudio(missingAudioSceneNumbers)} type="button">
+              {isBusy ? <Loader2 className="kv-spin" size={15} /> : <RefreshCcw size={15} />}
+              生成缺失配音
+            </button>
+          </div>
+        ) : null}
         {versionsOpen ? (
           <section className="kv-version-panel">
             <div className="kv-strip-heading">
