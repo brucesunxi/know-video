@@ -21,6 +21,10 @@ export async function POST(request: Request) {
   if (body.sceneNumbers?.some((sceneNumber) => !validScenes.has(sceneNumber))) {
     return NextResponse.json({ error: "请求包含当前版本中不存在的场景。" }, { status: 409 });
   }
+  const previousAudioKeys = new Map(project.currentVersion.scenes.map((scene) => [
+    scene.sceneNumber,
+    scene.assets.find((asset) => asset.type === "audio" && asset.url)?.r2Key
+  ]));
   const updated = await generateProjectVoices(project, body.sceneNumbers);
 
   await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
@@ -31,7 +35,10 @@ export async function POST(request: Request) {
   const targets = body.sceneNumbers?.length
     ? updated.currentVersion.scenes.filter((scene) => body.sceneNumbers?.includes(scene.sceneNumber))
     : updated.currentVersion.scenes;
-  const failed = targets.filter((scene) => !scene.assets.some((asset) => asset.type === "audio" && asset.url));
+  const failed = targets.filter((scene) => {
+    const nextAudio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
+    return !nextAudio || nextAudio.r2Key === previousAudioKeys.get(scene.sceneNumber);
+  });
 
   if (failed.length > 0) {
     return NextResponse.json(

@@ -9,6 +9,18 @@ function containsChinese(text: string) {
   return /\p{Script=Han}/u.test(text);
 }
 
+async function mapWithConcurrency<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>) {
+  let cursor = 0;
+  async function run() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      await worker(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => run()));
+}
+
 async function generateSceneVoice(scene: Scene, project: Project): Promise<SceneAsset> {
   let body: Buffer;
   let model: string;
@@ -75,19 +87,23 @@ export async function generateProjectVoices(project: Project, sceneNumbers?: num
     || getOptionalEnv("ENABLE_TTS") === "false"
   ) return project;
   const selected = sceneNumbers ? new Set(sceneNumbers) : undefined;
-  const scenes = await Promise.all(project.currentVersion.scenes.map(async (scene) => {
-    if (selected && !selected.has(scene.sceneNumber)) return scene;
+  const scenes = [...project.currentVersion.scenes];
+  const selectedIndexes = scenes
+    .map((scene, index) => ({ scene, index }))
+    .filter(({ scene }) => !selected || selected.has(scene.sceneNumber));
+  const concurrency = Math.min(4, Math.max(1, Number(getOptionalEnv("TTS_GENERATION_CONCURRENCY")) || 3));
+  await mapWithConcurrency(selectedIndexes, concurrency, async ({ scene, index }) => {
     try {
       const voice = await generateSceneVoice(scene, project);
-      return { ...scene, assets: [voice, ...scene.assets.filter((asset) => asset.type !== "audio")] };
+      scenes[index] = { ...scene, assets: [voice, ...scene.assets.filter((asset) => asset.type !== "audio")] };
     } catch (error) {
       console.error(`[audio-assets] Scene ${scene.sceneNumber} voice generation failed:`, error);
       // A failed Chinese regeneration must not leave a previously broken MeloTTS track active.
-      return containsChinese(scene.voiceover)
-        ? { ...scene, assets: scene.assets.filter((asset) => asset.type !== "audio") }
-        : scene;
+      if (containsChinese(scene.voiceover)) {
+        scenes[index] = { ...scene, assets: scene.assets.filter((asset) => asset.type !== "audio") };
+      }
     }
-  }));
+  });
 
   return { ...project, currentVersion: { ...project.currentVersion, scenes } };
 }

@@ -34,27 +34,42 @@ export async function generateAzureChineseSpeech(text: string, durationSeconds?:
   const rate = speechRate(text, durationSeconds);
   const ssmlRate = `${rate >= 0 ? "+" : ""}${rate}%`;
   const ssml = `<speak version="1.0" xml:lang="zh-CN"><voice name="${escapeXml(voice)}"><prosody rate="${ssmlRate}">${escapeXml(text)}</prosody></voice></speak>`;
-  const response = await fetch(
-    `https://${encodeURIComponent(region)}.tts.speech.microsoft.com/cognitiveservices/v1`,
-    {
-      method: "POST",
-      headers: {
-        "Ocp-Apim-Subscription-Key": key,
-        "Content-Type": "application/ssml+xml",
-        "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
-        "User-Agent": "KnowVideo"
-      },
-      body: ssml,
-      signal: AbortSignal.timeout(60_000)
+  let body: Buffer | undefined;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(
+        `https://${encodeURIComponent(region)}.tts.speech.microsoft.com/cognitiveservices/v1`,
+        {
+          method: "POST",
+          headers: {
+            "Ocp-Apim-Subscription-Key": key,
+            "Content-Type": "application/ssml+xml",
+            "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+            "User-Agent": "KnowVideo"
+          },
+          body: ssml,
+          signal: AbortSignal.timeout(60_000)
+        }
+      );
+      if (!response.ok) {
+        const detail = (await response.text().catch(() => "")).trim();
+        const error = new Error(detail || `Chinese speech service returned ${response.status}`) as Error & { status?: number };
+        error.status = response.status;
+        if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt === 2) throw error;
+        lastError = error;
+      } else {
+        body = Buffer.from(await response.arrayBuffer());
+        break;
+      }
+    } catch (error) {
+      lastError = error;
+      const status = (error as { status?: number }).status;
+      if (attempt === 2 || (status && ![408, 429, 500, 502, 503, 504].includes(status))) throw error;
     }
-  );
-
-  if (!response.ok) {
-    const detail = (await response.text().catch(() => "")).trim();
-    throw new Error(detail || `Chinese speech service returned ${response.status}`);
+    await new Promise((resolve) => setTimeout(resolve, 500 * (2 ** attempt) + Math.floor(Math.random() * 180)));
   }
-
-  const body = Buffer.from(await response.arrayBuffer());
+  if (!body) throw lastError instanceof Error ? lastError : new Error("Chinese speech service failed after retries");
   if (body.length < 1_000) throw new Error("Chinese speech service returned an empty audio file");
 
   return {
