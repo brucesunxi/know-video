@@ -8,6 +8,10 @@ export function matchesRenderSandbox(jobId: string, sandboxName?: string) {
   return !sandboxName || sandboxName === renderSandboxName(jobId);
 }
 
+export function renderOutputKey(input: Pick<RenderJob, "id" | "projectId" | "versionId">) {
+  return `renders/${input.projectId}/${input.versionId}/${input.id}.mp4`;
+}
+
 export function publicRenderError(status: RenderJob["status"]) {
   if (status === "cancelled") return "场景素材已经更新，请重新导出最新版本。";
   if (status === "failed") {

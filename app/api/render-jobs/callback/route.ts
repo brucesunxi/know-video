@@ -2,8 +2,9 @@ import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { getOptionalEnv } from "@/lib/env";
-import { matchesRenderSandbox } from "@/lib/render-lifecycle";
-import { updateRenderJob } from "@/lib/render-jobs";
+import { matchesRenderSandbox, renderOutputKey } from "@/lib/render-lifecycle";
+import { getRenderJob, updateRenderJob } from "@/lib/render-jobs";
+import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import { stopRenderSandbox } from "@/lib/vercel-renderer";
 
 const payloadSchema = z.object({
@@ -39,7 +40,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid render callback payload" }, { status: 400 });
   }
   const payload = parsed.data;
+  const existing = await getRenderJob(payload.jobId);
+  if (!existing) return NextResponse.json({ error: "Render job not found" }, { status: 404 });
+  if (payload.outputR2Key && payload.outputR2Key !== renderOutputKey(existing)) {
+    return NextResponse.json({ error: "Render output path does not match job" }, { status: 400 });
+  }
   const renderJob = await updateRenderJob(payload);
+  if (!renderJob && payload.outputR2Key) {
+    await deleteUnreferencedStorageObjects([payload.outputR2Key]).catch((error) => {
+      console.error("[render-callback] Unable to clean stale render output:", error);
+    });
+  }
   if (["ready", "failed"].includes(payload.status) && payload.sandboxName) {
     after(() => stopRenderSandbox(payload.sandboxName!).catch((error) => {
       console.error("Unable to stop render sandbox", error);

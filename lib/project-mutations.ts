@@ -4,7 +4,7 @@ import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import { demoProject } from "@/lib/mock-data";
 import { assetUrlForKey } from "@/lib/r2";
 import { invalidateVersionRender } from "@/lib/render-jobs";
-import { deleteUnreferencedAssetObjects } from "@/lib/scene-assets";
+import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import { applyEditPlan } from "@/lib/video-brain";
 import type { ChatMessage, EditPlan, Project, ProjectVersion, ProjectVersionSummary, Scene, SceneAsset } from "@/lib/types";
 
@@ -430,7 +430,7 @@ export async function persistGeneratedSceneAssets(
     set status = ${complete ? "ready" : "draft"}
     where id = ${versionId}
   `;
-  await deleteUnreferencedAssetObjects(replacedKeys).catch((error) => {
+  await deleteUnreferencedStorageObjects(replacedKeys).catch((error) => {
     console.error("[project-mutations] Unable to clean replaced generated assets:", error);
   });
 }

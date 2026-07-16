@@ -12,10 +12,15 @@ const output = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports, require: () => ({}) });
-const { matchesRenderSandbox, publicRenderError, renderSandboxName } = module.exports;
+const { matchesRenderSandbox, publicRenderError, renderOutputKey, renderSandboxName } = module.exports;
 
 const jobId = "d90dc514-7d0d-491e-994f-e52c6916cb68";
 assert.equal(renderSandboxName(jobId), `know-video-job-${jobId}`);
+assert.equal(renderOutputKey({
+  id: jobId,
+  projectId: "04c0432b-9f15-4c46-ae24-9163aa612284",
+  versionId: "ee31d129-ff72-4dc5-a091-4867db85a262"
+}), `renders/04c0432b-9f15-4c46-ae24-9163aa612284/ee31d129-ff72-4dc5-a091-4867db85a262/${jobId}.mp4`);
 assert.equal(matchesRenderSandbox(jobId, renderSandboxName(jobId)), true);
 assert.equal(matchesRenderSandbox(jobId, "know-video-job-another"), false);
 assert.equal(matchesRenderSandbox(jobId), true);

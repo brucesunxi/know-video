@@ -1,5 +1,6 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { assetUrlForKey } from "@/lib/r2";
+import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import type { RenderJob } from "@/lib/types";
 
 type RenderJobRow = {
@@ -32,20 +33,39 @@ function toRenderJob(row: RenderJobRow): RenderJob {
 export async function invalidateVersionRender(versionId: string) {
   if (!hasDatabaseUrl()) return;
   const sql = getSql();
-  await sql`
-    update project_versions
-    set render_url = null,
-        status = case when status in ('rendering', 'ready') then 'draft' else status end
-    where id = ${versionId}
-  `;
-  await sql`
-    update render_jobs
-    set status = 'cancelled',
-        error = '场景素材已更新，需要重新导出。',
-        updated_at = now()
-    where version_id = ${versionId}
-      and status in ('queued', 'running', 'ready')
-  `;
+  const results = await sql.transaction([
+    sql`
+      update project_versions
+      set render_url = null,
+          status = case when status in ('rendering', 'ready') then 'draft' else status end
+      where id = ${versionId}
+    `,
+    sql`
+      with obsolete as (
+        select id, output_r2_key
+        from render_jobs
+        where version_id = ${versionId}
+          and status in ('queued', 'running', 'ready')
+        for update
+      ),
+      cancelled as (
+        update render_jobs
+        set status = 'cancelled',
+            error = '场景素材已更新，需要重新导出。',
+            output_r2_key = null,
+            updated_at = now()
+        from obsolete
+        where render_jobs.id = obsolete.id
+        returning obsolete.output_r2_key as previous_output_r2_key
+      )
+      select previous_output_r2_key from cancelled
+    `
+  ]);
+  const obsoleteKeys = (results[1] as Array<{ previous_output_r2_key: string | null }>)
+    .flatMap((row) => row.previous_output_r2_key ? [row.previous_output_r2_key] : []);
+  await deleteUnreferencedStorageObjects(obsoleteKeys).catch((error) => {
+    console.error("[render-jobs] Unable to clean invalidated render outputs:", error);
+  });
 }
 
 export async function createRenderJob(projectId: string, versionId: string) {

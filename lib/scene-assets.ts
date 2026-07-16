@@ -1,34 +1,12 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { uploadedAssetType } from "@/lib/asset-policy";
-import { assetUrlForKey, deleteR2Objects } from "@/lib/r2";
+import { assetUrlForKey } from "@/lib/r2";
 import { invalidateVersionRender } from "@/lib/render-jobs";
+import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import type { SceneAsset } from "@/lib/types";
 
 export { uploadedAssetType } from "@/lib/asset-policy";
-
-export async function deleteUnreferencedAssetObjects(keys: string[]) {
-  const unique = Array.from(new Set(keys.filter(Boolean)));
-  if (unique.length === 0) return;
-  if (!hasDatabaseUrl()) {
-    await deleteR2Objects(unique);
-    return;
-  }
-  const rows = await getSql()`
-    select candidate.key
-    from unnest(${unique}::text[]) as candidate(key)
-    where not exists (
-      select 1
-      from scene_assets
-      where scene_assets.r2_key = candidate.key
-    )
-      and not exists (
-        select 1
-        from render_jobs
-        where render_jobs.output_r2_key = candidate.key
-      )
-  ` as Array<{ key: string }>;
-  await deleteR2Objects(rows.map((row) => row.key));
-}
+export { deleteUnreferencedStorageObjects as deleteUnreferencedAssetObjects } from "@/lib/storage-cleanup";
 
 export async function findOwnedScene(input: {
   projectId: string;
@@ -101,7 +79,7 @@ export async function attachUploadedAsset(input: {
     select r2_key from replaced
   ` as Array<{ r2_key: string }>;
   await invalidateVersionRender(input.versionId);
-  await deleteUnreferencedAssetObjects(replaced.map((asset) => asset.r2_key)).catch((error) => {
+  await deleteUnreferencedStorageObjects(replaced.map((asset) => asset.r2_key)).catch((error) => {
     console.error("[scene-assets] Unable to clean replaced objects:", error);
   });
 }
@@ -126,7 +104,7 @@ export async function detachSceneAsset(input: {
   ` as Array<{ id: string; r2_key: string }>;
   if (rows[0]) await invalidateVersionRender(input.versionId);
   if (rows[0]) {
-    await deleteUnreferencedAssetObjects([rows[0].r2_key]).catch((error) => {
+    await deleteUnreferencedStorageObjects([rows[0].r2_key]).catch((error) => {
       console.error("[scene-assets] Unable to clean detached object:", error);
     });
   }
