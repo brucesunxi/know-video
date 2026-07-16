@@ -1,4 +1,5 @@
 import {
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -86,6 +87,22 @@ export async function createPresignedUpload(input: { key: string; contentType: s
     ContentType: input.contentType
   });
   return getSignedUrl(createR2Client(), command, { expiresIn: 15 * 60 });
+}
+
+export async function deleteR2Objects(keys: string[]) {
+  const unique = Array.from(new Set(keys.filter(Boolean)));
+  if (unique.length === 0) return;
+  const client = createR2Client();
+  const bucket = getRequiredEnv("R2_BUCKET");
+  for (let index = 0; index < unique.length; index += 1000) {
+    await client.send(new DeleteObjectsCommand({
+      Bucket: bucket,
+      Delete: {
+        Objects: unique.slice(index, index + 1000).map((Key) => ({ Key })),
+        Quiet: true
+      }
+    }));
+  }
 }
 
 export function assetUrlForKey(key: string, publicUrl?: string) {

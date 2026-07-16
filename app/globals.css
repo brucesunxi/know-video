@@ -451,6 +451,8 @@ button:disabled {
 }
 
 .kv-project-card {
+  position: relative;
+  display: grid;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -460,6 +462,20 @@ button:disabled {
   padding: 0;
   text-align: left;
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.kv-project-open {
+  display: grid;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+}
+
+.kv-project-open:disabled {
+  cursor: default;
 }
 
 .kv-project-card:hover {
@@ -522,6 +538,121 @@ button:disabled {
   margin: 8px 0 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.kv-project-card-actions,
+.kv-project-rename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding: 9px 11px;
+}
+
+.kv-project-card-actions {
+  justify-content: flex-end;
+}
+
+.kv-project-card-actions button,
+.kv-project-rename button {
+  display: grid;
+  height: 30px;
+  width: 30px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: #596579;
+}
+
+.kv-project-card-actions button:hover,
+.kv-project-rename button:hover {
+  border-color: #9eabb8;
+  color: var(--ink);
+}
+
+.kv-project-card-actions button:last-child:hover {
+  border-color: #f2a6a0;
+  background: #fff7f7;
+  color: #b42318;
+}
+
+.kv-project-rename input {
+  min-width: 0;
+  flex: 1;
+  height: 34px;
+  border: 1px solid #9bded6;
+  border-radius: 6px;
+  outline: 0;
+  padding: 0 9px;
+  color: var(--ink);
+}
+
+.kv-modal-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 17, 30, 0.54);
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+
+.kv-confirm-modal {
+  display: grid;
+  width: min(440px, 100%);
+  gap: 12px;
+  border: 1px solid #d8dee7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 24px;
+  box-shadow: 0 24px 70px rgba(8, 17, 30, 0.24);
+}
+
+.kv-confirm-icon {
+  display: grid;
+  height: 42px;
+  width: 42px;
+  place-items: center;
+  border-radius: 8px;
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.kv-confirm-modal h3,
+.kv-confirm-modal p {
+  margin: 0;
+}
+
+.kv-confirm-modal p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.kv-confirm-modal > div:last-child {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.kv-confirm-modal > div:last-child button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 10px 14px;
+  color: var(--ink);
+  font-weight: 750;
+}
+
+.kv-confirm-modal > div:last-child button.danger {
+  border-color: #b42318;
+  background: #b42318;
+  color: #fff;
 }
 
 .kv-project-status {
@@ -1647,6 +1778,28 @@ button:disabled {
   padding: 12px 14px;
   color: #9f1c1c;
   line-height: 1.45;
+}
+
+.kv-global-error {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #fecaca;
+  background: #fff7f7;
+  padding: 11px 20px;
+  color: #9f1c1c;
+  line-height: 1.45;
+}
+
+.kv-global-error button {
+  display: grid;
+  height: 30px;
+  width: 30px;
+  place-items: center;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
 }
 
 .kv-studio,

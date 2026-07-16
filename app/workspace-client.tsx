@@ -27,7 +27,8 @@ import {
   Send,
   Sparkles,
   Trash2,
-  Upload
+  Upload,
+  X
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
 import { VIDEO_FPS } from "@/video/config";
@@ -143,7 +144,11 @@ function ProjectLibrary({
   isLoading,
   onQueryChange,
   onOpen,
-  onCreate
+  onCreate,
+  onRename,
+  onDelete,
+  actionBusy,
+  errorMessage
 }: {
   projects: ProjectListItem[];
   query: string;
@@ -151,7 +156,14 @@ function ProjectLibrary({
   onQueryChange: (value: string) => void;
   onOpen: (projectId: string) => void;
   onCreate: () => void;
+  onRename: (projectId: string, title: string) => Promise<boolean>;
+  onDelete: (projectId: string) => Promise<boolean>;
+  actionBusy: boolean;
+  errorMessage?: string;
 }) {
+  const [renamingId, setRenamingId] = useState<string>();
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteCandidate, setDeleteCandidate] = useState<ProjectListItem>();
   const filtered = projects.filter((item) => item.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const statusLabel: Record<ProjectListItem["status"], string> = {
     draft: "草稿",
@@ -179,6 +191,7 @@ function ProjectLibrary({
         <input aria-label="搜索项目" onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索视频项目" value={query} />
         <span>{filtered.length} 个项目</span>
       </div>
+      {errorMessage ? <div className="kv-inline-error" role="alert"><AlertCircle size={18} />{errorMessage}</div> : null}
       {isLoading ? (
         <div className="kv-project-empty"><Loader2 className="kv-spin" size={24} /><p>正在读取项目...</p></div>
       ) : filtered.length === 0 ? (
@@ -190,22 +203,57 @@ function ProjectLibrary({
       ) : (
         <div className="kv-project-grid">
           {filtered.map((item) => (
-            <button className="kv-project-card" key={item.id} onClick={() => onOpen(item.id)} type="button">
-              <div className={`kv-project-cover${item.thumbnailUrl ? "" : " empty"}`} style={item.thumbnailUrl ? { backgroundImage: `url(${item.thumbnailUrl})` } : undefined}>
-                {!item.thumbnailUrl ? <Film size={28} /> : null}
-                <span>{durationLabel(item.durationSeconds)}</span>
-              </div>
-              <div className="kv-project-card-body">
-                <div>
-                  <strong>{item.title}</strong>
-                  <span className={`kv-project-status ${item.status}`}>{statusLabel[item.status]}</span>
+            <article className="kv-project-card" key={item.id}>
+              <button className="kv-project-open" disabled={actionBusy || renamingId === item.id} onClick={() => onOpen(item.id)} type="button">
+                <div className={`kv-project-cover${item.thumbnailUrl ? "" : " empty"}`} style={item.thumbnailUrl ? { backgroundImage: `url(${item.thumbnailUrl})` } : undefined}>
+                  {!item.thumbnailUrl ? <Film size={28} /> : null}
+                  <span>{durationLabel(item.durationSeconds)}</span>
                 </div>
-                <p>{item.sceneCount} 个场景 · {new Date(item.updatedAt).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}</p>
-              </div>
-            </button>
+                <div className="kv-project-card-body">
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span className={`kv-project-status ${item.status}`}>{statusLabel[item.status]}</span>
+                  </div>
+                  <p>{item.sceneCount} 个场景 · {new Date(item.updatedAt).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}</p>
+                </div>
+              </button>
+              {renamingId === item.id ? (
+                <form className="kv-project-rename" onSubmit={async (event) => {
+                  event.preventDefault();
+                  if (await onRename(item.id, renameValue.trim())) setRenamingId(undefined);
+                }}>
+                  <input aria-label="项目名称" autoFocus maxLength={120} onChange={(event) => setRenameValue(event.target.value)} value={renameValue} />
+                  <button disabled={actionBusy || renameValue.trim().length === 0} title="保存名称" type="submit"><Check size={15} /></button>
+                  <button disabled={actionBusy} onClick={() => setRenamingId(undefined)} title="取消" type="button"><X size={15} /></button>
+                </form>
+              ) : (
+                <div className="kv-project-card-actions">
+                  <button disabled={actionBusy} onClick={() => { setRenamingId(item.id); setRenameValue(item.title); }} title="重命名" type="button"><Pencil size={15} /></button>
+                  <button disabled={actionBusy} onClick={() => setDeleteCandidate(item)} title="删除项目" type="button"><Trash2 size={15} /></button>
+                </div>
+              )}
+            </article>
           ))}
         </div>
       )}
+      {deleteCandidate ? (
+        <div className="kv-modal-backdrop" role="presentation">
+          <section aria-labelledby="delete-project-title" aria-modal="true" className="kv-confirm-modal" role="dialog">
+            <div className="kv-confirm-icon"><Trash2 size={20} /></div>
+            <h3 id="delete-project-title">删除“{deleteCandidate.title}”？</h3>
+            <p>项目、全部版本、场景素材、对话记录和已导出视频都会永久删除。</p>
+            <div>
+              <button disabled={actionBusy} onClick={() => setDeleteCandidate(undefined)} type="button">取消</button>
+              <button className="danger" disabled={actionBusy} onClick={async () => {
+                if (await onDelete(deleteCandidate.id)) setDeleteCandidate(undefined);
+              }} type="button">
+                {actionBusy ? <Loader2 className="kv-spin" size={16} /> : <Trash2 size={16} />}
+                确认删除
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -947,6 +995,7 @@ export function WorkspaceClient({
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [projectQuery, setProjectQuery] = useState("");
   const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectActionBusy, setProjectActionBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
@@ -1560,6 +1609,54 @@ export function WorkspaceClient({
     }
   }
 
+  async function renameProject(projectId: string, title: string) {
+    if (!title) return false;
+    setProjectActionBusy(true);
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title })
+      });
+      const data = await response.json() as {
+        project?: { id: string; title: string; updatedAt: string };
+        error?: string;
+      };
+      if (!response.ok || !data.project) throw new Error(data.error || "项目重命名失败。");
+      setProjects((current) => current.map((item) => item.id === projectId
+        ? { ...item, title: data.project!.title, updatedAt: data.project!.updatedAt }
+        : item));
+      if (project.id === projectId) {
+        setProject((current) => ({ ...current, title: data.project!.title }));
+      }
+      return true;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "项目重命名失败。");
+      return false;
+    } finally {
+      setProjectActionBusy(false);
+    }
+  }
+
+  async function deleteProject(projectId: string) {
+    setProjectActionBusy(true);
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { method: "DELETE" });
+      const data = await response.json() as { deleted?: boolean; error?: string };
+      if (!response.ok || !data.deleted) throw new Error(data.error || "项目删除失败。");
+      setProjects((current) => current.filter((item) => item.id !== projectId));
+      if (project.id === projectId) window.location.assign("/");
+      return true;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "项目删除失败。");
+      return false;
+    } finally {
+      setProjectActionBusy(false);
+    }
+  }
+
   return (
     <Shell
       onNewVideo={resetToBrief}
@@ -1570,6 +1667,13 @@ export function WorkspaceClient({
       stage={stage}
     >
       <input accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav" hidden onChange={uploadAsset} ref={fileInputRef} type="file" />
+      {stage === "studio" && errorMessage ? (
+        <div className="kv-global-error" role="alert">
+          <AlertCircle size={18} />
+          <span>{errorMessage}</span>
+          <button aria-label="关闭错误提示" onClick={() => setErrorMessage(undefined)} type="button"><X size={16} /></button>
+        </div>
+      ) : null}
       {stage === "brief" ? (
         <BriefScreen
           currentProject={project}
@@ -1589,10 +1693,14 @@ export function WorkspaceClient({
       ) : null}
       {stage === "projects" ? (
         <ProjectLibrary
+          actionBusy={projectActionBusy}
+          errorMessage={errorMessage}
           isLoading={projectsLoading}
           onCreate={resetToBrief}
+          onDelete={deleteProject}
           onOpen={(projectId) => void openProject(projectId)}
           onQueryChange={setProjectQuery}
+          onRename={renameProject}
           projects={projects}
           query={projectQuery}
         />
