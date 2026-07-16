@@ -1,7 +1,5 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { demoProject } from "@/lib/mock-data";
-import { generateProjectSceneImages } from "@/lib/image-assets";
-import { generateProjectVoices } from "@/lib/audio-assets";
 import { assetUrlForKey } from "@/lib/r2";
 import { applyEditPlan } from "@/lib/video-brain";
 import type { ChatMessage, EditPlan, Project, ProjectVersion, ProjectVersionSummary, Scene, SceneAsset } from "@/lib/types";
@@ -477,32 +475,52 @@ export async function persistEditPlan(params: {
 export async function applyPersistedEditPlan(params: {
   project: Project;
   editPlan: EditPlan;
-}): Promise<{ project: Project; message: ChatMessage; renderJobId?: string }> {
+}): Promise<{
+  project: Project;
+  message: ChatMessage;
+  regeneration: { imageSceneNumbers: number[]; audioSceneNumbers: number[] };
+}> {
   const changedProject = applyEditPlan(params.project, params.editPlan);
-  const imageSceneNumbers = params.editPlan.changes
+  const imageSceneNumbers = Array.from(new Set(params.editPlan.changes
     .filter((change) => change.regenerate.some((type) => ["image", "thumbnail", "clip"].includes(type)))
-    .map((change) => change.sceneNumber);
-  const audioSceneNumbers = params.editPlan.changes
+    .map((change) => change.sceneNumber)));
+  const audioSceneNumbers = Array.from(new Set(params.editPlan.changes
     .filter((change) => change.regenerate.includes("audio") || change.after.voiceover !== change.before.voiceover)
-    .map((change) => change.sceneNumber);
-  const projectWithImages = imageSceneNumbers.length > 0
-    ? await generateProjectSceneImages(changedProject, {
-      replaceExistingImages: true,
-      sceneNumbers: imageSceneNumbers
+    .map((change) => change.sceneNumber)));
+  const captionSceneNumbers = Array.from(new Set(params.editPlan.changes
+    .filter((change) => (
+      change.regenerate.includes("caption")
+      || change.after.title !== change.before.title
+      || change.after.voiceover !== change.before.voiceover
+    ))
+    .map((change) => change.sceneNumber)));
+  const imageTargets = new Set(imageSceneNumbers);
+  const audioTargets = new Set(audioSceneNumbers);
+  const captionTargets = new Set(captionSceneNumbers);
+  const scenes = changedProject.currentVersion.scenes.map((scene) => ({
+    ...scene,
+    assets: scene.assets.filter((asset) => {
+      if (asset.type === "render") return false;
+      if (imageTargets.has(scene.sceneNumber) && ["image", "clip", "thumbnail"].includes(asset.type)) return false;
+      if (audioTargets.has(scene.sceneNumber) && asset.type === "audio") return false;
+      if (captionTargets.has(scene.sceneNumber) && asset.type === "caption") return false;
+      return true;
     })
-    : changedProject;
-  if (imageSceneNumbers.length > 0 && projectWithImages.currentVersion.assetErrorCode) {
-    throw new Error("部分场景画面生成失败，修改尚未应用。请稍后重试。");
-  }
-  const nextProject = audioSceneNumbers.length > 0
-    ? await generateProjectVoices(projectWithImages, audioSceneNumbers)
-    : projectWithImages;
-  if (audioSceneNumbers.some((sceneNumber) => {
-    const scene = nextProject.currentVersion.scenes.find((item) => item.sceneNumber === sceneNumber);
-    return !scene?.assets.some((asset) => asset.type === "audio" && asset.url);
-  })) {
-    throw new Error("部分场景配音生成失败，修改尚未应用。请检查语音服务后重试。");
-  }
+  }));
+  const visualCount = scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
+  const nextProject: Project = {
+    ...changedProject,
+    currentVersion: {
+      ...changedProject.currentVersion,
+      status: "draft",
+      renderUrl: undefined,
+      assetStatus: visualCount === scenes.length ? "ready" : visualCount > 0 ? "partial" : "failed",
+      assetErrorCode: undefined,
+      scenes
+    }
+  };
+  const regeneration = { imageSceneNumbers, audioSceneNumbers };
+  const pendingMedia = imageSceneNumbers.length > 0 || audioSceneNumbers.length > 0;
 
   if (!canPersist()) {
     return {
@@ -511,9 +529,12 @@ export async function applyPersistedEditPlan(params: {
         id: crypto.randomUUID(),
         role: "assistant",
         type: "version",
-        content: "修改已经应用，并创建了一个可随时恢复的新版本。",
+        content: pendingMedia
+          ? "修改已保存为可恢复的新版本，正在刷新受影响的画面和配音。"
+          : "修改已保存为可恢复的新版本，可以继续预览或导出。",
         versionId: nextProject.currentVersion.id
       },
+      regeneration
     };
   }
 
@@ -529,7 +550,7 @@ export async function applyPersistedEditPlan(params: {
     values (
       ${params.project.id},
       ${params.project.currentVersion.id},
-      ${versionStatus(nextProject)},
+      ${pendingMedia ? "draft" : versionStatus(nextProject)},
       ${JSON.stringify(nextProject.currentVersion.scenes)},
       ${nextProject.currentVersion.durationSeconds}
     )
@@ -551,7 +572,9 @@ export async function applyPersistedEditPlan(params: {
     where id = ${params.editPlan.id}
   `;
 
-  const content = "修改已经应用，并创建了一个可随时恢复的新版本。确认预览后即可导出 MP4。";
+  const content = pendingMedia
+    ? "修改已保存为可恢复的新版本，正在刷新受影响的画面和配音。"
+    : "修改已保存为可恢复的新版本，可以继续预览或导出。";
   const messageRows = await sql`
     insert into chat_messages (project_id, version_id, role, message_type, content)
     values (${params.project.id}, ${versionId}, 'assistant', 'version', ${content})
@@ -572,7 +595,8 @@ export async function applyPersistedEditPlan(params: {
       type: "version",
       content,
       versionId
-    }
+    },
+    regeneration
   };
 }
 

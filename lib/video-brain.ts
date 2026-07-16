@@ -356,6 +356,8 @@ export function applyEditPlan(project: Project, plan: EditPlan): Project {
       label: `edit ${plan.editNumber}`,
       status: "planning",
       createdAt: new Date().toISOString(),
+      renderUrl: undefined,
+      renderJobId: undefined,
       scenes: nextScenes
     }
   };

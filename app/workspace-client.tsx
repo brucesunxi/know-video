@@ -1177,27 +1177,92 @@ export function WorkspaceClient({
   }
 
   async function applyEditPlanRequest(editPlan: EditPlan) {
-      const response = await fetch("/api/edit-plan/apply", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          projectId: project.id,
-          versionId: project.currentVersion.id,
-          editPlan
-        })
-      });
-      if (!response.ok) {
-        const failure = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(failure.error || "应用修改失败。");
+    const response = await fetch("/api/edit-plan/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: project.id,
+        versionId: project.currentVersion.id,
+        editPlan
+      }),
+      signal: AbortSignal.timeout(30_000)
+    });
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(failure.error || "应用修改失败。");
+    }
+    const data = await response.json() as {
+      project: Project;
+      message: ChatMessage;
+      regeneration: { imageSceneNumbers: number[]; audioSceneNumbers: number[] };
+    };
+    let updatedProject = data.project;
+    const warnings: string[] = [];
+    setProject(updatedProject);
+    setMessages((current) => [...current, data.message]);
+    setVersions([]);
+
+    if (data.regeneration.imageSceneNumbers.length > 0) {
+      try {
+        const imageResponse = await fetch("/api/assets/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            projectId: updatedProject.id,
+            versionId: updatedProject.currentVersion.id,
+            sceneNumbers: data.regeneration.imageSceneNumbers,
+            quality: "standard"
+          }),
+          signal: AbortSignal.timeout(125_000)
+        });
+        const imageData = await imageResponse.json() as { project?: Project; error?: string };
+        if (imageData.project) {
+          updatedProject = imageData.project;
+          setProject(updatedProject);
+        }
+        if (!imageResponse.ok) warnings.push(imageData.error || "部分修改场景的画面生成失败。");
+      } catch (error) {
+        warnings.push(requestErrorMessage(error, "修改场景的画面生成失败。"));
       }
-      const data = await response.json() as {
-        project: Project;
-        message: ChatMessage;
-      };
-      setProject(data.project);
-      setMessages((current) => [...current, data.message]);
-      setVersions([]);
-      return data.project;
+    }
+
+    if (data.regeneration.audioSceneNumbers.length > 0) {
+      try {
+        const audioResponse = await fetch("/api/assets/audio/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            projectId: updatedProject.id,
+            versionId: updatedProject.currentVersion.id,
+            sceneNumbers: data.regeneration.audioSceneNumbers
+          }),
+          signal: AbortSignal.timeout(125_000)
+        });
+        const audioData = await audioResponse.json() as { project?: Project; error?: string };
+        if (audioData.project) {
+          updatedProject = audioData.project;
+          setProject(updatedProject);
+        }
+        if (!audioResponse.ok) warnings.push(audioData.error || "部分修改场景的配音生成失败。");
+      } catch (error) {
+        warnings.push(requestErrorMessage(error, "修改场景的配音生成失败。"));
+      }
+    }
+
+    const completionMessage = warnings.length > 0
+      ? `文字修改和新版本已经保存。${Array.from(new Set(warnings)).join(" ")}`
+      : data.regeneration.imageSceneNumbers.length > 0 || data.regeneration.audioSceneNumbers.length > 0
+        ? "修改内容和受影响素材已经全部更新。"
+        : "修改内容已经保存。";
+    setMessages((current) => [...current, {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      type: "text",
+      content: completionMessage,
+      versionId: updatedProject.currentVersion.id
+    }]);
+    if (warnings.length > 0) setErrorMessage(Array.from(new Set(warnings)).join(" "));
+    return updatedProject;
   }
 
   async function applyPlan() {
