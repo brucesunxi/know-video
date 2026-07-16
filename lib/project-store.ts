@@ -14,6 +14,9 @@ type ProjectListRow = ProjectRow & {
   status: ProjectVersion["status"] | null;
   duration_seconds: number | null;
   scene_count: number;
+  visual_count: number;
+  audio_count: number;
+  has_active_render: boolean;
   thumbnail_r2_key: string | null;
   thumbnail_public_url: string | null;
 };
@@ -221,6 +224,29 @@ export async function listProjects(): Promise<ProjectListItem[]> {
       pv.status,
       pv.duration_seconds,
       count(distinct s.id)::int as scene_count,
+      count(distinct s.id) filter (
+        where exists (
+          select 1
+          from scene_assets visual_asset
+          where visual_asset.scene_id = s.id
+            and visual_asset.asset_type in ('image', 'clip')
+        )
+      )::int as visual_count,
+      count(distinct s.id) filter (
+        where exists (
+          select 1
+          from scene_assets audio_asset
+          where audio_asset.scene_id = s.id
+            and audio_asset.asset_type = 'audio'
+        )
+      )::int as audio_count,
+      exists (
+        select 1
+        from render_jobs active_render
+        where active_render.project_id = p.id
+          and active_render.version_id = p.current_version_id
+          and active_render.status in ('queued', 'running')
+      ) as has_active_render,
       (
         select sa.r2_key
         from scenes first_scene
@@ -245,17 +271,32 @@ export async function listProjects(): Promise<ProjectListItem[]> {
     limit 100
   ` as ProjectListRow[];
 
-  return rows.map((row) => ({
-    id: row.id,
-    title: cleanBrand(row.title),
-    updatedAt: new Date(row.updated_at).toISOString(),
-    status: row.status ?? "draft",
-    durationSeconds: row.duration_seconds ?? 0,
-    sceneCount: row.scene_count,
-    thumbnailUrl: row.thumbnail_r2_key
-      ? assetUrlForKey(row.thumbnail_r2_key, row.thumbnail_public_url ?? undefined)
-      : undefined
-  }));
+  return rows.map((row) => {
+    const mediaComplete = row.scene_count > 0
+      && row.visual_count === row.scene_count
+      && row.audio_count === row.scene_count;
+    const status: ProjectVersion["status"] = row.has_active_render
+      ? "rendering"
+      : row.status === "planning"
+        ? "planning"
+        : row.status === "failed"
+          ? "failed"
+          : mediaComplete
+            ? "ready"
+            : "draft";
+
+    return {
+      id: row.id,
+      title: cleanBrand(row.title),
+      updatedAt: new Date(row.updated_at).toISOString(),
+      status,
+      durationSeconds: row.duration_seconds ?? 0,
+      sceneCount: row.scene_count,
+      thumbnailUrl: row.thumbnail_r2_key
+        ? assetUrlForKey(row.thumbnail_r2_key, row.thumbnail_public_url ?? undefined)
+        : undefined
+    };
+  });
 }
 
 export async function getProjectSnapshot(projectId: string): Promise<ProjectSnapshot | undefined> {

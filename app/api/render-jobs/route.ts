@@ -23,6 +23,22 @@ export async function POST(request: Request) {
   const body = requestSchema.parse(await request.json());
   const project = await loadProjectForRender(body.projectId, body.versionId);
   if (!project) return NextResponse.json({ error: "没有找到需要渲染的视频版本。" }, { status: 404 });
+  const missingVisuals = project.currentVersion.scenes
+    .filter((scene) => !scene.assets.some((asset) => asset.type === "image" || asset.type === "clip"))
+    .map((scene) => scene.sceneNumber);
+  const missingAudio = project.currentVersion.scenes
+    .filter((scene) => !scene.assets.some((asset) => asset.type === "audio"))
+    .map((scene) => scene.sceneNumber);
+  if (project.currentVersion.scenes.length === 0 || missingVisuals.length > 0 || missingAudio.length > 0) {
+    const details = [
+      missingVisuals.length > 0 ? `缺少画面的场景：${missingVisuals.join("、")}` : "",
+      missingAudio.length > 0 ? `缺少配音的场景：${missingAudio.join("、")}` : ""
+    ].filter(Boolean).join("；");
+    return NextResponse.json(
+      { error: details ? `视频素材尚未完整。${details}。` : "视频还没有可渲染的场景。" },
+      { status: 409 }
+    );
+  }
   const reusable = await findReusableRenderJob(body.projectId, body.versionId);
   if (reusable) {
     return NextResponse.json(

@@ -361,12 +361,18 @@ export async function persistGeneratedSceneAssets(
         where exists (
           select 1 from scene_assets sa where sa.scene_id = scenes.id and sa.asset_type in ('image', 'clip')
         )
-      )::int as visual_count
+      )::int as visual_count,
+      count(*) filter (
+        where exists (
+          select 1 from scene_assets sa where sa.scene_id = scenes.id and sa.asset_type = 'audio'
+        )
+      )::int as audio_count
     from scenes
     where version_id = ${versionId}
-  ` as Array<{ scene_count: number; visual_count: number }>;
+  ` as Array<{ scene_count: number; visual_count: number; audio_count: number }>;
   const complete = (counts[0]?.scene_count ?? 0) > 0
-    && counts[0]?.scene_count === counts[0]?.visual_count;
+    && counts[0]?.scene_count === counts[0]?.visual_count
+    && counts[0]?.scene_count === counts[0]?.audio_count;
   await sql`
     update project_versions
     set status = ${complete ? "ready" : "draft"}
@@ -612,7 +618,30 @@ export async function listProjectVersions(projectId: string): Promise<ProjectVer
       pv.render_url,
       pv.created_at,
       p.current_version_id,
-      count(s.id)::int as scene_count
+      count(s.id)::int as scene_count,
+      count(s.id) filter (
+        where exists (
+          select 1
+          from scene_assets visual_asset
+          where visual_asset.scene_id = s.id
+            and visual_asset.asset_type in ('image', 'clip')
+        )
+      )::int as visual_count,
+      count(s.id) filter (
+        where exists (
+          select 1
+          from scene_assets audio_asset
+          where audio_asset.scene_id = s.id
+            and audio_asset.asset_type = 'audio'
+        )
+      )::int as audio_count,
+      exists (
+        select 1
+        from render_jobs active_render
+        where active_render.project_id = pv.project_id
+          and active_render.version_id = pv.id
+          and active_render.status in ('queued', 'running')
+      ) as has_active_render
     from project_versions pv
     join projects p on p.id = pv.project_id
     left join scenes s on s.version_id = pv.id
@@ -628,18 +657,36 @@ export async function listProjectVersions(projectId: string): Promise<ProjectVer
     created_at: Date | string;
     current_version_id: string | null;
     scene_count: number;
+    visual_count: number;
+    audio_count: number;
+    has_active_render: boolean;
   }>;
-  return rows.map((row, index) => ({
-    id: row.id,
-    parentVersionId: row.parent_version_id ?? undefined,
-    label: `版本 ${rows.length - index}`,
-    status: row.status,
-    createdAt: new Date(row.created_at).toISOString(),
-    durationSeconds: row.duration_seconds,
-    renderUrl: row.render_url ?? undefined,
-    sceneCount: row.scene_count,
-    isCurrent: row.id === row.current_version_id
-  }));
+  return rows.map((row, index) => {
+    const mediaComplete = row.scene_count > 0
+      && row.visual_count === row.scene_count
+      && row.audio_count === row.scene_count;
+    const status: ProjectVersion["status"] = row.has_active_render
+      ? "rendering"
+      : row.status === "planning"
+        ? "planning"
+        : row.status === "failed"
+          ? "failed"
+          : mediaComplete
+            ? "ready"
+            : "draft";
+
+    return {
+      id: row.id,
+      parentVersionId: row.parent_version_id ?? undefined,
+      label: `版本 ${rows.length - index}`,
+      status,
+      createdAt: new Date(row.created_at).toISOString(),
+      durationSeconds: row.duration_seconds,
+      renderUrl: row.render_url ?? undefined,
+      sceneCount: row.scene_count,
+      isCurrent: row.id === row.current_version_id
+    };
+  });
 }
 
 export async function restoreProjectVersion(params: {

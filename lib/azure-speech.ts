@@ -25,6 +25,15 @@ function speechRate(text: string, durationSeconds?: number) {
   return Math.max(-10, Math.min(35, Math.round((estimatedSeconds / availableSeconds - 1) * 100)));
 }
 
+function looksLikeMp3(body: Buffer) {
+  if (body.subarray(0, 3).toString("ascii") === "ID3") return true;
+  const searchLength = Math.min(body.length - 1, 8_192);
+  for (let index = 0; index < searchLength; index += 1) {
+    if (body[index] === 0xff && (body[index + 1] & 0xe0) === 0xe0) return true;
+  }
+  return false;
+}
+
 export async function generateAzureChineseSpeech(text: string, durationSeconds?: number) {
   const key = getOptionalEnv("AZURE_SPEECH_KEY");
   const region = getOptionalEnv("AZURE_SPEECH_REGION");
@@ -71,6 +80,7 @@ export async function generateAzureChineseSpeech(text: string, durationSeconds?:
   }
   if (!body) throw lastError instanceof Error ? lastError : new Error("Chinese speech service failed after retries");
   if (body.length < 1_000) throw new Error("Chinese speech service returned an empty audio file");
+  if (!looksLikeMp3(body)) throw new Error("Chinese speech service returned an invalid MP3 file");
 
   return {
     body,
