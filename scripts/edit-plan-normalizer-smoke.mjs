@@ -137,4 +137,52 @@ assert.deepEqual(
   ["image", "thumbnail", "audio", "caption", "render"]
 );
 
+const secondScene = {
+  ...scene,
+  id: "scene-2",
+  sceneNumber: 2,
+  title: "Second",
+  voiceover: "Second narration"
+};
+const secondSide = {
+  ...side,
+  title: secondScene.title,
+  voiceover: secondScene.voiceover
+};
+const scoped = normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "只修改第 2 个场景的标题",
+  affectedScenes: [1, 2],
+  changes: [
+    {
+      sceneNumber: 1,
+      status: "updated",
+      before: side,
+      after: { ...side, title: "Model changed the wrong scene" },
+      regenerate: ["caption", "render"]
+    },
+    {
+      sceneNumber: 2,
+      status: "updated",
+      before: secondSide,
+      after: { ...secondSide, title: "Only this scene changes" },
+      regenerate: []
+    }
+  ]
+}, [scene, secondScene]);
+assert.deepEqual(Array.from(scoped.affectedScenes), [2]);
+assert.equal(scoped.changes[0].after.title, "Only this scene changes");
+
+const unsupportedTopology = normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  changes: [{
+    sceneNumber: 1,
+    status: "deleted",
+    before: side,
+    after: { ...side, title: "Should never apply" },
+    regenerate: ["render"]
+  }]
+}, [scene]);
+assert.deepEqual(Array.from(unsupportedTopology.changes), []);
+
 console.log("Edit plan normalization smoke checks passed.");

@@ -16,6 +16,7 @@ import {
   ImagePlus,
   Layers3,
   Loader2,
+  MessageSquareText,
   Mic2,
   Music2,
   PanelRightOpen,
@@ -31,6 +32,7 @@ import {
   X
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
+import { replacementAssetTypes } from "@/lib/asset-policy";
 import { VIDEO_FPS } from "@/video/config";
 import type { ChatMessage, EditChange, EditPlan, GenerationOptions, Project, ProjectListItem, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
 
@@ -821,7 +823,7 @@ function ChatPanel({
   }, [messages.length, pendingPlan, isBusy]);
 
   return (
-    <aside className="kv-chat">
+    <aside className="kv-chat" id="kv-chat-panel">
       <header>
         <div>
           <span className="kv-eyebrow">对话式改片</span>
@@ -1011,6 +1013,14 @@ function StudioScreen({
             </button>
           </div>
           <div className="kv-actions">
+            <button
+              className="kv-mobile-chat-action"
+              onClick={() => document.getElementById("kv-chat-panel")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              type="button"
+            >
+              <MessageSquareText size={16} />
+              对话改片
+            </button>
             <button className={versionsOpen ? "active" : ""} onClick={onToggleVersions} type="button">
               <History size={16} />
               版本
@@ -1724,7 +1734,13 @@ export function WorkspaceClient({
           ...current.currentVersion,
           renderUrl: undefined,
           scenes: current.currentVersion.scenes.map((scene) => scene.sceneNumber === selectedScene
-            ? { ...scene, assets: [uploadedAsset, ...scene.assets.filter((asset) => asset.type !== uploadedAsset.type)] }
+            ? {
+                ...scene,
+                assets: [
+                  uploadedAsset,
+                  ...scene.assets.filter((asset) => !replacementAssetTypes(uploadedAsset.type).includes(asset.type))
+                ]
+              }
             : scene)
         }
       }));

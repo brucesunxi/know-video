@@ -823,6 +823,10 @@ button:disabled {
   color: #087568;
 }
 
+.kv-mobile-chat-action {
+  display: none !important;
+}
+
 .kv-version-panel {
   display: grid;
   gap: 14px;
@@ -2498,6 +2502,14 @@ button:disabled {
 
   .kv-actions .kv-primary {
     order: -1;
+  }
+
+  .kv-actions .kv-mobile-chat-action {
+    display: inline-flex !important;
+    order: -2;
+    border-color: #9bded6;
+    background: #edf9f7;
+    color: #087568;
   }
 
   .kv-tabs button {

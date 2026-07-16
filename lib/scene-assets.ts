@@ -1,5 +1,5 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
-import { uploadedAssetType } from "@/lib/asset-policy";
+import { replacementAssetTypes, uploadedAssetType } from "@/lib/asset-policy";
 import { assetUrlForKey } from "@/lib/r2";
 import { invalidateVersionRender } from "@/lib/render-jobs";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
@@ -58,10 +58,12 @@ export async function attachUploadedAsset(input: {
   const sceneId = await findOwnedScene(input);
   if (!sceneId) throw new Error("没有找到要绑定素材的场景。");
   const sql = getSql();
+  const replacementTypes = replacementAssetTypes(input.asset.type);
   const replaced = await sql`
     with replaced as (
       delete from scene_assets
-      where scene_id = ${sceneId} and asset_type = ${input.asset.type}
+      where scene_id = ${sceneId}
+        and asset_type in (${replacementTypes[0]}, ${replacementTypes[1] ?? replacementTypes[0]})
       returning r2_key
     ),
     inserted as (

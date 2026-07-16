@@ -5,10 +5,18 @@ export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) 
   const sceneByNumber = new Map(scenes.map((scene) => [scene.sceneNumber, scene]));
   const intent = analyzeEditIntent(plan.userRequest, scenes.map((scene) => scene.sceneNumber));
   const preserveVisualAssets = intent.preserveVisualAssetsOnLocalization;
+  const explicitlyAllowed = intent.explicitSceneNumbers.length > 0
+    ? new Set(intent.explicitSceneNumbers)
+    : undefined;
   const seen = new Set<number>();
   const changes = plan.changes.flatMap((change) => {
     const scene = sceneByNumber.get(change.sceneNumber);
-    if (!scene || seen.has(change.sceneNumber)) return [];
+    if (
+      !scene
+      || seen.has(change.sceneNumber)
+      || (explicitlyAllowed && !explicitlyAllowed.has(change.sceneNumber))
+      || change.status !== "updated"
+    ) return [];
     seen.add(change.sceneNumber);
 
     const currentTone = scene.style.theme.includes("light") ? "light" : "dark";

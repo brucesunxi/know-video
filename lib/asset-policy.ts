@@ -27,8 +27,16 @@ export function maxUploadBytes(contentType: string) {
   return 0;
 }
 
+export function replacementAssetTypes(type: AssetType): AssetType[] {
+  return type === "image" || type === "clip" ? ["image", "clip"] : [type];
+}
+
 function ascii(body: Uint8Array, start: number, end: number) {
-  return Buffer.from(body.subarray(start, end)).toString("ascii");
+  let value = "";
+  for (let index = start; index < Math.min(end, body.length); index += 1) {
+    value += String.fromCharCode(body[index]);
+  }
+  return value;
 }
 
 export function matchesDeclaredAssetType(body: Uint8Array, contentType: string) {

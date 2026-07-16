@@ -95,8 +95,10 @@ function hasChinese(value?: string) {
 function validGlobalChinesePayload(payload: EditPlanPayload, version: ProjectVersion) {
   const changes = new Map(payload.changes.map((change) => [change.sceneNumber, change]));
   return version.scenes.every((scene) => {
-    const after = changes.get(scene.sceneNumber)?.after;
+    const change = changes.get(scene.sceneNumber);
+    const after = change?.after;
     return after
+      && change.status === "updated"
       && hasChinese(after.title)
       && hasChinese(after.voiceover)
       && hasChinese(after.visualPrompt)
@@ -106,8 +108,11 @@ function validGlobalChinesePayload(payload: EditPlanPayload, version: ProjectVer
 
 function validGlobalScopePayload(payload: EditPlanPayload, version: ProjectVersion) {
   const affected = new Set(payload.affectedScenes);
-  const changes = new Set(payload.changes.map((change) => change.sceneNumber));
-  return version.scenes.every((scene) => affected.has(scene.sceneNumber) && changes.has(scene.sceneNumber));
+  const changes = new Map(payload.changes.map((change) => [change.sceneNumber, change]));
+  return version.scenes.every((scene) => (
+    affected.has(scene.sceneNumber)
+    && changes.get(scene.sceneNumber)?.status === "updated"
+  ));
 }
 
 const regenerateOrder = ["image", "audio", "clip", "thumbnail", "caption", "render"] as const;
@@ -147,15 +152,28 @@ function normalizedRegenerate(
 function normalizeEditPayload(
   payload: EditPlanPayload,
   version: ProjectVersion,
+  userRequest: string,
   globalChineseRewrite: boolean,
   globalScopeRequest: boolean,
   preserveVisualAssetsOnLocalization: boolean
 ): EditPlanPayload {
   const sceneByNumber = new Map(version.scenes.map((scene) => [scene.sceneNumber, scene]));
+  const intent = analyzeEditIntent(
+    userRequest,
+    version.scenes.map((scene) => scene.sceneNumber)
+  );
+  const explicitlyAllowed = !globalScopeRequest && intent.explicitSceneNumbers.length > 0
+    ? new Set(intent.explicitSceneNumbers)
+    : undefined;
   const seen = new Set<number>();
   const changes = payload.changes.flatMap((change) => {
     const scene = sceneByNumber.get(change.sceneNumber);
-    if (!scene || seen.has(change.sceneNumber)) return [];
+    if (
+      !scene
+      || seen.has(change.sceneNumber)
+      || (explicitlyAllowed && !explicitlyAllowed.has(change.sceneNumber))
+      || change.status !== "updated"
+    ) return [];
     seen.add(change.sceneNumber);
     return [{
       ...change,
@@ -595,7 +613,7 @@ export async function createEditPlan(params: {
         {
           role: "system",
           content:
-            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. A request without a specific scene target that changes language, narration, captions, style, palette, pacing, music, fonts, logos, or watermarks applies to the full video. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. Return strict JSON only."
+            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. Never return changes for a scene outside an explicitly requested scene or range. Scene insertion and deletion are not supported in this editor, so every returned change must use status updated. A request without a specific scene target that changes language, narration, captions, style, palette, pacing, music, fonts, logos, or watermarks applies to the full video. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. Return strict JSON only."
         },
         {
           role: "user",
@@ -624,6 +642,7 @@ export async function createEditPlan(params: {
     const normalized = normalizeEditPayload(
       payload,
       params.version,
+      params.request,
       globalChineseRewrite,
       globalScopeRequest,
       preserveVisualAssetsOnLocalization

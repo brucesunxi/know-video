@@ -21,6 +21,7 @@ vm.runInNewContext(compiled, {
 const {
   matchesDeclaredAssetType,
   maxUploadBytes,
+  replacementAssetTypes,
   supportedUploadContentTypes,
   uploadedAssetType
 } = module.exports;
@@ -59,5 +60,8 @@ assert.equal(maxUploadBytes("image/png"), 25_000_000);
 assert.equal(maxUploadBytes("audio/mpeg"), 80_000_000);
 assert.equal(maxUploadBytes("video/mp4"), 500_000_000);
 assert.equal(maxUploadBytes("application/octet-stream"), 0);
+assert.deepEqual(Array.from(replacementAssetTypes("image")), ["image", "clip"]);
+assert.deepEqual(Array.from(replacementAssetTypes("clip")), ["image", "clip"]);
+assert.deepEqual(Array.from(replacementAssetTypes("audio")), ["audio"]);
 
 console.log("Asset policy smoke checks passed.");
