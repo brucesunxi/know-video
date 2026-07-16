@@ -10,6 +10,7 @@ import {
   Clapperboard,
   Download,
   Film,
+  History,
   ImagePlus,
   Layers3,
   Loader2,
@@ -17,6 +18,7 @@ import {
   PanelRightOpen,
   Plus,
   RefreshCcw,
+  RotateCcw,
   Send,
   Settings2,
   Sparkles,
@@ -24,7 +26,7 @@ import {
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
 import { VIDEO_FPS } from "@/video/config";
-import type { ChatMessage, EditChange, EditPlan, Project, RenderJob, Scene } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, Project, ProjectVersionSummary, RenderJob, Scene } from "@/lib/types";
 
 type Source = "database" | "mock";
 type Stage = "brief" | "generating" | "studio";
@@ -470,7 +472,12 @@ function StudioScreen({
   onEnhanceScene,
   onRegenerateAudio,
   onExport,
-  exportProgress
+  exportProgress,
+  versions,
+  versionsOpen,
+  versionsLoading,
+  onToggleVersions,
+  onRestoreVersion
 }: {
   project: Project;
   messages: ChatMessage[];
@@ -491,6 +498,11 @@ function StudioScreen({
   onRegenerateAudio: (sceneNumbers?: number[]) => void;
   onExport: () => void;
   exportProgress?: number;
+  versions: ProjectVersionSummary[];
+  versionsOpen: boolean;
+  versionsLoading: boolean;
+  onToggleVersions: () => void;
+  onRestoreVersion: (versionId: string) => void;
 }) {
   const playerRef = useRef<PlayerRef>(null);
   const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === selectedScene) ?? project.currentVersion.scenes[0];
@@ -520,6 +532,10 @@ function StudioScreen({
             </button>
           </div>
           <div className="kv-actions">
+            <button className={versionsOpen ? "active" : ""} onClick={onToggleVersions} type="button">
+              <History size={16} />
+              版本
+            </button>
             <button onClick={onUpload} type="button">
               <ImagePlus size={16} />
               素材
@@ -542,6 +558,38 @@ function StudioScreen({
             </button>
           </div>
         </div>
+        {versionsOpen ? (
+          <section className="kv-version-panel">
+            <div className="kv-strip-heading">
+              <div>
+                <span className="kv-eyebrow">版本历史</span>
+                <h3>每次确认修改都会保留一个版本</h3>
+              </div>
+              <span>{versions.length} 个版本</span>
+            </div>
+            {versionsLoading ? (
+              <div className="kv-version-loading"><Loader2 className="kv-spin" size={18} />正在读取版本...</div>
+            ) : (
+              <div className="kv-version-list">
+                {versions.map((version) => (
+                  <article className={version.isCurrent ? "current" : ""} key={version.id}>
+                    <div>
+                      <strong>{version.label}</strong>
+                      {version.isCurrent ? <span>当前</span> : null}
+                    </div>
+                    <p>{version.sceneCount} 个场景 · {durationLabel(version.durationSeconds)}</p>
+                    <time>{new Date(version.createdAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
+                    {!version.isCurrent ? (
+                      <button disabled={isBusy} onClick={() => onRestoreVersion(version.id)} type="button">
+                        <RotateCcw size={15} />恢复为新版本
+                      </button>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
         {view === "preview" ? (
           <>
             {missingSceneNumbers.length === 0 ? (
@@ -601,6 +649,9 @@ export function WorkspaceClient({
   const [studioView, setStudioView] = useState<StudioView>("preview");
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [exportProgress, setExportProgress] = useState<number | undefined>();
+  const [versions, setVersions] = useState<ProjectVersionSummary[]>([]);
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [versionsLoading, setVersionsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
@@ -744,7 +795,10 @@ export function WorkspaceClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ project, editPlan: pendingPlan })
       });
-      if (!response.ok) throw new Error("Failed to apply edit plan.");
+      if (!response.ok) {
+        const failure = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(failure.error || "应用修改失败。");
+      }
       const data = await response.json() as {
         project: Project;
         message: ChatMessage;
@@ -752,13 +806,81 @@ export function WorkspaceClient({
       setProject(data.project);
       setPendingPlan(undefined);
       setMessages((current) => [...current, data.message]);
+      setVersions([]);
     } catch (error) {
       console.error(error);
       pushMessage({
         role: "assistant",
         type: "text",
-        content: "应用修改失败。请检查 Vercel 日志。"
+        content: error instanceof Error ? error.message : "应用修改失败，请重试。"
       });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function cancelPlan() {
+    const plan = pendingPlan;
+    if (!plan) return;
+    setPendingPlan(undefined);
+    try {
+      const response = await fetch("/api/edit-plan/reject", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          versionId: project.currentVersion.id,
+          editPlanId: plan.id
+        })
+      });
+      const data = await response.json() as { message?: ChatMessage };
+      if (response.ok && data.message) setMessages((current) => [...current, data.message!]);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  async function loadVersions() {
+    setVersionsLoading(true);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/versions`, { cache: "no-store" });
+      const data = await response.json() as { versions?: ProjectVersionSummary[]; error?: string };
+      if (!response.ok) throw new Error(data.error || "版本历史读取失败。");
+      setVersions(data.versions ?? []);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "版本历史读取失败。";
+      setErrorMessage(message);
+    } finally {
+      setVersionsLoading(false);
+    }
+  }
+
+  function toggleVersions() {
+    const next = !versionsOpen;
+    setVersionsOpen(next);
+    if (next) void loadVersions();
+  }
+
+  async function restoreVersion(versionId: string) {
+    setIsBusy(true);
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/versions/restore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ versionId })
+      });
+      const data = await response.json() as { project?: Project; message?: ChatMessage; error?: string };
+      if (!response.ok || !data.project || !data.message) throw new Error(data.error || "版本恢复失败。");
+      setProject(data.project);
+      setMessages((current) => [...current, data.message!]);
+      setSelectedScene(1);
+      setPendingPlan(undefined);
+      await loadVersions();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "版本恢复失败。";
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
     } finally {
       setIsBusy(false);
     }
@@ -800,6 +922,7 @@ export function WorkspaceClient({
   async function regenerateImages(sceneNumbers?: number[], quality: "standard" | "premium" = "standard") {
     setIsBusy(true);
     setErrorMessage(undefined);
+    setVersionsOpen(false);
     try {
       const response = await fetch("/api/assets/generate", {
         method: "POST",
@@ -910,6 +1033,7 @@ export function WorkspaceClient({
     setPendingPlan(undefined);
     setChatInput("");
     setErrorMessage(undefined);
+    setVersionsOpen(false);
   }
 
   return (
@@ -936,7 +1060,7 @@ export function WorkspaceClient({
           isBusy={isBusy}
           messages={messages}
           onApply={applyPlan}
-          onCancel={() => setPendingPlan(undefined)}
+          onCancel={cancelPlan}
           onInput={setChatInput}
           onSelectScene={setSelectedScene}
           onSubmit={submitChat}
@@ -946,6 +1070,11 @@ export function WorkspaceClient({
           onRegenerateAudio={regenerateAudio}
           onExport={exportVideo}
           exportProgress={exportProgress}
+          versions={versions}
+          versionsOpen={versionsOpen}
+          versionsLoading={versionsLoading}
+          onToggleVersions={toggleVersions}
+          onRestoreVersion={restoreVersion}
           onViewChange={setStudioView}
           pendingPlan={pendingPlan}
           project={project}

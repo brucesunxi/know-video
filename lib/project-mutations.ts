@@ -3,7 +3,7 @@ import { generateProjectSceneImages } from "@/lib/image-assets";
 import { generateProjectVoices } from "@/lib/audio-assets";
 import { assetUrlForKey } from "@/lib/r2";
 import { applyEditPlan } from "@/lib/video-brain";
-import type { ChatMessage, EditPlan, Project, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
+import type { ChatMessage, EditPlan, Project, ProjectVersion, ProjectVersionSummary, Scene, SceneAsset } from "@/lib/types";
 
 type IdRow = { id: string };
 
@@ -12,7 +12,8 @@ export function canPersist() {
 }
 
 function versionStatus(project: Project): ProjectVersion["status"] {
-  return project.currentVersion.assetStatus === "failed" ? "failed" : "ready";
+  if (project.currentVersion.assetStatus === "failed") return "failed";
+  return project.currentVersion.assetStatus === "ready" ? "ready" : "draft";
 }
 
 async function insertScenes(versionId: string, scenes: Scene[]) {
@@ -75,7 +76,7 @@ async function loadSceneAssets(sceneIds: string[]) {
     select id, scene_id, asset_type, r2_key, public_url, metadata_json
     from scene_assets
     where scene_id = any(${sceneIds})
-    order by created_at asc
+    order by created_at desc
   ` as Array<{
     id: string;
     scene_id: string;
@@ -231,12 +232,13 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
 
   const sql = getSql();
   const versions = await sql`
-    select id, status, duration_seconds, render_url, created_at
+    select id, parent_version_id, status, duration_seconds, render_url, created_at
     from project_versions
     where id = ${versionId}
     limit 1
   ` as Array<{
     id: string;
+    parent_version_id: string | null;
     status: ProjectVersion["status"];
     duration_seconds: number;
     render_url: string | null;
@@ -278,6 +280,7 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
 
   return {
     id: version.id,
+    parentVersionId: version.parent_version_id ?? undefined,
     label: "current",
     status: version.status,
     createdAt: new Date(version.created_at).toISOString(),
@@ -291,7 +294,7 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
 export async function persistGeneratedSceneAssets(
   versionId: string,
   scenes: Scene[],
-  options: { replaceAudio?: boolean } = {}
+  options: { replaceAudio?: boolean; replaceImages?: boolean; sceneNumbers?: number[] } = {}
 ) {
   if (!canPersist()) return;
 
@@ -302,8 +305,10 @@ export async function persistGeneratedSceneAssets(
     where version_id = ${versionId}
   ` as Array<{ id: string; scene_number: number }>;
   const sceneIdByNumber = new Map(rows.map((row) => [row.scene_number, row.id]));
+  const selected = options.sceneNumbers ? new Set(options.sceneNumbers) : undefined;
 
   for (const scene of scenes) {
+    if (selected && !selected.has(scene.sceneNumber)) continue;
     const sceneId = sceneIdByNumber.get(scene.sceneNumber);
     if (!sceneId) continue;
 
@@ -311,6 +316,12 @@ export async function persistGeneratedSceneAssets(
       await sql`
         delete from scene_assets
         where scene_id = ${sceneId} and asset_type = 'audio'
+      `;
+    }
+    if (options.replaceImages) {
+      await sql`
+        delete from scene_assets
+        where scene_id = ${sceneId} and asset_type = 'image'
       `;
     }
 
@@ -325,12 +336,46 @@ export async function persistGeneratedSceneAssets(
     }
   }
 
-  const imageCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image")).length;
+  const counts = await sql`
+    select
+      count(*)::int as scene_count,
+      count(*) filter (
+        where exists (
+          select 1 from scene_assets sa where sa.scene_id = scenes.id and sa.asset_type = 'image'
+        )
+      )::int as image_count
+    from scenes
+    where version_id = ${versionId}
+  ` as Array<{ scene_count: number; image_count: number }>;
+  const complete = (counts[0]?.scene_count ?? 0) > 0
+    && counts[0]?.scene_count === counts[0]?.image_count;
   await sql`
     update project_versions
-    set status = ${imageCount > 0 ? "ready" : "failed"}
+    set status = ${complete ? "ready" : "draft"}
     where id = ${versionId}
   `;
+}
+
+export async function rejectPersistedEditPlan(params: {
+  projectId: string;
+  versionId: string;
+  editPlanId: string;
+}): Promise<ChatMessage> {
+  const content = "已取消这份修改方案，当前视频版本保持不变。";
+  if (!canPersist()) {
+    return { id: crypto.randomUUID(), role: "assistant", type: "text", content, versionId: params.versionId };
+  }
+  const sql = getSql();
+  await sql`
+    update edit_plans set status = 'rejected'
+    where id = ${params.editPlanId} and project_id = ${params.projectId} and status = 'proposed'
+  `;
+  const rows = await sql`
+    insert into chat_messages (project_id, version_id, role, message_type, content)
+    values (${params.projectId}, ${params.versionId}, 'assistant', 'text', ${content})
+    returning id
+  ` as IdRow[];
+  return { id: rows[0].id, role: "assistant", type: "text", content, versionId: params.versionId };
 }
 
 export async function persistEditPlan(params: {
@@ -413,14 +458,31 @@ export async function applyPersistedEditPlan(params: {
   project: Project;
   editPlan: EditPlan;
 }): Promise<{ project: Project; message: ChatMessage; renderJobId?: string }> {
-  const projectWithImages = await generateProjectSceneImages(
-    applyEditPlan(params.project, params.editPlan),
-    {
+  const changedProject = applyEditPlan(params.project, params.editPlan);
+  const imageSceneNumbers = params.editPlan.changes
+    .filter((change) => change.regenerate.some((type) => ["image", "thumbnail", "clip"].includes(type)))
+    .map((change) => change.sceneNumber);
+  const audioSceneNumbers = params.editPlan.changes
+    .filter((change) => change.regenerate.includes("audio") || change.after.voiceover !== change.before.voiceover)
+    .map((change) => change.sceneNumber);
+  const projectWithImages = imageSceneNumbers.length > 0
+    ? await generateProjectSceneImages(changedProject, {
       replaceExistingImages: true,
-      sceneNumbers: params.editPlan.affectedScenes
-    }
-  );
-  const nextProject = await generateProjectVoices(projectWithImages, params.editPlan.affectedScenes);
+      sceneNumbers: imageSceneNumbers
+    })
+    : changedProject;
+  if (imageSceneNumbers.length > 0 && projectWithImages.currentVersion.assetErrorCode) {
+    throw new Error("部分场景画面生成失败，修改尚未应用。请稍后重试。");
+  }
+  const nextProject = audioSceneNumbers.length > 0
+    ? await generateProjectVoices(projectWithImages, audioSceneNumbers)
+    : projectWithImages;
+  if (audioSceneNumbers.some((sceneNumber) => {
+    const scene = nextProject.currentVersion.scenes.find((item) => item.sceneNumber === sceneNumber);
+    return !scene?.assets.some((asset) => asset.type === "audio" && asset.url);
+  })) {
+    throw new Error("部分场景配音生成失败，修改尚未应用。请检查语音服务后重试。");
+  }
 
   if (!canPersist()) {
     return {
@@ -429,10 +491,9 @@ export async function applyPersistedEditPlan(params: {
         id: crypto.randomUUID(),
         role: "assistant",
         type: "version",
-        content: `${nextProject.currentVersion.label} applied · render job queued`,
+        content: "修改已经应用，并创建了一个可随时恢复的新版本。",
         versionId: nextProject.currentVersion.id
       },
-      renderJobId: crypto.randomUUID()
     };
   }
 
@@ -470,13 +531,7 @@ export async function applyPersistedEditPlan(params: {
     where id = ${params.editPlan.id}
   `;
 
-  const jobRows = await sql`
-    insert into render_jobs (project_id, version_id, status, progress)
-    values (${params.project.id}, ${versionId}, 'queued', 0)
-    returning id
-  ` as IdRow[];
-
-  const content = `${nextProject.currentVersion.label} applied · render job ${jobRows[0].id.slice(0, 8)} queued`;
+  const content = "修改已经应用，并创建了一个可随时恢复的新版本。确认预览后即可导出 MP4。";
   const messageRows = await sql`
     insert into chat_messages (project_id, version_id, role, message_type, content)
     values (${params.project.id}, ${versionId}, 'assistant', 'version', ${content})
@@ -497,7 +552,94 @@ export async function applyPersistedEditPlan(params: {
       type: "version",
       content,
       versionId
+    }
+  };
+}
+
+export async function listProjectVersions(projectId: string): Promise<ProjectVersionSummary[]> {
+  if (!canPersist()) return [];
+  const sql = getSql();
+  const rows = await sql`
+    select
+      pv.id,
+      pv.parent_version_id,
+      pv.status,
+      pv.duration_seconds,
+      pv.render_url,
+      pv.created_at,
+      p.current_version_id,
+      count(s.id)::int as scene_count
+    from project_versions pv
+    join projects p on p.id = pv.project_id
+    left join scenes s on s.version_id = pv.id
+    where pv.project_id = ${projectId}
+    group by pv.id, p.current_version_id
+    order by pv.created_at desc
+  ` as Array<{
+    id: string;
+    parent_version_id: string | null;
+    status: ProjectVersion["status"];
+    duration_seconds: number;
+    render_url: string | null;
+    created_at: Date | string;
+    current_version_id: string | null;
+    scene_count: number;
+  }>;
+  return rows.map((row, index) => ({
+    id: row.id,
+    parentVersionId: row.parent_version_id ?? undefined,
+    label: `版本 ${rows.length - index}`,
+    status: row.status,
+    createdAt: new Date(row.created_at).toISOString(),
+    durationSeconds: row.duration_seconds,
+    renderUrl: row.render_url ?? undefined,
+    sceneCount: row.scene_count,
+    isCurrent: row.id === row.current_version_id
+  }));
+}
+
+export async function restoreProjectVersion(params: {
+  projectId: string;
+  targetVersionId: string;
+}): Promise<{ project: Project; message: ChatMessage }> {
+  if (!canPersist()) throw new Error("版本恢复需要数据库连接。");
+  const target = await loadVersion(params.targetVersionId);
+  if (!target) throw new Error("没有找到要恢复的版本。");
+  const sql = getSql();
+  const projects = await sql`
+    select title, current_version_id from projects where id = ${params.projectId} limit 1
+  ` as Array<{ title: string; current_version_id: string | null }>;
+  if (!projects[0] || !projects[0].current_version_id) throw new Error("没有找到项目。");
+
+  const rows = await sql`
+    insert into project_versions (project_id, parent_version_id, status, scene_plan_json, duration_seconds)
+    values (
+      ${params.projectId},
+      ${projects[0].current_version_id},
+      ${target.status === "failed" ? "draft" : target.status},
+      ${JSON.stringify(target.scenes)},
+      ${target.durationSeconds}
+    )
+    returning id
+  ` as IdRow[];
+  const versionId = rows[0].id;
+  await insertScenes(versionId, target.scenes);
+  await sql`update projects set current_version_id = ${versionId}, updated_at = now() where id = ${params.projectId}`;
+  const content = "已从历史版本创建新的当前版本，原有版本和修改记录均已保留。";
+  const messageRows = await sql`
+    insert into chat_messages (project_id, version_id, role, message_type, content)
+    values (${params.projectId}, ${versionId}, 'assistant', 'version', ${content})
+    returning id
+  ` as IdRow[];
+  return {
+    project: {
+      id: params.projectId,
+      title: projects[0].title,
+      engine: "Animation Engine",
+      credits: 0,
+      plan: "Free",
+      currentVersion: { ...target, id: versionId, parentVersionId: projects[0].current_version_id, label: "已恢复版本", renderUrl: undefined }
     },
-    renderJobId: jobRows[0].id
+    message: { id: messageRows[0].id, role: "assistant", type: "version", content, versionId }
   };
 }

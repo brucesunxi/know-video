@@ -26,6 +26,7 @@ export type Scene = {
 
 export type ProjectVersion = {
   id: string;
+  parentVersionId?: string;
   label: string;
   status: "draft" | "planning" | "rendering" | "ready" | "failed";
   createdAt: string;
@@ -35,6 +36,15 @@ export type ProjectVersion = {
   assetStatus?: "pending" | "partial" | "ready" | "failed";
   assetErrorCode?: "missing_key" | "invalid_key" | "storage_failed" | "generation_failed";
   scenes: Scene[];
+};
+
+export type ProjectVersionSummary = Pick<
+  ProjectVersion,
+  "id" | "parentVersionId" | "status" | "createdAt" | "durationSeconds" | "renderUrl"
+> & {
+  label: string;
+  sceneCount: number;
+  isCurrent: boolean;
 };
 
 export type RenderJob = {

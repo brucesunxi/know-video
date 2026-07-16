@@ -15,19 +15,26 @@ export const maxDuration = 120;
 export async function POST(request: Request) {
   const body = requestSchema.parse(await request.json());
   const project = body.project as Project;
+  const previousImageKeys = new Map(
+    project.currentVersion.scenes.map((scene) => [
+      scene.sceneNumber,
+      scene.assets.find((asset) => asset.type === "image" && asset.url)?.r2Key
+    ])
+  );
   const updated = await generateProjectSceneImages(project, {
     replaceExistingImages: true,
     sceneNumbers: body.sceneNumbers,
     quality: body.quality
   });
 
-  await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes);
-
   const targetScenes = body.sceneNumbers?.length
     ? updated.currentVersion.scenes.filter((scene) => body.sceneNumbers?.includes(scene.sceneNumber))
     : updated.currentVersion.scenes;
   const failedTargets = targetScenes.filter(
-    (scene) => !scene.assets.some((asset) => asset.type === "image" && asset.url)
+    (scene) => {
+      const nextImage = scene.assets.find((asset) => asset.type === "image" && asset.url);
+      return !nextImage || nextImage.r2Key === previousImageKeys.get(scene.sceneNumber);
+    }
   );
 
   if (failedTargets.length > 0) {
@@ -43,6 +50,11 @@ export async function POST(request: Request) {
       { status: 502 }
     );
   }
+
+  await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
+    replaceImages: true,
+    sceneNumbers: body.sceneNumbers
+  });
 
   return NextResponse.json({ project: updated });
 }

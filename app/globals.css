@@ -439,6 +439,95 @@ button:disabled {
   justify-content: space-between;
 }
 
+.kv-actions button.active {
+  border-color: #9bded6;
+  background: #edf9f7;
+  color: #087568;
+}
+
+.kv-version-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.07);
+}
+
+.kv-version-panel .kv-strip-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.kv-version-panel .kv-strip-heading h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.kv-version-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.kv-version-list article {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.kv-version-list article.current {
+  border-color: #9bded6;
+  background: #f0faf8;
+}
+
+.kv-version-list article > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kv-version-list article span {
+  border-radius: 999px;
+  background: #dff7f2;
+  padding: 3px 7px;
+  color: #087568;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.kv-version-list p,
+.kv-version-list time {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kv-version-list button,
+.kv-version-loading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.kv-version-list button {
+  justify-self: start;
+  margin-top: 3px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 7px 9px;
+}
+
 .kv-tabs button.active {
   background: var(--ink);
   color: #fff;
@@ -1403,17 +1492,33 @@ button:disabled {
   }
 
   .kv-prompt-tools,
-  .kv-actionbar,
-  .kv-actions {
+  .kv-actionbar {
     align-items: stretch;
     flex-direction: column;
   }
 
   .kv-actionbar,
-  .kv-actions,
-  .kv-tabs,
+  .kv-tabs {
+    width: 100%;
+  }
+
+  .kv-actionbar {
+    display: grid;
+    gap: 10px;
+  }
+
+  .kv-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
   .kv-actions button {
     width: 100%;
+    min-width: 0;
+    justify-content: center;
+    padding-inline: 10px;
   }
 
   .kv-tabs button {

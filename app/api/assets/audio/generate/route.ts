@@ -17,7 +17,8 @@ export async function POST(request: Request) {
   const updated = await generateProjectVoices(project, body.sceneNumbers);
 
   await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
-    replaceAudio: true
+    replaceAudio: true,
+    sceneNumbers: body.sceneNumbers
   });
 
   const targets = body.sceneNumbers?.length

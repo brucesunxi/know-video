@@ -156,7 +156,7 @@ export async function getCurrentProjectSnapshot(): Promise<{
       select id, role, message_type, content, version_id, metadata_json
       from chat_messages
       where project_id = ${projectRow.id}
-      order by created_at asc
+      order by created_at desc
       limit 50
     ` as MessageRow[];
 

@@ -3,6 +3,7 @@ import {
   AbsoluteFill,
   Audio,
   Img,
+  OffthreadVideo,
   Sequence,
   interpolate,
   spring,
@@ -13,11 +14,6 @@ import type { Project, Scene } from "@/lib/types";
 import { VIDEO_FPS } from "@/video/config";
 
 export type KnowVideoCompositionProps = { project: Project };
-
-function sceneImage(scene: Scene) {
-  return scene.assets.find((asset) => asset.type === "clip" && asset.url)?.url
-    ?? scene.assets.find((asset) => asset.type === "image" && asset.url)?.url;
-}
 
 function SceneFrame({ scene, projectTitle, sceneIndex }: { scene: Scene; projectTitle: string; sceneIndex: number }) {
   const frame = useCurrentFrame();
@@ -31,12 +27,19 @@ function SceneFrame({ scene, projectTitle, sceneIndex }: { scene: Scene; project
   );
   const drift = interpolate(frame, [0, Math.max(1, durationInFrames - 1)], [0, sceneIndex % 2 === 0 ? -2.8 : 2.8]);
   const zoom = interpolate(frame, [0, Math.max(1, durationInFrames - 1)], [1.035, 1.11]);
-  const image = sceneImage(scene);
+  const clip = scene.assets.find((asset) => asset.type === "clip" && asset.url)?.url;
+  const image = scene.assets.find((asset) => asset.type === "image" && asset.url)?.url;
   const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url)?.url;
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#08111f", opacity: fade, overflow: "hidden" }}>
-      {image ? (
+      {clip ? (
+        <OffthreadVideo
+          muted
+          src={clip}
+          style={{ height: "106%", objectFit: "cover", position: "absolute", top: "-3%", width: "106%" }}
+        />
+      ) : image ? (
         <Img
           src={image}
           style={{
