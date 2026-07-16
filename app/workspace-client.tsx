@@ -1658,7 +1658,19 @@ export function WorkspaceClient({
     setBusyAction("uploading-asset");
     setUploadProgress(0);
     try {
-      if (file.size > 500_000_000) throw new Error("单个素材不能超过 500MB。");
+      const uploadLimit = file.type.startsWith("image/")
+        ? 25_000_000
+        : file.type.startsWith("audio/")
+          ? 80_000_000
+          : 500_000_000;
+      if (file.size > uploadLimit) {
+        const limitLabel = file.type.startsWith("image/")
+          ? "25MB"
+          : file.type.startsWith("audio/")
+            ? "80MB"
+            : "500MB";
+        throw new Error(`该类型的单个素材不能超过 ${limitLabel}。`);
+      }
       let uploadedAsset: SceneAsset;
       if (file.size <= 4_000_000) {
         const form = new FormData();

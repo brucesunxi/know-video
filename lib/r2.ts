@@ -68,6 +68,12 @@ export async function getFromR2(key: string, range?: string) {
   };
 }
 
+export async function readR2Prefix(key: string, bytes = 64) {
+  const object = await getFromR2(key, `bytes=0-${Math.max(0, bytes - 1)}`);
+  if (!object.body) throw new Error("Stored object has no body");
+  return Buffer.from(await object.body.transformToByteArray());
+}
+
 export async function headR2Object(key: string) {
   const response = await createR2Client().send(new HeadObjectCommand({
     Bucket: getRequiredEnv("R2_BUCKET"),

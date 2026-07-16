@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { maxUploadBytes, uploadedAssetType } from "@/lib/asset-policy";
 import { createPresignedUpload } from "@/lib/r2";
-import { findOwnedScene, uploadedAssetType } from "@/lib/scene-assets";
+import { findOwnedScene } from "@/lib/scene-assets";
 
 const schema = z.object({
   projectId: z.string().uuid(),
@@ -17,6 +18,9 @@ export async function POST(request: Request) {
     const body = schema.parse(await request.json());
     if (!uploadedAssetType(body.contentType)) {
       return NextResponse.json({ error: "暂不支持这种素材格式。" }, { status: 415 });
+    }
+    if (body.size > maxUploadBytes(body.contentType)) {
+      return NextResponse.json({ error: "素材文件超过该格式允许的大小。" }, { status: 413 });
     }
     const sceneId = await findOwnedScene(body);
     if (!sceneId) return NextResponse.json({ error: "没有找到要绑定素材的场景。" }, { status: 404 });

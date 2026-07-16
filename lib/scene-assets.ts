@@ -1,13 +1,33 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
-import { assetUrlForKey } from "@/lib/r2";
+import { uploadedAssetType } from "@/lib/asset-policy";
+import { assetUrlForKey, deleteR2Objects } from "@/lib/r2";
 import { invalidateVersionRender } from "@/lib/render-jobs";
-import type { AssetType, SceneAsset } from "@/lib/types";
+import type { SceneAsset } from "@/lib/types";
 
-export function uploadedAssetType(contentType: string): AssetType | undefined {
-  if (contentType.startsWith("audio/")) return "audio";
-  if (contentType.startsWith("video/")) return "clip";
-  if (contentType.startsWith("image/")) return "image";
-  return undefined;
+export { uploadedAssetType } from "@/lib/asset-policy";
+
+export async function deleteUnreferencedAssetObjects(keys: string[]) {
+  const unique = Array.from(new Set(keys.filter(Boolean)));
+  if (unique.length === 0) return;
+  if (!hasDatabaseUrl()) {
+    await deleteR2Objects(unique);
+    return;
+  }
+  const rows = await getSql()`
+    select candidate.key
+    from unnest(${unique}::text[]) as candidate(key)
+    where not exists (
+      select 1
+      from scene_assets
+      where scene_assets.r2_key = candidate.key
+    )
+      and not exists (
+        select 1
+        from render_jobs
+        where render_jobs.output_r2_key = candidate.key
+      )
+  ` as Array<{ key: string }>;
+  await deleteR2Objects(rows.map((row) => row.key));
 }
 
 export async function findOwnedScene(input: {
@@ -60,19 +80,30 @@ export async function attachUploadedAsset(input: {
   const sceneId = await findOwnedScene(input);
   if (!sceneId) throw new Error("没有找到要绑定素材的场景。");
   const sql = getSql();
-  await sql`delete from scene_assets where scene_id = ${sceneId} and asset_type = ${input.asset.type}`;
-  await sql`
-    insert into scene_assets (id, scene_id, asset_type, r2_key, public_url, metadata_json)
-    values (
-      ${input.asset.id},
-      ${sceneId},
-      ${input.asset.type},
-      ${input.asset.r2Key},
-      ${input.asset.url},
-      ${JSON.stringify(input.asset.metadata ?? {})}
+  const replaced = await sql`
+    with replaced as (
+      delete from scene_assets
+      where scene_id = ${sceneId} and asset_type = ${input.asset.type}
+      returning r2_key
+    ),
+    inserted as (
+      insert into scene_assets (id, scene_id, asset_type, r2_key, public_url, metadata_json)
+      values (
+        ${input.asset.id},
+        ${sceneId},
+        ${input.asset.type},
+        ${input.asset.r2Key},
+        ${input.asset.url},
+        ${JSON.stringify(input.asset.metadata ?? {})}
+      )
+      returning id
     )
-  `;
+    select r2_key from replaced
+  ` as Array<{ r2_key: string }>;
   await invalidateVersionRender(input.versionId);
+  await deleteUnreferencedAssetObjects(replaced.map((asset) => asset.r2_key)).catch((error) => {
+    console.error("[scene-assets] Unable to clean replaced objects:", error);
+  });
 }
 
 export async function detachSceneAsset(input: {
@@ -91,8 +122,13 @@ export async function detachSceneAsset(input: {
       and s.scene_number = ${input.sceneNumber}
       and pv.id = s.version_id
       and pv.project_id = ${input.projectId}
-    returning sa.id
-  ` as Array<{ id: string }>;
+    returning sa.id, sa.r2_key
+  ` as Array<{ id: string; r2_key: string }>;
   if (rows[0]) await invalidateVersionRender(input.versionId);
+  if (rows[0]) {
+    await deleteUnreferencedAssetObjects([rows[0].r2_key]).catch((error) => {
+      console.error("[scene-assets] Unable to clean detached object:", error);
+    });
+  }
   return Boolean(rows[0]);
 }

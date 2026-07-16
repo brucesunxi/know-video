@@ -4,6 +4,7 @@ import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import { demoProject } from "@/lib/mock-data";
 import { assetUrlForKey } from "@/lib/r2";
 import { invalidateVersionRender } from "@/lib/render-jobs";
+import { deleteUnreferencedAssetObjects } from "@/lib/scene-assets";
 import { applyEditPlan } from "@/lib/video-brain";
 import type { ChatMessage, EditPlan, Project, ProjectVersion, ProjectVersionSummary, Scene, SceneAsset } from "@/lib/types";
 
@@ -361,6 +362,8 @@ export async function persistGeneratedSceneAssets(
   ` as Array<{ id: string; scene_number: number }>;
   const sceneIdByNumber = new Map(rows.map((row) => [row.scene_number, row.id]));
   const selected = options.sceneNumbers ? new Set(options.sceneNumbers) : undefined;
+  const queries = [];
+  const deletionIndexes: number[] = [];
 
   for (const scene of scenes) {
     if (selected && !selected.has(scene.sceneNumber)) continue;
@@ -368,28 +371,39 @@ export async function persistGeneratedSceneAssets(
     if (!sceneId) continue;
 
     if (options.replaceAudio) {
-      await sql`
+      deletionIndexes.push(queries.length);
+      queries.push(sql`
         delete from scene_assets
         where scene_id = ${sceneId} and asset_type = 'audio'
-      `;
+        returning r2_key
+      `);
     }
     if (options.replaceImages) {
-      await sql`
+      deletionIndexes.push(queries.length);
+      queries.push(sql`
         delete from scene_assets
         where scene_id = ${sceneId} and asset_type in ('image', 'clip')
-      `;
+        returning r2_key
+      `);
     }
 
     for (const asset of scene.assets) {
-      await sql`
+      queries.push(sql`
         insert into scene_assets (scene_id, asset_type, r2_key, public_url, metadata_json)
         select ${sceneId}, ${asset.type}, ${asset.r2Key}, ${asset.url}, ${JSON.stringify(asset.metadata ?? {})}
         where not exists (
           select 1 from scene_assets where scene_id = ${sceneId} and r2_key = ${asset.r2Key}
         )
-      `;
+      `);
     }
   }
+
+  const results = queries.length > 0
+    ? await sql.transaction(queries)
+    : [];
+  const replacedKeys = deletionIndexes.flatMap((index) => (
+    results[index] as Array<{ r2_key: string }> | undefined
+  )?.map((row) => row.r2_key) ?? []);
 
   await invalidateVersionRender(versionId);
   const counts = await sql`
@@ -416,6 +430,9 @@ export async function persistGeneratedSceneAssets(
     set status = ${complete ? "ready" : "draft"}
     where id = ${versionId}
   `;
+  await deleteUnreferencedAssetObjects(replacedKeys).catch((error) => {
+    console.error("[project-mutations] Unable to clean replaced generated assets:", error);
+  });
 }
 
 export async function rejectPersistedEditPlan(params: {
