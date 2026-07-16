@@ -5,6 +5,7 @@ import { demoProject } from "@/lib/mock-data";
 import { assetUrlForKey } from "@/lib/r2";
 import { invalidateVersionRender } from "@/lib/render-jobs";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
+import { assertRestorableVersion, restorableSceneAssets, restoredVersionStatus } from "@/lib/version-restore";
 import { applyEditPlan } from "@/lib/video-brain";
 import type { ChatMessage, EditPlan, Project, ProjectVersion, ProjectVersionSummary, Scene, SceneAsset } from "@/lib/types";
 
@@ -861,57 +862,161 @@ export async function restoreProjectVersion(params: {
   targetVersionId: string;
 }): Promise<{ project: Project; message: ChatMessage }> {
   if (!canPersist()) throw new Error("版本恢复需要数据库连接。");
+  const sql = getSql();
+  const ownership = await sql`
+    select
+      p.title,
+      p.current_version_id,
+      target.project_id as target_project_id
+    from projects p
+    left join project_versions target on target.id = ${params.targetVersionId}
+    where p.id = ${params.projectId}
+    limit 1
+  ` as Array<{
+    title: string;
+    current_version_id: string | null;
+    target_project_id: string | null;
+  }>;
+  const projectRow = ownership[0];
+  if (!projectRow?.current_version_id) throw new Error("没有找到项目。");
+  if (!projectRow.target_project_id) throw new Error("没有找到要恢复的版本。");
+  assertRestorableVersion({
+    projectId: params.projectId,
+    targetProjectId: projectRow.target_project_id,
+    currentVersionId: projectRow.current_version_id,
+    targetVersionId: params.targetVersionId
+  });
   const target = await loadVersion(params.targetVersionId);
   if (!target) throw new Error("没有找到要恢复的版本。");
-  const sql = getSql();
-  const projects = await sql`
-    select title, current_version_id from projects where id = ${params.projectId} limit 1
-  ` as Array<{ title: string; current_version_id: string | null }>;
-  if (!projects[0] || !projects[0].current_version_id) throw new Error("没有找到项目。");
-  await sql`
-    update edit_plans
-    set status = 'rejected'
-    where project_id = ${params.projectId}
-      and base_version_id = ${projects[0].current_version_id}
-      and status = 'proposed'
-  `;
 
-  const rows = await sql`
-    insert into project_versions (project_id, parent_version_id, status, scene_plan_json, duration_seconds)
-    values (
-      ${params.projectId},
-      ${projects[0].current_version_id},
-      ${target.status === "failed" ? "draft" : target.status},
-      ${JSON.stringify(target.scenes)},
-      ${target.durationSeconds}
-    )
-    returning id
-  ` as IdRow[];
-  const versionId = rows[0].id;
-  const persistedScenes = await insertScenes(versionId, target.scenes);
-  await sql`update projects set current_version_id = ${versionId}, updated_at = now() where id = ${params.projectId}`;
+  const versionId = crypto.randomUUID();
+  const messageId = crypto.randomUUID();
+  const restoredStatus = restoredVersionStatus(target.scenes);
+  const persistedScenes = target.scenes.map((scene) => ({
+    ...scene,
+    id: crypto.randomUUID(),
+    assets: restorableSceneAssets(scene.assets)
+      .map((asset) => ({ ...asset, id: crypto.randomUUID() }))
+  }));
   const content = "已从历史版本创建新的当前版本，原有版本和修改记录均已保留。";
-  const messageRows = await sql`
-    insert into chat_messages (project_id, version_id, role, message_type, content)
-    values (${params.projectId}, ${versionId}, 'assistant', 'version', ${content})
-    returning id
-  ` as IdRow[];
+  const queries = [
+    sql`
+      select id
+      from projects
+      where id = ${params.projectId}
+        and current_version_id = ${projectRow.current_version_id}
+      for update
+    `,
+    sql`
+      update edit_plans
+      set status = 'rejected'
+      where project_id = ${params.projectId}
+        and base_version_id = ${projectRow.current_version_id}
+        and status = 'proposed'
+    `,
+    sql`
+      insert into project_versions (
+        id,
+        project_id,
+        parent_version_id,
+        status,
+        scene_plan_json,
+        duration_seconds
+      )
+      select
+        ${versionId},
+        ${params.projectId},
+        ${projectRow.current_version_id},
+        ${restoredStatus},
+        ${JSON.stringify(persistedScenes)},
+        ${target.durationSeconds}
+      from projects
+      where id = ${params.projectId}
+        and current_version_id = ${projectRow.current_version_id}
+    `,
+    ...persistedScenes.flatMap((scene) => [
+      sql`
+        insert into scenes (
+          id,
+          version_id,
+          scene_number,
+          title,
+          voiceover,
+          visual_prompt,
+          motion_prompt,
+          duration_seconds,
+          style_json
+        )
+        values (
+          ${scene.id},
+          ${versionId},
+          ${scene.sceneNumber},
+          ${scene.title},
+          ${scene.voiceover},
+          ${scene.visualPrompt},
+          ${scene.motionPrompt},
+          ${scene.durationSeconds},
+          ${JSON.stringify(scene.style)}
+        )
+      `,
+      ...scene.assets.map((asset) => sql`
+        insert into scene_assets (
+          id,
+          scene_id,
+          asset_type,
+          r2_key,
+          public_url,
+          metadata_json
+        )
+        values (
+          ${asset.id},
+          ${scene.id},
+          ${asset.type},
+          ${asset.r2Key},
+          ${asset.url},
+          ${JSON.stringify(asset.metadata ?? {})}
+        )
+      `)
+    ]),
+    sql`
+      update projects
+      set current_version_id = ${versionId}, updated_at = now()
+      where id = ${params.projectId}
+        and current_version_id = ${projectRow.current_version_id}
+    `,
+    sql`
+      insert into chat_messages (id, project_id, version_id, role, message_type, content)
+      values (${messageId}, ${params.projectId}, ${versionId}, 'assistant', 'version', ${content})
+    `
+  ];
+  try {
+    await sql.transaction(queries);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("foreign key")) {
+      throw new Error("项目版本已经发生变化，请刷新后重试。");
+    }
+    throw error;
+  }
+
   return {
     project: {
       id: params.projectId,
-      title: projects[0].title,
+      title: projectRow.title,
       engine: "Animation Engine",
       credits: 0,
       plan: "Free",
       currentVersion: {
         ...target,
         id: versionId,
-        parentVersionId: projects[0].current_version_id,
+        parentVersionId: projectRow.current_version_id,
         label: "已恢复版本",
+        status: restoredStatus,
+        createdAt: new Date().toISOString(),
         renderUrl: undefined,
+        renderJobId: undefined,
         scenes: persistedScenes
       }
     },
-    message: { id: messageRows[0].id, role: "assistant", type: "version", content, versionId }
+    message: { id: messageId, role: "assistant", type: "version", content, versionId }
   };
 }
