@@ -465,6 +465,47 @@ export async function rejectPersistedEditPlan(params: {
   return { id: messageId, role: "assistant", type: "text", content, versionId: params.versionId };
 }
 
+export async function persistAssistantMessage(params: {
+  id: string;
+  projectId: string;
+  versionId: string;
+  content: string;
+}): Promise<ChatMessage> {
+  if (!canPersist()) {
+    return {
+      id: params.id,
+      role: "assistant",
+      type: "text",
+      content: params.content,
+      versionId: params.versionId
+    };
+  }
+  const rows = await getSql()`
+    insert into chat_messages (id, project_id, version_id, role, message_type, content)
+    select
+      ${params.id},
+      ${params.projectId},
+      ${params.versionId},
+      'assistant',
+      'text',
+      ${params.content}
+    from projects
+    where id = ${params.projectId}
+      and current_version_id = ${params.versionId}
+    returning id
+  ` as IdRow[];
+  if (!rows[0]) {
+    throw new Error("视频版本已经发生变化，这条制作记录未写入新版本。");
+  }
+  return {
+    id: params.id,
+    role: "assistant",
+    type: "text",
+    content: params.content,
+    versionId: params.versionId
+  };
+}
+
 export async function persistEditPlan(params: {
   projectId: string;
   request: string;

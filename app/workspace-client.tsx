@@ -1198,7 +1198,12 @@ export function WorkspaceClient({
             }
           }
           : current);
-        pushMessage({ role: "assistant", type: "text", content: "后台导出已经完成，可以下载 1080p MP4。" });
+        pushMessage({
+          role: "assistant",
+          type: "text",
+          content: "后台导出已经完成，可以下载 1080p MP4。",
+          versionId: completed.versionId
+        }, true);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -1215,11 +1220,26 @@ export function WorkspaceClient({
     };
   }, [project.currentVersion.id, project.currentVersion.renderJobId, project.currentVersion.renderUrl]);
 
-  function pushMessage(message: Omit<ChatMessage, "id">) {
+  function pushMessage(message: Omit<ChatMessage, "id">, persist = false) {
+    const id = crypto.randomUUID();
     setMessages((current) => {
       const last = current[current.length - 1];
       if (last?.role === message.role && last.content === message.content) return current;
-      return [...current, { ...message, id: crypto.randomUUID() }];
+      return [...current, { ...message, id }];
+    });
+    if (!persist || message.role !== "assistant") return;
+    void fetch("/api/chat-messages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id,
+        projectId: project.id,
+        versionId: message.versionId ?? project.currentVersion.id,
+        content: message.content
+      }),
+      keepalive: true
+    }).catch((error) => {
+      console.error("[chat-message] Unable to persist production event:", error);
     });
   }
 
@@ -1473,13 +1493,12 @@ export function WorkspaceClient({
       : data.regeneration.imageSceneNumbers.length > 0 || data.regeneration.audioSceneNumbers.length > 0
         ? "修改内容和受影响素材已经全部更新。"
         : "修改内容已经保存。";
-    setMessages((current) => [...current, {
-      id: crypto.randomUUID(),
+    pushMessage({
       role: "assistant",
       type: "text",
       content: completionMessage,
       versionId: updatedProject.currentVersion.id
-    }]);
+    }, true);
     if (warnings.length > 0) setErrorMessage(Array.from(new Set(warnings)).join(" "));
     setBusyAction("applying-edit");
     return updatedProject;
@@ -1699,8 +1718,9 @@ export function WorkspaceClient({
       pushMessage({
         role: "assistant",
         type: "text",
-        content: `素材“${String(uploadedAsset.metadata?.name ?? "未命名素材")}”已应用到场景 ${selectedScene}。`
-      });
+        content: `素材“${String(uploadedAsset.metadata?.name ?? "未命名素材")}”已应用到场景 ${selectedScene}。`,
+        versionId: project.currentVersion.id
+      }, true);
     } catch (error) {
       console.error(error);
       pushMessage({
@@ -1786,7 +1806,12 @@ export function WorkspaceClient({
             : scene)
         }
       }));
-      pushMessage({ role: "assistant", type: "text", content: `场景 ${selectedScene} 的素材已从当前版本移除。` });
+      pushMessage({
+        role: "assistant",
+        type: "text",
+        content: `场景 ${selectedScene} 的素材已从当前版本移除。`,
+        versionId: project.currentVersion.id
+      }, true);
     } catch (error) {
       pushMessage({ role: "assistant", type: "text", content: error instanceof Error ? error.message : "无法移除素材。" });
     } finally {
@@ -1821,8 +1846,9 @@ export function WorkspaceClient({
           ? quality === "premium"
             ? `场景 ${sceneNumbers[0]} 已经提升为精细画质。`
             : `场景 ${sceneNumbers[0]} 的画面已经重新生成。`
-          : "场景画面已经重新生成，可以继续播放或导出。"
-      });
+          : "场景画面已经重新生成，可以继续播放或导出。",
+        versionId: data.project.currentVersion.id
+      }, true);
     } catch (error) {
       const message = error instanceof Error ? error.message : "场景画面生成失败。";
       setErrorMessage(message);
@@ -1855,8 +1881,9 @@ export function WorkspaceClient({
         type: "text",
         content: sceneNumbers?.length === 1
           ? `场景 ${sceneNumbers[0]} 的配音已经重新生成。`
-          : "全部场景配音已经重新生成。"
-      });
+          : "全部场景配音已经重新生成。",
+        versionId: data.project.currentVersion.id
+      }, true);
     } catch (error) {
       const message = error instanceof Error ? error.message : "场景配音生成失败。";
       setErrorMessage(message);
@@ -1901,7 +1928,12 @@ export function WorkspaceClient({
       anchor.href = completed.renderUrl;
       anchor.download = `${project.title}.mp4`;
       anchor.click();
-      pushMessage({ role: "assistant", type: "text", content: "1080p MP4 已完成合成并保存到云端。" });
+      pushMessage({
+        role: "assistant",
+        type: "text",
+        content: "1080p MP4 已完成合成并保存到云端。",
+        versionId: completed.versionId
+      }, true);
     } catch (error) {
       const message = error instanceof Error ? error.message : "视频导出失败。";
       setErrorMessage(message);
