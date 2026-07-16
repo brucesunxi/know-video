@@ -98,14 +98,22 @@ function broadUnscopedEdit(request: string) {
   return subject && action;
 }
 
+function requestsVisualDirectionChange(request: string) {
+  const visualSubject = /画面|视觉|风格|画风|色调|配色|颜色|主题|构图|背景|人物|角色|字体|logo|水印|visual|image|style|theme|palette|color|composition|background|character|font|watermark/iu.test(request);
+  const visualAction = /改|换|调整|变成|使用|统一|翻译|转换|本地化|移除|删除|增加|添加|重做|重新生成|make|change|switch|translate|localize|adjust|use|remove|add|regenerate|redesign/iu.test(request);
+  return visualSubject && visualAction;
+}
+
 export function analyzeEditIntent(request: string, availableSceneNumbers: number[]) {
   const explicitSceneNumbers = extractRequestedSceneNumbers(request, availableSceneNumbers);
   const global = stronglyGlobal(request)
     || (explicitSceneNumbers.length === 0 && (weaklyGlobal(request) || broadUnscopedEdit(request)));
+  const globalChineseRewrite = requestsChinese(request) && global;
 
   return {
     explicitSceneNumbers,
     global,
-    globalChineseRewrite: requestsChinese(request) && global
+    globalChineseRewrite,
+    preserveVisualAssetsOnLocalization: globalChineseRewrite && !requestsVisualDirectionChange(request)
   };
 }

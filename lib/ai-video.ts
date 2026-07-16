@@ -115,9 +115,15 @@ const regenerateOrder = ["image", "audio", "clip", "thumbnail", "caption", "rend
 function normalizedRegenerate(
   change: EditPlanPayload["changes"][number],
   scene: Scene,
-  globalChineseRewrite: boolean
+  globalChineseRewrite: boolean,
+  preserveVisualAssetsOnLocalization: boolean
 ) {
-  if (globalChineseRewrite) return ["image", "audio", "caption", "render"] as EditPlanPayload["changes"][number]["regenerate"];
+  if (globalChineseRewrite && preserveVisualAssetsOnLocalization) {
+    return ["audio", "caption", "render"] as EditPlanPayload["changes"][number]["regenerate"];
+  }
+  if (globalChineseRewrite) {
+    return ["image", "audio", "thumbnail", "caption", "render"] as EditPlanPayload["changes"][number]["regenerate"];
+  }
 
   const regenerate = new Set(change.regenerate);
   const afterVoiceover = change.after.voiceover ?? scene.voiceover;
@@ -142,7 +148,8 @@ function normalizeEditPayload(
   payload: EditPlanPayload,
   version: ProjectVersion,
   globalChineseRewrite: boolean,
-  globalScopeRequest: boolean
+  globalScopeRequest: boolean,
+  preserveVisualAssetsOnLocalization: boolean
 ): EditPlanPayload {
   const sceneByNumber = new Map(version.scenes.map((scene) => [scene.sceneNumber, scene]));
   const seen = new Set<number>();
@@ -164,14 +171,21 @@ function normalizeEditPayload(
         voiceover: change.after.voiceover ?? scene.voiceover,
         motionPrompt: change.after.motionPrompt ?? scene.motionPrompt
       },
-      regenerate: normalizedRegenerate(change, scene, globalChineseRewrite)
+      regenerate: normalizedRegenerate(
+        change,
+        scene,
+        globalChineseRewrite,
+        preserveVisualAssetsOnLocalization
+      )
     }];
   });
 
   return globalChineseRewrite
     ? {
         ...payload,
-        summary: `将全部 ${version.scenes.length} 个场景的标题、旁白、画面描述、镜头运动和字幕统一改为中文。`,
+        summary: preserveVisualAssetsOnLocalization
+          ? `将全部 ${version.scenes.length} 个场景的标题、旁白、字幕和制作描述统一改为中文，并保留现有视觉素材。`
+          : `将全部 ${version.scenes.length} 个场景的标题、旁白、字幕和视觉方案统一改为中文。`,
         affectedScenes: version.scenes.map((scene) => scene.sceneNumber),
         changes
       }
@@ -557,6 +571,7 @@ export async function createEditPlan(params: {
   );
   const globalChineseRewrite = intent.globalChineseRewrite;
   const globalScopeRequest = intent.global;
+  const preserveVisualAssetsOnLocalization = intent.preserveVisualAssetsOnLocalization;
   const textModel = getTextModel();
   if (!textModel) {
     if (globalChineseRewrite) {
@@ -567,7 +582,7 @@ export async function createEditPlan(params: {
   const activeTextModel = textModel;
 
   const globalDirective = globalChineseRewrite
-    ? `\n\nThis is a GLOBAL Simplified Chinese localization. You MUST return one updated change for every scene. Every after.title, after.voiceover, after.visualPrompt, and after.motionPrompt must be written in Simplified Chinese. Do not limit visual translation to scenes that visibly contain text. affectedScenes must contain every scene number. regenerate must include audio, image, caption, and render.`
+    ? `\n\nThis is a GLOBAL Simplified Chinese localization. You MUST return one updated change for every scene. Every after.title, after.voiceover, after.visualPrompt, and after.motionPrompt must be written in Simplified Chinese. Do not limit translation to scenes that visibly contain text. affectedScenes must contain every scene number. ${preserveVisualAssetsOnLocalization ? "This is translation-only: preserve the existing visual meaning and assets; regenerate must include audio, caption, and render, but must not include image, clip, or thumbnail." : "The request also changes visual direction; regenerate must include image, audio, thumbnail, caption, and render."}`
     : globalScopeRequest
       ? `\n\nThis is a GLOBAL edit request. You MUST return one updated change for every scene, preserve each scene's narrative purpose, and include every scene number in affectedScenes.`
       : "";
@@ -606,7 +621,13 @@ export async function createEditPlan(params: {
     if (globalChineseRewrite && !validGlobalChinesePayload(payload, params.version)) {
       throw new Error("Global Chinese edit plan did not cover every scene and field");
     }
-    const normalized = normalizeEditPayload(payload, params.version, globalChineseRewrite, globalScopeRequest);
+    const normalized = normalizeEditPayload(
+      payload,
+      params.version,
+      globalChineseRewrite,
+      globalScopeRequest,
+      preserveVisualAssetsOnLocalization
+    );
     return {
       engine: textModel.engine,
       editPlan: {

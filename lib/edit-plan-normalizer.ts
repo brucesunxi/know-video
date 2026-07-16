@@ -1,7 +1,10 @@
 import type { AssetType, EditPlan, Scene } from "@/lib/types";
+import { analyzeEditIntent } from "@/lib/edit-intent";
 
 export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) {
   const sceneByNumber = new Map(scenes.map((scene) => [scene.sceneNumber, scene]));
+  const intent = analyzeEditIntent(plan.userRequest, scenes.map((scene) => scene.sceneNumber));
+  const preserveVisualAssets = intent.preserveVisualAssetsOnLocalization;
   const seen = new Set<number>();
   const changes = plan.changes.flatMap((change) => {
     const scene = sceneByNumber.get(change.sceneNumber);
@@ -11,8 +14,10 @@ export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) 
     const currentTone = scene.style.theme.includes("light") ? "light" : "dark";
     const voiceover = change.after.voiceover ?? scene.voiceover;
     const motionPrompt = change.after.motionPrompt ?? scene.motionPrompt;
-    const visualChanged = change.after.visualPrompt !== scene.visualPrompt
-      || change.after.thumbnailTone !== currentTone;
+    const visualChanged = !preserveVisualAssets && (
+      change.after.visualPrompt !== scene.visualPrompt
+      || change.after.thumbnailTone !== currentTone
+    );
     const audioChanged = voiceover !== scene.voiceover;
     const captionChanged = change.after.title !== scene.title || audioChanged;
     const motionChanged = motionPrompt !== scene.motionPrompt;

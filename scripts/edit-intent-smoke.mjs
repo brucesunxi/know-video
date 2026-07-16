@@ -26,27 +26,66 @@ assert.deepEqual(Array.from(extractRequestedSceneNumbers("修改最后一个场�
 
 assert.deepEqual(
   JSON.parse(JSON.stringify(analyzeEditIntent("把语言都改为中文", scenes))),
-  { explicitSceneNumbers: [], global: true, globalChineseRewrite: true }
+  {
+    explicitSceneNumbers: [],
+    global: true,
+    globalChineseRewrite: true,
+    preserveVisualAssetsOnLocalization: true
+  }
 );
 assert.deepEqual(
   JSON.parse(JSON.stringify(analyzeEditIntent("把语言改成中文", scenes))),
-  { explicitSceneNumbers: [], global: true, globalChineseRewrite: true }
+  {
+    explicitSceneNumbers: [],
+    global: true,
+    globalChineseRewrite: true,
+    preserveVisualAssetsOnLocalization: true
+  }
 );
 assert.deepEqual(
   JSON.parse(JSON.stringify(analyzeEditIntent("只把第五个镜头改成中文", scenes))),
-  { explicitSceneNumbers: [5], global: false, globalChineseRewrite: false }
+  {
+    explicitSceneNumbers: [5],
+    global: false,
+    globalChineseRewrite: false,
+    preserveVisualAssetsOnLocalization: false
+  }
 );
 assert.deepEqual(
   JSON.parse(JSON.stringify(analyzeEditIntent("第五个镜头都改成中文", scenes))),
-  { explicitSceneNumbers: [5], global: false, globalChineseRewrite: false }
+  {
+    explicitSceneNumbers: [5],
+    global: false,
+    globalChineseRewrite: false,
+    preserveVisualAssetsOnLocalization: false
+  }
 );
 assert.deepEqual(
   JSON.parse(JSON.stringify(analyzeEditIntent("整体风格调整为明亮高级", scenes))),
-  { explicitSceneNumbers: [], global: true, globalChineseRewrite: false }
+  {
+    explicitSceneNumbers: [],
+    global: true,
+    globalChineseRewrite: false,
+    preserveVisualAssetsOnLocalization: false
+  }
 );
 assert.deepEqual(
   JSON.parse(JSON.stringify(analyzeEditIntent("把配音速度放慢", scenes))),
-  { explicitSceneNumbers: [], global: true, globalChineseRewrite: false }
+  {
+    explicitSceneNumbers: [],
+    global: true,
+    globalChineseRewrite: false,
+    preserveVisualAssetsOnLocalization: false
+  }
+);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(analyzeEditIntent("把全片改成中文，并换成明亮的视觉风格", scenes))),
+  {
+    explicitSceneNumbers: [],
+    global: true,
+    globalChineseRewrite: true,
+    preserveVisualAssetsOnLocalization: false
+  }
 );
 
 console.log("Edit intent smoke checks passed.");
