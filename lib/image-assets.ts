@@ -56,6 +56,22 @@ function isSafetyFiltered(error: unknown) {
 
 type ImageQuality = "standard" | "premium";
 
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>
+) {
+  let cursor = 0;
+  async function run() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      await worker(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => run()));
+}
+
 async function generateSceneImage(
   scene: Scene,
   project: Project,
@@ -131,26 +147,26 @@ export async function generateProjectSceneImages(
 
   const selectedScenes = options.sceneNumbers ? new Set(options.sceneNumbers) : undefined;
   const failures: NonNullable<Project["currentVersion"]["assetErrorCode"]>[] = [];
-  const scenes = await Promise.all(
-    project.currentVersion.scenes.map(async (scene) => {
-      if (selectedScenes && !selectedScenes.has(scene.sceneNumber)) return scene;
-
+  const scenes = [...project.currentVersion.scenes];
+  const selectedIndexes = scenes
+    .map((scene, index) => ({ scene, index }))
+    .filter(({ scene }) => !selectedScenes || selectedScenes.has(scene.sceneNumber));
+  const concurrency = Math.min(3, Math.max(1, Number(getOptionalEnv("IMAGE_GENERATION_CONCURRENCY")) || 2));
+  await mapWithConcurrency(selectedIndexes, concurrency, async ({ scene, index }) => {
       try {
         const image = await generateSceneImage(scene, project, options.quality ?? "standard");
-        if (!image) return scene;
+        if (!image) return;
 
         const existingAssets = options.replaceExistingImages
           ? scene.assets.filter((asset) => !["image", "clip"].includes(asset.type))
           : scene.assets;
 
-        return { ...scene, assets: [image, ...existingAssets] };
+        scenes[index] = { ...scene, assets: [image, ...existingAssets] };
       } catch (error) {
         failures.push(classifyImageError(error));
         console.error(`[image-assets] Scene ${scene.sceneNumber} image generation failed:`, error);
-        return scene;
       }
-    })
-  );
+  });
 
   const visualCount = scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
   const assetStatus: NonNullable<Project["currentVersion"]["assetStatus"]> =

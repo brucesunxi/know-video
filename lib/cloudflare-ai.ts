@@ -62,6 +62,18 @@ function unwrapResult<T>(payload: CloudflareEnvelope<T> | T) {
   return (payload as CloudflareEnvelope<T>).result ?? payload as T;
 }
 
+function retryableStatus(status: number) {
+  return [408, 429, 500, 502, 503, 504].includes(status);
+}
+
+function retryDelay(attempt: number) {
+  return 700 * (2 ** attempt) + Math.floor(Math.random() * 250);
+}
+
+async function wait(milliseconds: number) {
+  await new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 export async function generateCloudflareImage(
   prompt: string,
   quality: "standard" | "premium" = "standard"
@@ -69,24 +81,39 @@ export async function generateCloudflareImage(
   const model = quality === "premium"
     ? getOptionalEnv("CLOUDFLARE_PREMIUM_IMAGE_MODEL") || PREMIUM_IMAGE_MODEL
     : getOptionalEnv("CLOUDFLARE_IMAGE_MODEL") || STANDARD_IMAGE_MODEL;
-  const form = new FormData();
-  form.append("prompt", prompt);
-  form.append("width", "1280");
-  form.append("height", "720");
-  form.append("steps", "4");
-
-  const response = await fetch(endpoint(model), {
-    method: "POST",
-    headers: authorizationHeaders(),
-    body: form,
-    signal: AbortSignal.timeout(110_000)
-  });
-  if (!response.ok) throw await responseError(response);
-
-  const payload = await response.json() as CloudflareEnvelope<{ image?: string }> | { image?: string };
-  const result = unwrapResult(payload);
-  if (!result?.image) throw new Error("AI image service returned no image");
-  return { body: decodeBase64(result.image), model };
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const form = new FormData();
+      form.append("prompt", prompt);
+      form.append("width", "1280");
+      form.append("height", "720");
+      form.append("steps", "4");
+      const response = await fetch(endpoint(model), {
+        method: "POST",
+        headers: authorizationHeaders(),
+        body: form,
+        signal: AbortSignal.timeout(110_000)
+      });
+      if (!response.ok) {
+        const error = await responseError(response);
+        if (!retryableStatus(response.status) || attempt === 2) throw error;
+        lastError = error;
+      } else {
+        const payload = await response.json() as CloudflareEnvelope<{ image?: string }> | { image?: string };
+        const result = unwrapResult(payload);
+        if (!result?.image) throw new Error("AI image service returned no image");
+        return { body: decodeBase64(result.image), model };
+      }
+    } catch (error) {
+      lastError = error;
+      if (attempt === 2 || ((error as { status?: number }).status && !retryableStatus((error as { status: number }).status))) {
+        throw error;
+      }
+    }
+    await wait(retryDelay(attempt));
+  }
+  throw lastError instanceof Error ? lastError : new Error("AI image service failed after retries");
 }
 
 function speechLanguage(text: string) {

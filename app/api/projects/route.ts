@@ -17,7 +17,7 @@ const requestSchema = z.object({
   baseProject: z.unknown().optional()
 });
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function GET() {
   return NextResponse.json({ projects: await listProjects() });
