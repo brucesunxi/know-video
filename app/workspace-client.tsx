@@ -858,14 +858,7 @@ export function WorkspaceClient({
   const [projectsLoading, setProjectsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const generationPrompt = useMemo(() => {
-    const request = briefPrompt.trim();
-    if (!request) return "";
-    const sceneInstruction = generationOptions.sceneCount === "auto"
-      ? "场景数量由导演根据叙事自动规划"
-      : `严格生成 ${generationOptions.sceneCount} 个场景`;
-    return `${request}\n\n制作参数：总时长 ${generationOptions.duration} 秒；${sceneInstruction}；全部标题、旁白和字幕使用${generationOptions.language}；视觉风格为${generationOptions.style}。`;
-  }, [briefPrompt, generationOptions]);
+  const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
 
   function pushMessage(message: Omit<ChatMessage, "id">) {
     setMessages((current) => {
@@ -893,7 +886,7 @@ export function WorkspaceClient({
       const response = await fetch("/api/projects", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt })
+        body: JSON.stringify({ prompt, options: generationOptions })
       });
       if (!response.ok) {
         const failure = await response.json().catch(() => ({})) as { error?: string };
