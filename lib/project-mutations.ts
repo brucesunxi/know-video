@@ -18,6 +18,7 @@ function versionStatus(project: Project): ProjectVersion["status"] {
 
 async function insertScenes(versionId: string, scenes: Scene[]) {
   const sql = getSql();
+  const persistedScenes: Scene[] = [];
 
   for (const scene of scenes) {
     const sceneRows = await sql`
@@ -45,10 +46,11 @@ async function insertScenes(versionId: string, scenes: Scene[]) {
     ` as IdRow[];
 
     const sceneId = sceneRows[0]?.id;
-    if (!sceneId || scene.assets.length === 0) continue;
+    if (!sceneId) throw new Error(`场景 ${scene.sceneNumber} 保存失败。`);
+    const persistedAssets: SceneAsset[] = [];
 
     for (const asset of scene.assets) {
-      await sql`
+      const assetRows = await sql`
         insert into scene_assets (
           scene_id,
           asset_type,
@@ -63,9 +65,16 @@ async function insertScenes(versionId: string, scenes: Scene[]) {
           ${asset.url},
           ${JSON.stringify(asset.metadata ?? {})}
         )
-      `;
+        returning id
+      ` as IdRow[];
+      if (!assetRows[0]?.id) throw new Error(`场景 ${scene.sceneNumber} 的素材保存失败。`);
+      persistedAssets.push({ ...asset, id: assetRows[0].id });
     }
+
+    persistedScenes.push({ ...scene, id: sceneId, assets: persistedAssets });
   }
+
+  return persistedScenes;
 }
 
 async function loadSceneAssets(sceneIds: string[]) {
@@ -154,7 +163,7 @@ export async function persistGeneratedProject(params: {
   ` as IdRow[];
   const versionId = versionRows[0].id;
 
-  await insertScenes(versionId, params.project.currentVersion.scenes);
+  const persistedScenes = await insertScenes(versionId, params.project.currentVersion.scenes);
 
   await sql`
     update projects
@@ -182,7 +191,7 @@ export async function persistGeneratedProject(params: {
       ...params.project.currentVersion,
       id: versionId,
       status,
-      scenes: params.project.currentVersion.scenes
+      scenes: persistedScenes
     }
   };
 
@@ -578,7 +587,7 @@ export async function applyPersistedEditPlan(params: {
   ` as IdRow[];
   const versionId = versionRows[0].id;
 
-  await insertScenes(versionId, nextProject.currentVersion.scenes);
+  const persistedScenes = await insertScenes(versionId, nextProject.currentVersion.scenes);
 
   await sql`
     update projects
@@ -606,7 +615,8 @@ export async function applyPersistedEditPlan(params: {
       ...nextProject,
       currentVersion: {
         ...nextProject.currentVersion,
-        id: versionId
+        id: versionId,
+        scenes: persistedScenes
       }
     },
     message: {
@@ -728,7 +738,7 @@ export async function restoreProjectVersion(params: {
     returning id
   ` as IdRow[];
   const versionId = rows[0].id;
-  await insertScenes(versionId, target.scenes);
+  const persistedScenes = await insertScenes(versionId, target.scenes);
   await sql`update projects set current_version_id = ${versionId}, updated_at = now() where id = ${params.projectId}`;
   const content = "已从历史版本创建新的当前版本，原有版本和修改记录均已保留。";
   const messageRows = await sql`
@@ -743,7 +753,14 @@ export async function restoreProjectVersion(params: {
       engine: "Animation Engine",
       credits: 0,
       plan: "Free",
-      currentVersion: { ...target, id: versionId, parentVersionId: projects[0].current_version_id, label: "已恢复版本", renderUrl: undefined }
+      currentVersion: {
+        ...target,
+        id: versionId,
+        parentVersionId: projects[0].current_version_id,
+        label: "已恢复版本",
+        renderUrl: undefined,
+        scenes: persistedScenes
+      }
     },
     message: { id: messageRows[0].id, role: "assistant", type: "version", content, versionId }
   };
