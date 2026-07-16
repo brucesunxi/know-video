@@ -1236,6 +1236,89 @@ button:disabled {
   font-weight: 750;
 }
 
+.kv-scene-panel > .kv-strip-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.kv-scene-panel > .kv-strip-heading > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.kv-scene-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.kv-scene-editor label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.kv-scene-editor label.wide,
+.kv-scene-editor-actions {
+  grid-column: 1 / -1;
+}
+
+.kv-scene-editor label > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.kv-scene-editor input,
+.kv-scene-editor textarea {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  background: #f8fafc;
+  color: var(--ink);
+  padding: 10px 11px;
+  line-height: 1.5;
+}
+
+.kv-scene-editor textarea {
+  min-height: 126px;
+  resize: vertical;
+}
+
+.kv-scene-editor input:focus,
+.kv-scene-editor textarea:focus {
+  border-color: var(--accent-2);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1);
+}
+
+.kv-scene-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.kv-scene-editor-actions p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .kv-scene-strip {
   display: grid;
   grid-auto-flow: column;
@@ -1879,6 +1962,7 @@ button:disabled {
   .kv-example-grid,
   .kv-progress-steps,
   .kv-generation-options,
+  .kv-scene-editor,
   .kv-scene-grid,
   .kv-board {
     grid-template-columns: 1fr;
@@ -1921,6 +2005,15 @@ button:disabled {
 
   .kv-prompt-tools .kv-primary {
     margin-left: 0;
+  }
+
+  .kv-scene-editor-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kv-scene-editor-actions .kv-primary {
+    width: 100%;
   }
 
   .kv-preview-meta {

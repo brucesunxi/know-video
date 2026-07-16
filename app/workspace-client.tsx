@@ -19,6 +19,7 @@ import {
   Mic2,
   Music2,
   PanelRightOpen,
+  Pencil,
   Plus,
   RefreshCcw,
   RotateCcw,
@@ -392,33 +393,109 @@ function Storyboard({
   );
 }
 
-function ScenePanel({ scene }: { scene?: Scene }) {
+type SceneTextEdits = Pick<Scene, "title" | "voiceover" | "visualPrompt" | "motionPrompt">;
+
+function ScenePanel({
+  scene,
+  isBusy,
+  onSave
+}: {
+  scene?: Scene;
+  isBusy: boolean;
+  onSave: (sceneNumber: number, edits: SceneTextEdits) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<SceneTextEdits>({ title: "", voiceover: "", visualPrompt: "", motionPrompt: "" });
   const imageMetadata = scene?.assets.find((asset) => asset.type === "image")?.metadata;
   const qualityLabel = imageMetadata?.quality === "premium"
     || String(imageMetadata?.model ?? "").includes("klein-9b")
     ? "精细画质"
     : "标准画质";
 
+  useEffect(() => {
+    if (!scene) return;
+    setDraft({
+      title: scene.title,
+      voiceover: scene.voiceover,
+      visualPrompt: scene.visualPrompt,
+      motionPrompt: scene.motionPrompt
+    });
+    setEditing(false);
+  }, [scene?.id]);
+
+  const changed = Boolean(scene) && (
+    draft.title.trim() !== scene?.title
+    || draft.voiceover.trim() !== scene?.voiceover
+    || draft.visualPrompt.trim() !== scene?.visualPrompt
+    || draft.motionPrompt.trim() !== scene?.motionPrompt
+  );
+
   return (
     <section className="kv-scene-panel">
       <div className="kv-strip-heading">
-        <h3>场景制作说明</h3>
-        <span>{scene?.style.theme ?? "theme"} · {qualityLabel}</span>
+        <div>
+          <h3>{editing ? `编辑场景 ${scene?.sceneNumber ?? ""}` : "场景制作说明"}</h3>
+          <span>{scene?.style.theme ?? "theme"} · {qualityLabel}</span>
+        </div>
+        {scene ? (
+          <button disabled={isBusy} onClick={() => setEditing((current) => !current)} type="button">
+            {editing ? <RotateCcw size={15} /> : <Pencil size={15} />}
+            {editing ? "取消编辑" : "直接编辑"}
+          </button>
+        ) : null}
       </div>
-      <div className="kv-scene-grid">
-        <article>
-          <span>旁白</span>
-          <p>{scene?.voiceover ?? "No voiceover yet."}</p>
-        </article>
-        <article>
-          <span>画面设计</span>
-          <p>{scene?.visualPrompt ?? "No visual prompt yet."}</p>
-        </article>
-        <article>
-          <span>镜头运动</span>
-          <p>{scene?.motionPrompt ?? "No motion prompt yet."}</p>
-        </article>
-      </div>
+      {editing && scene ? (
+        <div className="kv-scene-editor">
+          <label className="wide">
+            <span>场景标题</span>
+            <input onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} value={draft.title} />
+          </label>
+          <label>
+            <span>旁白</span>
+            <textarea onChange={(event) => setDraft((current) => ({ ...current, voiceover: event.target.value }))} value={draft.voiceover} />
+          </label>
+          <label>
+            <span>画面设计</span>
+            <textarea onChange={(event) => setDraft((current) => ({ ...current, visualPrompt: event.target.value }))} value={draft.visualPrompt} />
+          </label>
+          <label className="wide">
+            <span>镜头运动</span>
+            <textarea onChange={(event) => setDraft((current) => ({ ...current, motionPrompt: event.target.value }))} value={draft.motionPrompt} />
+          </label>
+          <div className="kv-scene-editor-actions">
+            <p>保存会创建新版本，并只重做受影响的画面或配音。</p>
+            <button
+              className="kv-primary"
+              disabled={isBusy || !changed || Object.values(draft).some((value) => value.trim().length === 0)}
+              onClick={() => onSave(scene.sceneNumber, {
+                title: draft.title.trim(),
+                voiceover: draft.voiceover.trim(),
+                visualPrompt: draft.visualPrompt.trim(),
+                motionPrompt: draft.motionPrompt.trim()
+              })}
+              type="button"
+            >
+              {isBusy ? <Loader2 className="kv-spin" size={16} /> : <Check size={16} />}
+              保存为新版本
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="kv-scene-grid">
+          <article>
+            <span>旁白</span>
+            <p>{scene?.voiceover ?? "No voiceover yet."}</p>
+          </article>
+          <article>
+            <span>画面设计</span>
+            <p>{scene?.visualPrompt ?? "No visual prompt yet."}</p>
+          </article>
+          <article>
+            <span>镜头运动</span>
+            <p>{scene?.motionPrompt ?? "No motion prompt yet."}</p>
+          </article>
+        </div>
+      )}
     </section>
   );
 }
@@ -657,7 +734,8 @@ function StudioScreen({
   uploadProgress,
   assetsOpen,
   onToggleAssets,
-  onRemoveAsset
+  onRemoveAsset,
+  onSaveScene
 }: {
   project: Project;
   messages: ChatMessage[];
@@ -687,6 +765,7 @@ function StudioScreen({
   assetsOpen: boolean;
   onToggleAssets: () => void;
   onRemoveAsset: (assetId: string) => void;
+  onSaveScene: (sceneNumber: number, edits: SceneTextEdits) => void;
 }) {
   const playerRef = useRef<PlayerRef>(null);
   const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === selectedScene) ?? project.currentVersion.scenes[0];
@@ -801,7 +880,7 @@ function StudioScreen({
               </section>
             )}
             <Storyboard onSelect={selectScene} scenes={project.currentVersion.scenes} selectedScene={selectedScene} />
-            <ScenePanel scene={scene} />
+            <ScenePanel isBusy={isBusy} onSave={onSaveScene} scene={scene} />
           </>
         ) : (
           <StoryboardBoard scenes={project.currentVersion.scenes} />
@@ -990,15 +1069,11 @@ export function WorkspaceClient({
     }
   }
 
-  async function applyPlan() {
-    if (!pendingPlan) return;
-
-    setIsBusy(true);
-    try {
+  async function applyEditPlanRequest(editPlan: EditPlan) {
       const response = await fetch("/api/edit-plan/apply", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ project, editPlan: pendingPlan })
+        body: JSON.stringify({ project, editPlan })
       });
       if (!response.ok) {
         const failure = await response.json().catch(() => ({})) as { error?: string };
@@ -1009,9 +1084,18 @@ export function WorkspaceClient({
         message: ChatMessage;
       };
       setProject(data.project);
-      setPendingPlan(undefined);
       setMessages((current) => [...current, data.message]);
       setVersions([]);
+      return data.project;
+  }
+
+  async function applyPlan() {
+    if (!pendingPlan) return;
+
+    setIsBusy(true);
+    try {
+      await applyEditPlanRequest(pendingPlan);
+      setPendingPlan(undefined);
     } catch (error) {
       console.error(error);
       pushMessage({
@@ -1019,6 +1103,64 @@ export function WorkspaceClient({
         type: "text",
         content: error instanceof Error ? error.message : "应用修改失败，请重试。"
       });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function saveSceneEdits(sceneNumber: number, edits: SceneTextEdits) {
+    const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === sceneNumber);
+    if (!scene) return;
+    const voiceoverChanged = edits.voiceover !== scene.voiceover;
+    const visualChanged = edits.title !== scene.title || edits.visualPrompt !== scene.visualPrompt;
+    const motionChanged = edits.motionPrompt !== scene.motionPrompt;
+    if (!voiceoverChanged && !visualChanged && !motionChanged) return;
+
+    const regenerate = new Set<SceneAsset["type"]>();
+    if (voiceoverChanged) {
+      regenerate.add("audio");
+      regenerate.add("caption");
+    }
+    if (visualChanged) {
+      regenerate.add("image");
+      regenerate.add("thumbnail");
+    }
+    if (motionChanged || regenerate.size > 0) regenerate.add("render");
+    const plan: EditPlan = {
+      id: crypto.randomUUID(),
+      editNumber: Math.max(1, Math.round(Date.now() / 1000) % 10000),
+      baseVersionId: project.currentVersion.id,
+      status: "proposed",
+      userRequest: `直接编辑场景 ${sceneNumber}`,
+      summary: `更新场景 ${sceneNumber} 的制作内容，并创建一个可恢复的新版本。`,
+      affectedScenes: [sceneNumber],
+      changes: [{
+        sceneNumber,
+        status: "updated",
+        before: {
+          title: scene.title,
+          voiceover: scene.voiceover,
+          thumbnailTone: scene.style.theme.includes("light") ? "light" : "dark",
+          visualPrompt: scene.visualPrompt,
+          motionPrompt: scene.motionPrompt
+        },
+        after: {
+          ...edits,
+          thumbnailTone: scene.style.theme.includes("light") ? "light" : "dark"
+        },
+        regenerate: Array.from(regenerate)
+      }],
+      createdAt: new Date().toISOString()
+    };
+
+    setIsBusy(true);
+    setErrorMessage(undefined);
+    try {
+      await applyEditPlanRequest(plan);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "场景保存失败。";
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
     } finally {
       setIsBusy(false);
     }
@@ -1446,6 +1588,7 @@ export function WorkspaceClient({
           assetsOpen={assetsOpen}
           onToggleAssets={toggleAssets}
           onRemoveAsset={removeSceneAsset}
+          onSaveScene={saveSceneEdits}
           onViewChange={setStudioView}
           pendingPlan={pendingPlan}
           project={project}
