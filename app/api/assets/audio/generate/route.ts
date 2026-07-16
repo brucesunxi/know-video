@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
   if (failed.length > 0) {
     return NextResponse.json(
-      { error: "部分场景配音生成失败，请检查中文语音服务配置后重试。", project: updated },
+      { error: "部分场景配音未完成。请缩短过长旁白后重试；如果所有旁白都很短，请检查语音服务配置。", project: updated },
       { status: 502 }
     );
   }

@@ -28,6 +28,7 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
   let contentType: "audio/mpeg" | "audio/wav";
   let extension: "mp3" | "wav";
   let rate: number | undefined;
+  let actualDurationSeconds: number | undefined;
   if (containsChinese(scene.voiceover)) {
     if (!hasAzureSpeech()) {
       throw new Error("Chinese narration requires AZURE_SPEECH_KEY and AZURE_SPEECH_REGION");
@@ -37,6 +38,7 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
     model = generated.model;
     voice = generated.voice;
     rate = generated.rate;
+    actualDurationSeconds = generated.actualDurationSeconds;
     contentType = generated.contentType;
     extension = generated.extension;
   } else if (hasCloudflareAI()) {
@@ -76,7 +78,8 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
       contentType,
       sceneNumber: scene.sceneNumber,
       targetDurationSeconds: scene.durationSeconds,
-      rate
+      rate,
+      actualDurationSeconds
     }
   };
 }
