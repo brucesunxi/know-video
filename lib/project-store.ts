@@ -135,7 +135,7 @@ type ProjectSnapshot = {
   project: Project;
   messages: ChatMessage[];
   pendingPlan?: EditPlan;
-  source: "database" | "mock";
+  source: "database" | "empty" | "mock";
 };
 
 async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSnapshot | undefined> {
@@ -375,6 +375,9 @@ export async function getProjectSnapshot(projectId: string): Promise<ProjectSnap
 
 export async function getCurrentProjectSnapshot(): Promise<ProjectSnapshot> {
   if (!hasDatabaseUrl()) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("生产环境数据库尚未配置。");
+    }
     return { project: demoProject, messages: demoMessages, source: "mock" };
   }
 
@@ -389,13 +392,14 @@ export async function getCurrentProjectSnapshot(): Promise<ProjectSnapshot> {
 
     const projectRow = projects[0];
     if (!projectRow?.current_version_id) {
-      return { project: demoProject, messages: demoMessages, source: "mock" };
+      return { project: demoProject, messages: [], source: "empty" };
     }
 
     return await hydrateProjectSnapshot(projectRow)
-      ?? { project: demoProject, messages: demoMessages, source: "mock" };
+      ?? { project: demoProject, messages: [], source: "empty" };
   } catch (error) {
-    console.error("[project-store] Falling back to mock data:", error);
+    console.error("[project-store] Unable to load the current project:", error);
+    if (process.env.NODE_ENV === "production") throw error;
     return { project: demoProject, messages: demoMessages, source: "mock" };
   }
 }

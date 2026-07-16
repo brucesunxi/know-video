@@ -34,7 +34,7 @@ import { KnowVideoPlayer } from "@/app/video-player";
 import { VIDEO_FPS } from "@/video/config";
 import type { ChatMessage, EditChange, EditPlan, GenerationOptions, Project, ProjectListItem, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
 
-type Source = "database" | "mock";
+type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
 type Engine = "ai" | "heuristic";
 type StudioView = "preview" | "storyboard";
@@ -187,7 +187,7 @@ function Shell({
           <button aria-label="新建视频" className={stage === "brief" ? "active" : ""} onClick={onNewVideo} type="button">
             <Plus size={18} />
           </button>
-          <button aria-label="视频工作室" className={stage === "studio" ? "active" : ""} onClick={onOpenStudio} type="button">
+          <button aria-label="视频工作室" className={stage === "studio" ? "active" : ""} disabled={source === "empty"} onClick={onOpenStudio} type="button">
             <Clapperboard size={18} />
           </button>
           <button aria-label="项目列表" className={stage === "projects" ? "active" : ""} onClick={onOpenProjects} type="button">
@@ -202,7 +202,7 @@ function Shell({
             <h1>{stage === "brief" ? "用一句需求，完成一支视频" : stage === "projects" ? "我的视频项目" : project.title}</h1>
           </div>
           <div className="kv-status-row">
-            <span>{source === "database" ? "项目已保存" : "本地预览"}</span>
+            <span>{source === "database" ? "项目已保存" : source === "empty" ? "尚未创建项目" : "本地预览"}</span>
             <span>智能分镜</span>
             <span>云端素材</span>
           </div>
@@ -343,6 +343,7 @@ function BriefScreen({
   onUseExample,
   onSubmit,
   onOpenStudio,
+  hasCurrentProject,
   errorMessage
 }: {
   prompt: string;
@@ -354,6 +355,7 @@ function BriefScreen({
   onUseExample: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onOpenStudio: () => void;
+  hasCurrentProject: boolean;
   errorMessage?: string;
 }) {
   return (
@@ -431,12 +433,21 @@ function BriefScreen({
       <aside className="kv-brief-side">
         <div className="kv-side-panel">
           <span className="kv-eyebrow">最近项目</span>
-          <h3>{currentProject.title}</h3>
-          <p>{currentProject.currentVersion.scenes.length} 个场景 · {durationLabel(currentProject.currentVersion.durationSeconds)}</p>
-          <button onClick={onOpenStudio} type="button">
-            打开工作室
-            <ChevronRight size={16} />
-          </button>
+          {hasCurrentProject ? (
+            <>
+              <h3>{currentProject.title}</h3>
+              <p>{currentProject.currentVersion.scenes.length} 个场景 · {durationLabel(currentProject.currentVersion.durationSeconds)}</p>
+              <button onClick={onOpenStudio} type="button">
+                打开工作室
+                <ChevronRight size={16} />
+              </button>
+            </>
+          ) : (
+            <>
+              <h3>还没有视频项目</h3>
+              <p>输入一句需求，创建第一支可继续对话修改的视频。</p>
+            </>
+          )}
         </div>
         <div className="kv-side-panel">
           <span className="kv-eyebrow">制作流程</span>
@@ -1141,6 +1152,7 @@ export function WorkspaceClient({
   source: Source;
 }) {
   const [project, setProject] = useState(initialProject);
+  const [projectSource, setProjectSource] = useState<Source>(source);
   const [stage, setStage] = useState<Stage>(initialPendingPlan ? "studio" : "brief");
   const [briefPrompt, setBriefPrompt] = useState("");
   const [chatInput, setChatInput] = useState("");
@@ -1275,6 +1287,7 @@ export function WorkspaceClient({
       let generatedProject = data.project;
       const warnings: string[] = [];
       setProject(generatedProject);
+      setProjectSource("database");
       setProjects([]);
       setMessages([
         ...data.messages,
@@ -1981,6 +1994,7 @@ export function WorkspaceClient({
       };
       if (!response.ok || !data.project || !data.messages) throw new Error(data.error || "项目读取失败。");
       setProject(data.project);
+      setProjectSource("database");
       setMessages(data.messages);
       setSelectedScene(1);
       setPendingPlan(data.pendingPlan);
@@ -2046,9 +2060,11 @@ export function WorkspaceClient({
     <Shell
       onNewVideo={resetToBrief}
       onOpenProjects={() => void openProjects()}
-      onOpenStudio={() => setStage("studio")}
+      onOpenStudio={() => {
+        if (projectSource !== "empty") setStage("studio");
+      }}
       project={project}
-      source={source}
+      source={projectSource}
       stage={stage}
     >
       <input accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav" hidden onChange={uploadAsset} ref={fileInputRef} type="file" />
@@ -2070,6 +2086,7 @@ export function WorkspaceClient({
           onUseExample={setBriefPrompt}
           prompt={briefPrompt}
           options={generationOptions}
+          hasCurrentProject={projectSource !== "empty"}
           errorMessage={errorMessage}
         />
       ) : null}
