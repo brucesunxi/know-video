@@ -1,4 +1,5 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
+import { isEditApplicationConflict, materializeAppliedVersion } from "@/lib/edit-application";
 import { editPlanSchema } from "@/lib/edit-plan-schema";
 import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import { demoProject } from "@/lib/mock-data";
@@ -19,67 +20,6 @@ export function canPersist() {
 function versionStatus(project: Project): ProjectVersion["status"] {
   if (project.currentVersion.assetStatus === "failed") return "failed";
   return project.currentVersion.assetStatus === "ready" ? "ready" : "draft";
-}
-
-async function insertScenes(versionId: string, scenes: Scene[]) {
-  const sql = getSql();
-  const persistedScenes: Scene[] = [];
-
-  for (const scene of scenes) {
-    const sceneRows = await sql`
-      insert into scenes (
-        version_id,
-        scene_number,
-        title,
-        voiceover,
-        visual_prompt,
-        motion_prompt,
-        duration_seconds,
-        style_json
-      )
-      values (
-        ${versionId},
-        ${scene.sceneNumber},
-        ${scene.title},
-        ${scene.voiceover},
-        ${scene.visualPrompt},
-        ${scene.motionPrompt},
-        ${scene.durationSeconds},
-        ${JSON.stringify(scene.style)}
-      )
-      returning id
-    ` as IdRow[];
-
-    const sceneId = sceneRows[0]?.id;
-    if (!sceneId) throw new Error(`场景 ${scene.sceneNumber} 保存失败。`);
-    const persistedAssets: SceneAsset[] = [];
-
-    for (const asset of scene.assets) {
-      const assetRows = await sql`
-        insert into scene_assets (
-          scene_id,
-          asset_type,
-          r2_key,
-          public_url,
-          metadata_json
-        )
-        values (
-          ${sceneId},
-          ${asset.type},
-          ${asset.r2Key},
-          ${asset.url},
-          ${JSON.stringify(asset.metadata ?? {})}
-        )
-        returning id
-      ` as IdRow[];
-      if (!assetRows[0]?.id) throw new Error(`场景 ${scene.sceneNumber} 的素材保存失败。`);
-      persistedAssets.push({ ...asset, id: assetRows[0].id });
-    }
-
-    persistedScenes.push({ ...scene, id: sceneId, assets: persistedAssets });
-  }
-
-  return persistedScenes;
 }
 
 async function loadSceneAssets(sceneIds: string[]) {
@@ -592,60 +532,6 @@ export async function persistEditPlan(params: {
   };
 }
 
-export async function persistDirectEditPlan(params: {
-  projectId: string;
-  versionId: string;
-  editPlan: EditPlan;
-}) {
-  if (!canPersist()) return params.editPlan;
-
-  const sql = getSql();
-  await sql`
-    update edit_plans
-    set status = 'rejected'
-    where project_id = ${params.projectId}
-      and base_version_id = ${params.versionId}
-      and status = 'proposed'
-  `;
-  const userRows = await sql`
-    insert into chat_messages (project_id, version_id, role, message_type, content)
-    values (${params.projectId}, ${params.versionId}, 'user', 'text', ${params.editPlan.userRequest})
-    returning id
-  ` as IdRow[];
-  const rows = await sql`
-    insert into edit_plans (
-      id,
-      project_id,
-      base_version_id,
-      user_message_id,
-      status,
-      summary,
-      affected_scenes_json,
-      patch_json,
-      preview_json
-    )
-    values (
-      ${params.editPlan.id},
-      ${params.projectId},
-      ${params.versionId},
-      ${userRows[0].id},
-      'proposed',
-      ${params.editPlan.summary},
-      ${JSON.stringify(params.editPlan.affectedScenes)},
-      ${JSON.stringify(params.editPlan)},
-      ${JSON.stringify({ source: "direct-scene-edit" })}
-    )
-    returning id
-  ` as IdRow[];
-  if (!rows[0]) throw new Error("场景修改方案保存失败。");
-  return {
-    ...params.editPlan,
-    id: rows[0].id,
-    baseVersionId: params.versionId,
-    status: "proposed" as const
-  };
-}
-
 export async function loadProposedEditPlan(params: {
   projectId: string;
   versionId: string;
@@ -684,6 +570,7 @@ export async function loadProposedEditPlan(params: {
 export async function applyPersistedEditPlan(params: {
   project: Project;
   editPlan: EditPlan;
+  direct?: boolean;
 }): Promise<{
   project: Project;
   message: ChatMessage;
@@ -752,53 +639,172 @@ export async function applyPersistedEditPlan(params: {
   }
 
   const sql = getSql();
-  const versionRows = await sql`
-    with claimed_plan as (
-      update edit_plans
-      set status = 'applied'
-      where id = ${params.editPlan.id}
-        and project_id = ${params.project.id}
-        and base_version_id = ${params.project.currentVersion.id}
-        and status = 'proposed'
-      returning id
-    )
-    insert into project_versions (
-      project_id,
-      parent_version_id,
-      status,
-      scene_plan_json,
-      duration_seconds
-    )
-    select
-      ${params.project.id},
-      ${params.project.currentVersion.id},
-      ${pendingMedia ? "draft" : versionStatus(nextProject)},
-      ${JSON.stringify(nextProject.currentVersion.scenes)},
-      ${nextProject.currentVersion.durationSeconds}
-    from claimed_plan
-    returning id
-  ` as IdRow[];
-  if (!versionRows[0]) {
-    throw new Error("修改方案已经失效，请重新生成后再应用。");
-  }
-  const versionId = versionRows[0].id;
-
-  const persistedScenes = await insertScenes(versionId, nextProject.currentVersion.scenes);
-
-  await sql`
-    update projects
-    set current_version_id = ${versionId}, updated_at = now()
-    where id = ${params.project.id}
-  `;
-
+  const materialized = materializeAppliedVersion(nextProject);
+  const {
+    versionId,
+    assistantMessageId,
+    directUserMessageId,
+    scenes: persistedScenes
+  } = materialized;
   const content = pendingMedia
     ? "修改已保存为可恢复的新版本，正在刷新受影响的画面和配音。"
     : "修改已保存为可恢复的新版本，可以继续预览或导出。";
-  const messageRows = await sql`
-    insert into chat_messages (project_id, version_id, role, message_type, content)
-    values (${params.project.id}, ${versionId}, 'assistant', 'version', ${content})
-    returning id
-  ` as IdRow[];
+  const baseVersionId = params.project.currentVersion.id;
+  const queries = [
+    sql`
+      select id
+      from projects
+      where id = ${params.project.id}
+        and current_version_id = ${baseVersionId}
+      for update
+    `,
+    ...(params.direct ? [
+      sql`
+        update edit_plans
+        set status = 'rejected'
+        where project_id = ${params.project.id}
+          and base_version_id = ${baseVersionId}
+          and status = 'proposed'
+      `,
+      sql`
+        insert into chat_messages (id, project_id, version_id, role, message_type, content)
+        values (
+          ${directUserMessageId},
+          ${params.project.id},
+          ${baseVersionId},
+          'user',
+          'text',
+          ${normalizedPlan.userRequest}
+        )
+      `,
+      sql`
+        insert into edit_plans (
+          id,
+          project_id,
+          base_version_id,
+          user_message_id,
+          status,
+          summary,
+          affected_scenes_json,
+          patch_json,
+          preview_json
+        )
+        values (
+          ${normalizedPlan.id},
+          ${params.project.id},
+          ${baseVersionId},
+          ${directUserMessageId},
+          'proposed',
+          ${normalizedPlan.summary},
+          ${JSON.stringify(normalizedPlan.affectedScenes)},
+          ${JSON.stringify(normalizedPlan)},
+          ${JSON.stringify({ source: "direct-scene-edit" })}
+        )
+      `
+    ] : []),
+    sql`
+      with claimed_plan as (
+        update edit_plans
+        set status = 'applied'
+        where id = ${normalizedPlan.id}
+          and project_id = ${params.project.id}
+          and base_version_id = ${baseVersionId}
+          and status = 'proposed'
+          and exists (
+            select 1
+            from projects
+            where id = ${params.project.id}
+              and current_version_id = ${baseVersionId}
+          )
+        returning id
+      )
+      insert into project_versions (
+        id,
+        project_id,
+        parent_version_id,
+        status,
+        scene_plan_json,
+        duration_seconds
+      )
+      select
+        ${versionId},
+        ${params.project.id},
+        ${baseVersionId},
+        ${pendingMedia ? "draft" : versionStatus(nextProject)},
+        ${JSON.stringify(persistedScenes)},
+        ${nextProject.currentVersion.durationSeconds}
+      from claimed_plan
+    `,
+    ...persistedScenes.flatMap((scene) => [
+      sql`
+        insert into scenes (
+          id,
+          version_id,
+          scene_number,
+          title,
+          voiceover,
+          visual_prompt,
+          motion_prompt,
+          duration_seconds,
+          style_json
+        )
+        values (
+          ${scene.id},
+          ${versionId},
+          ${scene.sceneNumber},
+          ${scene.title},
+          ${scene.voiceover},
+          ${scene.visualPrompt},
+          ${scene.motionPrompt},
+          ${scene.durationSeconds},
+          ${JSON.stringify(scene.style)}
+        )
+      `,
+      ...scene.assets.map((asset) => sql`
+        insert into scene_assets (
+          id,
+          scene_id,
+          asset_type,
+          r2_key,
+          public_url,
+          metadata_json
+        )
+        values (
+          ${asset.id},
+          ${scene.id},
+          ${asset.type},
+          ${asset.r2Key},
+          ${asset.url},
+          ${JSON.stringify(asset.metadata ?? {})}
+        )
+      `)
+    ]),
+    sql`
+      update projects
+      set current_version_id = ${versionId}, updated_at = now()
+      where id = ${params.project.id}
+        and current_version_id = ${baseVersionId}
+    `,
+    sql`
+      insert into chat_messages (id, project_id, version_id, role, message_type, content)
+      values (
+        ${assistantMessageId},
+        ${params.project.id},
+        ${versionId},
+        'assistant',
+        'version',
+        ${content}
+      )
+    `
+  ];
+  try {
+    await sql.transaction(queries);
+  } catch (error) {
+    if (isEditApplicationConflict(error)) {
+      throw new Error("修改方案已经失效，或视频版本已经发生变化，请刷新后重新生成。");
+    }
+    throw error;
+  }
 
   return {
     project: {
@@ -810,7 +816,7 @@ export async function applyPersistedEditPlan(params: {
       }
     },
     message: {
-      id: messageRows[0].id,
+      id: assistantMessageId,
       role: "assistant",
       type: "version",
       content,

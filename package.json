@@ -13,6 +13,7 @@
     "render:lifecycle:smoke": "node scripts/render-lifecycle-smoke.mjs",
     "edit:intent:smoke": "node scripts/edit-intent-smoke.mjs",
     "edit:plan:smoke": "node scripts/edit-plan-normalizer-smoke.mjs",
+    "edit:apply:smoke": "node scripts/edit-application-smoke.mjs",
     "edit:schema:smoke": "node scripts/edit-plan-schema-smoke.mjs",
     "image:continuity:smoke": "node scripts/image-continuity-smoke.mjs",
     "speech:timing:smoke": "node scripts/speech-timing-smoke.mjs",

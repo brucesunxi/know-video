@@ -4,8 +4,7 @@ import { editPlanSchema } from "@/lib/edit-plan-schema";
 import {
   applyPersistedEditPlan,
   loadCurrentProjectForEdit,
-  loadProposedEditPlan,
-  persistDirectEditPlan
+  loadProposedEditPlan
 } from "@/lib/project-mutations";
 import type { EditPlan } from "@/lib/types";
 
@@ -32,11 +31,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重新修改。" }, { status: 409 });
     }
     const editPlan = body.direct
-      ? await persistDirectEditPlan({
-        projectId: body.projectId,
-        versionId: body.versionId,
-        editPlan: body.editPlan as EditPlan
-      })
+      ? body.editPlan as EditPlan
       : await loadProposedEditPlan({
         projectId: body.projectId,
         versionId: body.versionId,
@@ -51,7 +46,8 @@ export async function POST(request: Request) {
     }
     const result = await applyPersistedEditPlan({
       project,
-      editPlan
+      editPlan,
+      direct: body.direct
     });
     return NextResponse.json(result);
   } catch (error) {
@@ -59,6 +55,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "修改方案格式无效，请重新生成。" }, { status: 400 });
     }
     const message = error instanceof Error ? error.message : "应用修改失败。";
-    return NextResponse.json({ error: message }, { status: 502 });
+    const status = /已经失效|版本已经发生变化/.test(message) ? 409 : 502;
+    return NextResponse.json({ error: message }, { status });
   }
 }
