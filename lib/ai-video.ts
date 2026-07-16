@@ -136,13 +136,13 @@ function normalizedRegenerate(
     regenerate.add("caption");
   }
   if (
-    change.after.title !== scene.title
-    || change.after.visualPrompt !== scene.visualPrompt
+    change.after.visualPrompt !== scene.visualPrompt
     || change.after.thumbnailTone !== (scene.style.theme.includes("light") ? "light" : "dark")
   ) {
     regenerate.add("image");
     regenerate.add("thumbnail");
   }
+  if (change.after.title !== scene.title) regenerate.add("caption");
   if (afterMotion !== scene.motionPrompt || regenerate.size > 0) regenerate.add("render");
   return regenerateOrder.filter((type) => regenerate.has(type));
 }

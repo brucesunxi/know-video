@@ -1,4 +1,5 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
+import { demoProject } from "@/lib/mock-data";
 import { generateProjectSceneImages } from "@/lib/image-assets";
 import { generateProjectVoices } from "@/lib/audio-assets";
 import { assetUrlForKey } from "@/lib/r2";
@@ -212,11 +213,18 @@ export async function persistGeneratedProject(params: {
 }
 
 export async function loadProjectForRender(projectId: string, versionId: string): Promise<Project | undefined> {
-  const version = await loadVersion(versionId);
-  if (!version || !canPersist()) return undefined;
+  if (!canPersist()) return undefined;
   const sql = getSql();
-  const rows = await sql`select title from projects where id = ${projectId} limit 1` as Array<{ title: string }>;
+  const rows = await sql`
+    select p.title
+    from projects p
+    join project_versions pv on pv.project_id = p.id
+    where p.id = ${projectId} and pv.id = ${versionId}
+    limit 1
+  ` as Array<{ title: string }>;
   if (!rows[0]) return undefined;
+  const version = await loadVersion(versionId);
+  if (!version) return undefined;
   return {
     id: projectId,
     title: rows[0].title,
@@ -225,6 +233,22 @@ export async function loadProjectForRender(projectId: string, versionId: string)
     plan: "Free",
     currentVersion: version
   };
+}
+
+export async function loadCurrentProjectForEdit(projectId: string, versionId: string) {
+  if (!canPersist()) {
+    return projectId === demoProject.id && versionId === demoProject.currentVersion.id
+      ? demoProject
+      : undefined;
+  }
+  const rows = await getSql()`
+    select id
+    from projects
+    where id = ${projectId} and current_version_id = ${versionId}
+    limit 1
+  ` as IdRow[];
+  if (!rows[0]) return undefined;
+  return loadProjectForRender(projectId, versionId);
 }
 
 export async function loadVersion(versionId: string): Promise<ProjectVersion | undefined> {

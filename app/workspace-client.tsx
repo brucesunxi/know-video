@@ -1073,7 +1073,11 @@ export function WorkspaceClient({
       const response = await fetch("/api/edit-plan/apply", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ project, editPlan })
+        body: JSON.stringify({
+          projectId: project.id,
+          versionId: project.currentVersion.id,
+          editPlan
+        })
       });
       if (!response.ok) {
         const failure = await response.json().catch(() => ({})) as { error?: string };
@@ -1112,9 +1116,10 @@ export function WorkspaceClient({
     const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === sceneNumber);
     if (!scene) return;
     const voiceoverChanged = edits.voiceover !== scene.voiceover;
-    const visualChanged = edits.title !== scene.title || edits.visualPrompt !== scene.visualPrompt;
+    const titleChanged = edits.title !== scene.title;
+    const visualChanged = edits.visualPrompt !== scene.visualPrompt;
     const motionChanged = edits.motionPrompt !== scene.motionPrompt;
-    if (!voiceoverChanged && !visualChanged && !motionChanged) return;
+    if (!titleChanged && !voiceoverChanged && !visualChanged && !motionChanged) return;
 
     const regenerate = new Set<SceneAsset["type"]>();
     if (voiceoverChanged) {
@@ -1125,6 +1130,7 @@ export function WorkspaceClient({
       regenerate.add("image");
       regenerate.add("thumbnail");
     }
+    if (titleChanged) regenerate.add("caption");
     if (motionChanged || regenerate.size > 0) regenerate.add("render");
     const plan: EditPlan = {
       id: crypto.randomUUID(),
