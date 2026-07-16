@@ -1,8 +1,11 @@
 import { z } from "zod";
 
+const narrationVoiceSchema = z.enum(["male-clear", "male-deep", "female-natural"]);
+
 export const editSideSchema = z.object({
   title: z.string().min(1).max(240),
   voiceover: z.string().min(1).max(4000).optional(),
+  narrationVoice: narrationVoiceSchema.optional(),
   thumbnailTone: z.string().min(1).max(80),
   visualPrompt: z.string().min(1).max(8000),
   motionPrompt: z.string().min(1).max(4000).optional()

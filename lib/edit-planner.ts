@@ -11,6 +11,7 @@ export const editPlanSchema = z.object({
       before: z.object({
         title: z.string(),
         voiceover: z.string().optional(),
+        narrationVoice: z.enum(["male-clear", "male-deep", "female-natural"]).optional(),
         thumbnailTone: z.string(),
         visualPrompt: z.string(),
         motionPrompt: z.string().optional()
@@ -18,6 +19,7 @@ export const editPlanSchema = z.object({
       after: z.object({
         title: z.string(),
         voiceover: z.string().optional(),
+        narrationVoice: z.enum(["male-clear", "male-deep", "female-natural"]).optional(),
         thumbnailTone: z.string(),
         visualPrompt: z.string(),
         motionPrompt: z.string().optional()

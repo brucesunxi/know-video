@@ -4,7 +4,8 @@ import { generateAzureChineseSpeech, hasAzureSpeech } from "@/lib/azure-speech";
 import { generateCloudflareSpeech, hasCloudflareAI } from "@/lib/cloudflare-ai";
 import { getOptionalEnv } from "@/lib/env";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
-import type { Project, Scene, SceneAsset } from "@/lib/types";
+import { DEFAULT_NARRATION_VOICE, narrationVoiceProfile } from "@/lib/voice-profiles";
+import type { NarrationVoice, Project, Scene, SceneAsset } from "@/lib/types";
 
 function containsChinese(text: string) {
   return /\p{Script=Han}/u.test(text);
@@ -22,7 +23,11 @@ async function mapWithConcurrency<T>(items: T[], concurrency: number, worker: (i
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => run()));
 }
 
-async function generateSceneVoice(scene: Scene, project: Project): Promise<SceneAsset> {
+async function generateSceneVoice(
+  scene: Scene,
+  project: Project,
+  narrationVoice?: NarrationVoice
+): Promise<SceneAsset> {
   let body: Buffer;
   let model: string;
   let voice: string;
@@ -30,10 +35,12 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
   let extension: "mp3" | "wav";
   let rate: number | undefined;
   let actualDurationSeconds: number | undefined;
+  const selectedVoice = narrationVoice ?? scene.style.narrationVoice ?? DEFAULT_NARRATION_VOICE;
+  const profile = narrationVoiceProfile(selectedVoice);
   if (containsChinese(scene.voiceover)) {
     try {
       if (!hasAzureSpeech()) throw new Error("Chinese speech service is not configured");
-      const generated = await generateAzureChineseSpeech(scene.voiceover, scene.durationSeconds);
+      const generated = await generateAzureChineseSpeech(scene.voiceover, scene.durationSeconds, selectedVoice);
       body = generated.body;
       model = generated.model;
       voice = generated.voice;
@@ -53,7 +60,7 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
         voice: voice as "alloy",
         input: scene.voiceover,
         response_format: "wav",
-        instructions: "Natural Mandarin Chinese narration. Clear pronunciation, confident premium product-film delivery, no sound effects."
+        instructions: `${profile.direction} Clear pronunciation, no sound effects.`
       });
       body = Buffer.from(await result.arrayBuffer());
       const inspection = assertUsableSpeechAudio(body, { targetDurationSeconds: scene.durationSeconds });
@@ -103,12 +110,17 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
       sceneNumber: scene.sceneNumber,
       targetDurationSeconds: scene.durationSeconds,
       rate,
-      actualDurationSeconds
+      actualDurationSeconds,
+      narrationVoice: selectedVoice
     }
   };
 }
 
-export async function generateProjectVoices(project: Project, sceneNumbers?: number[]) {
+export async function generateProjectVoices(
+  project: Project,
+  sceneNumbers?: number[],
+  narrationVoice?: NarrationVoice
+) {
   if (
     (!hasAzureSpeech() && !hasCloudflareAI() && !getOptionalEnv("OPENAI_API_KEY"))
     || getOptionalEnv("ENABLE_TTS") === "false"
@@ -130,8 +142,12 @@ export async function generateProjectVoices(project: Project, sceneNumbers?: num
   const concurrency = Math.min(4, Math.max(1, Number(getOptionalEnv("TTS_GENERATION_CONCURRENCY")) || 3));
   await mapWithConcurrency(selectedIndexes, concurrency, async ({ scene, index }) => {
     try {
-      const voice = await generateSceneVoice(scene, project);
-      scenes[index] = { ...scene, assets: [voice, ...scene.assets.filter((asset) => asset.type !== "audio")] };
+      const voice = await generateSceneVoice(scene, project, narrationVoice);
+      scenes[index] = {
+        ...scene,
+        style: narrationVoice ? { ...scene.style, narrationVoice } : scene.style,
+        assets: [voice, ...scene.assets.filter((asset) => asset.type !== "audio")]
+      };
     } catch (error) {
       console.error(`[audio-assets] Scene ${scene.sceneNumber} voice generation failed:`, error);
       // A failed Chinese regeneration must not leave a previously broken MeloTTS track active.

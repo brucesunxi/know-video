@@ -70,6 +70,7 @@ const editPlanPayloadSchema = z.object({
       before: z.object({
         title: z.string(),
         voiceover: z.string().optional(),
+        narrationVoice: z.enum(["male-clear", "male-deep", "female-natural"]).optional(),
         thumbnailTone: z.string(),
         visualPrompt: z.string(),
         motionPrompt: z.string().optional()
@@ -77,6 +78,7 @@ const editPlanPayloadSchema = z.object({
       after: z.object({
         title: z.string(),
         voiceover: z.string().optional(),
+        narrationVoice: z.enum(["male-clear", "male-deep", "female-natural"]).optional(),
         thumbnailTone: z.string(),
         visualPrompt: z.string(),
         motionPrompt: z.string().optional()
@@ -132,11 +134,13 @@ function normalizedRegenerate(
 
   const regenerate = new Set(change.regenerate);
   const afterVoiceover = change.after.voiceover ?? scene.voiceover;
+  const afterVoice = change.after.narrationVoice ?? scene.style.narrationVoice;
   const afterMotion = change.after.motionPrompt ?? scene.motionPrompt;
   if (afterVoiceover !== scene.voiceover) {
     regenerate.add("audio");
     regenerate.add("caption");
   }
+  if (afterVoice !== scene.style.narrationVoice) regenerate.add("audio");
   if (
     change.after.visualPrompt !== scene.visualPrompt
     || change.after.thumbnailTone !== (scene.style.theme.includes("light") ? "light" : "dark")
@@ -180,6 +184,7 @@ function normalizeEditPayload(
       before: {
         title: scene.title,
         voiceover: scene.voiceover,
+        narrationVoice: scene.style.narrationVoice,
         thumbnailTone: scene.style.theme.includes("light") ? "light" : "dark",
         visualPrompt: scene.visualPrompt,
         motionPrompt: scene.motionPrompt
@@ -187,6 +192,7 @@ function normalizeEditPayload(
       after: {
         ...change.after,
         voiceover: change.after.voiceover ?? scene.voiceover,
+        narrationVoice: change.after.narrationVoice ?? scene.style.narrationVoice,
         motionPrompt: change.after.motionPrompt ?? scene.motionPrompt
       },
       regenerate: normalizedRegenerate(
@@ -613,11 +619,11 @@ export async function createEditPlan(params: {
         {
           role: "system",
           content:
-            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. Never return changes for a scene outside an explicitly requested scene or range. Scene insertion and deletion are not supported in this editor, so every returned change must use status updated. A request without a specific scene target that changes language, narration, captions, style, palette, pacing, music, fonts, logos, or watermarks applies to the full video. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. Return strict JSON only."
+            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. Never return changes for a scene outside an explicitly requested scene or range. Scene insertion and deletion are not supported in this editor, so every returned change must use status updated. A request without a specific scene target that changes language, narration, captions, style, palette, pacing, music, fonts, logos, watermarks, or voice applies to the full video. Supported narrationVoice values are male-clear for a clear energetic male voice, male-deep for a calm authoritative male voice, and female-natural for a warm natural female voice. Only change narrationVoice when the user asks for an audio voice or vocal character change. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. Return strict JSON only."
         },
         {
           role: "user",
-          content: `Current version scenes:\n${JSON.stringify(params.version.scenes, null, 2)}\n\nUser edit request:\n${params.request}${globalDirective}${retry ? "\n\nYour previous attempt was incomplete. Rebuild the entire plan and satisfy every requirement above." : ""}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated"|"added"|"deleted"|"unchanged", "before": { "title": string, "voiceover": string, "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
+          content: `Current version scenes:\n${JSON.stringify(params.version.scenes, null, 2)}\n\nUser edit request:\n${params.request}${globalDirective}${retry ? "\n\nYour previous attempt was incomplete. Rebuild the entire plan and satisfy every requirement above." : ""}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
         }
       ],
       temperature: globalChineseRewrite ? 0.2 : 0.45

@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateProjectVoices } from "@/lib/audio-assets";
 import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
+import { isNarrationVoice } from "@/lib/voice-profiles";
 
 const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
   versionId: z.string().min(1).max(200),
-  sceneNumbers: z.array(z.number().int().positive()).optional()
+  sceneNumbers: z.array(z.number().int().positive()).optional(),
+  narrationVoice: z.string().refine(isNarrationVoice).optional()
 });
 
 export const maxDuration = 120;
@@ -29,11 +31,15 @@ export async function POST(request: Request) {
     scene.sceneNumber,
     scene.assets.find((asset) => asset.type === "audio" && asset.url)?.r2Key
   ]));
-  const updated = await generateProjectVoices(project, body.sceneNumbers);
+  if (body.narrationVoice && !body.sceneNumbers?.length) {
+    return NextResponse.json({ error: "选择音色时必须指定要更新的场景。" }, { status: 400 });
+  }
+  const updated = await generateProjectVoices(project, body.sceneNumbers, body.narrationVoice);
 
   await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
     replaceAudio: true,
-    sceneNumbers: body.sceneNumbers
+    sceneNumbers: body.sceneNumbers,
+    updateStyles: Boolean(body.narrationVoice)
   });
 
   const targets = body.sceneNumbers?.length

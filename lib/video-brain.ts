@@ -1,4 +1,5 @@
 import { analyzeEditIntent } from "@/lib/edit-intent";
+import { narrationVoiceFromRequest } from "@/lib/voice-profiles";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
 const palettes = {
@@ -338,6 +339,7 @@ export function buildEditPlanFromRequest(params: {
   editNumber: number;
 }): EditPlan {
   const tone = detectTone(params.request);
+  const requestedVoice = narrationVoiceFromRequest(params.request);
   const intent = analyzeEditIntent(
     params.request,
     params.version.scenes.map((scene) => scene.sceneNumber)
@@ -360,6 +362,7 @@ export function buildEditPlanFromRequest(params: {
       before: {
         title: scene.title,
         voiceover: scene.voiceover,
+        narrationVoice: scene.style.narrationVoice,
         thumbnailTone: scene.style.theme.includes("light") ? "light" : "dark",
         visualPrompt: scene.visualPrompt,
         motionPrompt: scene.motionPrompt
@@ -367,11 +370,14 @@ export function buildEditPlanFromRequest(params: {
       after: {
         title: scene.title,
         voiceover: scene.voiceover,
+        narrationVoice: requestedVoice ?? scene.style.narrationVoice,
         thumbnailTone: tone === "light" ? "light" : "dark",
         visualPrompt: `${scene.visualPrompt} Revision request: ${params.request}. Apply a ${tone} art direction, keep layout readable, and preserve the scene purpose.`,
         motionPrompt: scene.motionPrompt
       },
-      regenerate: ["image", "clip", "thumbnail", "render"]
+      regenerate: requestedVoice
+        ? ["audio", "render"]
+        : ["image", "clip", "thumbnail", "render"]
     })),
     createdAt: new Date().toISOString()
   };
@@ -392,7 +398,8 @@ export function applyEditPlan(project: Project, plan: EditPlan): Project {
       style: {
         ...scene.style,
         theme,
-        palette: change.after.thumbnailTone === "light" ? palettes.light : scene.style.palette
+        palette: change.after.thumbnailTone === "light" ? palettes.light : scene.style.palette,
+        narrationVoice: change.after.narrationVoice ?? scene.style.narrationVoice
       }
     };
   });

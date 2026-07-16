@@ -338,7 +338,12 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
 export async function persistGeneratedSceneAssets(
   versionId: string,
   scenes: Scene[],
-  options: { replaceAudio?: boolean; replaceImages?: boolean; sceneNumbers?: number[] } = {}
+  options: {
+    replaceAudio?: boolean;
+    replaceImages?: boolean;
+    sceneNumbers?: number[];
+    updateStyles?: boolean;
+  } = {}
 ) {
   if (!canPersist()) return;
 
@@ -357,6 +362,14 @@ export async function persistGeneratedSceneAssets(
     if (selected && !selected.has(scene.sceneNumber)) continue;
     const sceneId = sceneIdByNumber.get(scene.sceneNumber);
     if (!sceneId) continue;
+
+    if (options.updateStyles) {
+      queries.push(sql`
+        update scenes
+        set style_json = ${JSON.stringify(scene.style)}
+        where id = ${sceneId}
+      `);
+    }
 
     if (options.replaceAudio) {
       deletionIndexes.push(queries.length);

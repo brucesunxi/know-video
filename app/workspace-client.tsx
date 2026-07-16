@@ -33,8 +33,13 @@ import {
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
 import { replacementAssetTypes } from "@/lib/asset-policy";
+import {
+  DEFAULT_NARRATION_VOICE,
+  narrationVoiceProfile,
+  narrationVoiceProfiles
+} from "@/lib/voice-profiles";
 import { VIDEO_FPS } from "@/video/config";
-import type { ChatMessage, EditChange, EditPlan, GenerationOptions, Project, ProjectListItem, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, GenerationOptions, NarrationVoice, Project, ProjectListItem, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
@@ -540,14 +545,17 @@ type SceneTextEdits = Pick<Scene, "title" | "voiceover" | "visualPrompt" | "moti
 function ScenePanel({
   scene,
   isBusy,
-  onSave
+  onSave,
+  onVoiceChange
 }: {
   scene?: Scene;
   isBusy: boolean;
   onSave: (sceneNumber: number, edits: SceneTextEdits) => void;
+  onVoiceChange: (sceneNumber: number, voice: NarrationVoice) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<SceneTextEdits>({ title: "", voiceover: "", visualPrompt: "", motionPrompt: "" });
+  const [selectedVoice, setSelectedVoice] = useState<NarrationVoice>(DEFAULT_NARRATION_VOICE);
   const imageMetadata = scene?.assets.find((asset) => asset.type === "image")?.metadata;
   const qualityLabel = imageMetadata?.quality === "premium"
     || String(imageMetadata?.model ?? "").includes("klein-9b")
@@ -562,6 +570,7 @@ function ScenePanel({
       visualPrompt: scene.visualPrompt,
       motionPrompt: scene.motionPrompt
     });
+    setSelectedVoice(scene.style.narrationVoice ?? DEFAULT_NARRATION_VOICE);
     setEditing(false);
   }, [scene?.id]);
 
@@ -571,19 +580,45 @@ function ScenePanel({
     || draft.visualPrompt.trim() !== scene?.visualPrompt
     || draft.motionPrompt.trim() !== scene?.motionPrompt
   );
+  const voiceChanged = Boolean(scene) && selectedVoice !== (scene?.style.narrationVoice ?? DEFAULT_NARRATION_VOICE);
+  const voiceProfile = narrationVoiceProfile(selectedVoice);
 
   return (
-    <section className="kv-scene-panel">
+    <section className="kv-scene-panel" id="kv-scene-panel">
       <div className="kv-strip-heading">
-        <div>
+        <div className="kv-scene-heading-copy">
           <h3>{editing ? `编辑场景 ${scene?.sceneNumber ?? ""}` : "场景制作说明"}</h3>
           <span>{scene?.style.theme ?? "theme"} · {qualityLabel}</span>
         </div>
         {scene ? (
-          <button disabled={isBusy} onClick={() => setEditing((current) => !current)} type="button">
-            {editing ? <RotateCcw size={15} /> : <Pencil size={15} />}
-            {editing ? "取消编辑" : "直接编辑"}
-          </button>
+          <div className="kv-scene-panel-actions">
+            <label className="kv-voice-picker">
+              <span>配音音色</span>
+              <select
+                aria-label="当前场景配音音色"
+                disabled={isBusy}
+                onChange={(event) => setSelectedVoice(event.target.value as NarrationVoice)}
+                value={selectedVoice}
+              >
+                {narrationVoiceProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>{profile.label}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              disabled={isBusy || !voiceChanged}
+              onClick={() => onVoiceChange(scene.sceneNumber, selectedVoice)}
+              title={voiceProfile.description}
+              type="button"
+            >
+              {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Mic2 size={15} />}
+              应用音色
+            </button>
+            <button disabled={isBusy} onClick={() => setEditing((current) => !current)} type="button">
+              {editing ? <RotateCcw size={15} /> : <Pencil size={15} />}
+              {editing ? "取消编辑" : "直接编辑"}
+            </button>
+          </div>
         ) : null}
       </div>
       {editing && scene ? (
@@ -734,6 +769,11 @@ function ChangeCard({ change }: { change: EditChange }) {
       label: "旁白",
       before: change.before.voiceover,
       after: change.after.voiceover
+    },
+    {
+      label: "配音音色",
+      before: narrationVoiceProfile(change.before.narrationVoice).label,
+      after: narrationVoiceProfile(change.after.narrationVoice).label
     },
     {
       label: "画面方向",
@@ -921,7 +961,8 @@ function StudioScreen({
   assetsOpen,
   onToggleAssets,
   onRemoveAsset,
-  onSaveScene
+  onSaveScene,
+  onVoiceChange
 }: {
   project: Project;
   messages: ChatMessage[];
@@ -953,6 +994,7 @@ function StudioScreen({
   onToggleAssets: () => void;
   onRemoveAsset: (assetId: string) => void;
   onSaveScene: (sceneNumber: number, edits: SceneTextEdits) => void;
+  onVoiceChange: (sceneNumber: number, voice: NarrationVoice) => void;
 }) {
   const playerRef = useRef<PlayerRef>(null);
   const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === selectedScene) ?? project.currentVersion.scenes[0];
@@ -1129,7 +1171,12 @@ function StudioScreen({
               </section>
             )}
             <Storyboard onSelect={selectScene} scenes={project.currentVersion.scenes} selectedScene={selectedScene} />
-            <ScenePanel isBusy={isBusy} onSave={onSaveScene} scene={scene} />
+            <ScenePanel
+              isBusy={isBusy}
+              onSave={onSaveScene}
+              onVoiceChange={onVoiceChange}
+              scene={scene}
+            />
           </>
         ) : (
           <StoryboardBoard scenes={project.currentVersion.scenes} />
@@ -1888,7 +1935,7 @@ export function WorkspaceClient({
     }
   }
 
-  async function regenerateAudio(sceneNumbers?: number[]) {
+  async function regenerateAudio(sceneNumbers?: number[], narrationVoice?: NarrationVoice) {
     setIsBusy(true);
     setBusyAction("generating-audio");
     setErrorMessage(undefined);
@@ -1899,7 +1946,8 @@ export function WorkspaceClient({
         body: JSON.stringify({
           projectId: project.id,
           versionId: project.currentVersion.id,
-          sceneNumbers
+          sceneNumbers,
+          narrationVoice
         })
       });
       const data = await response.json() as { project?: Project; error?: string };
@@ -1909,7 +1957,9 @@ export function WorkspaceClient({
         role: "assistant",
         type: "text",
         content: sceneNumbers?.length === 1
-          ? `场景 ${sceneNumbers[0]} 的配音已经重新生成。`
+          ? narrationVoice
+            ? `场景 ${sceneNumbers[0]} 已切换为${narrationVoiceProfile(narrationVoice).label}，配音已经重新生成。`
+            : `场景 ${sceneNumbers[0]} 的配音已经重新生成。`
           : "全部场景配音已经重新生成。",
         versionId: data.project.currentVersion.id
       }, true);
@@ -2150,6 +2200,7 @@ export function WorkspaceClient({
           onToggleAssets={toggleAssets}
           onRemoveAsset={removeSceneAsset}
           onSaveScene={saveSceneEdits}
+          onVoiceChange={(sceneNumber, voice) => void regenerateAudio([sceneNumber], voice)}
           onViewChange={setStudioView}
           pendingPlan={pendingPlan}
           project={project}

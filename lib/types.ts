@@ -1,4 +1,5 @@
 export type AssetType = "image" | "audio" | "clip" | "thumbnail" | "caption" | "render";
+export type NarrationVoice = "male-clear" | "male-deep" | "female-natural";
 
 export type GenerationOptions = {
   duration: "15" | "30" | "45" | "60";
@@ -27,6 +28,7 @@ export type Scene = {
     theme: string;
     palette: string[];
     mood: string;
+    narrationVoice?: NarrationVoice;
   };
   assets: SceneAsset[];
 };
@@ -92,6 +94,7 @@ export type EditChange = {
   before: {
     title: string;
     voiceover?: string;
+    narrationVoice?: NarrationVoice;
     thumbnailTone: string;
     visualPrompt: string;
     motionPrompt?: string;
@@ -99,6 +102,7 @@ export type EditChange = {
   after: {
     title: string;
     voiceover?: string;
+    narrationVoice?: NarrationVoice;
     thumbnailTone: string;
     visualPrompt: string;
     motionPrompt?: string;

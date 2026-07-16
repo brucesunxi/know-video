@@ -4,6 +4,8 @@ import {
   correctedSpeechRate,
   speechRateForDuration
 } from "@/lib/speech-timing";
+import { narrationVoiceProfile } from "@/lib/voice-profiles";
+import type { NarrationVoice } from "@/lib/types";
 
 const DEFAULT_CHINESE_VOICE = "zh-CN-YunxiNeural";
 
@@ -69,12 +71,18 @@ async function requestAzureSpeech(input: {
   return body;
 }
 
-export async function generateAzureChineseSpeech(text: string, durationSeconds?: number) {
+export async function generateAzureChineseSpeech(
+  text: string,
+  durationSeconds?: number,
+  narrationVoice?: NarrationVoice
+) {
   const key = getOptionalEnv("AZURE_SPEECH_KEY");
   const region = getOptionalEnv("AZURE_SPEECH_REGION");
   if (!key || !region) throw new Error("Chinese speech service is not configured");
 
-  const voice = getOptionalEnv("AZURE_SPEECH_CHINESE_VOICE") || DEFAULT_CHINESE_VOICE;
+  const voice = narrationVoice
+    ? narrationVoiceProfile(narrationVoice).azureVoice
+    : getOptionalEnv("AZURE_SPEECH_CHINESE_VOICE") || DEFAULT_CHINESE_VOICE;
   let rate = speechRateForDuration(text, durationSeconds);
   let body = await requestAzureSpeech({ key, region, voice, text, rate });
   let actualDurationSeconds = assertUsableSpeechAudio(body).durationSeconds;

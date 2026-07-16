@@ -54,6 +54,21 @@ await send("Emulation.setDeviceMetricsOverride", {
 await send("Page.navigate", { url });
 await new Promise((resolve) => setTimeout(resolve, 2_000));
 for (const clickText of clickTexts) {
+  if (clickText.startsWith("scroll:")) {
+    const selector = clickText.slice("scroll:".length);
+    const scrolled = await send("Runtime.evaluate", {
+      expression: `(() => {
+        const element = document.querySelector(${JSON.stringify(selector)});
+        if (!element) return false;
+        element.scrollIntoView({ block: "start" });
+        return true;
+      })()`,
+      returnByValue: true
+    });
+    if (!scrolled.result.value) throw new Error(`Could not find element: ${selector}`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    continue;
+  }
   const clicked = await send("Runtime.evaluate", {
     expression: `(() => {
       const target = ${JSON.stringify(clickText)};

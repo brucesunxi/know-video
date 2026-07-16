@@ -19,6 +19,7 @@
     "image:continuity:smoke": "node scripts/image-continuity-smoke.mjs",
     "speech:timing:smoke": "node scripts/speech-timing-smoke.mjs",
     "audio:quality:smoke": "node scripts/audio-quality-smoke.mjs",
+    "voice:profiles:smoke": "node scripts/voice-profiles-smoke.mjs",
     "asset:policy:smoke": "node scripts/asset-policy-smoke.mjs",
     "version:restore:smoke": "node scripts/version-restore-smoke.mjs",
     "project:create:smoke": "node scripts/project-creation-smoke.mjs",

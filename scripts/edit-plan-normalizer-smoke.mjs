@@ -185,4 +185,18 @@ const unsupportedTopology = normalizeEditPlanAgainstScenes({
 }, [scene]);
 assert.deepEqual(Array.from(unsupportedTopology.changes), []);
 
+const voiceChange = normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "把第 1 场景换成自然女声",
+  changes: [{
+    sceneNumber: 1,
+    status: "updated",
+    before: side,
+    after: { ...side, narrationVoice: "female-natural" },
+    regenerate: []
+  }]
+}, [scene]);
+assert.equal(voiceChange.changes[0].after.narrationVoice, "female-natural");
+assert.deepEqual(Array.from(voiceChange.changes[0].regenerate), ["audio", "render"]);
+
 console.log("Edit plan normalization smoke checks passed.");

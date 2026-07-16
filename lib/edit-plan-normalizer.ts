@@ -20,14 +20,20 @@ export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) 
     seen.add(change.sceneNumber);
 
     const currentTone = scene.style.theme.includes("light") ? "light" : "dark";
+    const title = change.after.title ?? scene.title;
     const voiceover = change.after.voiceover ?? scene.voiceover;
+    const narrationVoice = change.after.narrationVoice ?? scene.style.narrationVoice;
+    const thumbnailTone = change.after.thumbnailTone ?? currentTone;
+    const visualPrompt = change.after.visualPrompt ?? scene.visualPrompt;
     const motionPrompt = change.after.motionPrompt ?? scene.motionPrompt;
     const visualChanged = !preserveVisualAssets && (
-      change.after.visualPrompt !== scene.visualPrompt
-      || change.after.thumbnailTone !== currentTone
+      visualPrompt !== scene.visualPrompt
+      || thumbnailTone !== currentTone
     );
-    const audioChanged = voiceover !== scene.voiceover;
-    const captionChanged = change.after.title !== scene.title || audioChanged;
+    const voiceoverChanged = voiceover !== scene.voiceover;
+    const voiceChanged = narrationVoice !== scene.style.narrationVoice;
+    const audioChanged = voiceoverChanged || voiceChanged;
+    const captionChanged = title !== scene.title || voiceoverChanged;
     const motionChanged = motionPrompt !== scene.motionPrompt;
     if (!visualChanged && !audioChanged && !captionChanged && !motionChanged) return [];
     const regenerate = new Set<AssetType>();
@@ -46,13 +52,18 @@ export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) 
       before: {
         title: scene.title,
         voiceover: scene.voiceover,
+        narrationVoice: scene.style.narrationVoice,
         thumbnailTone: currentTone,
         visualPrompt: scene.visualPrompt,
         motionPrompt: scene.motionPrompt
       },
       after: {
         ...change.after,
+        title,
         voiceover,
+        narrationVoice,
+        thumbnailTone,
+        visualPrompt,
         motionPrompt
       },
       regenerate: Array.from(regenerate)
