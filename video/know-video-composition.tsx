@@ -54,11 +54,22 @@ function activeCaption(text: string, frame: number, durationInFrames: number) {
   const totalWeight = parts.reduce((sum, part) => sum + Math.max(1, part.length), 0);
   const position = (frame / Math.max(1, durationInFrames - 1)) * totalWeight;
   let cursor = 0;
-  for (const part of parts) {
-    cursor += Math.max(1, part.length);
-    if (position <= cursor) return part;
+  for (const [index, part] of parts.entries()) {
+    const weight = Math.max(1, part.length);
+    const startPosition = cursor;
+    cursor += weight;
+    if (position <= cursor) {
+      const startFrame = Math.round((startPosition / totalWeight) * durationInFrames);
+      const endFrame = Math.round((cursor / totalWeight) * durationInFrames);
+      return { text: part, index, startFrame, endFrame };
+    }
   }
-  return parts[parts.length - 1];
+  return {
+    text: parts[parts.length - 1],
+    index: parts.length - 1,
+    startFrame: Math.max(0, durationInFrames - 1),
+    endFrame: durationInFrames
+  };
 }
 
 function motionValues(scene: Scene, frame: number, durationInFrames: number) {
@@ -66,16 +77,71 @@ function motionValues(scene: Scene, frame: number, durationInFrames: number) {
   const direction = scene.motionPrompt.toLowerCase();
   const pansRight = direction.includes("right") || direction.includes("向右");
   const pansLeft = direction.includes("left") || direction.includes("向左");
+  const movesUp = direction.includes("upward") || direction.includes("rise") || direction.includes("向上") || direction.includes("上升");
+  const movesDown = direction.includes("downward") || direction.includes("descend") || direction.includes("向下") || direction.includes("下降");
+  const orbit = direction.includes("orbit") || direction.includes("arc") || direction.includes("环绕") || direction.includes("弧线");
   const pullsBack = direction.includes("pull") || direction.includes("zoom out") || direction.includes("拉远");
   const x = pansRight
-    ? interpolate(frame, progressRange, [-2.2, 2.2])
+    ? interpolate(frame, progressRange, [-3.2, 3.2])
     : pansLeft
-      ? interpolate(frame, progressRange, [2.2, -2.2])
-      : interpolate(frame, progressRange, [0, scene.sceneNumber % 2 === 0 ? -1.4 : 1.4]);
+      ? interpolate(frame, progressRange, [3.2, -3.2])
+      : orbit
+        ? interpolate(frame, progressRange, [scene.sceneNumber % 2 === 0 ? 2.4 : -2.4, scene.sceneNumber % 2 === 0 ? -2.4 : 2.4])
+        : interpolate(frame, progressRange, [0, scene.sceneNumber % 2 === 0 ? -1.6 : 1.6]);
+  const y = movesUp
+    ? interpolate(frame, progressRange, [2.4, -2.4])
+    : movesDown
+      ? interpolate(frame, progressRange, [-2.4, 2.4])
+      : orbit
+        ? interpolate(frame, progressRange, [-1.2, 1.2])
+        : 0;
   const scale = pullsBack
-    ? interpolate(frame, progressRange, [1.12, 1.035])
-    : interpolate(frame, progressRange, [1.035, 1.105]);
-  return { x, scale };
+    ? interpolate(frame, progressRange, [1.14, 1.035])
+    : interpolate(frame, progressRange, [1.035, 1.115]);
+  return { x, y, scale };
+}
+
+type TransitionKind = "dissolve" | "push-left" | "push-right" | "zoom" | "wipe";
+
+function transitionKind(scene: Scene): TransitionKind {
+  const direction = scene.motionPrompt.toLowerCase();
+  if (direction.includes("wipe") || direction.includes("遮罩") || direction.includes("擦除")) return "wipe";
+  if (direction.includes("right") || direction.includes("向右")) return "push-right";
+  if (direction.includes("left") || direction.includes("向左")) return "push-left";
+  if (direction.includes("zoom") || direction.includes("push in") || direction.includes("推进") || direction.includes("推近")) return "zoom";
+  return scene.sceneNumber % 4 === 0
+    ? "wipe"
+    : scene.sceneNumber % 3 === 0
+      ? "zoom"
+      : "dissolve";
+}
+
+function transitionStyle(kind: TransitionKind, frame: number, transitionFrames: number, active: boolean) {
+  if (!active || frame >= transitionFrames) return {};
+  const progress = interpolate(frame, [0, transitionFrames], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  if (kind === "push-left") return { transform: `translateX(${(1 - progress) * 8}%)` };
+  if (kind === "push-right") return { transform: `translateX(${(progress - 1) * 8}%)` };
+  if (kind === "zoom") return { transform: `scale(${1.055 - progress * 0.055})` };
+  if (kind === "wipe") return { clipPath: `inset(0 ${Math.max(0, 100 - progress * 100)}% 0 0)` };
+  return {};
+}
+
+function audioVolume(frame: number, durationInFrames: number) {
+  const fadeFrames = Math.max(2, Math.min(Math.round(VIDEO_FPS * 0.16), Math.floor(durationInFrames / 4)));
+  const fadeIn = interpolate(frame, [0, fadeFrames], [0, 0.96], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const fadeOut = interpolate(
+    frame,
+    [Math.max(fadeFrames, durationInFrames - fadeFrames), durationInFrames],
+    [0.96, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  );
+  return Math.min(fadeIn, fadeOut);
 }
 
 function SceneFrame({
@@ -127,17 +193,46 @@ function SceneFrame({
   const visualFrame = Math.min(frame, contentDurationInFrames - 1);
   const motion = motionValues(scene, visualFrame, contentDurationInFrames);
   const caption = activeCaption(scene.voiceover, visualFrame, contentDurationInFrames);
+  const captionEntrance = interpolate(
+    visualFrame,
+    [caption.startFrame, Math.min(caption.endFrame, caption.startFrame + Math.round(VIDEO_FPS * 0.14))],
+    [0, 1],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  );
+  const titleHold = interpolate(
+    visualFrame,
+    [0, Math.round(contentDurationInFrames * 0.68), Math.round(contentDurationInFrames * 0.82)],
+    [1, 1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  );
+  const transition = transitionKind(scene);
+  const accent = scene.style.palette.find((color) => /^#[0-9a-f]{6}$/i.test(color)) ?? "#22c7b8";
   const clip = scene.assets.find((asset) => asset.type === "clip" && asset.url)?.url;
   const image = scene.assets.find((asset) => asset.type === "image" && asset.url)?.url;
   const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url)?.url;
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "#08111f", opacity: fade, overflow: "hidden" }}>
+    <AbsoluteFill
+      style={{
+        backgroundColor: "#08111f",
+        opacity: fade,
+        overflow: "hidden",
+        ...transitionStyle(transition, frame, transitionFrames, hasTransitionIn)
+      }}
+    >
       {clip ? (
         <OffthreadVideo
           muted
           src={clip}
-          style={{ height: "106%", objectFit: "cover", position: "absolute", top: "-3%", width: "106%" }}
+          style={{
+            height: "106%",
+            left: `${motion.x}%`,
+            objectFit: "cover",
+            position: "absolute",
+            top: `${-3 + motion.y}%`,
+            transform: `scale(${motion.scale})`,
+            width: "106%"
+          }}
         />
       ) : image ? (
         <Img
@@ -147,7 +242,7 @@ function SceneFrame({
             left: `${motion.x}%`,
             objectFit: "cover",
             position: "absolute",
-            top: "-3%",
+            top: `${-3 + motion.y}%`,
             transform: `scale(${motion.scale})`,
             width: "106%"
           }}
@@ -159,7 +254,7 @@ function SceneFrame({
       {hasTransitionIn && frame < transitionFrames ? (
         <AbsoluteFill
           style={{
-            background: "linear-gradient(90deg, transparent 0%, rgba(34,199,184,.24) 48%, transparent 100%)",
+            background: `linear-gradient(90deg, transparent 0%, ${accent}44 48%, transparent 100%)`,
             opacity: interpolate(frame, [0, transitionFrames], [0.7, 0], { extrapolateRight: "clamp" }),
             transform: `translateX(${interpolate(frame, [0, transitionFrames], [-35, 35])}%)`
           }}
@@ -175,7 +270,7 @@ function SceneFrame({
           fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif",
           left: 74,
           maxWidth: 1320,
-          opacity: entrance * copyOpacity,
+          opacity: entrance * copyOpacity * titleHold,
           position: "absolute",
           right: 74,
           transform: `translateY(${(1 - entrance) * 38}px)`
@@ -205,28 +300,28 @@ function SceneFrame({
           maxWidth: 1420,
           padding: "13px 24px 15px",
           position: "absolute",
-          transform: "translateX(-50%)",
           borderRadius: 8,
           background: "rgba(2,8,18,.76)",
           color: "#fff",
           fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif",
-          fontSize: captionFontSize(caption),
+          fontSize: captionFontSize(caption.text),
           fontWeight: 600,
           letterSpacing: 0,
           lineHeight: 1.35,
           overflowWrap: "anywhere",
-          opacity: copyOpacity,
+          opacity: copyOpacity * captionEntrance,
           textAlign: "center",
-          textShadow: "0 2px 12px rgba(0,0,0,.65)"
+          textShadow: "0 2px 12px rgba(0,0,0,.65)",
+          transform: `translate(-50%, ${(1 - captionEntrance) * 8}px)`
         }}
-      >{caption}</div>
+      >{caption.text}</div>
       <div style={{ bottom: 52, color: "rgba(255,255,255,.7)", fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif", fontSize: 19, left: 74, opacity: copyOpacity, position: "absolute" }}>{projectTitle}</div>
       <div style={{ background: "rgba(255,255,255,.22)", bottom: 56, height: 5, left: 520, opacity: copyOpacity, position: "absolute", right: 74 }}>
-        <div style={{ background: "#22c7b8", height: "100%", width: `${(visualFrame / Math.max(1, contentDurationInFrames - 1)) * 100}%` }} />
+        <div style={{ background: accent, height: "100%", width: `${(visualFrame / Math.max(1, contentDurationInFrames - 1)) * 100}%` }} />
       </div>
       {audio ? (
         <Sequence durationInFrames={contentDurationInFrames}>
-          <Audio src={audio} volume={0.96} />
+          <Audio src={audio} volume={(audioFrame) => audioVolume(audioFrame, contentDurationInFrames)} />
         </Sequence>
       ) : null}
     </AbsoluteFill>

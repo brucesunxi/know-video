@@ -832,6 +832,28 @@ function StudioScreen({
   const missingAudioSceneNumbers = project.currentVersion.scenes
     .filter((item) => !item.assets.some((asset) => asset.type === "audio" && asset.url))
     .map((item) => item.sceneNumber);
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    const handleFrameUpdate = ({ detail }: { detail: { frame: number } }) => {
+      const seconds = detail.frame / VIDEO_FPS;
+      let cursor = 0;
+      const activeScene = project.currentVersion.scenes.find((item) => {
+        cursor += item.durationSeconds;
+        return seconds < cursor;
+      }) ?? project.currentVersion.scenes.at(-1);
+      if (activeScene && activeScene.sceneNumber !== selectedScene) {
+        onSelectScene(activeScene.sceneNumber);
+      }
+    };
+    player.addEventListener("frameupdate", handleFrameUpdate);
+    player.addEventListener("seeked", handleFrameUpdate);
+    return () => {
+      player.removeEventListener("frameupdate", handleFrameUpdate);
+      player.removeEventListener("seeked", handleFrameUpdate);
+    };
+  }, [onSelectScene, project.currentVersion.id, project.currentVersion.scenes, selectedScene]);
+
   function selectScene(sceneNumber: number) {
     const seconds = project.currentVersion.scenes
       .filter((item) => item.sceneNumber < sceneNumber)

@@ -5,7 +5,7 @@ import { renderMedia, selectComposition } from "@remotion/renderer";
 
 const output = process.argv[2] || "/tmp/know-video-smoke.mp4";
 const frameStart = Number.parseInt(process.argv[3] || "0", 10);
-const frameEnd = Number.parseInt(process.argv[4] || "59", 10);
+const frameEnd = Number.parseInt(process.argv[4] || "179", 10);
 if (!Number.isInteger(frameStart) || !Number.isInteger(frameEnd) || frameStart < 0 || frameEnd < frameStart) {
   throw new Error("Frame range must be two positive integers: start end");
 }
@@ -47,20 +47,48 @@ const smokeProject = {
     label: "smoke",
     status: "ready",
     createdAt: new Date(0).toISOString(),
-    durationSeconds: 4,
+    durationSeconds: 6,
     scenes: [
       {
         id: "smoke-scene-1",
         sceneNumber: 1,
         title: "这是一个用于验证长中文标题不会溢出的真实渲染场景",
-        voiceover: "画面、字幕和音频必须同时进入最终视频文件，才能算真正通过导出验证。",
+        voiceover: "画面和字幕进入时间线。",
         visualPrompt: "Render verification",
-        motionPrompt: "Camera pushes in slowly",
-        durationSeconds: 4,
+        motionPrompt: "Camera pans slowly to the right",
+        durationSeconds: 2,
         style: { theme: "cinematic", palette: ["#08111f", "#22c7b8"], mood: "precise" },
         assets: [
           { id: "smoke-image", type: "image", url: pngDataUrl, r2Key: "smoke/image.png" },
           { id: "smoke-audio", type: "audio", url: wavDataUrl(), r2Key: "smoke/audio.wav" }
+        ]
+      },
+      {
+        id: "smoke-scene-2",
+        sceneNumber: 2,
+        title: "镜头运动与旁白衔接",
+        voiceover: "每段旁白自然进入并退出。",
+        visualPrompt: "Audio transition verification",
+        motionPrompt: "Camera pushes in slowly with foreground parallax",
+        durationSeconds: 2,
+        style: { theme: "cinematic", palette: ["#10223d", "#f5c46b"], mood: "flowing" },
+        assets: [
+          { id: "smoke-image-2", type: "image", url: pngDataUrl, r2Key: "smoke/image-2.png" },
+          { id: "smoke-audio-2", type: "audio", url: wavDataUrl(2, 520), r2Key: "smoke/audio-2.wav" }
+        ]
+      },
+      {
+        id: "smoke-scene-3",
+        sceneNumber: 3,
+        title: "预览与最终导出保持一致",
+        voiceover: "最终视频包含完整画面和声音。",
+        visualPrompt: "Final render verification",
+        motionPrompt: "A clean wipe reveals the final composition",
+        durationSeconds: 2,
+        style: { theme: "cinematic", palette: ["#15152a", "#8fd8ff"], mood: "resolved" },
+        assets: [
+          { id: "smoke-image-3", type: "image", url: pngDataUrl, r2Key: "smoke/image-3.png" },
+          { id: "smoke-audio-3", type: "audio", url: wavDataUrl(2, 620), r2Key: "smoke/audio-3.wav" }
         ]
       }
     ]
