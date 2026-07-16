@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { loadProjectForRender } from "@/lib/project-mutations";
+import { loadCurrentProjectForEdit } from "@/lib/project-mutations";
 import { publicRenderError } from "@/lib/render-lifecycle";
-import { createRenderJob, findReusableRenderJob, getRenderJob, updateRenderJob } from "@/lib/render-jobs";
+import { acquireRenderJob, getRenderJob, updateRenderJob } from "@/lib/render-jobs";
 import { startSandboxRender } from "@/lib/vercel-renderer";
 
 const requestSchema = z.object({
@@ -29,9 +29,18 @@ export async function GET(request: Request) {
     : NextResponse.json({ error: "没有找到渲染任务。" }, { status: 404 });
 }
 export async function POST(request: Request) {
-  const body = requestSchema.parse(await request.json());
-  const project = await loadProjectForRender(body.projectId, body.versionId);
-  if (!project) return NextResponse.json({ error: "没有找到需要渲染的视频版本。" }, { status: 404 });
+  const parsed = requestSchema.safeParse(await request.json().catch(() => undefined));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "导出请求格式无效。" }, { status: 400 });
+  }
+  const body = parsed.data;
+  const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
+  if (!project) {
+    return NextResponse.json(
+      { error: "视频版本已经发生变化，请刷新后导出当前版本。" },
+      { status: 409 }
+    );
+  }
   const missingVisuals = project.currentVersion.scenes
     .filter((scene) => !scene.assets.some((asset) => asset.type === "image" || asset.type === "clip"))
     .map((scene) => scene.sceneNumber);
@@ -48,15 +57,33 @@ export async function POST(request: Request) {
       { status: 409 }
     );
   }
-  const reusable = await findReusableRenderJob(body.projectId, body.versionId);
-  if (reusable) {
+  const acquired = await acquireRenderJob(body.projectId, body.versionId);
+  if (!acquired) {
     return NextResponse.json(
-      { renderJob: publicRenderJob(reusable), reused: true },
-      { status: reusable.status === "ready" ? 200 : 202 }
+      { error: "视频版本已经发生变化，请刷新后导出当前版本。" },
+      { status: 409 }
     );
   }
-  const renderJob = await createRenderJob(body.projectId, body.versionId);
-  await updateRenderJob({ jobId: renderJob.id, status: "running", progress: 5 });
+  if (acquired.reused) {
+    return NextResponse.json(
+      { renderJob: publicRenderJob(acquired.renderJob), reused: true },
+      { status: acquired.renderJob.status === "ready" ? 200 : 202 }
+    );
+  }
+  const renderJob = acquired.renderJob;
+  const running = await updateRenderJob({ jobId: renderJob.id, status: "running", progress: 5 });
+  if (!running) {
+    await updateRenderJob({
+      jobId: renderJob.id,
+      status: "cancelled",
+      progress: 0,
+      error: "视频版本已经发生变化。"
+    });
+    return NextResponse.json(
+      { error: "视频版本已经发生变化，请刷新后导出当前版本。" },
+      { status: 409 }
+    );
+  }
 
   try {
     const origin = new URL(request.url).origin;
@@ -67,7 +94,7 @@ export async function POST(request: Request) {
       callbackUrl: `${origin}/api/render-jobs/callback`
     });
     return NextResponse.json(
-      { renderJob: { ...renderJob, status: "running", progress: 5 }, reused: false },
+      { renderJob: running, reused: false },
       { status: 202 }
     );
   } catch (error) {

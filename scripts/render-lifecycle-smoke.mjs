@@ -12,7 +12,13 @@ const output = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports, require: () => ({}) });
-const { matchesRenderSandbox, publicRenderError, renderOutputKey, renderSandboxName } = module.exports;
+const {
+  matchesRenderSandbox,
+  publicRenderError,
+  renderOutputKey,
+  renderSandboxName,
+  versionStatusAfterRenderJob
+} = module.exports;
 
 const jobId = "d90dc514-7d0d-491e-994f-e52c6916cb68";
 assert.equal(renderSandboxName(jobId), `know-video-job-${jobId}`);
@@ -27,5 +33,10 @@ assert.equal(matchesRenderSandbox(jobId), true);
 assert.match(publicRenderError("failed"), /视频合成/);
 assert.match(publicRenderError("cancelled"), /重新导出/);
 assert.equal(publicRenderError("ready"), undefined);
+assert.equal(versionStatusAfterRenderJob("queued"), undefined);
+assert.equal(versionStatusAfterRenderJob("running"), "rendering");
+assert.equal(versionStatusAfterRenderJob("ready"), "ready");
+assert.equal(versionStatusAfterRenderJob("failed"), "draft");
+assert.equal(versionStatusAfterRenderJob("cancelled"), "draft");
 
 console.log("Render lifecycle smoke checks passed.");

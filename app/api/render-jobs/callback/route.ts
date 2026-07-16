@@ -50,6 +50,14 @@ export async function POST(request: Request) {
     await deleteUnreferencedStorageObjects([payload.outputR2Key]).catch((error) => {
       console.error("[render-callback] Unable to clean stale render output:", error);
     });
+    await updateRenderJob({
+      jobId: payload.jobId,
+      status: "cancelled",
+      progress: 0,
+      error: "视频版本已经发生变化，旧版本导出已取消。"
+    }).catch((error) => {
+      console.error("[render-callback] Unable to cancel stale render job:", error);
+    });
   }
   if (["ready", "failed"].includes(payload.status) && payload.sandboxName) {
     after(() => stopRenderSandbox(payload.sandboxName!).catch((error) => {

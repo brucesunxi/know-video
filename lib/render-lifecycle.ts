@@ -19,3 +19,10 @@ export function publicRenderError(status: RenderJob["status"]) {
   }
   return undefined;
 }
+
+export function versionStatusAfterRenderJob(status: RenderJob["status"]) {
+  if (status === "running") return "rendering";
+  if (status === "ready") return "ready";
+  if (status === "failed" || status === "cancelled") return "draft";
+  return undefined;
+}
