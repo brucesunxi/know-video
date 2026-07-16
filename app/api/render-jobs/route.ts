@@ -1,32 +1,66 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { loadCurrentProjectForEdit } from "@/lib/project-mutations";
-import { publicRenderError } from "@/lib/render-lifecycle";
-import { acquireRenderJob, getRenderJob, updateRenderJob } from "@/lib/render-jobs";
-import { startSandboxRender } from "@/lib/vercel-renderer";
+import { publicRenderError, renderSandboxName } from "@/lib/render-lifecycle";
+import { acquireRenderJob, cancelRenderJob, getRenderJob, listRenderJobs, updateRenderJob } from "@/lib/render-jobs";
+import { startSandboxRender, stopRenderSandbox } from "@/lib/vercel-renderer";
 
 const requestSchema = z.object({
   projectId: z.string().uuid(),
   versionId: z.string().uuid()
 });
 
+const cancelSchema = z.object({
+  projectId: z.string().uuid(),
+  jobId: z.string().uuid()
+});
+
 function publicRenderJob(renderJob: Awaited<ReturnType<typeof getRenderJob>>) {
   if (!renderJob || !["failed", "cancelled"].includes(renderJob.status)) return renderJob;
   return {
     ...renderJob,
-    error: publicRenderError(renderJob.status)
+    error: publicRenderError(renderJob.status, renderJob.error)
   };
 }
 
 export const maxDuration = 300;
 
 export async function GET(request: Request) {
-  const jobId = new URL(request.url).searchParams.get("id");
-  if (!jobId) return NextResponse.json({ error: "缺少渲染任务 ID。" }, { status: 400 });
+  const searchParams = new URL(request.url).searchParams;
+  const jobId = searchParams.get("id");
+  const projectId = searchParams.get("projectId");
+  if (projectId) {
+    if (!z.string().uuid().safeParse(projectId).success) {
+      return NextResponse.json({ error: "项目 ID 无效。" }, { status: 400 });
+    }
+    return NextResponse.json({ renderJobs: (await listRenderJobs(projectId)).map(publicRenderJob) });
+  }
+  if (!jobId || !z.string().uuid().safeParse(jobId).success) {
+    return NextResponse.json({ error: "缺少有效的渲染任务 ID。" }, { status: 400 });
+  }
   const renderJob = await getRenderJob(jobId);
   return renderJob
     ? NextResponse.json({ renderJob: publicRenderJob(renderJob) })
     : NextResponse.json({ error: "没有找到渲染任务。" }, { status: 404 });
+}
+
+export async function DELETE(request: Request) {
+  const parsed = cancelSchema.safeParse(await request.json().catch(() => undefined));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "取消导出请求格式无效。" }, { status: 400 });
+  }
+  const renderJob = await cancelRenderJob(parsed.data.projectId, parsed.data.jobId);
+  if (!renderJob) {
+    const existing = await getRenderJob(parsed.data.jobId);
+    if (existing?.projectId === parsed.data.projectId && existing.status === "cancelled") {
+      return NextResponse.json({ renderJob: publicRenderJob(existing) });
+    }
+    return NextResponse.json({ error: "导出任务已结束或不存在，无法取消。" }, { status: 409 });
+  }
+  after(() => stopRenderSandbox(renderSandboxName(renderJob.id)).catch((error) => {
+    console.error("[render-jobs] Unable to stop cancelled render sandbox:", error);
+  }));
+  return NextResponse.json({ renderJob: publicRenderJob(renderJob) });
 }
 export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => undefined));

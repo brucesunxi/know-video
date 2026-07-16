@@ -14,6 +14,7 @@ type RenderJobRow = {
   output_r2_key: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  version_label?: string | null;
 };
 
 function toRenderJob(row: RenderJobRow): RenderJob {
@@ -27,7 +28,8 @@ function toRenderJob(row: RenderJobRow): RenderJob {
     outputR2Key: row.output_r2_key ?? undefined,
     renderUrl: row.output_r2_key ? assetUrlForKey(row.output_r2_key) : undefined,
     createdAt: new Date(row.created_at).toISOString(),
-    updatedAt: new Date(row.updated_at).toISOString()
+    updatedAt: new Date(row.updated_at).toISOString(),
+    versionLabel: row.version_label ?? undefined
   };
 }
 
@@ -148,6 +150,65 @@ export async function getRenderJob(jobId: string) {
   const sql = getSql();
   const rows = await sql`select * from render_jobs where id = ${jobId} limit 1` as RenderJobRow[];
   return rows[0] ? toRenderJob(rows[0]) : undefined;
+}
+
+export async function listRenderJobs(projectId: string, limit = 20) {
+  if (!hasDatabaseUrl()) return [];
+  const sql = getSql();
+  const safeLimit = Math.min(50, Math.max(1, limit));
+  const rows = await sql`
+    select render_jobs.*, project_versions.label as version_label
+    from render_jobs
+    join project_versions on project_versions.id = render_jobs.version_id
+    where render_jobs.project_id = ${projectId}
+      and exists (select 1 from projects where projects.id = ${projectId})
+    order by render_jobs.created_at desc
+    limit ${safeLimit}
+  ` as RenderJobRow[];
+  return rows.map(toRenderJob);
+}
+
+export async function cancelRenderJob(projectId: string, jobId: string) {
+  if (!hasDatabaseUrl()) return undefined;
+  const sql = getSql();
+  const results = await sql.transaction([
+    sql`select pg_advisory_xact_lock(hashtextextended(${jobId}, 0))`,
+    sql`
+      with target as (
+        select id
+        from render_jobs
+        where id = ${jobId}
+          and project_id = ${projectId}
+          and status in ('queued', 'running')
+        for update
+      )
+      update render_jobs
+      set status = 'cancelled',
+          progress = 0,
+          error = '用户已取消本次导出。',
+          output_r2_key = null,
+          updated_at = now()
+      from target
+      where render_jobs.id = target.id
+      returning render_jobs.*
+    `,
+    sql`
+      update project_versions
+      set status = 'draft', render_url = null
+      where id = (
+        select version_id from render_jobs
+        where id = ${jobId} and project_id = ${projectId} and status = 'cancelled'
+      )
+        and status = 'rendering'
+        and exists (
+          select 1 from projects
+          where projects.id = ${projectId}
+            and projects.current_version_id = project_versions.id
+        )
+    `
+  ]);
+  const row = (results[1] as RenderJobRow[])[0];
+  return row ? toRenderJob(row) : undefined;
 }
 
 export async function updateRenderJob(input: {

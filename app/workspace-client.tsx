@@ -75,6 +75,24 @@ function durationLabel(seconds: number) {
   return minutes > 0 ? `${minutes}:${String(rest).padStart(2, "0")}` : `0:${String(rest).padStart(2, "0")}`;
 }
 
+function renderJobStatus(job: RenderJob) {
+  if (job.status === "ready") return "已完成";
+  if (job.status === "running") return `合成中 ${job.progress}%`;
+  if (job.status === "queued") return "等待中";
+  if (job.status === "cancelled") return "已取消";
+  return "失败";
+}
+
+function renderJobTime(job: RenderJob) {
+  if (!job.createdAt) return "刚刚";
+  return new Date(job.createdAt).toLocaleString("zh-CN", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 function uniqueRegenerate(plan: EditPlan) {
   return Array.from(new Set(plan.changes.flatMap((change) => change.regenerate)))
     .map(assetTypeLabel)
@@ -952,6 +970,12 @@ function StudioScreen({
   onRegenerateAudio,
   onExport,
   exportProgress,
+  activeRenderJobId,
+  renderJobs,
+  exportsOpen,
+  exportsLoading,
+  onToggleExports,
+  onCancelExport,
   versions,
   versionsOpen,
   versionsLoading,
@@ -984,6 +1008,12 @@ function StudioScreen({
   onRegenerateAudio: (sceneNumbers?: number[]) => void;
   onExport: () => void;
   exportProgress?: number;
+  activeRenderJobId?: string;
+  renderJobs: RenderJob[];
+  exportsOpen: boolean;
+  exportsLoading: boolean;
+  onToggleExports: () => void;
+  onCancelExport: (jobId: string) => void;
   versions: ProjectVersionSummary[];
   versionsOpen: boolean;
   versionsLoading: boolean;
@@ -1067,6 +1097,10 @@ function StudioScreen({
               <History size={16} />
               版本
             </button>
+            <button className={exportsOpen ? "active" : ""} onClick={onToggleExports} type="button">
+              <FileVideo2 size={16} />
+              导出记录
+            </button>
             <button className={assetsOpen ? "active" : ""} disabled={isBusy} onClick={onToggleAssets} type="button">
               {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <ImagePlus size={16} />}
               {uploadProgress !== undefined ? `上传 ${uploadProgress}%` : "素材"}
@@ -1100,6 +1134,12 @@ function StudioScreen({
                   ? "下载 MP4"
                   : "导出 MP4"}
             </button>
+            {exportProgress !== undefined && activeRenderJobId ? (
+              <button className="kv-cancel-export" onClick={() => onCancelExport(activeRenderJobId)} type="button">
+                <X size={16} />
+                取消
+              </button>
+            ) : null}
           </div>
         </div>
         {missingAudioSceneNumbers.length > 0 ? (
@@ -1140,6 +1180,58 @@ function StudioScreen({
                     ) : null}
                   </article>
                 ))}
+              </div>
+            )}
+          </section>
+        ) : null}
+        {exportsOpen ? (
+          <section className="kv-export-panel">
+            <div className="kv-strip-heading">
+              <div>
+                <span className="kv-eyebrow">导出记录</span>
+                <h3>MP4 合成任务与成片</h3>
+              </div>
+              <span>{renderJobs.length} 条记录</span>
+            </div>
+            {exportsLoading ? (
+              <div className="kv-version-loading"><Loader2 className="kv-spin" size={18} />正在读取导出记录...</div>
+            ) : renderJobs.length === 0 ? (
+              <div className="kv-export-empty">
+                <FileVideo2 size={20} />
+                <span>当前项目还没有导出记录</span>
+              </div>
+            ) : (
+              <div className="kv-export-list">
+                {renderJobs.map((job) => {
+                  const active = job.status === "queued" || job.status === "running";
+                  return (
+                    <article className={`status-${job.status}`} key={job.id}>
+                      <div className="kv-export-summary">
+                        <strong>{job.versionLabel ?? `版本 ${job.versionId.slice(0, 8)}`}</strong>
+                        <span>{renderJobStatus(job)}</span>
+                      </div>
+                      <time>{renderJobTime(job)}</time>
+                      {active ? (
+                        <div className="kv-export-progress" aria-label={`导出进度 ${job.progress}%`}>
+                          <span style={{ width: `${Math.max(4, job.progress)}%` }} />
+                        </div>
+                      ) : null}
+                      {job.error && job.status === "failed" ? <p>{job.error}</p> : null}
+                      <div className="kv-export-actions">
+                        {job.status === "ready" && job.renderUrl ? (
+                          <a download href={job.renderUrl}>
+                            <Download size={15} />下载 MP4
+                          </a>
+                        ) : null}
+                        {active ? (
+                          <button onClick={() => onCancelExport(job.id)} type="button">
+                            <X size={15} />取消导出
+                          </button>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -1226,6 +1318,10 @@ export function WorkspaceClient({
   const [versions, setVersions] = useState<ProjectVersionSummary[]>([]);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionsLoading, setVersionsLoading] = useState(false);
+  const [renderJobs, setRenderJobs] = useState<RenderJob[]>([]);
+  const [exportsOpen, setExportsOpen] = useState(false);
+  const [exportsLoading, setExportsLoading] = useState(false);
+  const [activeRenderJobId, setActiveRenderJobId] = useState<string | undefined>(initialProject.currentVersion.renderJobId);
   const [uploadProgress, setUploadProgress] = useState<number | undefined>();
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [generationOptions, setGenerationOptions] = useState<GenerationOptions>({
@@ -1240,6 +1336,7 @@ export function WorkspaceClient({
   const [projectActionBusy, setProjectActionBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recoveringRenderRef = useRef<string>();
+  const cancelledRenderIdsRef = useRef(new Set<string>());
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
 
@@ -1247,11 +1344,20 @@ export function WorkspaceClient({
     const jobId = project.currentVersion.renderJobId;
     if (!jobId || project.currentVersion.renderUrl || recoveringRenderRef.current === jobId) return;
     recoveringRenderRef.current = jobId;
+    setActiveRenderJobId(jobId);
     let cancelled = false;
     setExportProgress((current) => current ?? 5);
-    void waitForRenderJob(jobId, () => cancelled, setExportProgress)
+    void waitForRenderJob(
+      jobId,
+      () => cancelled || cancelledRenderIdsRef.current.has(jobId),
+      (progress) => {
+        setExportProgress(progress);
+        setRenderJobs((current) => current.map((job) => job.id === jobId ? { ...job, progress } : job));
+      }
+    )
       .then((completed) => {
         if (!completed || cancelled) return;
+        setRenderJobs((current) => [completed, ...current.filter((job) => job.id !== completed.id)]);
         if (completed.status !== "ready" || !completed.renderUrl) {
           throw new Error(completed.error || "MP4 渲染失败。");
         }
@@ -1275,13 +1381,14 @@ export function WorkspaceClient({
         }, true);
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (cancelled || cancelledRenderIdsRef.current.has(jobId)) return;
         const message = error instanceof Error ? error.message : "视频导出失败。";
         setErrorMessage(message);
         pushMessage({ role: "assistant", type: "text", content: message });
       })
       .finally(() => {
         if (recoveringRenderRef.current === jobId) recoveringRenderRef.current = undefined;
+        setActiveRenderJobId((current) => current === jobId ? undefined : current);
         if (!cancelled) setExportProgress(undefined);
       });
     return () => {
@@ -1346,6 +1453,12 @@ export function WorkspaceClient({
       setProject(generatedProject);
       setProjectSource("database");
       setProjects([]);
+      setVersions([]);
+      setRenderJobs([]);
+      setVersionsOpen(false);
+      setExportsOpen(false);
+      setAssetsOpen(false);
+      setActiveRenderJobId(undefined);
       setMessages([
         ...data.messages,
         {
@@ -1702,13 +1815,90 @@ export function WorkspaceClient({
   function toggleVersions() {
     const next = !versionsOpen;
     setVersionsOpen(next);
-    if (next) setAssetsOpen(false);
+    if (next) {
+      setAssetsOpen(false);
+      setExportsOpen(false);
+    }
     if (next) void loadVersions();
   }
+
+  async function loadRenderJobs(silent = false) {
+    if (projectSource !== "database") {
+      setRenderJobs([]);
+      setExportsLoading(false);
+      return;
+    }
+    if (!silent) setExportsLoading(true);
+    try {
+      const response = await fetch(`/api/render-jobs?projectId=${encodeURIComponent(project.id)}`, { cache: "no-store" });
+      const data = await response.json() as { renderJobs?: RenderJob[]; error?: string };
+      if (!response.ok) throw new Error(data.error || "导出记录读取失败。");
+      setRenderJobs(data.renderJobs ?? []);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "导出记录读取失败。";
+      setErrorMessage(message);
+    } finally {
+      if (!silent) setExportsLoading(false);
+    }
+  }
+
+  function toggleExports() {
+    const next = !exportsOpen;
+    setExportsOpen(next);
+    if (next) {
+      setAssetsOpen(false);
+      setVersionsOpen(false);
+      void loadRenderJobs();
+    }
+  }
+
+  useEffect(() => {
+    if (!exportsOpen || !renderJobs.some((job) => job.status === "queued" || job.status === "running")) return;
+    const interval = window.setInterval(() => void loadRenderJobs(true), 3000);
+    return () => window.clearInterval(interval);
+  }, [exportsOpen, project.id, renderJobs.some((job) => job.status === "queued" || job.status === "running")]);
 
   function toggleAssets() {
     setAssetsOpen((current) => !current);
     setVersionsOpen(false);
+    setExportsOpen(false);
+  }
+
+  async function cancelExport(jobId: string) {
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch("/api/render-jobs", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, jobId })
+      });
+      const data = await response.json() as { renderJob?: RenderJob; error?: string };
+      if (!response.ok || !data.renderJob) throw new Error(data.error || "取消导出失败。");
+      cancelledRenderIdsRef.current.add(jobId);
+      setRenderJobs((current) => [data.renderJob!, ...current.filter((job) => job.id !== jobId)]);
+      setActiveRenderJobId((current) => current === jobId ? undefined : current);
+      setExportProgress(undefined);
+      if (data.renderJob.versionId === project.currentVersion.id) {
+        setProject((current) => ({
+          ...current,
+          currentVersion: {
+            ...current.currentVersion,
+            renderJobId: undefined,
+            status: "draft",
+            renderUrl: undefined
+          }
+        }));
+      }
+      pushMessage({
+        role: "assistant",
+        type: "text",
+        content: "本次 MP4 导出已取消，场景和素材不会受到影响。",
+        versionId: data.renderJob.versionId
+      }, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "取消导出失败。";
+      setErrorMessage(message);
+    }
   }
 
   async function restoreVersion(versionId: string) {
@@ -1983,6 +2173,7 @@ export function WorkspaceClient({
       return;
     }
     setExportProgress(5);
+    let requestedJobId: string | undefined;
     try {
       const response = await fetch("/api/render-jobs", {
         method: "POST",
@@ -1991,10 +2182,24 @@ export function WorkspaceClient({
       });
       const data = await response.json() as { renderJob?: RenderJob; error?: string };
       if (!response.ok || !data.renderJob) throw new Error(data.error || "MP4 渲染任务启动失败。");
-      let completed = data.renderJob;
+      const startedJob = data.renderJob;
+      requestedJobId = startedJob.id;
+      cancelledRenderIdsRef.current.delete(startedJob.id);
+      setActiveRenderJobId(startedJob.id);
+      setRenderJobs((current) => [startedJob, ...current.filter((job) => job.id !== startedJob.id)]);
+      let completed: RenderJob | undefined = startedJob;
       if (completed.status === "queued" || completed.status === "running") {
-        completed = await waitForRenderJob(completed.id, () => false, setExportProgress) ?? completed;
+        completed = await waitForRenderJob(
+          completed.id,
+          () => cancelledRenderIdsRef.current.has(startedJob.id),
+          (progress) => {
+            setExportProgress(progress);
+            setRenderJobs((current) => current.map((job) => job.id === startedJob.id ? { ...job, progress } : job));
+          }
+        );
       }
+      if (!completed) return;
+      setRenderJobs((current) => [completed!, ...current.filter((job) => job.id !== completed!.id)]);
       if (completed.status !== "ready" || !completed.renderUrl) {
         throw new Error(completed.error || "MP4 渲染失败。");
       }
@@ -2014,11 +2219,13 @@ export function WorkspaceClient({
         versionId: completed.versionId
       }, true);
     } catch (error) {
+      if (requestedJobId && cancelledRenderIdsRef.current.has(requestedJobId)) return;
       const message = error instanceof Error ? error.message : "视频导出失败。";
       setErrorMessage(message);
       pushMessage({ role: "assistant", type: "text", content: message });
     } finally {
       setExportProgress(undefined);
+      setActiveRenderJobId(undefined);
     }
   }
 
@@ -2028,6 +2235,7 @@ export function WorkspaceClient({
     setChatInput("");
     setErrorMessage(undefined);
     setVersionsOpen(false);
+    setExportsOpen(false);
   }
 
   async function openProjects() {
@@ -2066,6 +2274,11 @@ export function WorkspaceClient({
       setPendingPlan(data.pendingPlan);
       setStudioView("preview");
       setVersions([]);
+      setRenderJobs([]);
+      setVersionsOpen(false);
+      setExportsOpen(false);
+      setAssetsOpen(false);
+      setActiveRenderJobId(data.project.currentVersion.renderJobId);
       setStage("studio");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "项目读取失败。");
@@ -2190,6 +2403,12 @@ export function WorkspaceClient({
           onRegenerateAudio={regenerateAudio}
           onExport={exportVideo}
           exportProgress={exportProgress}
+          activeRenderJobId={activeRenderJobId}
+          renderJobs={renderJobs}
+          exportsOpen={exportsOpen}
+          exportsLoading={exportsLoading}
+          onToggleExports={toggleExports}
+          onCancelExport={(jobId) => void cancelExport(jobId)}
           versions={versions}
           versionsOpen={versionsOpen}
           versionsLoading={versionsLoading}

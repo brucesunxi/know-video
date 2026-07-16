@@ -84,8 +84,12 @@ The app reads from Neon when `DATABASE_URL` is configured. If no project exists 
   - Output: new project version and queued render job
 
 - `POST /api/render-jobs`
-  - Input: `{ "projectId": "...", "versionId": "...", "affectedScenes": [1,2] }`
+  - Input: `{ "projectId": "...", "versionId": "..." }`
   - Output: queued render job
+- `GET /api/render-jobs?projectId=...`
+  - Returns the latest export jobs across all versions of a project
+- `DELETE /api/render-jobs`
+  - Cancels a queued/running export and terminates its isolated render sandbox
 
 - `POST /api/assets/upload`
   - Input: multipart `file`
@@ -102,7 +106,7 @@ The app reads from Neon when `DATABASE_URL` is configured. If no project exists 
 
 1. Add generated video clips selectively for motion-critical scenes.
 2. Add authentication and per-user project ownership.
-3. Add render cancellation and an export history panel.
+3. Add reusable music tracks and automatic voice/music ducking.
 
 ## Renderer
 

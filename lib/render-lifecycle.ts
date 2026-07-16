@@ -12,8 +12,12 @@ export function renderOutputKey(input: Pick<RenderJob, "id" | "projectId" | "ver
   return `renders/${input.projectId}/${input.versionId}/${input.id}.mp4`;
 }
 
-export function publicRenderError(status: RenderJob["status"]) {
-  if (status === "cancelled") return "场景素材已经更新，请重新导出最新版本。";
+export function publicRenderError(status: RenderJob["status"], reason?: string) {
+  if (status === "cancelled") {
+    return reason?.includes("用户")
+      ? "用户已取消本次导出。"
+      : "场景素材已经更新，请重新导出最新版本。";
+  }
   if (status === "failed") {
     return "视频合成没有完成，请稍后重试。若持续失败，请重新生成缺失素材后再导出。";
   }

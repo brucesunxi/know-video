@@ -67,6 +67,7 @@ export type RenderJob = {
   renderUrl?: string;
   createdAt?: string;
   updatedAt?: string;
+  versionLabel?: string;
 };
 
 export type Project = {

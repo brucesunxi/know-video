@@ -32,6 +32,7 @@ assert.equal(matchesRenderSandbox(jobId, "know-video-job-another"), false);
 assert.equal(matchesRenderSandbox(jobId), true);
 assert.match(publicRenderError("failed"), /视频合成/);
 assert.match(publicRenderError("cancelled"), /重新导出/);
+assert.match(publicRenderError("cancelled", "用户已取消本次导出。"), /用户已取消/);
 assert.equal(publicRenderError("ready"), undefined);
 assert.equal(versionStatusAfterRenderJob("queued"), undefined);
 assert.equal(versionStatusAfterRenderJob("running"), "rendering");
