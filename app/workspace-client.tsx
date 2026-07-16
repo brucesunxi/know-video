@@ -110,6 +110,37 @@ function requestErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+async function waitForRenderJob(
+  jobId: string,
+  isCancelled: () => boolean = () => false,
+  onProgress: (progress: number) => void = () => undefined
+) {
+  const startedAt = Date.now();
+  let consecutiveFailures = 0;
+  let current: RenderJob | undefined;
+  while (!isCancelled()) {
+    if (Date.now() - startedAt > 45 * 60 * 1000) {
+      throw new Error("视频渲染超时，请稍后在项目中重试导出。");
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    if (isCancelled()) return undefined;
+    try {
+      const response = await fetch(`/api/render-jobs?id=${encodeURIComponent(jobId)}`, { cache: "no-store" });
+      const data = await response.json() as { renderJob?: RenderJob; error?: string };
+      if (!response.ok || !data.renderJob) throw new Error(data.error || "无法读取视频渲染进度。");
+      current = data.renderJob;
+      onProgress(current.progress);
+      consecutiveFailures = 0;
+    } catch (error) {
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= 4) throw error;
+      continue;
+    }
+    if (current.status !== "queued" && current.status !== "running") return current;
+  }
+  return undefined;
+}
+
 function busyActionLabel(action?: BusyAction) {
   switch (action) {
     case "planning-edit":
@@ -1139,8 +1170,50 @@ export function WorkspaceClient({
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectActionBusy, setProjectActionBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recoveringRenderRef = useRef<string>();
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
+
+  useEffect(() => {
+    const jobId = project.currentVersion.renderJobId;
+    if (!jobId || project.currentVersion.renderUrl || recoveringRenderRef.current === jobId) return;
+    recoveringRenderRef.current = jobId;
+    let cancelled = false;
+    setExportProgress((current) => current ?? 5);
+    void waitForRenderJob(jobId, () => cancelled, setExportProgress)
+      .then((completed) => {
+        if (!completed || cancelled) return;
+        if (completed.status !== "ready" || !completed.renderUrl) {
+          throw new Error(completed.error || "MP4 渲染失败。");
+        }
+        setExportProgress(100);
+        setProject((current) => current.currentVersion.id === completed.versionId
+          ? {
+            ...current,
+            currentVersion: {
+              ...current.currentVersion,
+              renderJobId: undefined,
+              renderUrl: completed.renderUrl,
+              status: "ready"
+            }
+          }
+          : current);
+        pushMessage({ role: "assistant", type: "text", content: "后台导出已经完成，可以下载 1080p MP4。" });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "视频导出失败。";
+        setErrorMessage(message);
+        pushMessage({ role: "assistant", type: "text", content: message });
+      })
+      .finally(() => {
+        if (recoveringRenderRef.current === jobId) recoveringRenderRef.current = undefined;
+        if (!cancelled) setExportProgress(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.currentVersion.id, project.currentVersion.renderJobId, project.currentVersion.renderUrl]);
 
   function pushMessage(message: Omit<ChatMessage, "id">) {
     setMessages((current) => {
@@ -1801,21 +1874,8 @@ export function WorkspaceClient({
       const data = await response.json() as { renderJob?: RenderJob; error?: string };
       if (!response.ok || !data.renderJob) throw new Error(data.error || "MP4 渲染任务启动失败。");
       let completed = data.renderJob;
-      const startedAt = Date.now();
-      while (completed.status === "queued" || completed.status === "running") {
-        if (Date.now() - startedAt > 45 * 60 * 1000) {
-          throw new Error("视频渲染超时，请稍后在项目中重试导出。");
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 2000));
-        const statusResponse = await fetch(`/api/render-jobs?id=${encodeURIComponent(completed.id)}`, {
-          cache: "no-store"
-        });
-        const statusData = await statusResponse.json() as { renderJob?: RenderJob; error?: string };
-        if (!statusResponse.ok || !statusData.renderJob) {
-          throw new Error(statusData.error || "无法读取视频渲染进度。");
-        }
-        completed = statusData.renderJob;
-        setExportProgress(completed.progress);
+      if (completed.status === "queued" || completed.status === "running") {
+        completed = await waitForRenderJob(completed.id, () => false, setExportProgress) ?? completed;
       }
       if (completed.status !== "ready" || !completed.renderUrl) {
         throw new Error(completed.error || "MP4 渲染失败。");

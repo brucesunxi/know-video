@@ -1,5 +1,6 @@
 import { Sandbox } from "@vercel/sandbox";
 import { getOptionalEnv, getRequiredEnv } from "@/lib/env";
+import { renderSandboxName } from "@/lib/render-lifecycle";
 import type { Project } from "@/lib/types";
 
 const SANDBOX_ROOT = "/vercel/sandbox";
@@ -94,7 +95,7 @@ export async function startSandboxRender(input: {
   callbackUrl: string;
 }) {
   const sourceSandbox = await ensureRendererBase();
-  const sandboxName = `know-video-job-${input.jobId}`;
+  const sandboxName = renderSandboxName(input.jobId);
   let sandbox: Sandbox | undefined;
   try {
     sandbox = await Sandbox.fork({

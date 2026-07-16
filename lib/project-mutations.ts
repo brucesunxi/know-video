@@ -262,9 +262,23 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
 
   const sql = getSql();
   const versions = await sql`
-    select id, parent_version_id, status, duration_seconds, render_url, created_at
-    from project_versions
-    where id = ${versionId}
+    select
+      pv.id,
+      pv.parent_version_id,
+      pv.status,
+      pv.duration_seconds,
+      pv.render_url,
+      pv.created_at,
+      (
+        select rj.id
+        from render_jobs rj
+        where rj.version_id = pv.id
+          and rj.status in ('queued', 'running')
+        order by rj.created_at desc
+        limit 1
+      ) as active_render_job_id
+    from project_versions pv
+    where pv.id = ${versionId}
     limit 1
   ` as Array<{
     id: string;
@@ -272,6 +286,7 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
     status: ProjectVersion["status"];
     duration_seconds: number;
     render_url: string | null;
+    active_render_job_id: string | null;
     created_at: Date | string;
   }>;
 
@@ -325,6 +340,7 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
     createdAt: new Date(version.created_at).toISOString(),
     durationSeconds: version.duration_seconds,
     renderUrl: version.render_url ?? undefined,
+    renderJobId: version.active_render_job_id ?? undefined,
     assetStatus: visualCount === hydratedScenes.length ? "ready" : visualCount > 0 ? "partial" : "failed",
     scenes: hydratedScenes
   };

@@ -27,6 +27,7 @@ type VersionRow = {
   status: ProjectVersion["status"];
   scene_plan_json: unknown;
   render_url: string | null;
+  active_render_job_id: string | null;
   duration_seconds: number;
   created_at: Date | string;
 };
@@ -142,9 +143,23 @@ async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSn
 
   const sql = getSql();
   const versions = await sql`
-    select id, status, scene_plan_json, render_url, duration_seconds, created_at
-    from project_versions
-    where id = ${projectRow.current_version_id}
+    select
+      pv.id,
+      pv.status,
+      pv.scene_plan_json,
+      pv.render_url,
+      pv.duration_seconds,
+      pv.created_at,
+      (
+        select rj.id
+        from render_jobs rj
+        where rj.version_id = pv.id
+          and rj.status in ('queued', 'running')
+        order by rj.created_at desc
+        limit 1
+      ) as active_render_job_id
+    from project_versions pv
+    where pv.id = ${projectRow.current_version_id}
     limit 1
   ` as VersionRow[];
 
@@ -212,6 +227,7 @@ async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSn
       createdAt: new Date(versionRow.created_at).toISOString(),
       durationSeconds: versionRow.duration_seconds,
       renderUrl: versionRow.render_url ?? undefined,
+      renderJobId: versionRow.active_render_job_id ?? undefined,
       assetStatus: visualCount === scenes.length ? "ready" : visualCount > 0 ? "partial" : "failed",
       scenes: scenes.length > 0 ? scenes : demoProject.currentVersion.scenes
     }

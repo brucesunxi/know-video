@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "render:smoke": "node scripts/render-smoke.mjs",
+    "render:lifecycle:smoke": "node scripts/render-lifecycle-smoke.mjs",
     "edit:intent:smoke": "node scripts/edit-intent-smoke.mjs",
     "edit:plan:smoke": "node scripts/edit-plan-normalizer-smoke.mjs",
     "edit:schema:smoke": "node scripts/edit-plan-schema-smoke.mjs",

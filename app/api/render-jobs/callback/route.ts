@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { getOptionalEnv } from "@/lib/env";
+import { matchesRenderSandbox } from "@/lib/render-lifecycle";
 import { updateRenderJob } from "@/lib/render-jobs";
 import { stopRenderSandbox } from "@/lib/vercel-renderer";
 
@@ -18,6 +19,9 @@ const payloadSchema = z.object({
   }
   if (payload.status === "failed" && !payload.error) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Failed callback requires error" });
+  }
+  if (!matchesRenderSandbox(payload.jobId, payload.sandboxName)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Sandbox name does not match job" });
   }
 });
 
@@ -43,5 +47,5 @@ export async function POST(request: Request) {
   }
   return renderJob
     ? NextResponse.json({ renderJob })
-    : NextResponse.json({ error: "Render job not found" }, { status: 404 });
+    : NextResponse.json({ error: "Render callback is stale or the job is no longer active" }, { status: 409 });
 }

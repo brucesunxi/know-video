@@ -129,14 +129,31 @@ export async function updateRenderJob(input: {
       )
     returning *
   ` as RenderJobRow[];
-  const row = rows[0] ?? (await sql`
-    select * from render_jobs where id = ${input.jobId} limit 1
-  ` as RenderJobRow[])[0];
+  const row = rows[0];
+  if (row && input.status === "running") {
+    await sql`
+      update project_versions
+      set status = 'rendering'
+      where id = ${row.version_id}
+        and exists (
+          select 1
+          from projects
+          where projects.id = project_versions.project_id
+            and projects.current_version_id = project_versions.id
+        )
+    `;
+  }
   if (row && input.status === "ready" && row.output_r2_key) {
     await sql`
       update project_versions
       set status = 'ready', render_url = ${assetUrlForKey(row.output_r2_key)}
       where id = ${row.version_id}
+        and exists (
+          select 1
+          from projects
+          where projects.id = project_versions.project_id
+            and projects.current_version_id = project_versions.id
+        )
     `;
   }
   return row ? toRenderJob(row) : undefined;

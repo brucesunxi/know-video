@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { loadProjectForRender } from "@/lib/project-mutations";
+import { publicRenderError } from "@/lib/render-lifecycle";
 import { createRenderJob, findReusableRenderJob, getRenderJob, updateRenderJob } from "@/lib/render-jobs";
 import { startSandboxRender } from "@/lib/vercel-renderer";
 
@@ -9,6 +10,14 @@ const requestSchema = z.object({
   versionId: z.string().uuid()
 });
 
+function publicRenderJob(renderJob: Awaited<ReturnType<typeof getRenderJob>>) {
+  if (!renderJob || !["failed", "cancelled"].includes(renderJob.status)) return renderJob;
+  return {
+    ...renderJob,
+    error: publicRenderError(renderJob.status)
+  };
+}
+
 export const maxDuration = 300;
 
 export async function GET(request: Request) {
@@ -16,7 +25,7 @@ export async function GET(request: Request) {
   if (!jobId) return NextResponse.json({ error: "缺少渲染任务 ID。" }, { status: 400 });
   const renderJob = await getRenderJob(jobId);
   return renderJob
-    ? NextResponse.json({ renderJob })
+    ? NextResponse.json({ renderJob: publicRenderJob(renderJob) })
     : NextResponse.json({ error: "没有找到渲染任务。" }, { status: 404 });
 }
 export async function POST(request: Request) {
@@ -42,7 +51,7 @@ export async function POST(request: Request) {
   const reusable = await findReusableRenderJob(body.projectId, body.versionId);
   if (reusable) {
     return NextResponse.json(
-      { renderJob: reusable, reused: true },
+      { renderJob: publicRenderJob(reusable), reused: true },
       { status: reusable.status === "ready" ? 200 : 202 }
     );
   }
@@ -63,7 +72,11 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "视频渲染失败。";
+    console.error("[render-jobs] Unable to start render:", error);
     const failed = await updateRenderJob({ jobId: renderJob.id, status: "failed", progress: 0, error: message });
-    return NextResponse.json({ error: message, renderJob: failed }, { status: 502 });
+    return NextResponse.json({
+      error: "视频合成任务启动失败，请稍后重试。",
+      renderJob: publicRenderJob(failed)
+    }, { status: 502 });
   }
 }
