@@ -24,7 +24,6 @@ import {
   RotateCcw,
   Search,
   Send,
-  Settings2,
   Sparkles,
   Trash2,
   Upload
@@ -37,6 +36,12 @@ type Source = "database" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
 type Engine = "ai" | "heuristic";
 type StudioView = "preview" | "storyboard";
+type GenerationOptions = {
+  duration: "15" | "30" | "45" | "60";
+  sceneCount: "auto" | "3" | "5" | "6";
+  language: "中文" | "英文";
+  style: "电影质感" | "极简高级" | "明快有活力" | "温暖自然";
+};
 
 const promptExamples = [
   "生成一个 30 秒的 AI 视频生成平台产品介绍视频，风格高级、节奏快、适合官网首屏。",
@@ -106,9 +111,6 @@ function Shell({
           </button>
           <button aria-label="项目列表" className={stage === "projects" ? "active" : ""} onClick={onOpenProjects} type="button">
             <Layers3 size={18} />
-          </button>
-          <button aria-label="设置" type="button">
-            <Settings2 size={18} />
           </button>
         </nav>
       </aside>
@@ -205,18 +207,22 @@ function ProjectLibrary({
 
 function BriefScreen({
   prompt,
+  options,
   isBusy,
   currentProject,
   onPromptChange,
+  onOptionsChange,
   onUseExample,
   onSubmit,
   onOpenStudio,
   errorMessage
 }: {
   prompt: string;
+  options: GenerationOptions;
   isBusy: boolean;
   currentProject: Project;
   onPromptChange: (value: string) => void;
+  onOptionsChange: (value: GenerationOptions) => void;
   onUseExample: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onOpenStudio: () => void;
@@ -235,15 +241,44 @@ function BriefScreen({
             placeholder="例如：生成一个 30 秒产品介绍视频，展示用户输入需求、AI 自动分镜、生成视频并能聊天修改..."
             value={prompt}
           />
+          <div className="kv-generation-options">
+            <label>
+              <span>视频时长</span>
+              <select onChange={(event) => onOptionsChange({ ...options, duration: event.target.value as GenerationOptions["duration"] })} value={options.duration}>
+                <option value="15">15 秒</option>
+                <option value="30">30 秒</option>
+                <option value="45">45 秒</option>
+                <option value="60">60 秒</option>
+              </select>
+            </label>
+            <label>
+              <span>场景数量</span>
+              <select onChange={(event) => onOptionsChange({ ...options, sceneCount: event.target.value as GenerationOptions["sceneCount"] })} value={options.sceneCount}>
+                <option value="auto">自动规划</option>
+                <option value="3">3 个场景</option>
+                <option value="5">5 个场景</option>
+                <option value="6">6 个场景</option>
+              </select>
+            </label>
+            <label>
+              <span>旁白语言</span>
+              <select onChange={(event) => onOptionsChange({ ...options, language: event.target.value as GenerationOptions["language"] })} value={options.language}>
+                <option value="中文">中文</option>
+                <option value="英文">英文</option>
+              </select>
+            </label>
+            <label>
+              <span>视觉风格</span>
+              <select onChange={(event) => onOptionsChange({ ...options, style: event.target.value as GenerationOptions["style"] })} value={options.style}>
+                <option value="电影质感">电影质感</option>
+                <option value="极简高级">极简高级</option>
+                <option value="明快有活力">明快有活力</option>
+                <option value="温暖自然">温暖自然</option>
+              </select>
+            </label>
+          </div>
           <div className="kv-prompt-tools">
-            <button type="button">
-              <Upload size={18} />
-              参考素材
-            </button>
-            <button type="button">
-              <Mic2 size={18} />
-              语音输入
-            </button>
+            <span>参数会同时约束脚本、分镜、画面与配音。</span>
             <button className="kv-primary" disabled={isBusy || prompt.trim().length < 4} type="submit">
               {isBusy ? <Loader2 className="kv-spin" size={18} /> : <Sparkles size={18} />}
               开始生成
@@ -812,12 +847,25 @@ export function WorkspaceClient({
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | undefined>();
   const [assetsOpen, setAssetsOpen] = useState(false);
+  const [generationOptions, setGenerationOptions] = useState<GenerationOptions>({
+    duration: "30",
+    sceneCount: "auto",
+    language: "中文",
+    style: "电影质感"
+  });
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [projectQuery, setProjectQuery] = useState("");
   const [projectsLoading, setProjectsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
+  const generationPrompt = useMemo(() => {
+    const request = briefPrompt.trim();
+    if (!request) return "";
+    const sceneInstruction = generationOptions.sceneCount === "auto"
+      ? "场景数量由导演根据叙事自动规划"
+      : `严格生成 ${generationOptions.sceneCount} 个场景`;
+    return `${request}\n\n制作参数：总时长 ${generationOptions.duration} 秒；${sceneInstruction}；全部标题、旁白和字幕使用${generationOptions.language}；视觉风格为${generationOptions.style}。`;
+  }, [briefPrompt, generationOptions]);
 
   function pushMessage(message: Omit<ChatMessage, "id">) {
     setMessages((current) => {
@@ -1358,10 +1406,12 @@ export function WorkspaceClient({
           currentProject={project}
           isBusy={isBusy}
           onOpenStudio={() => setStage("studio")}
+          onOptionsChange={setGenerationOptions}
           onPromptChange={setBriefPrompt}
           onSubmit={createVideo}
           onUseExample={setBriefPrompt}
           prompt={briefPrompt}
+          options={generationOptions}
           errorMessage={errorMessage}
         />
       ) : null}

@@ -30,7 +30,8 @@ body {
 
 button,
 textarea,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -247,6 +248,44 @@ button:disabled {
   line-height: 1.5;
 }
 
+.kv-generation-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.kv-generation-options label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.kv-generation-options label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.kv-generation-options select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  background: #f8fafc;
+  color: var(--ink);
+  padding: 9px 28px 9px 10px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.kv-generation-options select:focus {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1);
+}
+
 .kv-prompt-tools,
 .kv-actionbar,
 .kv-actions,
@@ -260,6 +299,11 @@ button:disabled {
 .kv-prompt-tools {
   border-top: 1px solid var(--line);
   padding-top: 12px;
+}
+
+.kv-prompt-tools > span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .kv-prompt-tools button:not(.kv-primary),
@@ -1834,6 +1878,7 @@ button:disabled {
 
   .kv-example-grid,
   .kv-progress-steps,
+  .kv-generation-options,
   .kv-scene-grid,
   .kv-board {
     grid-template-columns: 1fr;
