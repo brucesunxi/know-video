@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
 import { VIDEO_FPS } from "@/video/config";
-import type { ChatMessage, EditChange, EditPlan, Project, ProjectVersionSummary, RenderJob, Scene } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, Project, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
 
 type Source = "database" | "mock";
 type Stage = "brief" | "generating" | "studio";
@@ -896,23 +896,36 @@ export function WorkspaceClient({
       const form = new FormData();
       form.set("file", file);
       form.set("projectId", project.id);
+      form.set("versionId", project.currentVersion.id);
+      form.set("sceneNumber", String(selectedScene));
       const response = await fetch("/api/assets/upload", {
         method: "POST",
         body: form
       });
-      if (!response.ok) throw new Error("Upload failed.");
-      const data = await response.json() as { asset: { r2Key: string; metadata?: { name?: string } } };
+      const data = await response.json() as { asset?: SceneAsset; error?: string };
+      if (!response.ok || !data.asset) throw new Error(data.error || "素材上传失败。");
+      const uploadedAsset = data.asset;
+      setProject((current) => ({
+        ...current,
+        currentVersion: {
+          ...current.currentVersion,
+          renderUrl: undefined,
+          scenes: current.currentVersion.scenes.map((scene) => scene.sceneNumber === selectedScene
+            ? { ...scene, assets: [uploadedAsset, ...scene.assets.filter((asset) => asset.type !== uploadedAsset.type)] }
+            : scene)
+        }
+      }));
       pushMessage({
         role: "assistant",
         type: "text",
-        content: `素材已上传到 R2：${data.asset.metadata?.name ?? "asset"}。路径：${data.asset.r2Key}`
+        content: `素材“${String(uploadedAsset.metadata?.name ?? "未命名素材")}”已应用到场景 ${selectedScene}。`
       });
     } catch (error) {
       console.error(error);
       pushMessage({
         role: "assistant",
         type: "text",
-        content: "素材上传失败，请检查 R2 配置。"
+        content: error instanceof Error ? error.message : "素材上传失败，请检查存储配置。"
       });
     } finally {
       setIsBusy(false);
@@ -1038,7 +1051,7 @@ export function WorkspaceClient({
 
   return (
     <Shell onNewVideo={resetToBrief} project={project} source={source} stage={stage}>
-      <input hidden onChange={uploadAsset} ref={fileInputRef} type="file" />
+      <input accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav" hidden onChange={uploadAsset} ref={fileInputRef} type="file" />
       {stage === "brief" ? (
         <BriefScreen
           currentProject={project}
