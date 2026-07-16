@@ -221,7 +221,7 @@ function ProjectLibrary({
     <div className="kv-projects-page">
       <div className="kv-projects-heading">
         <div>
-          <span className="kv-eyebrow">Project library</span>
+          <span className="kv-eyebrow">项目库</span>
           <h2>继续创作，或开始一支新视频</h2>
           <p>所有脚本、分镜、素材、对话和历史版本都保存在各自项目中。</p>
         </div>
@@ -401,7 +401,7 @@ function BriefScreen({
         <div className="kv-side-panel">
           <span className="kv-eyebrow">最近项目</span>
           <h3>{currentProject.title}</h3>
-          <p>{currentProject.currentVersion.scenes.length} scenes · {durationLabel(currentProject.currentVersion.durationSeconds)}</p>
+          <p>{currentProject.currentVersion.scenes.length} 个场景 · {durationLabel(currentProject.currentVersion.durationSeconds)}</p>
           <button onClick={onOpenStudio} type="button">
             打开工作室
             <ChevronRight size={16} />

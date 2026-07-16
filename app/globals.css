@@ -2143,7 +2143,7 @@ button:disabled {
 @media (max-width: 760px) {
   .kv-shell {
     grid-template-columns: 1fr;
-    padding-bottom: 68px;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
   }
 
   .kv-sidebar {
@@ -2153,13 +2153,13 @@ button:disabled {
     bottom: 0;
     left: 0;
     display: flex;
-    height: 68px;
+    height: calc(68px + env(safe-area-inset-bottom));
     flex-direction: row;
     justify-content: center;
     border-top: 1px solid var(--line);
     border-right: 0;
     background: rgba(255, 255, 255, 0.96);
-    padding: 8px 12px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
     backdrop-filter: blur(18px);
   }
 
@@ -2181,15 +2181,31 @@ button:disabled {
   }
 
   .kv-topbar {
-    align-items: flex-start;
+    align-items: stretch;
     flex-direction: column;
-    padding: 16px;
+    gap: 14px;
+    padding: 15px 16px;
+  }
+
+  .kv-topbar h1 {
+    font-size: 20px;
+    white-space: normal;
+  }
+
+  .kv-status-row {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .kv-status-row span {
+    padding: 7px 10px;
+    font-size: 10px;
   }
 
   .kv-brief,
   .kv-studio-main,
   .kv-projects-page {
-    padding: 16px;
+    padding: 12px;
   }
 
   .kv-projects-heading {
@@ -2210,26 +2226,79 @@ button:disabled {
   }
 
   .kv-brief-main {
-    padding: 18px;
+    gap: 16px;
+    border-radius: 14px;
+    padding: 16px;
   }
 
   .kv-section-heading h2 {
-    font-size: 32px;
+    margin-top: 10px;
+    font-size: 29px;
+    line-height: 1.1;
   }
 
-  .kv-example-grid,
   .kv-progress-steps,
-  .kv-generation-options,
   .kv-scene-editor,
   .kv-scene-grid,
   .kv-board {
     grid-template-columns: 1fr;
   }
 
-  .kv-prompt-tools,
   .kv-actionbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .kv-prompt-box {
+    border-radius: 12px;
+    padding: 13px;
+  }
+
+  .kv-prompt-box textarea {
+    min-height: 150px;
+    font-size: 16px;
+  }
+
+  .kv-generation-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kv-prompt-tools {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .kv-prompt-tools > span {
+    line-height: 1.45;
+  }
+
+  .kv-prompt-tools .kv-primary {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .kv-example-grid {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    margin-inline: -16px;
+    padding: 0 16px 4px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .kv-example-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .kv-example-grid button {
+    min-width: min(78vw, 290px);
+    min-height: 108px;
+    scroll-snap-align: start;
+  }
+
+  .kv-brief-side {
+    gap: 12px;
   }
 
   .kv-media-warning {
@@ -2312,5 +2381,15 @@ button:disabled {
 
   .kv-missing-visual p {
     display: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .kv-section-heading h2 {
+    font-size: 27px;
+  }
+
+  .kv-generation-options {
+    grid-template-columns: 1fr;
   }
 }
