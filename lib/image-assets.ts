@@ -1,7 +1,14 @@
 import OpenAI from "openai";
+import sharp from "sharp";
 import { generateCloudflareImage, hasCloudflareAI } from "@/lib/cloudflare-ai";
 import { getOptionalEnv } from "@/lib/env";
-import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
+import {
+  projectVisualIdentity,
+  sceneImagePrompt,
+  stableImageSeed,
+  type ImageReferenceRole
+} from "@/lib/image-continuity";
+import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 
 function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
@@ -23,25 +30,18 @@ function imageModel() {
   return getOptionalEnv("OPENAI_IMAGE_MODEL") || "gpt-image-2";
 }
 
-function buildSceneImagePrompt(scene: Scene, projectTitle: string) {
-  const palette = scene.style.palette.join(", ");
-
-  return [
-    `Create a polished 16:9 key visual for a scene in a product video called "${projectTitle}".`,
-    `Scene ${scene.sceneNumber}: ${scene.title}.`,
-    `Visual direction: ${scene.visualPrompt}`,
-    `Motion direction to imply: ${scene.motionPrompt}`,
-    `Mood: ${scene.style.mood}. Theme: ${scene.style.theme}. Palette: ${palette}.`,
-    "Make it a finished cinematic frame rather than a wireframe or a presentation slide: strong composition, depth, premium lighting, and one clear subject.",
-    "Show the actual human workflow, device, environment, and product interaction described by the scene. Use spatial layers and purposeful visual storytelling.",
-    "Use little or no text inside the generated image. Never show prompt instructions, layout annotations, labels, lorem ipsum, fake logos, watermarks, or generic floating cards.",
-    "Keep important subjects inside a 16:9 center-safe area so the 3:2 source can be cropped cleanly."
-  ].join("\n");
+function buildSceneImagePrompt(
+  scene: Scene,
+  project: Project,
+  references: Array<{ role: "current" | "anchor" }>
+) {
+  return sceneImagePrompt(scene, project, references.map((reference) => reference.role));
 }
 
-function buildBrandSafeImagePrompt(scene: Scene, projectTitle: string) {
+function buildBrandSafeImagePrompt(scene: Scene, project: Project) {
   return [
-    `Create a brand-safe 16:9 cinematic key visual for the product video "${projectTitle}".`,
+    `Create a brand-safe 16:9 cinematic key visual for the product video "${project.title}".`,
+    projectVisualIdentity(project),
     `Scene ${scene.sceneNumber}: ${scene.title}.`,
     `Use an elegant abstract visual metaphor built from architecture, light, layered materials, and purposeful motion.`,
     `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
@@ -55,6 +55,32 @@ function isSafetyFiltered(error: unknown) {
 }
 
 type ImageQuality = "standard" | "premium";
+type ImageReference = {
+  body: Buffer;
+  contentType: "image/jpeg";
+  role: ImageReferenceRole;
+  r2Key: string;
+};
+
+async function loadImageReference(asset: SceneAsset | undefined, role: ImageReference["role"]) {
+  if (!asset?.r2Key) return undefined;
+  try {
+    const stored = await getFromR2(asset.r2Key);
+    const bytes = stored.body
+      ? Buffer.from(await stored.body.transformToByteArray())
+      : undefined;
+    if (!bytes?.length) return undefined;
+    const body = await sharp(bytes)
+      .rotate()
+      .resize(512, 288, { fit: "cover" })
+      .jpeg({ quality: 82, chromaSubsampling: "4:2:0" })
+      .toBuffer();
+    return { body, contentType: "image/jpeg", role, r2Key: asset.r2Key } satisfies ImageReference;
+  } catch (error) {
+    console.warn(`[image-assets] Could not prepare reference ${asset.r2Key}:`, error);
+    return undefined;
+  }
+}
 
 async function mapWithConcurrency<T>(
   items: T[],
@@ -75,19 +101,27 @@ async function mapWithConcurrency<T>(
 async function generateSceneImage(
   scene: Scene,
   project: Project,
-  quality: ImageQuality
-): Promise<SceneAsset | undefined> {
-  let prompt = buildSceneImagePrompt(scene, project.title);
+  quality: ImageQuality,
+  references: ImageReference[]
+): Promise<{ asset: SceneAsset; reference: ImageReference } | undefined> {
+  const usableReferences = hasCloudflareAI() ? references : [];
+  let prompt = buildSceneImagePrompt(scene, project, usableReferences);
   let body: Buffer;
   let model: string;
   if (hasCloudflareAI()) {
     let generated;
     try {
-      generated = await generateCloudflareImage(prompt, quality);
+      generated = await generateCloudflareImage(prompt, quality, {
+        seed: stableImageSeed(`${project.id}:${scene.sceneNumber}`),
+        references: usableReferences
+      });
     } catch (error) {
       if (!isSafetyFiltered(error)) throw error;
-      prompt = buildBrandSafeImagePrompt(scene, project.title);
-      generated = await generateCloudflareImage(prompt, quality);
+      prompt = buildBrandSafeImagePrompt(scene, project);
+      generated = await generateCloudflareImage(prompt, quality, {
+        seed: stableImageSeed(`${project.id}:${scene.sceneNumber}`),
+        references: usableReferences.filter((reference) => reference.role === "anchor")
+      });
     }
     body = generated.body;
     model = generated.model;
@@ -114,7 +148,7 @@ async function generateSceneImage(
     contentType: "image/png"
   });
 
-  return {
+  const asset: SceneAsset = {
     id: crypto.randomUUID(),
     type: "image",
     r2Key: uploaded.key,
@@ -124,8 +158,19 @@ async function generateSceneImage(
       model,
       quality,
       prompt,
+      seed: stableImageSeed(`${project.id}:${scene.sceneNumber}`),
+      referenceKeys: usableReferences.map((reference) => reference.r2Key),
       sceneNumber: scene.sceneNumber
     }
+  };
+  const referenceBody = await sharp(body)
+    .rotate()
+    .resize(512, 288, { fit: "cover" })
+    .jpeg({ quality: 82, chromaSubsampling: "4:2:0" })
+    .toBuffer();
+  return {
+    asset,
+    reference: { body: referenceBody, contentType: "image/jpeg", role: "anchor", r2Key: uploaded.key }
   };
 }
 
@@ -151,17 +196,58 @@ export async function generateProjectSceneImages(
   const selectedIndexes = scenes
     .map((scene, index) => ({ scene, index }))
     .filter(({ scene }) => !selectedScenes || selectedScenes.has(scene.sceneNumber));
+  if (selectedIndexes.length === 0) return project;
   const concurrency = Math.min(3, Math.max(1, Number(getOptionalEnv("IMAGE_GENERATION_CONCURRENCY")) || 2));
-  await mapWithConcurrency(selectedIndexes, concurrency, async ({ scene, index }) => {
+  const firstExistingImage = scenes
+    .flatMap((scene) => scene.assets.filter((asset) => asset.type === "image" && asset.url))
+    .find(Boolean);
+  let projectAnchor = await loadImageReference(firstExistingImage, "anchor");
+  const targets = [...selectedIndexes];
+
+  if (!projectAnchor && targets.length > 0) {
+    const anchorTarget = targets.shift()!;
+    try {
+      const currentReference = await loadImageReference(
+        anchorTarget.scene.assets.find((asset) => asset.type === "image" && asset.url),
+        "current"
+      );
+      const generated = await generateSceneImage(
+        anchorTarget.scene,
+        project,
+        options.quality ?? "standard",
+        currentReference ? [currentReference] : []
+      );
+      if (generated) {
+        const existingAssets = options.replaceExistingImages
+          ? anchorTarget.scene.assets.filter((asset) => !["image", "clip"].includes(asset.type))
+          : anchorTarget.scene.assets;
+        scenes[anchorTarget.index] = { ...anchorTarget.scene, assets: [generated.asset, ...existingAssets] };
+        projectAnchor = generated.reference;
+      }
+    } catch (error) {
+      failures.push(classifyImageError(error));
+      console.error(`[image-assets] Anchor scene ${anchorTarget.scene.sceneNumber} image generation failed:`, error);
+    }
+  }
+
+  await mapWithConcurrency(targets, concurrency, async ({ scene, index }) => {
       try {
-        const image = await generateSceneImage(scene, project, options.quality ?? "standard");
-        if (!image) return;
+        const currentReference = await loadImageReference(
+          scene.assets.find((asset) => asset.type === "image" && asset.url),
+          "current"
+        );
+        const references = [
+          currentReference,
+          projectAnchor && projectAnchor.r2Key !== currentReference?.r2Key ? projectAnchor : undefined
+        ].filter(Boolean) as ImageReference[];
+        const generated = await generateSceneImage(scene, project, options.quality ?? "standard", references);
+        if (!generated) return;
 
         const existingAssets = options.replaceExistingImages
           ? scene.assets.filter((asset) => !["image", "clip"].includes(asset.type))
           : scene.assets;
 
-        scenes[index] = { ...scene, assets: [image, ...existingAssets] };
+        scenes[index] = { ...scene, assets: [generated.asset, ...existingAssets] };
       } catch (error) {
         failures.push(classifyImageError(error));
         console.error(`[image-assets] Scene ${scene.sceneNumber} image generation failed:`, error);

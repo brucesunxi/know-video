@@ -76,7 +76,12 @@ async function wait(milliseconds: number) {
 
 export async function generateCloudflareImage(
   prompt: string,
-  quality: "standard" | "premium" = "standard"
+  quality: "standard" | "premium" = "standard",
+  options: {
+    seed?: number;
+    guidance?: number;
+    references?: Array<{ body: Buffer; contentType: string }>;
+  } = {}
 ) {
   const model = quality === "premium"
     ? getOptionalEnv("CLOUDFLARE_PREMIUM_IMAGE_MODEL") || PREMIUM_IMAGE_MODEL
@@ -89,6 +94,19 @@ export async function generateCloudflareImage(
       form.append("width", "1280");
       form.append("height", "720");
       form.append("steps", "4");
+      if (options.seed !== undefined) form.append("seed", String(options.seed));
+      form.append("guidance", String(options.guidance ?? (quality === "premium" ? 4 : 3.5)));
+      options.references?.slice(0, 4).forEach((reference, index) => {
+        const bytes = reference.body.buffer.slice(
+          reference.body.byteOffset,
+          reference.body.byteOffset + reference.body.byteLength
+        ) as ArrayBuffer;
+        form.append(
+          `input_image_${index}`,
+          new Blob([bytes], { type: reference.contentType }),
+          `reference-${index}.${reference.contentType === "image/png" ? "png" : "jpg"}`
+        );
+      });
       const response = await fetch(endpoint(model), {
         method: "POST",
         headers: authorizationHeaders(),
