@@ -738,7 +738,7 @@ button:disabled {
 .kv-progress-steps {
   display: grid;
   width: min(760px, 92vw);
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: 10px;
 }
 

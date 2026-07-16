@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
-import type { EditPlan, Project, ProjectVersion, Scene } from "@/lib/types";
+import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
 type AiEngine = "deepseek-flash" | "openai" | "heuristic";
 
@@ -10,7 +10,7 @@ const sceneSchema = z.object({
   voiceover: z.string().min(1),
   visualPrompt: z.string().min(1),
   motionPrompt: z.string().min(1),
-  durationSeconds: z.number().int().min(3).max(20),
+  durationSeconds: z.number().int().min(2).max(20),
   style: z.object({
     theme: z.string().min(1),
     palette: z.array(z.string()).min(2).max(6),
@@ -241,23 +241,25 @@ function isModelConnectionError(error: unknown) {
   return /timeout|timed out|connection|fetch failed|econn|etimedout|network/i.test(message);
 }
 
-function requestedDuration(prompt: string) {
+function requestedDuration(prompt: string, options?: GenerationOptions) {
+  if (options) return Number(options.duration);
   const match = prompt.match(/(?:时长|duration)?\s*(\d{1,3})\s*(?:秒|秒钟|seconds?|s\b)/i);
   const duration = match ? Number(match[1]) : 30;
   return Math.min(120, Math.max(15, duration));
 }
 
-function requestedSceneCount(prompt: string, targetDuration: number) {
+function requestedSceneCount(prompt: string, targetDuration: number, options?: GenerationOptions) {
+  if (options?.sceneCount && options.sceneCount !== "auto") return Number(options.sceneCount);
   const match = prompt.match(/(?:分成|生成|需要|共|exactly)?\s*(\d)\s*(?:个)?(?:场景|镜头|分镜|scenes?|shots?)/i);
   const count = match ? Number(match[1]) : 5;
-  const maximumFeasibleCount = Math.max(3, Math.floor(targetDuration / 3));
+  const maximumFeasibleCount = Math.max(3, Math.floor(targetDuration / 2));
   return Math.min(8, maximumFeasibleCount, Math.max(3, count));
 }
 
 function distributeDurations(values: number[], target: number) {
-  const source = values.map((value) => Math.max(3, value));
+  const source = values.map((value) => Math.max(2, value));
   const sourceTotal = source.reduce((sum, value) => sum + value, 0) || source.length;
-  const scaled = source.map((value) => Math.max(3, Math.round((value / sourceTotal) * target)));
+  const scaled = source.map((value) => Math.max(2, Math.round((value / sourceTotal) * target)));
   let difference = target - scaled.reduce((sum, value) => sum + value, 0);
   let cursor = 0;
 
@@ -266,7 +268,7 @@ function distributeDurations(values: number[], target: number) {
     if (difference > 0) {
       scaled[index] += 1;
       difference -= 1;
-    } else if (scaled[index] > 3) {
+    } else if (scaled[index] > 2) {
       scaled[index] -= 1;
       difference += 1;
     }
@@ -311,7 +313,11 @@ function normalizeStoryboard(
   }));
 }
 
-function storyboardQualityIssues(scenes: Scene[]) {
+function storyboardQualityIssues(
+  scenes: Scene[],
+  options?: GenerationOptions,
+  projectTitle?: string
+) {
   const issues: string[] = [];
   const normalizedTitles = scenes.map((scene) => scene.title.toLowerCase().replace(/\s+/g, " "));
 
@@ -320,13 +326,38 @@ function storyboardQualityIssues(scenes: Scene[]) {
   if (scenes.some((scene) => scene.visualPrompt.split("\n")[0].length < 100)) issues.push("visual direction lacks concrete detail");
   if (scenes.some((scene) => scene.motionPrompt.split(" Camera language:")[0].length < 50)) issues.push("camera or motion direction lacks detail");
   if (scenes.some((scene) => scene.voiceover.length < 12)) issues.push("voiceover is too short");
+  if (options?.language === "中文" && scenes.some((scene) => !hasChinese(scene.title) || !hasChinese(scene.voiceover))) {
+    issues.push("scene titles or narration are not fully localized in Chinese");
+  }
+  if (options?.language === "英文" && scenes.some((scene) => hasChinese(scene.title) || hasChinese(scene.voiceover))) {
+    issues.push("scene titles or narration are not fully localized in English");
+  }
+  if (
+    projectTitle
+    && (
+      (options?.language === "中文" && !hasChinese(projectTitle))
+      || (options?.language === "英文" && hasChinese(projectTitle))
+    )
+  ) {
+    issues.push("project title is not localized in the requested language");
+  }
 
   return issues;
 }
 
-async function createTreatment(prompt: string, textModel: NonNullable<ReturnType<typeof getTextModel>>) {
-  const targetDuration = requestedDuration(prompt);
-  const sceneCount = requestedSceneCount(prompt, targetDuration);
+async function createTreatment(
+  prompt: string,
+  textModel: NonNullable<ReturnType<typeof getTextModel>>,
+  options?: GenerationOptions
+) {
+  const targetDuration = requestedDuration(prompt, options);
+  const sceneCount = requestedSceneCount(prompt, targetDuration, options);
+  const languageDirection = options
+    ? `Required language for workingTitle, all scene titles, narration, and visible text: ${options.language}.`
+    : "Infer the language from the user's request.";
+  const styleDirection = options
+    ? `Required overall visual style: ${options.style}. Translate that style into a concrete visual bible rather than merely naming it.`
+    : "Infer an appropriate visual style from the user's request.";
   const completion = await textModel.client.chat.completions.create({
     model: textModel.model,
     response_format: { type: "json_object" },
@@ -345,7 +376,7 @@ async function createTreatment(prompt: string, textModel: NonNullable<ReturnType
       },
       {
         role: "user",
-        content: `Creative request:\n${prompt}\n\nTarget duration: ${targetDuration} seconds. Required beats: exactly ${sceneCount}.\n\nReturn JSON in this exact shape:\n{ "workingTitle": string, "language": string, "audience": string, "corePromise": string, "creativeConcept": string, "narrativeArc": string, "visualBible": { "world": string, "artDirection": string, "palette": string[3-6], "lighting": string, "cameraLanguage": string, "recurringMotif": string, "avoid": string[2-10] }, "beats": [{ "purpose": string, "emotionalBeat": string, "visualAnchor": string, "transition": string }] }`
+        content: `Creative request:\n${prompt}\n\nTarget duration: ${targetDuration} seconds. Required beats: exactly ${sceneCount}.\n${languageDirection}\n${styleDirection}\n\nReturn JSON in this exact shape:\n{ "workingTitle": string, "language": string, "audience": string, "corePromise": string, "creativeConcept": string, "narrativeArc": string, "visualBible": { "world": string, "artDirection": string, "palette": string[3-6], "lighting": string, "cameraLanguage": string, "recurringMotif": string, "avoid": string[2-10] }, "beats": [{ "purpose": string, "emotionalBeat": string, "visualAnchor": string, "transition": string }] }`
       }
     ],
     temperature: 0.6
@@ -365,6 +396,7 @@ async function repairStoryboard(params: {
   issues: string[];
   targetDuration: number;
   textModel: NonNullable<ReturnType<typeof getTextModel>>;
+  options?: GenerationOptions;
 }) {
   const completion = await params.textModel.client.chat.completions.create({
     model: params.textModel.model,
@@ -382,7 +414,7 @@ async function repairStoryboard(params: {
       },
       {
         role: "user",
-        content: `Original request:\n${params.prompt}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds. Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
+        content: `Original request:\n${params.prompt}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. ${params.options ? `All titles and narration must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
       }
     ],
     temperature: 0.35
@@ -408,18 +440,22 @@ function storyboardLooksGeneric(scenes: Array<{ title: string; visualPrompt: str
   });
 }
 
-export async function createStoryboardProject(prompt: string, baseProject?: Project): Promise<{
+export async function createStoryboardProject(
+  prompt: string,
+  baseProject?: Project,
+  options?: GenerationOptions
+): Promise<{
   project: Project;
   engine: AiEngine;
 }> {
   const textModel = getTextModel();
   if (!textModel) {
-    return { project: generateProjectFromPrompt(prompt, baseProject), engine: "heuristic" };
+    return { project: generateProjectFromPrompt(prompt, baseProject, options), engine: "heuristic" };
   }
 
   try {
-    const targetDuration = requestedDuration(prompt);
-    const treatment = await createTreatment(prompt, textModel);
+    const targetDuration = requestedDuration(prompt, options);
+    const treatment = await createTreatment(prompt, textModel, options);
     const completion = await textModel.client.chat.completions.create({
       model: textModel.model,
       response_format: { type: "json_object" },
@@ -431,14 +467,14 @@ export async function createStoryboardProject(prompt: string, baseProject?: Proj
               "You are a meticulous storyboard director translating an approved treatment into production-ready shots.",
               "Return strict JSON only.",
               `Create exactly ${treatment.beats.length} scenes, one for each treatment beat, in the same order.`,
-              `The complete video must last exactly ${targetDuration} seconds after integer rounding, with every scene at least 3 seconds.`,
+              `The complete video must last exactly ${targetDuration} seconds after integer rounding, with every scene at least 2 seconds.`,
               "The storyboard must play as a real short film, not a generic SaaS page outline or presentation.",
               "Never use generic section titles such as Customization, User Interface, Benefits, Features, Overview, or Conclusion.",
               "Every scene must have one unmistakable visual subject, a foreground action, an environment, depth, and a specific composition.",
               "Maintain the treatment's recurring motif, palette, world, lighting, and camera language across every scene.",
               "Do not rely on readable text, fake logos, generic dashboards, grids of floating cards, or instructions shown inside the image.",
               "Describe visual prompts as finished cinematic frames that an image model can render, not as design notes.",
-              "Scene titles should be short, concrete, and in the same language as the user's request.",
+              `Scene titles and narration must be short, concrete, and written in ${options?.language ?? treatment.language}.`,
               "Voiceover must be natural finished narration, fit comfortably in its scene duration, and avoid repeating the title.",
               "Motion prompts must specify camera movement, subject movement, depth behavior, and the handoff into the next shot."
             ].join(" ")
@@ -457,7 +493,7 @@ export async function createStoryboardProject(prompt: string, baseProject?: Proj
     }
     let acceptedStoryboard = parsed;
     let scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration);
-    let qualityIssues = storyboardQualityIssues(scenes);
+    let qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title);
     if (qualityIssues.length > 0) {
       console.warn(`[ai-video] Storyboard quality check requested a repair: ${qualityIssues.join(", ")}.`);
       acceptedStoryboard = await repairStoryboard({
@@ -466,13 +502,14 @@ export async function createStoryboardProject(prompt: string, baseProject?: Proj
         storyboard: acceptedStoryboard,
         issues: qualityIssues,
         targetDuration,
-        textModel
+        textModel,
+        options
       });
       scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration);
-      qualityIssues = storyboardQualityIssues(scenes);
+      qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title);
       if (qualityIssues.length > 0) {
         console.error(`[ai-video] Repaired storyboard still failed quality checks (${qualityIssues.join(", ")}), using focused fallback.`);
-        return { project: generateProjectFromPrompt(prompt, baseProject), engine: "heuristic" };
+        return { project: generateProjectFromPrompt(prompt, baseProject, options), engine: "heuristic" };
       }
     }
 
@@ -485,7 +522,7 @@ export async function createStoryboardProject(prompt: string, baseProject?: Proj
           credits: 996,
           plan: "Free"
         }),
-        title: parsed.title,
+        title: acceptedStoryboard.title,
         currentVersion: {
           id: crypto.randomUUID(),
           label: "draft 1",
@@ -498,7 +535,7 @@ export async function createStoryboardProject(prompt: string, baseProject?: Proj
     };
   } catch (error) {
     console.error("[ai-video] Falling back to heuristic storyboard:", error);
-    return { project: generateProjectFromPrompt(prompt, baseProject), engine: "heuristic" };
+    return { project: generateProjectFromPrompt(prompt, baseProject, options), engine: "heuristic" };
   }
 }
 

@@ -122,9 +122,7 @@ export async function persistGeneratedProject(params: {
         id: crypto.randomUUID(),
         role: "assistant",
         type: "version",
-        content: params.project.currentVersion.assetStatus === "ready"
-          ? `已完成 ${params.project.currentVersion.scenes.length} 个场景和全部视觉素材。`
-          : `已完成 ${params.project.currentVersion.scenes.length} 个场景，但部分视觉素材需要重试。`,
+        content: `脚本和 ${params.project.currentVersion.scenes.length} 个分镜已经完成，正在继续生成画面与配音。`,
         versionId: params.project.currentVersion.id
       }
     ];
@@ -171,9 +169,7 @@ export async function persistGeneratedProject(params: {
     returning id
   ` as IdRow[];
 
-  const assistantContent = params.project.currentVersion.assetStatus === "ready"
-    ? `已完成 ${params.project.currentVersion.scenes.length} 个场景和全部视觉素材。你可以播放预览，或通过对话逐场景修改。`
-    : `已完成 ${params.project.currentVersion.scenes.length} 个场景，但视觉素材没有全部生成。请在工作室中重试缺失的场景。`;
+  const assistantContent = `脚本和 ${params.project.currentVersion.scenes.length} 个分镜已经完成，正在继续生成画面与配音。`;
   const assistantRows = await sql`
     insert into chat_messages (project_id, version_id, role, message_type, content)
     values (${projectId}, ${versionId}, 'assistant', 'version', ${assistantContent})

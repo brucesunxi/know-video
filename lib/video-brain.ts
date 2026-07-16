@@ -1,4 +1,4 @@
-import type { EditPlan, Project, ProjectVersion, Scene } from "@/lib/types";
+import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
 const palettes = {
   dark: ["#07111d", "#143044", "#38d5e5", "#f8fafc"],
@@ -9,16 +9,20 @@ const palettes = {
 
 function detectTone(text: string) {
   const lower = text.toLowerCase();
-  if (lower.includes("light") || lower.includes("bright") || lower.includes("浅色") || lower.includes("白色")) return "light";
-  if (lower.includes("cinematic") || lower.includes("电影") || lower.includes("高级感")) return "cinematic";
-  if (lower.includes("playful") || lower.includes("fun") || lower.includes("可爱") || lower.includes("活泼")) return "playful";
+  if (lower.includes("light") || lower.includes("bright") || lower.includes("浅色") || lower.includes("白色") || lower.includes("极简")) return "light";
+  if (lower.includes("cinematic") || lower.includes("电影") || lower.includes("高级感") || lower.includes("温暖")) return "cinematic";
+  if (lower.includes("playful") || lower.includes("fun") || lower.includes("可爱") || lower.includes("活泼") || lower.includes("明快")) return "playful";
   return "dark";
 }
 
 function titleFromPrompt(prompt: string) {
   const cleaned = prompt.replace(/[。.!?？]/g, " ").trim();
   const first = cleaned.split(/\s+/).slice(0, 5).join(" ");
-  return first.length > 0 ? first : "Untitled Video";
+  return first.length > 0 ? first.slice(0, 40) : "Untitled Video";
+}
+
+function containsChinese(text: string) {
+  return /\p{Script=Han}/u.test(text);
 }
 
 function isVideoGenerationPrompt(prompt: string) {
@@ -33,17 +37,58 @@ function isVideoGenerationPrompt(prompt: string) {
   );
 }
 
-export function generateProjectFromPrompt(prompt: string, baseProject?: Project): Project {
-  const title = titleFromPrompt(prompt);
-  const tone = detectTone(prompt);
+function distributeFallbackDurations(sceneCount: number, targetDuration: number) {
+  const base = Math.floor(targetDuration / sceneCount);
+  const remainder = targetDuration - base * sceneCount;
+  return Array.from({ length: sceneCount }, (_, index) => base + (index < remainder ? 1 : 0));
+}
+
+function selectNarrativeScenes<T>(scenes: T[], count: number) {
+  const indexes = count === 3
+    ? [0, 2, 5]
+    : count === 5
+      ? [0, 1, 2, 3, 5]
+      : [0, 1, 2, 3, 4, 5];
+  return indexes.map((index) => scenes[index]);
+}
+
+function applyFallbackConstraints(
+  scenes: Scene[],
+  options?: GenerationOptions
+) {
+  const count = options?.sceneCount === "auto" || !options?.sceneCount
+    ? 5
+    : Number(options.sceneCount);
+  const targetDuration = Number(options?.duration ?? 30);
+  const durations = distributeFallbackDurations(count, targetDuration);
+  return selectNarrativeScenes(scenes, count).map((scene, index) => ({
+    ...scene,
+    id: crypto.randomUUID(),
+    sceneNumber: index + 1,
+    durationSeconds: durations[index]
+  }));
+}
+
+export function generateProjectFromPrompt(
+  prompt: string,
+  baseProject?: Project,
+  options?: GenerationOptions
+): Project {
+  const promptTitle = titleFromPrompt(prompt);
+  const tone = detectTone(`${prompt} ${options?.style ?? ""}`);
   const palette = palettes[tone];
-  const subject = title.toUpperCase();
-  const videoGenerationScenes: Scene[] = [
+  const chinese = options?.language !== "英文";
+  const title = chinese
+    ? containsChinese(promptTitle) ? promptTitle : "创意视频项目"
+    : containsChinese(promptTitle) ? "Creative Video" : promptTitle;
+  const videoGenerationBlueprints: Scene[] = [
     {
       id: crypto.randomUUID(),
       sceneNumber: 1,
-      title: "输入制作请求",
-      voiceover: "用户只需要描述想做的视频，Know Video 就会把目标、受众、时长和风格整理成清晰的制作 brief。",
+      title: chinese ? "输入制作请求" : "Describe the idea",
+      voiceover: chinese
+        ? "用户只需要描述想做的视频，Know Video 就会把目标、受众、时长和风格整理成清晰的制作简报。"
+        : "Describe the video you want, and Know Video turns the goal, audience, timing, and style into a clear production brief.",
       visualPrompt: `${tone} product video scene: a creator types a video request into Know Video, the prompt expands into audience, goal, tone, and duration chips.`,
       motionPrompt: "Camera pushes toward the prompt box, then the request fans out into structured production cards.",
       durationSeconds: 6,
@@ -53,8 +98,10 @@ export function generateProjectFromPrompt(prompt: string, baseProject?: Project)
     {
       id: crypto.randomUUID(),
       sceneNumber: 2,
-      title: "AI 自动分镜",
-      voiceover: "系统自动拆出脚本、旁白、镜头画面和运动提示词，让创意从一句话变成可执行的分镜。",
+      title: chinese ? "智能规划脚本" : "Plan the story",
+      voiceover: chinese
+        ? "系统自动拆出脚本、旁白、镜头画面和运动提示词，让创意从一句话变成可执行的分镜。"
+        : "The system develops the script, narration, visual direction, and camera movement into a production-ready storyboard.",
       visualPrompt: `${tone} storyboard workspace with five scene cards, narration lines, visual prompt panels, and timing markers generated from the request.`,
       motionPrompt: "Five scene cards slide into a timeline while script lines type in below each card.",
       durationSeconds: 7,
@@ -64,8 +111,10 @@ export function generateProjectFromPrompt(prompt: string, baseProject?: Project)
     {
       id: crypto.randomUUID(),
       sceneNumber: 3,
-      title: "生成视频预览",
-      voiceover: "每个镜头都会进入预览播放器，用户可以先看整体节奏，再决定哪里需要调整。",
+      title: chinese ? "生成统一画面" : "Create the visuals",
+      voiceover: chinese
+        ? "每个场景都在同一套视觉语言下生成，让人物、色彩、光线和构图保持连贯。"
+        : "Each scene is created within one visual language, keeping subjects, color, lighting, and composition coherent.",
       visualPrompt: `${tone} video preview player showing an AI-generated product video with progress bar, scene thumbnails, and animated UI elements.`,
       motionPrompt: "The playhead moves across the timeline, preview panels animate, and the current scene enlarges.",
       durationSeconds: 6,
@@ -75,8 +124,10 @@ export function generateProjectFromPrompt(prompt: string, baseProject?: Project)
     {
       id: crypto.randomUUID(),
       sceneNumber: 4,
-      title: "聊天改片",
-      voiceover: "如果画面、节奏或风格不满意，直接用对话提出修改，系统会生成逐场景的修改计划。",
+      title: chinese ? "通过对话改片" : "Revise through chat",
+      voiceover: chinese
+        ? "如果画面、节奏或风格不满意，直接用对话提出修改，系统会生成逐场景的修改计划。"
+        : "Ask for changes in plain language, and Know Video turns the request into a scene-by-scene revision plan.",
       visualPrompt: `${tone} split-screen editor: video preview on the left, chat instruction on the right, before-after scene diff cards appearing below.`,
       motionPrompt: "A chat message transforms into highlighted before-and-after cards for affected scenes.",
       durationSeconds: 6,
@@ -86,16 +137,32 @@ export function generateProjectFromPrompt(prompt: string, baseProject?: Project)
     {
       id: crypto.randomUUID(),
       sceneNumber: 5,
-      title: "确认并导出",
-      voiceover: "确认修改后，Know Video 会生成新版本并进入导出流程，把视频制作变成可反复优化的工作流。",
+      title: chinese ? "保留创作版本" : "Keep every version",
+      voiceover: chinese
+        ? "每次确认修改都会生成可恢复的新版本，让大胆尝试和精细调整都更安心。"
+        : "Every approved revision becomes a restorable version, making both bold experiments and precise refinements safer.",
       visualPrompt: `${tone} final export scene with Know Video version history, approved edit plan, render complete status, and export/share buttons.`,
       motionPrompt: "The accepted version moves to the front, render status reaches complete, and export buttons glow subtly.",
+      durationSeconds: 5,
+      style: { theme: tone, palette, mood: "confident" },
+      assets: []
+    },
+    {
+      id: crypto.randomUUID(),
+      sceneNumber: 6,
+      title: chinese ? "完成并导出" : "Finish and export",
+      voiceover: chinese
+        ? "确认成片后，系统会合成画面、字幕和自然配音，输出可以直接交付的高清视频。"
+        : "When the film is approved, visuals, captions, and narration are composed into a delivery-ready high-resolution video.",
+      visualPrompt: `${tone} final cinematic delivery scene for Know Video, completed film playing full-frame on a premium studio monitor, restrained export confirmation and version strip in the environment.`,
+      motionPrompt: "The finished sequence resolves on the monitor, the timeline locks, and the camera eases back into a confident final composition.",
       durationSeconds: 5,
       style: { theme: tone, palette, mood: "confident" },
       assets: []
     }
   ];
   if (isVideoGenerationPrompt(prompt)) {
+    const videoGenerationScenes = applyFallbackConstraints(videoGenerationBlueprints, options);
     return {
       ...(baseProject ?? {
         id: crypto.randomUUID(),
@@ -103,7 +170,7 @@ export function generateProjectFromPrompt(prompt: string, baseProject?: Project)
         credits: 996,
         plan: "Free"
       }),
-      title: "Know Video 产品介绍",
+      title: chinese ? "Know Video 产品介绍" : "Know Video Product Film",
       currentVersion: {
         id: crypto.randomUUID(),
         label: "draft 1",
@@ -115,12 +182,14 @@ export function generateProjectFromPrompt(prompt: string, baseProject?: Project)
     };
   }
 
-  const scenes: Scene[] = [
+  const genericBlueprints: Scene[] = [
     {
       id: crypto.randomUUID(),
       sceneNumber: 1,
-      title: "Opening Hook",
-      voiceover: `${title} opens with the core promise in one clear sentence, giving viewers a reason to keep watching.`,
+      title: chinese ? "开场钩子" : "Opening Hook",
+      voiceover: chinese
+        ? `${title} 从一个清晰、有吸引力的核心承诺开场，让观众立即理解这支视频为什么值得继续看。`
+        : `${title} opens with the core promise in one clear sentence, giving viewers a reason to keep watching.`,
       visualPrompt: `${tone} opening title card for ${prompt}, strong product signal, clean layout, readable headline.`,
       motionPrompt: "Camera pushes in slowly while the headline resolves and supporting UI details fade into place.",
       durationSeconds: 6,
@@ -130,8 +199,10 @@ export function generateProjectFromPrompt(prompt: string, baseProject?: Project)
     {
       id: crypto.randomUUID(),
       sceneNumber: 2,
-      title: "Problem Context",
-      voiceover: "The video frames the current friction, showing why the audience needs a more structured answer.",
+      title: chinese ? "问题情境" : "Problem Context",
+      voiceover: chinese
+        ? "视频呈现目标受众正在经历的真实阻力，让解决这个问题的价值变得具体而紧迫。"
+        : "The video frames the current friction, showing why the audience needs a more structured answer.",
       visualPrompt: `${tone} problem scene with scattered cards, alerts, and timeline pressure around ${prompt}.`,
       motionPrompt: "Cards drift apart, warning states appear, then pause for emphasis.",
       durationSeconds: 7,
@@ -141,8 +212,10 @@ export function generateProjectFromPrompt(prompt: string, baseProject?: Project)
     {
       id: crypto.randomUUID(),
       sceneNumber: 3,
-      title: "Solution Flow",
-      voiceover: "The solution is broken into a step-by-step flow that makes the system feel achievable.",
+      title: chinese ? "解决路径" : "Solution Flow",
+      voiceover: chinese
+        ? "解决方案被拆成清晰的步骤，让复杂过程变得容易理解，也让行动路径触手可及。"
+        : "The solution is broken into a step-by-step flow that makes the system feel achievable.",
       visualPrompt: `${tone} workflow scene with three connected steps, interface panels, and visual hierarchy.`,
       motionPrompt: "Steps connect from left to right, then the active step expands.",
       durationSeconds: 8,
@@ -152,8 +225,10 @@ export function generateProjectFromPrompt(prompt: string, baseProject?: Project)
     {
       id: crypto.randomUUID(),
       sceneNumber: 4,
-      title: "Proof Moment",
-      voiceover: "A concrete example shows the transformation from scattered work into a cleaner operating rhythm.",
+      title: chinese ? "效果证明" : "Proof Moment",
+      voiceover: chinese
+        ? "一个具体案例展示改变如何发生，把抽象价值转化为观众能够看见和相信的结果。"
+        : "A concrete example shows the transformation from scattered work into a cleaner operating rhythm.",
       visualPrompt: `${tone} before-after comparison for ${prompt}, measurable improvement, dashboard-like clarity.`,
       motionPrompt: "Before state compresses, after state slides in with highlighted metrics.",
       durationSeconds: 7,
@@ -163,15 +238,31 @@ export function generateProjectFromPrompt(prompt: string, baseProject?: Project)
     {
       id: crypto.randomUUID(),
       sceneNumber: 5,
-      title: `${subject} Closing`,
-      voiceover: "The closing scene reinforces the main outcome and leaves the audience with a memorable final frame.",
+      title: chinese ? "价值升华" : "Human Outcome",
+      voiceover: chinese
+        ? "镜头回到使用者真正获得的改变，强化这套方案带来的长期价值和情绪回报。"
+        : "The story returns to the human outcome, reinforcing the lasting value and emotional payoff of the solution.",
       visualPrompt: `${tone} closing brand card for ${prompt}, centered mark, concise takeaway, premium spacing.`,
       motionPrompt: "Logo and takeaway fade in, background elements settle, then hold.",
       durationSeconds: 6,
       style: { theme: tone, palette, mood: "polished" },
       assets: []
+    },
+    {
+      id: crypto.randomUUID(),
+      sceneNumber: 6,
+      title: chinese ? "成果收束" : "Final Resolve",
+      voiceover: chinese
+        ? "结尾再次聚焦最重要的成果，并用一个简洁、清晰、值得记住的画面结束整支视频。"
+        : "The closing scene reinforces the main outcome and leaves the audience with a memorable final frame.",
+      visualPrompt: `${tone} closing cinematic frame for ${prompt}, one concrete hero subject, resolved environment, strong visual identity, premium spacing, no generic presentation layout.`,
+      motionPrompt: "The final subject settles into a clean hero composition, environmental motion slows, and the camera holds for a confident finish.",
+      durationSeconds: 6,
+      style: { theme: tone, palette, mood: "resolved" },
+      assets: []
     }
   ];
+  const scenes = applyFallbackConstraints(genericBlueprints, options);
 
   return {
     ...(baseProject ?? {

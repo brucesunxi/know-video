@@ -1,5 +1,12 @@
 export type AssetType = "image" | "audio" | "clip" | "thumbnail" | "caption" | "render";
 
+export type GenerationOptions = {
+  duration: "15" | "30" | "45" | "60";
+  sceneCount: "auto" | "3" | "5" | "6";
+  language: "中文" | "英文";
+  style: "电影质感" | "极简高级" | "明快有活力" | "温暖自然";
+};
+
 export type SceneAsset = {
   id: string;
   type: AssetType;

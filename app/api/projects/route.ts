@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createStoryboardProject } from "@/lib/ai-video";
-import { generateProjectSceneImages } from "@/lib/image-assets";
-import { generateProjectVoices } from "@/lib/audio-assets";
 import { persistGeneratedProject } from "@/lib/project-mutations";
 import { listProjects } from "@/lib/project-store";
 
@@ -29,24 +27,10 @@ function publicEngine(engine: string) {
 
 export async function POST(request: Request) {
   const body = requestSchema.parse(await request.json());
-  const sceneInstruction = body.options?.sceneCount && body.options.sceneCount !== "auto"
-    ? `严格生成 ${body.options.sceneCount} 个场景。`
-    : "场景数量由导演根据叙事自动规划。";
-  const productionPrompt = body.options
-    ? [
-        body.prompt,
-        `总时长严格为 ${body.options.duration} 秒。`,
-        sceneInstruction,
-        `全部标题、旁白和字幕使用${body.options.language}。`,
-        `整体视觉风格为${body.options.style}。`
-      ].join("\n")
-    : body.prompt;
-  const { project, engine } = await createStoryboardProject(productionPrompt);
-  const projectWithImages = await generateProjectSceneImages(project);
-  const projectWithMedia = await generateProjectVoices(projectWithImages);
+  const { project, engine } = await createStoryboardProject(body.prompt, undefined, body.options);
   const persisted = await persistGeneratedProject({
     prompt: body.prompt,
-    project: projectWithMedia,
+    project,
     engine
   });
 

@@ -44,6 +44,11 @@ export async function POST(request: Request) {
     }
   );
 
+  await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
+    replaceImages: true,
+    sceneNumbers: body.sceneNumbers
+  });
+
   if (failedTargets.length > 0) {
     const messages = {
       missing_key: "图片服务尚未配置，请先设置有效的图片 API Key。",
@@ -57,11 +62,6 @@ export async function POST(request: Request) {
       { status: 502 }
     );
   }
-
-  await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
-    replaceImages: true,
-    sceneNumbers: body.sceneNumbers
-  });
 
   return NextResponse.json({ project: updated });
 }

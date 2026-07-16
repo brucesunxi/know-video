@@ -32,19 +32,12 @@ import {
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
 import { VIDEO_FPS } from "@/video/config";
-import type { ChatMessage, EditChange, EditPlan, Project, ProjectListItem, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, GenerationOptions, Project, ProjectListItem, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
 
 type Source = "database" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
 type Engine = "ai" | "heuristic";
 type StudioView = "preview" | "storyboard";
-type GenerationOptions = {
-  duration: "15" | "30" | "45" | "60";
-  sceneCount: "auto" | "3" | "5" | "6";
-  language: "中文" | "英文";
-  style: "电影质感" | "极简高级" | "明快有活力" | "温暖自然";
-};
-
 const promptExamples = [
   "生成一个 30 秒的 AI 视频生成平台产品介绍视频，风格高级、节奏快、适合官网首屏。",
   "做一个关于跨境电商库存管理 SaaS 的解释视频，目标客户是运营负责人。",
@@ -57,6 +50,7 @@ const progressSteps = [
   "撰写旁白与字幕",
   "生成视觉和运动提示词",
   "生成场景画面",
+  "生成自然配音",
   "保存项目版本"
 ];
 
@@ -85,6 +79,13 @@ function fileSizeLabel(value: unknown) {
 
 function sceneVisualAsset(scene: Scene) {
   return scene.assets.find((asset) => ["image", "clip"].includes(asset.type) && asset.url);
+}
+
+function requestErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name)) {
+    return `${fallback}请求超时，请稍后重试。`;
+  }
+  return error instanceof Error ? error.message : fallback;
 }
 
 function Shell({
@@ -377,7 +378,7 @@ function BriefScreen({
   );
 }
 
-function GeneratingScreen({ prompt, progress }: { prompt: string; progress: number }) {
+function GeneratingScreen({ prompt, progress, status }: { prompt: string; progress: number; status: string }) {
   const activeIndex = Math.min(progressSteps.length - 1, Math.floor(progress / (100 / progressSteps.length)));
 
   return (
@@ -388,7 +389,7 @@ function GeneratingScreen({ prompt, progress }: { prompt: string; progress: numb
       </div>
       <div className="kv-section-heading centered">
         <span className="kv-pill">正在制作</span>
-        <h2>正在生成脚本、分镜和场景画面</h2>
+        <h2>{status}</h2>
         <p>{prompt}</p>
       </div>
       <div className="kv-progress">
@@ -978,6 +979,7 @@ export function WorkspaceClient({
   const [pendingPlan, setPendingPlan] = useState<EditPlan | undefined>();
   const [isBusy, setIsBusy] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [generationStatus, setGenerationStatus] = useState("正在理解视频需求");
   const [studioView, setStudioView] = useState<StudioView>("preview");
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [exportProgress, setExportProgress] = useState<number | undefined>();
@@ -1016,17 +1018,17 @@ export function WorkspaceClient({
     setIsBusy(true);
     setErrorMessage(undefined);
     setProgress(8);
+    setGenerationStatus("正在理解视频需求");
     setStage("generating");
 
-    const timer = window.setInterval(() => {
-      setProgress((value) => Math.min(92, value + 12));
-    }, 520);
-
     try {
+      setProgress(18);
+      setGenerationStatus("正在规划脚本与分镜");
       const response = await fetch("/api/projects", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt, options: generationOptions })
+        body: JSON.stringify({ prompt, options: generationOptions }),
+        signal: AbortSignal.timeout(90_000)
       });
       if (!response.ok) {
         const failure = await response.json().catch(() => ({})) as { error?: string };
@@ -1037,8 +1039,9 @@ export function WorkspaceClient({
         messages: ChatMessage[];
         engine: Engine;
       };
-
-      setProject(data.project);
+      let generatedProject = data.project;
+      const warnings: string[] = [];
+      setProject(generatedProject);
       setProjects([]);
       setMessages([
         ...data.messages,
@@ -1051,19 +1054,63 @@ export function WorkspaceClient({
             : "已用本地规则生成初版分镜。"
         }
       ]);
-      if (data.project.currentVersion.assetStatus !== "ready") {
-        const errorMessages = {
-          missing_key: "脚本和分镜已经完成，但图片服务尚未配置。",
-          invalid_key: "脚本和分镜已经完成，但图片服务凭证无效，请更新 Vercel 中的服务配置。",
-          storage_failed: "脚本和分镜已经完成，但场景图片写入云端存储失败。",
-          generation_failed: "脚本和分镜已经完成，但部分场景画面生成失败。"
-        } as const;
-        setErrorMessage(
-          data.project.currentVersion.assetErrorCode
-            ? errorMessages[data.project.currentVersion.assetErrorCode]
-            : "脚本和分镜已经完成，但部分场景画面生成失败。"
-        );
+
+      setProgress(64);
+      setGenerationStatus("正在生成统一风格的场景画面");
+      try {
+        const imageResponse = await fetch("/api/assets/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            projectId: generatedProject.id,
+            versionId: generatedProject.currentVersion.id,
+            quality: "standard"
+          }),
+          signal: AbortSignal.timeout(125_000)
+        });
+        const imageData = await imageResponse.json() as { project?: Project; error?: string };
+        if (imageData.project) {
+          generatedProject = imageData.project;
+          setProject(generatedProject);
+        }
+        if (!imageResponse.ok) warnings.push(imageData.error || "部分场景画面生成失败。");
+      } catch (error) {
+        warnings.push(requestErrorMessage(error, "场景画面生成失败。"));
       }
+
+      setProgress(84);
+      setGenerationStatus("正在生成自然配音");
+      try {
+        const audioResponse = await fetch("/api/assets/audio/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            projectId: generatedProject.id,
+            versionId: generatedProject.currentVersion.id
+          }),
+          signal: AbortSignal.timeout(125_000)
+        });
+        const audioData = await audioResponse.json() as { project?: Project; error?: string };
+        if (audioData.project) {
+          generatedProject = audioData.project;
+          setProject(generatedProject);
+        }
+        if (!audioResponse.ok) warnings.push(audioData.error || "部分场景配音生成失败。");
+      } catch (error) {
+        warnings.push(requestErrorMessage(error, "场景配音生成失败。"));
+      }
+
+      setGenerationStatus("正在保存可继续编辑的项目");
+      setProgress(96);
+      if (warnings.length > 0) setErrorMessage(Array.from(new Set(warnings)).join(" "));
+      setMessages((current) => [...current, {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        type: "text",
+        content: warnings.length > 0
+          ? "脚本和分镜已经保存，部分媒体素材需要在工作室中重试。"
+          : "全部场景画面和配音已经完成，可以播放预览或继续通过对话修改。"
+      }]);
       setSelectedScene(1);
       setPendingPlan(undefined);
       setStudioView("preview");
@@ -1072,14 +1119,13 @@ export function WorkspaceClient({
     } catch (error) {
       console.error(error);
       setStage("brief");
-      setErrorMessage(error instanceof Error ? error.message : "生成失败，请稍后重试。");
+      setErrorMessage(requestErrorMessage(error, "生成失败，请稍后重试。"));
       pushMessage({
         role: "assistant",
         type: "text",
         content: "生成失败。请检查模型 Key、Vercel 日志或数据库连接。"
       });
     } finally {
-      window.clearInterval(timer);
       setIsBusy(false);
     }
   }
@@ -1689,7 +1735,7 @@ export function WorkspaceClient({
         />
       ) : null}
       {stage === "generating" ? (
-        <GeneratingScreen progress={progress} prompt={generationPrompt} />
+        <GeneratingScreen progress={progress} prompt={generationPrompt} status={generationStatus} />
       ) : null}
       {stage === "projects" ? (
         <ProjectLibrary
