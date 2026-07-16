@@ -774,7 +774,7 @@ button:disabled {
 .kv-studio {
   display: grid;
   min-height: 0;
-  grid-template-columns: minmax(0, 1fr) 420px;
+  grid-template-columns: minmax(0, 1fr) clamp(350px, 29vw, 420px);
 }
 
 .kv-studio-main {
@@ -1731,7 +1731,7 @@ button:disabled {
   position: sticky;
   top: 0;
   display: grid;
-  height: calc(100vh - 106px);
+  height: calc(100dvh - 94px);
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr) auto;
   border-left: 1px solid var(--line);
@@ -2229,22 +2229,61 @@ button:disabled {
   padding: 0;
 }
 
-@media (max-width: 1380px) {
-  .kv-brief,
-  .kv-studio {
+@media (max-width: 1180px) {
+  .kv-brief {
     grid-template-columns: 1fr;
   }
 
-  .kv-chat {
-    position: static;
-    height: auto;
-    min-height: 620px;
-    border-left: 0;
-    border-top: 1px solid var(--line);
+  .kv-actionbar {
+    flex-wrap: nowrap;
+  }
+
+  .kv-tabs {
+    flex: 0 0 auto;
+  }
+
+  .kv-tabs button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .kv-actions {
+    min-width: 0;
+    overflow-x: auto;
+    padding-bottom: 3px;
+    scrollbar-width: thin;
+  }
+
+  .kv-actions button {
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   .kv-project-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1040px) {
+  .kv-studio {
+    grid-template-columns: 1fr;
+  }
+
+  .kv-actionbar {
+    display: grid;
+    gap: 10px;
+  }
+
+  .kv-actions {
+    width: 100%;
+  }
+
+  .kv-chat {
+    position: static;
+    height: min(760px, 72dvh);
+    min-height: 540px;
+    border-left: 0;
+    border-top: 1px solid var(--line);
   }
 }
 
@@ -2303,6 +2342,10 @@ button:disabled {
   .kv-status-row {
     justify-content: flex-start;
     gap: 6px;
+  }
+
+  .kv-status-row span:nth-child(n + 3) {
+    display: none;
   }
 
   .kv-status-row span {
@@ -2430,17 +2473,31 @@ button:disabled {
   }
 
   .kv-actions {
-    display: grid;
+    display: flex;
     width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+    overflow-x: auto;
+    margin-inline: -12px;
+    padding: 0 12px 5px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .kv-actions::-webkit-scrollbar {
+    display: none;
   }
 
   .kv-actions button {
-    width: 100%;
-    min-width: 0;
+    flex: 0 0 auto;
+    min-height: 44px;
     justify-content: center;
     padding-inline: 10px;
+    scroll-snap-align: start;
+    white-space: nowrap;
+  }
+
+  .kv-actions .kv-primary {
+    order: -1;
   }
 
   .kv-tabs button {
@@ -2521,6 +2578,39 @@ button:disabled {
   .kv-player-fallback button {
     padding: 7px 9px;
     font-size: 11px;
+  }
+
+  .kv-chat {
+    height: min(720px, calc(100dvh - 90px));
+    min-height: 520px;
+  }
+
+  .kv-chat header {
+    padding: 15px 16px;
+  }
+
+  .kv-chat-log {
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .kv-chat-form {
+    grid-template-columns: minmax(0, 1fr) 46px;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .kv-chat-form textarea {
+    min-height: 72px;
+  }
+
+  .kv-review-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kv-review-actions button {
+    min-height: 44px;
+    justify-content: center;
   }
 }
 
