@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { assertUsableSpeechAudio } from "@/lib/audio-quality";
 import { generateAzureChineseSpeech, hasAzureSpeech } from "@/lib/azure-speech";
 import { generateCloudflareSpeech, hasCloudflareAI } from "@/lib/cloudflare-ai";
 import { getOptionalEnv } from "@/lib/env";
@@ -30,17 +31,36 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
   let rate: number | undefined;
   let actualDurationSeconds: number | undefined;
   if (containsChinese(scene.voiceover)) {
-    if (!hasAzureSpeech()) {
-      throw new Error("Chinese narration requires AZURE_SPEECH_KEY and AZURE_SPEECH_REGION");
+    try {
+      if (!hasAzureSpeech()) throw new Error("Chinese speech service is not configured");
+      const generated = await generateAzureChineseSpeech(scene.voiceover, scene.durationSeconds);
+      body = generated.body;
+      model = generated.model;
+      voice = generated.voice;
+      rate = generated.rate;
+      actualDurationSeconds = generated.actualDurationSeconds;
+      contentType = generated.contentType;
+      extension = generated.extension;
+    } catch (azureError) {
+      const apiKey = getOptionalEnv("OPENAI_API_KEY");
+      if (!apiKey) throw azureError;
+      console.error("[audio-assets] Azure Chinese speech failed, trying verified backup:", azureError);
+      const client = new OpenAI({ apiKey });
+      model = getOptionalEnv("OPENAI_TTS_MODEL") || "gpt-4o-mini-tts";
+      voice = getOptionalEnv("OPENAI_TTS_VOICE") || "alloy";
+      const result = await client.audio.speech.create({
+        model,
+        voice: voice as "alloy",
+        input: scene.voiceover,
+        response_format: "wav",
+        instructions: "Natural Mandarin Chinese narration. Clear pronunciation, confident premium product-film delivery, no sound effects."
+      });
+      body = Buffer.from(await result.arrayBuffer());
+      const inspection = assertUsableSpeechAudio(body, { targetDurationSeconds: scene.durationSeconds });
+      actualDurationSeconds = inspection.durationSeconds;
+      contentType = "audio/wav";
+      extension = "wav";
     }
-    const generated = await generateAzureChineseSpeech(scene.voiceover, scene.durationSeconds);
-    body = generated.body;
-    model = generated.model;
-    voice = generated.voice;
-    rate = generated.rate;
-    actualDurationSeconds = generated.actualDurationSeconds;
-    contentType = generated.contentType;
-    extension = generated.extension;
   } else if (hasCloudflareAI()) {
     const generated = await generateCloudflareSpeech(scene.voiceover);
     body = generated.body;
@@ -60,9 +80,13 @@ async function generateSceneVoice(scene: Scene, project: Project): Promise<Scene
       instructions: "Natural, confident product-film narration. Match the language of the text. Keep a composed, premium pace."
     });
     body = Buffer.from(await result.arrayBuffer());
+    const inspection = assertUsableSpeechAudio(body, { targetDurationSeconds: scene.durationSeconds });
+    actualDurationSeconds = inspection.durationSeconds;
     contentType = "audio/mpeg";
     extension = "mp3";
   }
+  const inspection = assertUsableSpeechAudio(body, { targetDurationSeconds: scene.durationSeconds });
+  actualDurationSeconds ??= inspection.durationSeconds;
   const key = `generated/${project.id}/${project.currentVersion.id}/scene-${scene.sceneNumber}-voice-${crypto.randomUUID()}.${extension}`;
   const uploaded = await uploadToR2({ key, body, contentType });
 

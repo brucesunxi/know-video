@@ -1,4 +1,5 @@
 import { getOptionalEnv } from "@/lib/env";
+import { assertUsableSpeechAudio } from "@/lib/audio-quality";
 
 const STANDARD_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const PREMIUM_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
@@ -158,6 +159,7 @@ export async function generateCloudflareSpeech(text: string) {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("audio/")) {
     const body = Buffer.from(await response.arrayBuffer());
+    assertUsableSpeechAudio(body);
     return { body, model, ...detectedAudioFormat(body) };
   }
 
@@ -165,5 +167,6 @@ export async function generateCloudflareSpeech(text: string) {
   const result = unwrapResult(payload);
   if (!result?.audio) throw new Error("AI speech service returned no audio");
   const body = decodeBase64(result.audio);
+  assertUsableSpeechAudio(body);
   return { body, model, ...detectedAudioFormat(body) };
 }

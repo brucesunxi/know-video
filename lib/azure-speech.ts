@@ -1,7 +1,7 @@
 import { getOptionalEnv } from "@/lib/env";
+import { assertUsableSpeechAudio } from "@/lib/audio-quality";
 import {
   correctedSpeechRate,
-  estimateCbrMp3Duration,
   speechRateForDuration
 } from "@/lib/speech-timing";
 
@@ -18,15 +18,6 @@ function escapeXml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
-}
-
-function looksLikeMp3(body: Buffer) {
-  if (body.subarray(0, 3).toString("ascii") === "ID3") return true;
-  const searchLength = Math.min(body.length - 1, 8_192);
-  for (let index = 0; index < searchLength; index += 1) {
-    if (body[index] === 0xff && (body[index + 1] & 0xe0) === 0xe0) return true;
-  }
-  return false;
 }
 
 async function requestAzureSpeech(input: {
@@ -49,7 +40,7 @@ async function requestAzureSpeech(input: {
           headers: {
             "Ocp-Apim-Subscription-Key": input.key,
             "Content-Type": "application/ssml+xml",
-            "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+            "X-Microsoft-OutputFormat": "riff-24khz-16bit-mono-pcm",
             "User-Agent": "KnowVideo"
           },
           body: ssml,
@@ -75,7 +66,6 @@ async function requestAzureSpeech(input: {
   }
   if (!body) throw lastError instanceof Error ? lastError : new Error("Chinese speech service failed after retries");
   if (body.length < 1_000) throw new Error("Chinese speech service returned an empty audio file");
-  if (!looksLikeMp3(body)) throw new Error("Chinese speech service returned an invalid MP3 file");
   return body;
 }
 
@@ -87,19 +77,17 @@ export async function generateAzureChineseSpeech(text: string, durationSeconds?:
   const voice = getOptionalEnv("AZURE_SPEECH_CHINESE_VOICE") || DEFAULT_CHINESE_VOICE;
   let rate = speechRateForDuration(text, durationSeconds);
   let body = await requestAzureSpeech({ key, region, voice, text, rate });
-  let actualDurationSeconds = estimateCbrMp3Duration(body, 48);
+  let actualDurationSeconds = assertUsableSpeechAudio(body).durationSeconds;
   const targetSeconds = durationSeconds ? Math.max(1.3, durationSeconds - 0.18) : undefined;
   if (targetSeconds && actualDurationSeconds > targetSeconds * 1.03 && rate < 45) {
     const nextRate = correctedSpeechRate(rate, actualDurationSeconds, targetSeconds);
     if (nextRate > rate) {
       rate = nextRate;
       body = await requestAzureSpeech({ key, region, voice, text, rate });
-      actualDurationSeconds = estimateCbrMp3Duration(body, 48);
+      actualDurationSeconds = assertUsableSpeechAudio(body).durationSeconds;
     }
   }
-  if (durationSeconds && actualDurationSeconds > durationSeconds + 0.12) {
-    throw new Error("旁白内容过长，无法在当前场景时长内自然读完。");
-  }
+  assertUsableSpeechAudio(body, { targetDurationSeconds: durationSeconds });
 
   return {
     body,
@@ -107,7 +95,7 @@ export async function generateAzureChineseSpeech(text: string, durationSeconds?:
     voice,
     rate,
     actualDurationSeconds,
-    contentType: "audio/mpeg" as const,
-    extension: "mp3" as const
+    contentType: "audio/wav" as const,
+    extension: "wav" as const
   };
 }

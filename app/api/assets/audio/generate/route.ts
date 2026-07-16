@@ -12,7 +12,11 @@ const requestSchema = z.object({
 export const maxDuration = 120;
 
 export async function POST(request: Request) {
-  const body = requestSchema.parse(await request.json());
+  const parsed = requestSchema.safeParse(await request.json().catch(() => undefined));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "配音请求格式无效。" }, { status: 400 });
+  }
+  const body = parsed.data;
   const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
   if (!project) {
     return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重试。" }, { status: 409 });
