@@ -14,6 +14,7 @@
     "edit:intent:smoke": "node scripts/edit-intent-smoke.mjs",
     "edit:plan:smoke": "node scripts/edit-plan-normalizer-smoke.mjs",
     "edit:apply:smoke": "node scripts/edit-application-smoke.mjs",
+    "edit:proposal:smoke": "node scripts/edit-proposal-smoke.mjs",
     "edit:schema:smoke": "node scripts/edit-plan-schema-smoke.mjs",
     "image:continuity:smoke": "node scripts/image-continuity-smoke.mjs",
     "speech:timing:smoke": "node scripts/speech-timing-smoke.mjs",

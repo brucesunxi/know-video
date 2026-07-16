@@ -2,6 +2,7 @@ import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { isEditApplicationConflict, materializeAppliedVersion } from "@/lib/edit-application";
 import { editPlanSchema } from "@/lib/edit-plan-schema";
 import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
+import { materializeEditProposal } from "@/lib/edit-proposal";
 import { demoProject } from "@/lib/mock-data";
 import { initialVersionStatus, materializeNewProject } from "@/lib/project-creation";
 import { assetUrlForKey } from "@/lib/r2";
@@ -432,21 +433,36 @@ export async function rejectPersistedEditPlan(params: {
     return { id: crypto.randomUUID(), role: "assistant", type: "text", content, versionId: params.versionId };
   }
   const sql = getSql();
-  const rejected = await sql`
-    update edit_plans set status = 'rejected'
-    where id = ${params.editPlanId}
-      and project_id = ${params.projectId}
-      and base_version_id = ${params.versionId}
-      and status = 'proposed'
-    returning id
-  ` as IdRow[];
-  if (!rejected[0]) throw new Error("修改方案已经失效，无需再次取消。");
+  const messageId = crypto.randomUUID();
   const rows = await sql`
-    insert into chat_messages (project_id, version_id, role, message_type, content)
-    values (${params.projectId}, ${params.versionId}, 'assistant', 'text', ${content})
+    with rejected as (
+      update edit_plans
+      set status = 'rejected'
+      where id = ${params.editPlanId}
+        and project_id = ${params.projectId}
+        and base_version_id = ${params.versionId}
+        and status = 'proposed'
+        and exists (
+          select 1
+          from projects
+          where id = ${params.projectId}
+            and current_version_id = ${params.versionId}
+        )
+      returning id
+    )
+    insert into chat_messages (id, project_id, version_id, role, message_type, content)
+    select
+      ${messageId},
+      ${params.projectId},
+      ${params.versionId},
+      'assistant',
+      'text',
+      ${content}
+    from rejected
     returning id
   ` as IdRow[];
-  return { id: rows[0].id, role: "assistant", type: "text", content, versionId: params.versionId };
+  if (!rows[0]) throw new Error("修改方案已经失效，无需再次取消。");
+  return { id: messageId, role: "assistant", type: "text", content, versionId: params.versionId };
 }
 
 export async function persistEditPlan(params: {
@@ -467,67 +483,99 @@ export async function persistEditPlan(params: {
   }
 
   const sql = getSql();
-  await sql`
-    update edit_plans
-    set status = 'rejected'
-    where project_id = ${params.projectId}
-      and base_version_id = ${params.versionId}
-      and status = 'proposed'
-  `;
-  const userRows = await sql`
-    insert into chat_messages (project_id, version_id, role, message_type, content)
-    values (${params.projectId}, ${params.versionId}, 'user', 'text', ${params.request})
-    returning id
-  ` as IdRow[];
-
-  const planRows = await sql`
-    insert into edit_plans (
-      project_id,
-      base_version_id,
-      user_message_id,
-      status,
-      summary,
-      affected_scenes_json,
-      patch_json,
-      preview_json
-    )
-    values (
-      ${params.projectId},
-      ${params.versionId},
-      ${userRows[0].id},
-      'proposed',
-      ${params.editPlan.summary},
-      ${JSON.stringify(params.editPlan.affectedScenes)},
-      ${JSON.stringify(params.editPlan)},
-      ${JSON.stringify({ engine: params.engine })}
-    )
-    returning id
-  ` as IdRow[];
-
-  const editPlan: EditPlan = {
-    ...params.editPlan,
-    id: planRows[0].id,
-    baseVersionId: params.versionId
-  };
-
-  const assistantRows = await sql`
-    insert into chat_messages (project_id, version_id, role, message_type, content, metadata_json)
-    values (
-      ${params.projectId},
-      ${params.versionId},
-      'assistant',
-      'plan',
-      ${editPlan.summary},
-      ${JSON.stringify({ editPlan, engine: params.engine })}
-    )
-    returning id
-  ` as IdRow[];
+  const {
+    planId,
+    userMessageId,
+    assistantMessageId,
+    editPlan
+  } = materializeEditProposal(params.editPlan, params.versionId);
+  const queries = [
+    sql`
+      select id
+      from projects
+      where id = ${params.projectId}
+        and current_version_id = ${params.versionId}
+      for update
+    `,
+    sql`
+      update edit_plans
+      set status = 'rejected'
+      where project_id = ${params.projectId}
+        and base_version_id = ${params.versionId}
+        and status = 'proposed'
+    `,
+    sql`
+      insert into chat_messages (id, project_id, version_id, role, message_type, content)
+      select
+        ${userMessageId},
+        ${params.projectId},
+        ${params.versionId},
+        'user',
+        'text',
+        ${params.request}
+      from projects
+      where id = ${params.projectId}
+        and current_version_id = ${params.versionId}
+    `,
+    sql`
+      insert into edit_plans (
+        id,
+        project_id,
+        base_version_id,
+        user_message_id,
+        status,
+        summary,
+        affected_scenes_json,
+        patch_json,
+        preview_json
+      )
+      values (
+        ${planId},
+        ${params.projectId},
+        ${params.versionId},
+        ${userMessageId},
+        'proposed',
+        ${editPlan.summary},
+        ${JSON.stringify(editPlan.affectedScenes)},
+        ${JSON.stringify(editPlan)},
+        ${JSON.stringify({ engine: params.engine })}
+      )
+    `,
+    sql`
+      insert into chat_messages (
+        id,
+        project_id,
+        version_id,
+        role,
+        message_type,
+        content,
+        metadata_json
+      )
+      values (
+        ${assistantMessageId},
+        ${params.projectId},
+        ${params.versionId},
+        'assistant',
+        'plan',
+        ${editPlan.summary},
+        ${JSON.stringify({ editPlan, engine: params.engine })}
+      )
+    `
+  ];
+  try {
+    await sql.transaction(queries);
+  } catch (error) {
+    if (isEditApplicationConflict(error)) {
+      throw new Error("视频版本已经发生变化，请刷新后重新生成修改方案。");
+    }
+    throw error;
+  }
 
   return {
     editPlan,
     messages: [
-      { id: userRows[0].id, role: "user", type: "text", content: params.request, versionId: params.versionId },
-      { id: assistantRows[0].id, role: "assistant", type: "plan", content: editPlan.summary, versionId: params.versionId, editPlan }
+      { id: userMessageId, role: "user", type: "text", content: params.request, versionId: params.versionId },
+      { id: assistantMessageId, role: "assistant", type: "plan", content: editPlan.summary, versionId: params.versionId, editPlan }
     ]
   };
 }
