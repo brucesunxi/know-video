@@ -1697,8 +1697,6 @@ button:disabled {
 .kv-change-list {
   display: grid;
   gap: 10px;
-  max-height: 320px;
-  overflow: auto;
 }
 
 .kv-change {
@@ -1708,14 +1706,15 @@ button:disabled {
   padding: 12px;
 }
 
-.kv-change div {
+.kv-change-heading,
+.kv-change-heading > div {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.kv-change span {
+.kv-change-heading > div > span {
   border-radius: 999px;
   background: #e7f8f5;
   color: #087568;
@@ -1725,42 +1724,107 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.kv-change p {
-  margin: 8px 0 0;
-  color: #475467;
-  font-size: 13px;
-  line-height: 1.45;
+.kv-regenerate-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
 }
 
-.kv-change .kv-change-field {
+.kv-regenerate-tags span {
+  border: 1px solid #d7dee8;
+  border-radius: 999px;
+  background: #fff;
+  padding: 3px 7px;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.kv-change-diffs {
   display: grid;
-  justify-content: stretch;
-  gap: 5px;
+  gap: 8px;
   margin-top: 10px;
-  border: 0;
+}
+
+.kv-change-diffs > section {
   border-radius: 8px;
   background: #f1f5f9;
   padding: 9px 10px;
 }
 
-.kv-change .kv-change-field.accent {
+.kv-change-diffs > section.accent {
   background: #eef8f6;
 }
 
-.kv-change .kv-change-field span {
-  justify-self: start;
-  padding: 0;
-  background: transparent;
+.kv-change-diffs > section > span {
   color: #667085;
+  font-size: 10px;
+  font-weight: 850;
 }
 
-.kv-change .kv-change-field.accent span {
-  color: #087568;
+.kv-before-after {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  margin-top: 7px;
 }
 
-.kv-change .kv-change-field p {
+.kv-before-after > svg {
+  margin-top: 17px;
+  color: #98a2b3;
+}
+
+.kv-before-after small {
+  color: #98a2b3;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.kv-before-after p {
+  margin: 3px 0 0;
+  color: #344054;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.kv-change-details {
+  margin-top: 10px;
+  border-top: 1px solid #dfe5ec;
+  padding-top: 9px;
+}
+
+.kv-change-details summary {
+  cursor: pointer;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.kv-change-details dl {
+  display: grid;
+  gap: 9px;
+  margin: 10px 0 0;
+}
+
+.kv-change-details dl > div {
+  display: grid;
+  gap: 3px;
+}
+
+.kv-change-details dt {
+  color: #667085;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.kv-change-details dd {
   margin: 0;
   color: #344054;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .kv-review-actions {

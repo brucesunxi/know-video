@@ -69,6 +69,12 @@ function durationLabel(seconds: number) {
 }
 
 function uniqueRegenerate(plan: EditPlan) {
+  return Array.from(new Set(plan.changes.flatMap((change) => change.regenerate)))
+    .map(assetTypeLabel)
+    .join("、");
+}
+
+function assetTypeLabel(type: SceneAsset["type"]) {
   const labels: Record<SceneAsset["type"], string> = {
     image: "画面",
     audio: "配音",
@@ -77,9 +83,7 @@ function uniqueRegenerate(plan: EditPlan) {
     caption: "字幕",
     render: "成片"
   };
-  return Array.from(new Set(plan.changes.flatMap((change) => change.regenerate)))
-    .map((type) => labels[type])
-    .join("、");
+  return labels[type];
 }
 
 function compactText(text: string | undefined, fallback: string, maxLength = 72) {
@@ -676,37 +680,71 @@ function SceneAssetsPanel({
 }
 
 function ChangeCard({ change }: { change: EditChange }) {
-  const voiceoverChanged = change.after.voiceover
-    && change.after.voiceover !== change.before.voiceover;
-  const motionPromptChanged = change.after.motionPrompt
-    && change.after.motionPrompt !== change.before.motionPrompt;
+  const changedFields = [
+    {
+      label: "标题",
+      before: change.before.title,
+      after: change.after.title
+    },
+    {
+      label: "旁白",
+      before: change.before.voiceover,
+      after: change.after.voiceover
+    },
+    {
+      label: "画面方向",
+      before: change.before.visualPrompt,
+      after: change.after.visualPrompt
+    },
+    {
+      label: "镜头运动",
+      before: change.before.motionPrompt,
+      after: change.after.motionPrompt
+    }
+  ].filter((field) => field.after && field.after !== field.before);
 
   return (
     <article className="kv-change">
-      <div>
-        <strong>场景 {change.sceneNumber}</strong>
-        <span>{change.status === "updated" ? "已更新" : change.status === "added" ? "新增" : change.status === "deleted" ? "删除" : "未改动"}</span>
-      </div>
-      <div className="kv-change-field">
-        <span>新标题</span>
-        <p>{change.after.title}</p>
-      </div>
-      {voiceoverChanged ? (
-        <div className="kv-change-field accent">
-          <span>新旁白</span>
-          <p>{change.after.voiceover}</p>
+      <div className="kv-change-heading">
+        <div>
+          <strong>场景 {change.sceneNumber}</strong>
+          <span>{change.status === "updated" ? "已更新" : change.status === "added" ? "新增" : change.status === "deleted" ? "删除" : "未改动"}</span>
         </div>
-      ) : null}
-      <div className="kv-change-field">
-        <span>画面描述</span>
-        <p>{change.after.visualPrompt}</p>
+        {change.regenerate.length > 0 ? (
+          <div className="kv-regenerate-tags" aria-label="需要重新生成的素材">
+            {Array.from(new Set(change.regenerate)).map((type) => (
+              <span key={type}>{assetTypeLabel(type)}</span>
+            ))}
+          </div>
+        ) : null}
       </div>
-      {motionPromptChanged ? (
-        <div className="kv-change-field">
-          <span>镜头运动</span>
-          <p>{change.after.motionPrompt}</p>
-        </div>
-      ) : null}
+      <div className="kv-change-diffs">
+        {changedFields.map((field) => (
+          <section className={field.label === "旁白" ? "accent" : ""} key={field.label}>
+            <span>{field.label}</span>
+            <div className="kv-before-after">
+              <div>
+                <small>当前</small>
+                <p>{compactText(field.before, "无", field.label === "画面方向" ? 110 : 88)}</p>
+              </div>
+              <ArrowRight aria-hidden="true" size={15} />
+              <div>
+                <small>修改后</small>
+                <p>{compactText(field.after, "无", field.label === "画面方向" ? 110 : 88)}</p>
+              </div>
+            </div>
+          </section>
+        ))}
+      </div>
+      <details className="kv-change-details">
+        <summary>查看完整制作说明</summary>
+        <dl>
+          <div><dt>标题</dt><dd>{change.after.title}</dd></div>
+          {change.after.voiceover ? <div><dt>旁白</dt><dd>{change.after.voiceover}</dd></div> : null}
+          <div><dt>画面方向</dt><dd>{change.after.visualPrompt}</dd></div>
+          {change.after.motionPrompt ? <div><dt>镜头运动</dt><dd>{change.after.motionPrompt}</dd></div> : null}
+        </dl>
+      </details>
     </article>
   );
 }
@@ -792,8 +830,13 @@ function ChatPanel({
       <form className="kv-chat-form" onSubmit={onSubmit}>
         <textarea
           disabled={isBusy}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }}
           onChange={(event) => onInput(event.target.value)}
-          placeholder="例如：把第 2 场景改成浅色；让整体更电影感；缩短旁白..."
+          placeholder="例如：把第 2 场景改成浅色；让整体更电影感；缩短旁白…"
           value={input}
         />
         <button disabled={isBusy || input.trim().length === 0} type="submit">
