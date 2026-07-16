@@ -1101,19 +1101,21 @@ function StudioScreen({
 export function WorkspaceClient({
   initialProject,
   initialMessages,
+  initialPendingPlan,
   source
 }: {
   initialProject: Project;
   initialMessages: ChatMessage[];
+  initialPendingPlan?: EditPlan;
   source: Source;
 }) {
   const [project, setProject] = useState(initialProject);
-  const [stage, setStage] = useState<Stage>("brief");
+  const [stage, setStage] = useState<Stage>(initialPendingPlan ? "studio" : "brief");
   const [briefPrompt, setBriefPrompt] = useState("");
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [selectedScene, setSelectedScene] = useState(1);
-  const [pendingPlan, setPendingPlan] = useState<EditPlan | undefined>();
+  const [pendingPlan, setPendingPlan] = useState<EditPlan | undefined>(initialPendingPlan);
   const [isBusy, setIsBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<BusyAction>();
   const [progress, setProgress] = useState(0);
@@ -1317,13 +1319,14 @@ export function WorkspaceClient({
     }
   }
 
-  async function applyEditPlanRequest(editPlan: EditPlan) {
+  async function applyEditPlanRequest(editPlan: EditPlan, direct = false) {
     const response = await fetch("/api/edit-plan/apply", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         projectId: project.id,
         versionId: project.currentVersion.id,
+        direct,
         editPlan
       }),
       signal: AbortSignal.timeout(30_000)
@@ -1482,7 +1485,7 @@ export function WorkspaceClient({
     setBusyAction("saving-scene");
     setErrorMessage(undefined);
     try {
-      await applyEditPlanRequest(plan);
+      await applyEditPlanRequest(plan, true);
     } catch (error) {
       const message = error instanceof Error ? error.message : "场景保存失败。";
       setErrorMessage(message);
@@ -1507,10 +1510,15 @@ export function WorkspaceClient({
           editPlanId: plan.id
         })
       });
-      const data = await response.json() as { message?: ChatMessage };
-      if (response.ok && data.message) setMessages((current) => [...current, data.message!]);
+      const data = await response.json() as { message?: ChatMessage; error?: string };
+      if (!response.ok || !data.message) throw new Error(data.error || "取消修改方案失败。");
+      setMessages((current) => [...current, data.message!]);
     } catch (error) {
       console.error(error);
+      setPendingPlan(plan);
+      const message = error instanceof Error ? error.message : "取消修改方案失败。";
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
     }
   }
 
@@ -1861,12 +1869,17 @@ export function WorkspaceClient({
     setErrorMessage(undefined);
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { cache: "no-store" });
-      const data = await response.json() as { project?: Project; messages?: ChatMessage[]; error?: string };
+      const data = await response.json() as {
+        project?: Project;
+        messages?: ChatMessage[];
+        pendingPlan?: EditPlan;
+        error?: string;
+      };
       if (!response.ok || !data.project || !data.messages) throw new Error(data.error || "项目读取失败。");
       setProject(data.project);
       setMessages(data.messages);
       setSelectedScene(1);
-      setPendingPlan(undefined);
+      setPendingPlan(data.pendingPlan);
       setStudioView("preview");
       setVersions([]);
       setStage("studio");

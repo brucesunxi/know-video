@@ -1,7 +1,8 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { demoMessages, demoProject } from "@/lib/mock-data";
+import { editPlanSchema } from "@/lib/edit-plan-schema";
 import { assetUrlForKey } from "@/lib/r2";
-import type { ChatMessage, Project, ProjectListItem, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
+import type { ChatMessage, EditPlan, Project, ProjectListItem, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
 
 type ProjectRow = {
   id: string;
@@ -57,6 +58,13 @@ type AssetRow = {
   r2_key: string;
   public_url: string | null;
   metadata_json: unknown;
+};
+
+type EditPlanRow = {
+  id: string;
+  base_version_id: string;
+  patch_json: unknown;
+  created_at: Date | string;
 };
 
 function cleanBrand(value: string) {
@@ -125,6 +133,7 @@ function toMessage(row: MessageRow): ChatMessage {
 type ProjectSnapshot = {
   project: Project;
   messages: ChatMessage[];
+  pendingPlan?: EditPlan;
   source: "database" | "mock";
 };
 
@@ -156,6 +165,16 @@ async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSn
     order by created_at desc
     limit 50
   ` as MessageRow[];
+
+  const pendingPlanRows = await sql`
+    select id, base_version_id, patch_json, created_at
+    from edit_plans
+    where project_id = ${projectRow.id}
+      and base_version_id = ${versionRow.id}
+      and status = 'proposed'
+    order by created_at desc
+    limit 1
+  ` as EditPlanRow[];
 
   const assetRows = sceneRows.length > 0 ? await sql`
     select id, scene_id, asset_type, r2_key, public_url, metadata_json
@@ -197,10 +216,24 @@ async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSn
       scenes: scenes.length > 0 ? scenes : demoProject.currentVersion.scenes
     }
   };
+  const pendingPlanRow = pendingPlanRows[0];
+  const parsedPendingPlan = pendingPlanRow
+    ? editPlanSchema.safeParse(cleanBrandInJson(pendingPlanRow.patch_json))
+    : undefined;
+  const pendingPlan = pendingPlanRow && parsedPendingPlan?.success
+    ? {
+      ...parsedPendingPlan.data,
+      id: pendingPlanRow.id,
+      baseVersionId: pendingPlanRow.base_version_id,
+      status: "proposed" as const,
+      createdAt: new Date(pendingPlanRow.created_at).toISOString()
+    }
+    : undefined;
 
   return {
     project,
     messages: messageRows.length > 0 ? messageRows.reverse().map(toMessage) : demoMessages,
+    pendingPlan,
     source: "database"
   };
 }

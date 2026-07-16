@@ -1,4 +1,5 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
+import { editPlanSchema } from "@/lib/edit-plan-schema";
 import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import { demoProject } from "@/lib/mock-data";
 import { assetUrlForKey } from "@/lib/r2";
@@ -411,10 +412,15 @@ export async function rejectPersistedEditPlan(params: {
     return { id: crypto.randomUUID(), role: "assistant", type: "text", content, versionId: params.versionId };
   }
   const sql = getSql();
-  await sql`
+  const rejected = await sql`
     update edit_plans set status = 'rejected'
-    where id = ${params.editPlanId} and project_id = ${params.projectId} and status = 'proposed'
-  `;
+    where id = ${params.editPlanId}
+      and project_id = ${params.projectId}
+      and base_version_id = ${params.versionId}
+      and status = 'proposed'
+    returning id
+  ` as IdRow[];
+  if (!rejected[0]) throw new Error("修改方案已经失效，无需再次取消。");
   const rows = await sql`
     insert into chat_messages (project_id, version_id, role, message_type, content)
     values (${params.projectId}, ${params.versionId}, 'assistant', 'text', ${content})
@@ -441,6 +447,13 @@ export async function persistEditPlan(params: {
   }
 
   const sql = getSql();
+  await sql`
+    update edit_plans
+    set status = 'rejected'
+    where project_id = ${params.projectId}
+      and base_version_id = ${params.versionId}
+      and status = 'proposed'
+  `;
   const userRows = await sql`
     insert into chat_messages (project_id, version_id, role, message_type, content)
     values (${params.projectId}, ${params.versionId}, 'user', 'text', ${params.request})
@@ -497,6 +510,95 @@ export async function persistEditPlan(params: {
       { id: assistantRows[0].id, role: "assistant", type: "plan", content: editPlan.summary, versionId: params.versionId, editPlan }
     ]
   };
+}
+
+export async function persistDirectEditPlan(params: {
+  projectId: string;
+  versionId: string;
+  editPlan: EditPlan;
+}) {
+  if (!canPersist()) return params.editPlan;
+
+  const sql = getSql();
+  await sql`
+    update edit_plans
+    set status = 'rejected'
+    where project_id = ${params.projectId}
+      and base_version_id = ${params.versionId}
+      and status = 'proposed'
+  `;
+  const userRows = await sql`
+    insert into chat_messages (project_id, version_id, role, message_type, content)
+    values (${params.projectId}, ${params.versionId}, 'user', 'text', ${params.editPlan.userRequest})
+    returning id
+  ` as IdRow[];
+  const rows = await sql`
+    insert into edit_plans (
+      id,
+      project_id,
+      base_version_id,
+      user_message_id,
+      status,
+      summary,
+      affected_scenes_json,
+      patch_json,
+      preview_json
+    )
+    values (
+      ${params.editPlan.id},
+      ${params.projectId},
+      ${params.versionId},
+      ${userRows[0].id},
+      'proposed',
+      ${params.editPlan.summary},
+      ${JSON.stringify(params.editPlan.affectedScenes)},
+      ${JSON.stringify(params.editPlan)},
+      ${JSON.stringify({ source: "direct-scene-edit" })}
+    )
+    returning id
+  ` as IdRow[];
+  if (!rows[0]) throw new Error("场景修改方案保存失败。");
+  return {
+    ...params.editPlan,
+    id: rows[0].id,
+    baseVersionId: params.versionId,
+    status: "proposed" as const
+  };
+}
+
+export async function loadProposedEditPlan(params: {
+  projectId: string;
+  versionId: string;
+  editPlanId: string;
+}) {
+  if (!canPersist()) return undefined;
+  const rows = await getSql()`
+    select id, base_version_id, patch_json, created_at
+    from edit_plans
+    where id = ${params.editPlanId}
+      and project_id = ${params.projectId}
+      and base_version_id = ${params.versionId}
+      and status = 'proposed'
+    limit 1
+  ` as Array<{
+    id: string;
+    base_version_id: string;
+    patch_json: unknown;
+    created_at: Date | string;
+  }>;
+  const row = rows[0];
+  if (!row) return undefined;
+  const parsed = editPlanSchema.safeParse(row.patch_json);
+  if (!parsed.success) {
+    throw new Error("修改方案数据不完整，请重新生成。");
+  }
+  return {
+    ...parsed.data,
+    id: row.id,
+    baseVersionId: row.base_version_id,
+    status: "proposed" as const,
+    createdAt: new Date(row.created_at).toISOString()
+  } satisfies EditPlan;
 }
 
 export async function applyPersistedEditPlan(params: {
@@ -571,6 +673,15 @@ export async function applyPersistedEditPlan(params: {
 
   const sql = getSql();
   const versionRows = await sql`
+    with claimed_plan as (
+      update edit_plans
+      set status = 'applied'
+      where id = ${params.editPlan.id}
+        and project_id = ${params.project.id}
+        and base_version_id = ${params.project.currentVersion.id}
+        and status = 'proposed'
+      returning id
+    )
     insert into project_versions (
       project_id,
       parent_version_id,
@@ -578,15 +689,18 @@ export async function applyPersistedEditPlan(params: {
       scene_plan_json,
       duration_seconds
     )
-    values (
+    select
       ${params.project.id},
       ${params.project.currentVersion.id},
       ${pendingMedia ? "draft" : versionStatus(nextProject)},
       ${JSON.stringify(nextProject.currentVersion.scenes)},
       ${nextProject.currentVersion.durationSeconds}
-    )
+    from claimed_plan
     returning id
   ` as IdRow[];
+  if (!versionRows[0]) {
+    throw new Error("修改方案已经失效，请重新生成后再应用。");
+  }
   const versionId = versionRows[0].id;
 
   const persistedScenes = await insertScenes(versionId, nextProject.currentVersion.scenes);
@@ -595,12 +709,6 @@ export async function applyPersistedEditPlan(params: {
     update projects
     set current_version_id = ${versionId}, updated_at = now()
     where id = ${params.project.id}
-  `;
-
-  await sql`
-    update edit_plans
-    set status = 'applied'
-    where id = ${params.editPlan.id}
   `;
 
   const content = pendingMedia
@@ -727,6 +835,13 @@ export async function restoreProjectVersion(params: {
     select title, current_version_id from projects where id = ${params.projectId} limit 1
   ` as Array<{ title: string; current_version_id: string | null }>;
   if (!projects[0] || !projects[0].current_version_id) throw new Error("没有找到项目。");
+  await sql`
+    update edit_plans
+    set status = 'rejected'
+    where project_id = ${params.projectId}
+      and base_version_id = ${projects[0].current_version_id}
+      and status = 'proposed'
+  `;
 
   const rows = await sql`
     insert into project_versions (project_id, parent_version_id, status, scene_plan_json, duration_seconds)

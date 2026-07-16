@@ -1,38 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { applyPersistedEditPlan, loadCurrentProjectForEdit } from "@/lib/project-mutations";
+import { editPlanSchema } from "@/lib/edit-plan-schema";
+import {
+  applyPersistedEditPlan,
+  loadCurrentProjectForEdit,
+  loadProposedEditPlan,
+  persistDirectEditPlan
+} from "@/lib/project-mutations";
 import type { EditPlan } from "@/lib/types";
-
-const editSideSchema = z.object({
-  title: z.string().min(1).max(240),
-  voiceover: z.string().min(1).max(4000).optional(),
-  thumbnailTone: z.string().min(1).max(80),
-  visualPrompt: z.string().min(1).max(8000),
-  motionPrompt: z.string().min(1).max(4000).optional()
-});
-
-const editPlanSchema = z.object({
-  id: z.string().min(1).max(200),
-  editNumber: z.number().int().positive(),
-  baseVersionId: z.string().min(1).max(200),
-  status: z.literal("proposed"),
-  userRequest: z.string().min(1).max(4000),
-  summary: z.string().min(1).max(4000),
-  affectedScenes: z.array(z.number().int().positive()).min(1).max(20),
-  changes: z.array(z.object({
-    sceneNumber: z.number().int().positive(),
-    status: z.enum(["updated", "added", "deleted", "unchanged"]),
-    before: editSideSchema,
-    after: editSideSchema,
-    regenerate: z.array(z.enum(["image", "audio", "clip", "thumbnail", "caption", "render"]))
-  })).min(1).max(20),
-  createdAt: z.string().min(1).max(100)
-});
 
 const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
   versionId: z.string().min(1).max(200),
-  editPlan: editPlanSchema
+  direct: z.boolean().optional().default(false),
+  editPlan: editPlanSchema.extend({ status: z.literal("proposed") })
 });
 
 export const maxDuration = 120;
@@ -43,17 +24,34 @@ export async function POST(request: Request) {
     if (body.editPlan.baseVersionId !== body.versionId) {
       return NextResponse.json({ error: "修改方案不是基于当前视频版本生成的，请重新规划。" }, { status: 409 });
     }
+    if (body.direct && !z.string().uuid().safeParse(body.editPlan.id).success) {
+      return NextResponse.json({ error: "直接编辑方案标识无效，请重试。" }, { status: 400 });
+    }
     const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
     if (!project) {
       return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重新修改。" }, { status: 409 });
     }
+    const editPlan = body.direct
+      ? await persistDirectEditPlan({
+        projectId: body.projectId,
+        versionId: body.versionId,
+        editPlan: body.editPlan as EditPlan
+      })
+      : await loadProposedEditPlan({
+        projectId: body.projectId,
+        versionId: body.versionId,
+        editPlanId: body.editPlan.id
+      }) ?? (!process.env.DATABASE_URL ? body.editPlan as EditPlan : undefined);
+    if (!editPlan) {
+      return NextResponse.json({ error: "修改方案已经失效，请重新生成后再应用。" }, { status: 409 });
+    }
     const sceneNumbers = new Set(project.currentVersion.scenes.map((scene) => scene.sceneNumber));
-    if (body.editPlan.changes.some((change) => !sceneNumbers.has(change.sceneNumber))) {
+    if (editPlan.changes.some((change) => !sceneNumbers.has(change.sceneNumber))) {
       return NextResponse.json({ error: "修改方案包含当前版本中不存在的场景。" }, { status: 409 });
     }
     const result = await applyPersistedEditPlan({
       project,
-      editPlan: body.editPlan as EditPlan
+      editPlan
     });
     return NextResponse.json(result);
   } catch (error) {
