@@ -85,7 +85,16 @@ export async function generateProjectVoices(project: Project, sceneNumbers?: num
   if (
     (!hasAzureSpeech() && !hasCloudflareAI() && !getOptionalEnv("OPENAI_API_KEY"))
     || getOptionalEnv("ENABLE_TTS") === "false"
-  ) return project;
+  ) {
+    return {
+      ...project,
+      currentVersion: {
+        ...project.currentVersion,
+        renderUrl: undefined,
+        status: "draft" as const
+      }
+    };
+  }
   const selected = sceneNumbers ? new Set(sceneNumbers) : undefined;
   const scenes = [...project.currentVersion.scenes];
   const selectedIndexes = scenes
@@ -105,5 +114,13 @@ export async function generateProjectVoices(project: Project, sceneNumbers?: num
     }
   });
 
-  return { ...project, currentVersion: { ...project.currentVersion, scenes } };
+  return {
+    ...project,
+    currentVersion: {
+      ...project.currentVersion,
+      renderUrl: undefined,
+      status: "draft",
+      scenes
+    }
+  };
 }

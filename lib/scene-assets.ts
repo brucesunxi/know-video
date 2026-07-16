@@ -1,5 +1,6 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { assetUrlForKey } from "@/lib/r2";
+import { invalidateVersionRender } from "@/lib/render-jobs";
 import type { AssetType, SceneAsset } from "@/lib/types";
 
 export function uploadedAssetType(contentType: string): AssetType | undefined {
@@ -71,6 +72,7 @@ export async function attachUploadedAsset(input: {
       ${JSON.stringify(input.asset.metadata ?? {})}
     )
   `;
+  await invalidateVersionRender(input.versionId);
 }
 
 export async function detachSceneAsset(input: {
@@ -91,5 +93,6 @@ export async function detachSceneAsset(input: {
       and pv.project_id = ${input.projectId}
     returning sa.id
   ` as Array<{ id: string }>;
+  if (rows[0]) await invalidateVersionRender(input.versionId);
   return Boolean(rows[0]);
 }

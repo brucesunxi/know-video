@@ -184,6 +184,8 @@ export async function generateProjectSceneImages(
       ...project,
       currentVersion: {
         ...project.currentVersion,
+        renderUrl: undefined,
+        status: "draft" as const,
         assetStatus: "failed" as const,
         assetErrorCode: credentialIssue
       }
@@ -262,6 +264,8 @@ export async function generateProjectSceneImages(
     ...project,
     currentVersion: {
       ...project.currentVersion,
+      renderUrl: undefined,
+      status: "draft",
       assetStatus,
       assetErrorCode: failures[0],
       scenes

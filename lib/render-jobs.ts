@@ -29,6 +29,25 @@ function toRenderJob(row: RenderJobRow): RenderJob {
   };
 }
 
+export async function invalidateVersionRender(versionId: string) {
+  if (!hasDatabaseUrl()) return;
+  const sql = getSql();
+  await sql`
+    update project_versions
+    set render_url = null,
+        status = case when status in ('rendering', 'ready') then 'draft' else status end
+    where id = ${versionId}
+  `;
+  await sql`
+    update render_jobs
+    set status = 'cancelled',
+        error = '场景素材已更新，需要重新导出。',
+        updated_at = now()
+    where version_id = ${versionId}
+      and status in ('queued', 'running', 'ready')
+  `;
+}
+
 export async function createRenderJob(projectId: string, versionId: string) {
   if (!hasDatabaseUrl()) {
     return { id: crypto.randomUUID(), projectId, versionId, status: "queued", progress: 0 } satisfies RenderJob;

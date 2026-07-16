@@ -2,6 +2,7 @@ import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import { demoProject } from "@/lib/mock-data";
 import { assetUrlForKey } from "@/lib/r2";
+import { invalidateVersionRender } from "@/lib/render-jobs";
 import { applyEditPlan } from "@/lib/video-brain";
 import type { ChatMessage, EditPlan, Project, ProjectVersion, ProjectVersionSummary, Scene, SceneAsset } from "@/lib/types";
 
@@ -373,6 +374,7 @@ export async function persistGeneratedSceneAssets(
     }
   }
 
+  await invalidateVersionRender(versionId);
   const counts = await sql`
     select
       count(*)::int as scene_count,
