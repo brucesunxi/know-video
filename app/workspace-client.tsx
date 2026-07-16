@@ -82,6 +82,10 @@ function fileSizeLabel(value: unknown) {
   return `${(bytes / 1_000_000).toFixed(bytes >= 10_000_000 ? 0 : 1)} MB`;
 }
 
+function sceneVisualAsset(scene: Scene) {
+  return scene.assets.find((asset) => ["image", "clip"].includes(asset.type) && asset.url);
+}
+
 function Shell({
   children,
   project,
@@ -382,7 +386,9 @@ function Storyboard({
                 className="kv-scene-thumb"
                 style={{ backgroundImage: `url("${scene.assets.find((asset) => asset.type === "image" && asset.url)?.url}")` }}
               />
-            ) : <span className="kv-scene-thumb empty"><ImagePlus size={18} /></span>}
+            ) : scene.assets.some((asset) => asset.type === "clip" && asset.url)
+              ? <span className="kv-scene-thumb empty clip"><FileVideo2 size={18} /></span>
+              : <span className="kv-scene-thumb empty"><ImagePlus size={18} /></span>}
             <span className="kv-scene-number">S{scene.sceneNumber}</span>
             <strong>{scene.title}</strong>
             <small>{scene.durationSeconds} 秒</small>
@@ -510,7 +516,9 @@ function StoryboardBoard({ scenes }: { scenes: Scene[] }) {
               className="kv-board-image"
               style={{ backgroundImage: `url("${scene.assets.find((asset) => asset.type === "image" && asset.url)?.url}")` }}
             />
-          ) : <div className="kv-board-image empty"><ImagePlus size={24} /><span>等待生成画面</span></div>}
+          ) : scene.assets.some((asset) => asset.type === "clip" && asset.url)
+            ? <div className="kv-board-image empty clip"><FileVideo2 size={24} /><span>已使用视频片段</span></div>
+            : <div className="kv-board-image empty"><ImagePlus size={24} /><span>等待生成画面</span></div>}
           <div>
             <span>S{scene.sceneNumber}</span>
             <strong>{scene.title}</strong>
@@ -770,7 +778,7 @@ function StudioScreen({
   const playerRef = useRef<PlayerRef>(null);
   const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === selectedScene) ?? project.currentVersion.scenes[0];
   const missingSceneNumbers = project.currentVersion.scenes
-    .filter((item) => !item.assets.some((asset) => asset.type === "image" && asset.url))
+    .filter((item) => !sceneVisualAsset(item))
     .map((item) => item.sceneNumber);
   function selectScene(sceneNumber: number) {
     const seconds = project.currentVersion.scenes
@@ -815,9 +823,13 @@ function StudioScreen({
               <Mic2 size={16} />
               重做本场景配音
             </button>
-            <button className="kv-primary" disabled={isBusy || exportProgress !== undefined} onClick={onExport} type="button">
+            <button className="kv-primary" disabled={isBusy || exportProgress !== undefined || missingSceneNumbers.length > 0} onClick={onExport} type="button">
               {exportProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <Download size={16} />}
-              {exportProgress !== undefined ? `正在合成 MP4 ${exportProgress}%` : "导出 MP4"}
+              {exportProgress !== undefined
+                ? `正在合成 MP4 ${exportProgress}%`
+                : project.currentVersion.renderUrl
+                  ? "下载 MP4"
+                  : "导出 MP4"}
             </button>
           </div>
         </div>
@@ -1385,7 +1397,12 @@ export function WorkspaceClient({
       const response = await fetch("/api/assets/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ project, sceneNumbers, quality })
+        body: JSON.stringify({
+          projectId: project.id,
+          versionId: project.currentVersion.id,
+          sceneNumbers,
+          quality
+        })
       });
       const data = await response.json() as { project?: Project; error?: string };
       if (!response.ok || !data.project) throw new Error(data.error || "场景画面生成失败。");
@@ -1415,7 +1432,11 @@ export function WorkspaceClient({
       const response = await fetch("/api/assets/audio/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ project, sceneNumbers })
+        body: JSON.stringify({
+          projectId: project.id,
+          versionId: project.currentVersion.id,
+          sceneNumbers
+        })
       });
       const data = await response.json() as { project?: Project; error?: string };
       if (!response.ok || !data.project) throw new Error(data.error || "场景配音生成失败。");
@@ -1438,6 +1459,13 @@ export function WorkspaceClient({
 
   async function exportVideo() {
     setErrorMessage(undefined);
+    if (project.currentVersion.renderUrl) {
+      const anchor = document.createElement("a");
+      anchor.href = project.currentVersion.renderUrl;
+      anchor.download = `${project.title}.mp4`;
+      anchor.click();
+      return;
+    }
     setExportProgress(5);
     try {
       const response = await fetch("/api/render-jobs", {

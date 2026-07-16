@@ -300,7 +300,7 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
     style: scene.style_json as Scene["style"],
     assets: assetMap.get(scene.id) ?? []
   }));
-  const imageCount = hydratedScenes.filter((scene) => scene.assets.some((asset) => asset.type === "image")).length;
+  const visualCount = hydratedScenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
 
   return {
     id: version.id,
@@ -310,7 +310,7 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
     createdAt: new Date(version.created_at).toISOString(),
     durationSeconds: version.duration_seconds,
     renderUrl: version.render_url ?? undefined,
-    assetStatus: imageCount === hydratedScenes.length ? "ready" : imageCount > 0 ? "partial" : "failed",
+    assetStatus: visualCount === hydratedScenes.length ? "ready" : visualCount > 0 ? "partial" : "failed",
     scenes: hydratedScenes
   };
 }
@@ -345,7 +345,7 @@ export async function persistGeneratedSceneAssets(
     if (options.replaceImages) {
       await sql`
         delete from scene_assets
-        where scene_id = ${sceneId} and asset_type = 'image'
+        where scene_id = ${sceneId} and asset_type in ('image', 'clip')
       `;
     }
 
@@ -365,14 +365,14 @@ export async function persistGeneratedSceneAssets(
       count(*)::int as scene_count,
       count(*) filter (
         where exists (
-          select 1 from scene_assets sa where sa.scene_id = scenes.id and sa.asset_type = 'image'
+          select 1 from scene_assets sa where sa.scene_id = scenes.id and sa.asset_type in ('image', 'clip')
         )
-      )::int as image_count
+      )::int as visual_count
     from scenes
     where version_id = ${versionId}
-  ` as Array<{ scene_count: number; image_count: number }>;
+  ` as Array<{ scene_count: number; visual_count: number }>;
   const complete = (counts[0]?.scene_count ?? 0) > 0
-    && counts[0]?.scene_count === counts[0]?.image_count;
+    && counts[0]?.scene_count === counts[0]?.visual_count;
   await sql`
     update project_versions
     set status = ${complete ? "ready" : "draft"}

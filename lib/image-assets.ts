@@ -140,7 +140,7 @@ export async function generateProjectSceneImages(
         if (!image) return scene;
 
         const existingAssets = options.replaceExistingImages
-          ? scene.assets.filter((asset) => asset.type !== "image")
+          ? scene.assets.filter((asset) => !["image", "clip"].includes(asset.type))
           : scene.assets;
 
         return { ...scene, assets: [image, ...existingAssets] };
@@ -152,9 +152,9 @@ export async function generateProjectSceneImages(
     })
   );
 
-  const imageCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image")).length;
+  const visualCount = scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
   const assetStatus: NonNullable<Project["currentVersion"]["assetStatus"]> =
-    imageCount === scenes.length ? "ready" : imageCount > 0 ? "partial" : "failed";
+    visualCount === scenes.length ? "ready" : visualCount > 0 ? "partial" : "failed";
 
   return {
     ...project,

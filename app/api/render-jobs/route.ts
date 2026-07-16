@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { loadProjectForRender } from "@/lib/project-mutations";
-import { createRenderJob, getRenderJob, updateRenderJob } from "@/lib/render-jobs";
+import { createRenderJob, findReusableRenderJob, getRenderJob, updateRenderJob } from "@/lib/render-jobs";
 import { startSandboxRender } from "@/lib/vercel-renderer";
 
 const requestSchema = z.object({
@@ -23,6 +23,13 @@ export async function POST(request: Request) {
   const body = requestSchema.parse(await request.json());
   const project = await loadProjectForRender(body.projectId, body.versionId);
   if (!project) return NextResponse.json({ error: "没有找到需要渲染的视频版本。" }, { status: 404 });
+  const reusable = await findReusableRenderJob(body.projectId, body.versionId);
+  if (reusable) {
+    return NextResponse.json(
+      { renderJob: reusable, reused: true },
+      { status: reusable.status === "ready" ? 200 : 202 }
+    );
+  }
   const renderJob = await createRenderJob(body.projectId, body.versionId);
   await updateRenderJob({ jobId: renderJob.id, status: "running", progress: 5 });
 
@@ -35,7 +42,7 @@ export async function POST(request: Request) {
       callbackUrl: `${origin}/api/render-jobs/callback`
     });
     return NextResponse.json(
-      { renderJob: { ...renderJob, status: "running", progress: 5 } },
+      { renderJob: { ...renderJob, status: "running", progress: 5 }, reused: false },
       { status: 202 }
     );
   } catch (error) {

@@ -42,6 +42,37 @@ export async function createRenderJob(projectId: string, versionId: string) {
   return toRenderJob(rows[0]);
 }
 
+export async function findReusableRenderJob(projectId: string, versionId: string) {
+  if (!hasDatabaseUrl()) return undefined;
+  const sql = getSql();
+  await sql`
+    update render_jobs
+    set status = 'failed',
+        progress = 0,
+        error = '渲染任务超时，已允许重新导出。',
+        updated_at = now()
+    where project_id = ${projectId}
+      and version_id = ${versionId}
+      and status in ('queued', 'running')
+      and updated_at < now() - interval '50 minutes'
+  `;
+  const rows = await sql`
+    select *
+    from render_jobs
+    where project_id = ${projectId}
+      and version_id = ${versionId}
+      and (
+        status in ('queued', 'running')
+        or (status = 'ready' and output_r2_key is not null)
+      )
+    order by
+      case status when 'running' then 0 when 'queued' then 1 else 2 end,
+      created_at desc
+    limit 1
+  ` as RenderJobRow[];
+  return rows[0] ? toRenderJob(rows[0]) : undefined;
+}
+
 export async function getRenderJob(jobId: string) {
   if (!hasDatabaseUrl()) return undefined;
   const sql = getSql();
@@ -66,18 +97,28 @@ export async function updateRenderJob(input: {
         output_r2_key = coalesce(${input.outputR2Key ?? null}, output_r2_key),
         updated_at = now()
     where id = ${input.jobId}
+      and (
+        (
+          ${input.status} = 'running'
+          and status in ('queued', 'running')
+          and progress <= ${input.progress}
+        )
+        or (
+          ${input.status} in ('ready', 'failed', 'cancelled')
+          and status in ('queued', 'running')
+        )
+      )
     returning *
   ` as RenderJobRow[];
-  const row = rows[0];
+  const row = rows[0] ?? (await sql`
+    select * from render_jobs where id = ${input.jobId} limit 1
+  ` as RenderJobRow[])[0];
   if (row && input.status === "ready" && row.output_r2_key) {
     await sql`
       update project_versions
       set status = 'ready', render_url = ${assetUrlForKey(row.output_r2_key)}
       where id = ${row.version_id}
     `;
-  } else if (row && input.status === "failed") {
-    await sql`update project_versions set status = 'failed' where id = ${row.version_id}`;
   }
   return row ? toRenderJob(row) : undefined;
 }
-

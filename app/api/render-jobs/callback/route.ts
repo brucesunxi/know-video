@@ -12,6 +12,13 @@ const payloadSchema = z.object({
   outputR2Key: z.string().optional(),
   error: z.string().optional(),
   sandboxName: z.string().optional()
+}).superRefine((payload, context) => {
+  if (payload.status === "ready" && !payload.outputR2Key) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Ready callback requires outputR2Key" });
+  }
+  if (payload.status === "failed" && !payload.error) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Failed callback requires error" });
+  }
 });
 
 function authorized(request: Request) {
@@ -23,7 +30,11 @@ function authorized(request: Request) {
 
 export async function POST(request: Request) {
   if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const payload = payloadSchema.parse(await request.json());
+  const parsed = payloadSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid render callback payload" }, { status: 400 });
+  }
+  const payload = parsed.data;
   const renderJob = await updateRenderJob(payload);
   if (["ready", "failed"].includes(payload.status) && payload.sandboxName) {
     after(() => stopRenderSandbox(payload.sandboxName!).catch((error) => {

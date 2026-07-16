@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateProjectVoices } from "@/lib/audio-assets";
-import { persistGeneratedSceneAssets } from "@/lib/project-mutations";
-import type { Project } from "@/lib/types";
+import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 
 const requestSchema = z.object({
-  project: z.unknown(),
+  projectId: z.string().min(1).max(200),
+  versionId: z.string().min(1).max(200),
   sceneNumbers: z.array(z.number().int().positive()).optional()
 });
 
@@ -13,7 +13,14 @@ export const maxDuration = 120;
 
 export async function POST(request: Request) {
   const body = requestSchema.parse(await request.json());
-  const project = body.project as Project;
+  const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
+  if (!project) {
+    return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重试。" }, { status: 409 });
+  }
+  const validScenes = new Set(project.currentVersion.scenes.map((scene) => scene.sceneNumber));
+  if (body.sceneNumbers?.some((sceneNumber) => !validScenes.has(sceneNumber))) {
+    return NextResponse.json({ error: "请求包含当前版本中不存在的场景。" }, { status: 409 });
+  }
   const updated = await generateProjectVoices(project, body.sceneNumbers);
 
   await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
