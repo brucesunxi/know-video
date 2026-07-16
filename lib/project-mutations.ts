@@ -295,12 +295,21 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
     assets: assetMap.get(scene.id) ?? []
   }));
   const visualCount = hydratedScenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
+  const audioCount = hydratedScenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio")).length;
+  const mediaComplete = hydratedScenes.length > 0
+    && visualCount === hydratedScenes.length
+    && audioCount === hydratedScenes.length;
+  const status = ["planning", "rendering", "failed"].includes(version.status)
+    ? version.status
+    : mediaComplete
+      ? "ready"
+      : "draft";
 
   return {
     id: version.id,
     parentVersionId: version.parent_version_id ?? undefined,
     label: "current",
-    status: version.status,
+    status,
     createdAt: new Date(version.created_at).toISOString(),
     durationSeconds: version.duration_seconds,
     renderUrl: version.render_url ?? undefined,

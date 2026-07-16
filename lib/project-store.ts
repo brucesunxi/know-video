@@ -173,6 +173,13 @@ async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSn
 
   const scenes = sceneRows.map((scene) => toScene(scene, assetMap.get(scene.id) ?? []));
   const visualCount = scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
+  const audioCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio")).length;
+  const mediaComplete = scenes.length > 0 && visualCount === scenes.length && audioCount === scenes.length;
+  const versionStatus = ["planning", "rendering", "failed"].includes(versionRow.status)
+    ? versionRow.status
+    : mediaComplete
+      ? "ready"
+      : "draft";
   const project: Project = {
     id: projectRow.id,
     title: cleanBrand(projectRow.title),
@@ -182,7 +189,7 @@ async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSn
     currentVersion: {
       id: versionRow.id,
       label: "current",
-      status: versionRow.status,
+      status: versionStatus,
       createdAt: new Date(versionRow.created_at).toISOString(),
       durationSeconds: versionRow.duration_seconds,
       renderUrl: versionRow.render_url ?? undefined,
