@@ -38,6 +38,14 @@ type Source = "database" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
 type Engine = "ai" | "heuristic";
 type StudioView = "preview" | "storyboard";
+type BusyAction =
+  | "planning-edit"
+  | "applying-edit"
+  | "generating-images"
+  | "generating-audio"
+  | "saving-scene"
+  | "uploading-asset"
+  | "restoring-version";
 const promptExamples = [
   "生成一个 30 秒的 AI 视频生成平台产品介绍视频，风格高级、节奏快、适合官网首屏。",
   "做一个关于跨境电商库存管理 SaaS 的解释视频，目标客户是运营负责人。",
@@ -61,7 +69,17 @@ function durationLabel(seconds: number) {
 }
 
 function uniqueRegenerate(plan: EditPlan) {
-  return Array.from(new Set(plan.changes.flatMap((change) => change.regenerate))).join(", ");
+  const labels: Record<SceneAsset["type"], string> = {
+    image: "画面",
+    audio: "配音",
+    clip: "视频片段",
+    thumbnail: "缩略图",
+    caption: "字幕",
+    render: "成片"
+  };
+  return Array.from(new Set(plan.changes.flatMap((change) => change.regenerate)))
+    .map((type) => labels[type])
+    .join("、");
 }
 
 function compactText(text: string | undefined, fallback: string, maxLength = 72) {
@@ -86,6 +104,27 @@ function requestErrorMessage(error: unknown, fallback: string) {
     return `${fallback}请求超时，请稍后重试。`;
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+function busyActionLabel(action?: BusyAction) {
+  switch (action) {
+    case "planning-edit":
+      return "正在理解要求并生成逐场景修改方案";
+    case "applying-edit":
+      return "正在保存新版本并更新受影响素材";
+    case "generating-images":
+      return "正在生成场景画面，请保持页面打开";
+    case "generating-audio":
+      return "正在生成自然配音，请保持页面打开";
+    case "saving-scene":
+      return "正在保存场景并创建可恢复版本";
+    case "uploading-asset":
+      return "正在上传并应用场景素材";
+    case "restoring-version":
+      return "正在恢复历史版本";
+    default:
+      return "正在处理";
+  }
 }
 
 function Shell({
@@ -646,7 +685,7 @@ function ChangeCard({ change }: { change: EditChange }) {
     <article className="kv-change">
       <div>
         <strong>场景 {change.sceneNumber}</strong>
-        <span>{change.status}</span>
+        <span>{change.status === "updated" ? "已更新" : change.status === "added" ? "新增" : change.status === "deleted" ? "删除" : "未改动"}</span>
       </div>
       <div className="kv-change-field">
         <span>新标题</span>
@@ -677,6 +716,7 @@ function ChatPanel({
   pendingPlan,
   input,
   isBusy,
+  busyAction,
   onInput,
   onSubmit,
   onApply,
@@ -686,6 +726,7 @@ function ChatPanel({
   pendingPlan?: EditPlan;
   input: string;
   isBusy: boolean;
+  busyAction?: BusyAction;
   onInput: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onApply: () => void;
@@ -744,7 +785,7 @@ function ChatPanel({
         {isBusy && !pendingPlan ? (
           <div className="kv-msg assistant kv-msg-loading" role="status">
             <Loader2 className="kv-spin" size={16} />
-            <p>正在理解你的修改要求...</p>
+            <p>{busyActionLabel(busyAction)}</p>
           </div>
         ) : null}
       </div>
@@ -771,6 +812,7 @@ function StudioScreen({
   selectedScene,
   view,
   isBusy,
+  busyAction,
   onInput,
   onSubmit,
   onApply,
@@ -801,6 +843,7 @@ function StudioScreen({
   selectedScene: number;
   view: StudioView;
   isBusy: boolean;
+  busyAction?: BusyAction;
   onInput: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onApply: () => void;
@@ -865,6 +908,12 @@ function StudioScreen({
   return (
     <div className="kv-studio">
       <section className="kv-studio-main">
+        {isBusy && busyAction ? (
+          <div className="kv-operation-status" role="status">
+            <Loader2 className="kv-spin" size={16} />
+            <span>{busyActionLabel(busyAction)}</span>
+          </div>
+        ) : null}
         <div className="kv-actionbar">
           <div className="kv-tabs">
             <button className={view === "preview" ? "active" : ""} onClick={() => onViewChange("preview")} type="button">
@@ -992,6 +1041,7 @@ function StudioScreen({
         )}
       </section>
       <ChatPanel
+        busyAction={busyAction}
         input={input}
         isBusy={isBusy}
         messages={messages}
@@ -1022,6 +1072,7 @@ export function WorkspaceClient({
   const [selectedScene, setSelectedScene] = useState(1);
   const [pendingPlan, setPendingPlan] = useState<EditPlan | undefined>();
   const [isBusy, setIsBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<BusyAction>();
   const [progress, setProgress] = useState(0);
   const [generationStatus, setGenerationStatus] = useState("正在理解视频需求");
   const [studioView, setStudioView] = useState<StudioView>("preview");
@@ -1167,7 +1218,7 @@ export function WorkspaceClient({
       pushMessage({
         role: "assistant",
         type: "text",
-        content: "生成失败。请检查模型 Key、Vercel 日志或数据库连接。"
+        content: "这次生成没有完成。你的需求仍保留在输入框中，可以稍后重试；如果持续失败，请从项目列表重新打开后再生成。"
       });
     } finally {
       setIsBusy(false);
@@ -1181,6 +1232,8 @@ export function WorkspaceClient({
 
     setChatInput("");
     setIsBusy(true);
+    setBusyAction("planning-edit");
+    setErrorMessage(undefined);
     pushMessage({ role: "user", type: "text", content: request });
 
     try {
@@ -1217,6 +1270,7 @@ export function WorkspaceClient({
       });
     } finally {
       setIsBusy(false);
+      setBusyAction(undefined);
     }
   }
 
@@ -1247,6 +1301,7 @@ export function WorkspaceClient({
     setVersions([]);
 
     if (data.regeneration.imageSceneNumbers.length > 0) {
+      setBusyAction("generating-images");
       try {
         const imageResponse = await fetch("/api/assets/generate", {
           method: "POST",
@@ -1271,6 +1326,7 @@ export function WorkspaceClient({
     }
 
     if (data.regeneration.audioSceneNumbers.length > 0) {
+      setBusyAction("generating-audio");
       try {
         const audioResponse = await fetch("/api/assets/audio/generate", {
           method: "POST",
@@ -1306,6 +1362,7 @@ export function WorkspaceClient({
       versionId: updatedProject.currentVersion.id
     }]);
     if (warnings.length > 0) setErrorMessage(Array.from(new Set(warnings)).join(" "));
+    setBusyAction("applying-edit");
     return updatedProject;
   }
 
@@ -1313,6 +1370,8 @@ export function WorkspaceClient({
     if (!pendingPlan) return;
 
     setIsBusy(true);
+    setBusyAction("applying-edit");
+    setErrorMessage(undefined);
     try {
       await applyEditPlanRequest(pendingPlan);
       setPendingPlan(undefined);
@@ -1325,6 +1384,7 @@ export function WorkspaceClient({
       });
     } finally {
       setIsBusy(false);
+      setBusyAction(undefined);
     }
   }
 
@@ -1376,6 +1436,7 @@ export function WorkspaceClient({
     };
 
     setIsBusy(true);
+    setBusyAction("saving-scene");
     setErrorMessage(undefined);
     try {
       await applyEditPlanRequest(plan);
@@ -1385,6 +1446,7 @@ export function WorkspaceClient({
       pushMessage({ role: "assistant", type: "text", content: message });
     } finally {
       setIsBusy(false);
+      setBusyAction(undefined);
     }
   }
 
@@ -1438,6 +1500,7 @@ export function WorkspaceClient({
 
   async function restoreVersion(versionId: string) {
     setIsBusy(true);
+    setBusyAction("restoring-version");
     setErrorMessage(undefined);
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/versions/restore`, {
@@ -1458,6 +1521,7 @@ export function WorkspaceClient({
       pushMessage({ role: "assistant", type: "text", content: message });
     } finally {
       setIsBusy(false);
+      setBusyAction(undefined);
     }
   }
 
@@ -1467,6 +1531,7 @@ export function WorkspaceClient({
     if (!file) return;
 
     setIsBusy(true);
+    setBusyAction("uploading-asset");
     setUploadProgress(0);
     try {
       if (file.size > 500_000_000) throw new Error("单个素材不能超过 500MB。");
@@ -1509,6 +1574,7 @@ export function WorkspaceClient({
       });
     } finally {
       setIsBusy(false);
+      setBusyAction(undefined);
       setUploadProgress(undefined);
     }
   }
@@ -1594,6 +1660,7 @@ export function WorkspaceClient({
 
   async function regenerateImages(sceneNumbers?: number[], quality: "standard" | "premium" = "standard") {
     setIsBusy(true);
+    setBusyAction("generating-images");
     setErrorMessage(undefined);
     setVersionsOpen(false);
     setAssetsOpen(false);
@@ -1626,11 +1693,13 @@ export function WorkspaceClient({
       pushMessage({ role: "assistant", type: "text", content: message });
     } finally {
       setIsBusy(false);
+      setBusyAction(undefined);
     }
   }
 
   async function regenerateAudio(sceneNumbers?: number[]) {
     setIsBusy(true);
+    setBusyAction("generating-audio");
     setErrorMessage(undefined);
     try {
       const response = await fetch("/api/assets/audio/generate", {
@@ -1658,6 +1727,7 @@ export function WorkspaceClient({
       pushMessage({ role: "assistant", type: "text", content: message });
     } finally {
       setIsBusy(false);
+      setBusyAction(undefined);
     }
   }
 
@@ -1862,6 +1932,7 @@ export function WorkspaceClient({
       ) : null}
       {stage === "studio" ? (
         <StudioScreen
+          busyAction={busyAction}
           input={chatInput}
           isBusy={isBusy}
           messages={messages}

@@ -1835,6 +1835,20 @@ button:disabled {
   min-width: 0;
 }
 
+.kv-operation-status {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-bottom: 1px solid #bce7df;
+  background: #edf9f6;
+  padding: 10px 18px;
+  color: #086f64;
+  font-size: 13px;
+  font-weight: 750;
+}
+
 .kv-actionbar {
   flex-wrap: wrap;
 }
