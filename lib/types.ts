@@ -69,6 +69,16 @@ export type Project = {
   currentVersion: ProjectVersion;
 };
 
+export type ProjectListItem = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  status: ProjectVersion["status"];
+  durationSeconds: number;
+  sceneCount: number;
+  thumbnailUrl?: string;
+};
+
 export type EditChange = {
   sceneNumber: number;
   status: "updated" | "added" | "deleted" | "unchanged";

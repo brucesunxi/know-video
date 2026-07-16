@@ -29,7 +29,8 @@ body {
 }
 
 button,
-textarea {
+textarea,
+input {
   font: inherit;
 }
 
@@ -346,6 +347,181 @@ button:disabled {
   align-content: center;
   gap: 24px;
   padding: 48px;
+}
+
+.kv-projects-page {
+  min-width: 0;
+  padding: 30px;
+}
+
+.kv-projects-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 24px;
+}
+
+.kv-projects-heading h2 {
+  max-width: 760px;
+  margin: 7px 0 0;
+  font-size: 34px;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+.kv-projects-heading p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.kv-project-search {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-block: 1px solid var(--line);
+  padding: 14px 2px;
+  color: var(--muted);
+}
+
+.kv-project-search input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.kv-project-search span {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.kv-project-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  padding-top: 22px;
+}
+
+.kv-project-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  padding: 0;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.kv-project-card:hover {
+  transform: translateY(-2px);
+  border-color: #aeb9c5;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.1);
+}
+
+.kv-project-cover {
+  position: relative;
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  background-color: #101828;
+  background-position: center;
+  background-size: cover;
+  color: #d9e3ef;
+}
+
+.kv-project-cover.empty {
+  background:
+    linear-gradient(125deg, rgba(18, 183, 166, 0.22), transparent 42%),
+    linear-gradient(315deg, rgba(47, 111, 237, 0.32), transparent 48%),
+    #101828;
+}
+
+.kv-project-cover span {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  border-radius: 4px;
+  background: rgba(5, 12, 24, 0.82);
+  color: #fff;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.kv-project-card-body {
+  padding: 13px;
+}
+
+.kv-project-card-body > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kv-project-card-body strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv-project-card-body p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kv-project-status {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eef2f6;
+  color: #596579;
+  padding: 4px 7px;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.kv-project-status.ready {
+  background: #e8faf5;
+  color: #087568;
+}
+
+.kv-project-status.rendering,
+.kv-project-status.planning {
+  background: #edf3ff;
+  color: #285cb8;
+}
+
+.kv-project-status.failed {
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.kv-project-empty {
+  display: grid;
+  min-height: 340px;
+  place-content: center;
+  justify-items: center;
+  color: var(--muted);
+  text-align: center;
+}
+
+.kv-project-empty h3 {
+  margin: 12px 0 0;
+  color: var(--ink);
+}
+
+.kv-project-empty p {
+  margin: 6px 0 0;
 }
 
 .kv-render-orbit {
@@ -1573,15 +1749,50 @@ button:disabled {
     border-left: 0;
     border-top: 1px solid var(--line);
   }
+
+  .kv-project-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
   .kv-shell {
     grid-template-columns: 1fr;
+    padding-bottom: 68px;
   }
 
   .kv-sidebar {
+    position: fixed;
+    z-index: 30;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    height: 68px;
+    flex-direction: row;
+    justify-content: center;
+    border-top: 1px solid var(--line);
+    border-right: 0;
+    background: rgba(255, 255, 255, 0.96);
+    padding: 8px 12px;
+    backdrop-filter: blur(18px);
+  }
+
+  .kv-logo {
     display: none;
+  }
+
+  .kv-nav {
+    display: flex;
+    width: min(100%, 420px);
+    justify-content: space-around;
+    gap: 8px;
+    margin-top: 0;
+  }
+
+  .kv-nav button {
+    height: 50px;
+    width: 58px;
   }
 
   .kv-topbar {
@@ -1591,8 +1802,26 @@ button:disabled {
   }
 
   .kv-brief,
-  .kv-studio-main {
+  .kv-studio-main,
+  .kv-projects-page {
     padding: 16px;
+  }
+
+  .kv-projects-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kv-projects-heading h2 {
+    font-size: 28px;
+  }
+
+  .kv-projects-heading .kv-primary {
+    width: 100%;
+  }
+
+  .kv-project-grid {
+    grid-template-columns: 1fr;
   }
 
   .kv-brief-main {

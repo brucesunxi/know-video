@@ -4,6 +4,7 @@ import { createStoryboardProject } from "@/lib/ai-video";
 import { generateProjectSceneImages } from "@/lib/image-assets";
 import { generateProjectVoices } from "@/lib/audio-assets";
 import { persistGeneratedProject } from "@/lib/project-mutations";
+import { listProjects } from "@/lib/project-store";
 
 const requestSchema = z.object({
   prompt: z.string().min(4),
@@ -11,6 +12,10 @@ const requestSchema = z.object({
 });
 
 export const maxDuration = 120;
+
+export async function GET() {
+  return NextResponse.json({ projects: await listProjects() });
+}
 
 function publicEngine(engine: string) {
   return engine === "heuristic" ? "heuristic" : "ai";

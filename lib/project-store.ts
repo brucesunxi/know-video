@@ -1,12 +1,21 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { demoMessages, demoProject } from "@/lib/mock-data";
 import { assetUrlForKey } from "@/lib/r2";
-import type { ChatMessage, Project, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
+import type { ChatMessage, Project, ProjectListItem, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
 
 type ProjectRow = {
   id: string;
   title: string;
   current_version_id: string | null;
+};
+
+type ProjectListRow = ProjectRow & {
+  updated_at: Date | string;
+  status: ProjectVersion["status"] | null;
+  duration_seconds: number | null;
+  scene_count: number;
+  thumbnail_r2_key: string | null;
+  thumbnail_public_url: string | null;
 };
 
 type VersionRow = {
@@ -110,11 +119,164 @@ function toMessage(row: MessageRow): ChatMessage {
   };
 }
 
-export async function getCurrentProjectSnapshot(): Promise<{
+type ProjectSnapshot = {
   project: Project;
   messages: ChatMessage[];
   source: "database" | "mock";
-}> {
+};
+
+async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSnapshot | undefined> {
+  if (!projectRow.current_version_id) return undefined;
+
+  const sql = getSql();
+  const versions = await sql`
+    select id, status, scene_plan_json, render_url, duration_seconds, created_at
+    from project_versions
+    where id = ${projectRow.current_version_id}
+    limit 1
+  ` as VersionRow[];
+
+  const versionRow = versions[0];
+  if (!versionRow) return undefined;
+
+  const sceneRows = await sql`
+    select id, scene_number, title, voiceover, visual_prompt, motion_prompt, duration_seconds, style_json
+    from scenes
+    where version_id = ${versionRow.id}
+    order by scene_number asc
+  ` as SceneRow[];
+
+  const messageRows = await sql`
+    select id, role, message_type, content, version_id, metadata_json
+    from chat_messages
+    where project_id = ${projectRow.id}
+    order by created_at desc
+    limit 50
+  ` as MessageRow[];
+
+  const assetRows = sceneRows.length > 0 ? await sql`
+    select id, scene_id, asset_type, r2_key, public_url, metadata_json
+    from scene_assets
+    where scene_id = any(${sceneRows.map((scene) => scene.id)})
+    order by created_at asc
+  ` as AssetRow[] : [];
+
+  const assetMap = new Map<string, SceneAsset[]>();
+  for (const asset of assetRows) {
+    const current = assetMap.get(asset.scene_id) ?? [];
+    current.push(toAsset(asset));
+    assetMap.set(asset.scene_id, current);
+  }
+
+  const scenes = sceneRows.map((scene) => toScene(scene, assetMap.get(scene.id) ?? []));
+  const imageCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image")).length;
+  const project: Project = {
+    id: projectRow.id,
+    title: cleanBrand(projectRow.title),
+    engine: "Animation Engine",
+    credits: demoProject.credits,
+    plan: demoProject.plan,
+    currentVersion: {
+      id: versionRow.id,
+      label: "current",
+      status: versionRow.status,
+      createdAt: new Date(versionRow.created_at).toISOString(),
+      durationSeconds: versionRow.duration_seconds,
+      renderUrl: versionRow.render_url ?? undefined,
+      assetStatus: imageCount === scenes.length ? "ready" : imageCount > 0 ? "partial" : "failed",
+      scenes: scenes.length > 0 ? scenes : demoProject.currentVersion.scenes
+    }
+  };
+
+  return {
+    project,
+    messages: messageRows.length > 0 ? messageRows.reverse().map(toMessage) : demoMessages,
+    source: "database"
+  };
+}
+
+export async function listProjects(): Promise<ProjectListItem[]> {
+  if (!hasDatabaseUrl()) {
+    const firstImage = demoProject.currentVersion.scenes
+      .flatMap((scene) => scene.assets)
+      .find((asset) => asset.type === "image");
+    return [{
+      id: demoProject.id,
+      title: demoProject.title,
+      updatedAt: demoProject.currentVersion.createdAt,
+      status: demoProject.currentVersion.status,
+      durationSeconds: demoProject.currentVersion.durationSeconds,
+      sceneCount: demoProject.currentVersion.scenes.length,
+      thumbnailUrl: firstImage?.url
+    }];
+  }
+
+  const sql = getSql();
+  const rows = await sql`
+    select
+      p.id,
+      p.title,
+      p.current_version_id,
+      p.updated_at,
+      pv.status,
+      pv.duration_seconds,
+      count(distinct s.id)::int as scene_count,
+      (
+        select sa.r2_key
+        from scenes first_scene
+        join scene_assets sa on sa.scene_id = first_scene.id and sa.asset_type in ('image', 'clip')
+        where first_scene.version_id = p.current_version_id
+        order by first_scene.scene_number asc, sa.created_at desc
+        limit 1
+      ) as thumbnail_r2_key,
+      (
+        select sa.public_url
+        from scenes first_scene
+        join scene_assets sa on sa.scene_id = first_scene.id and sa.asset_type in ('image', 'clip')
+        where first_scene.version_id = p.current_version_id
+        order by first_scene.scene_number asc, sa.created_at desc
+        limit 1
+      ) as thumbnail_public_url
+    from projects p
+    left join project_versions pv on pv.id = p.current_version_id
+    left join scenes s on s.version_id = p.current_version_id
+    group by p.id, pv.id
+    order by p.updated_at desc
+    limit 100
+  ` as ProjectListRow[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: cleanBrand(row.title),
+    updatedAt: new Date(row.updated_at).toISOString(),
+    status: row.status ?? "draft",
+    durationSeconds: row.duration_seconds ?? 0,
+    sceneCount: row.scene_count,
+    thumbnailUrl: row.thumbnail_r2_key
+      ? assetUrlForKey(row.thumbnail_r2_key, row.thumbnail_public_url ?? undefined)
+      : undefined
+  }));
+}
+
+export async function getProjectSnapshot(projectId: string): Promise<ProjectSnapshot | undefined> {
+  if (!hasDatabaseUrl()) {
+    return projectId === demoProject.id
+      ? { project: demoProject, messages: demoMessages, source: "mock" }
+      : undefined;
+  }
+
+  const sql = getSql();
+  const projects = await sql`
+    select id, title, current_version_id
+    from projects
+    where id = ${projectId}
+    limit 1
+  ` as ProjectRow[];
+  if (!projects[0]) return undefined;
+  return hydrateProjectSnapshot(projects[0]);
+}
+
+export async function getCurrentProjectSnapshot(): Promise<ProjectSnapshot> {
   if (!hasDatabaseUrl()) {
     return { project: demoProject, messages: demoMessages, source: "mock" };
   }
@@ -133,72 +295,8 @@ export async function getCurrentProjectSnapshot(): Promise<{
       return { project: demoProject, messages: demoMessages, source: "mock" };
     }
 
-    const versions = await sql`
-      select id, status, scene_plan_json, render_url, duration_seconds, created_at
-      from project_versions
-      where id = ${projectRow.current_version_id}
-      limit 1
-    ` as VersionRow[];
-
-    const versionRow = versions[0];
-    if (!versionRow) {
-      return { project: demoProject, messages: demoMessages, source: "mock" };
-    }
-
-    const sceneRows = await sql`
-      select id, scene_number, title, voiceover, visual_prompt, motion_prompt, duration_seconds, style_json
-      from scenes
-      where version_id = ${versionRow.id}
-      order by scene_number asc
-    ` as SceneRow[];
-
-    const messageRows = await sql`
-      select id, role, message_type, content, version_id, metadata_json
-      from chat_messages
-      where project_id = ${projectRow.id}
-      order by created_at desc
-      limit 50
-    ` as MessageRow[];
-
-    const assetRows = sceneRows.length > 0 ? await sql`
-      select id, scene_id, asset_type, r2_key, public_url, metadata_json
-      from scene_assets
-      where scene_id = any(${sceneRows.map((scene) => scene.id)})
-      order by created_at asc
-    ` as AssetRow[] : [];
-
-    const assetMap = new Map<string, SceneAsset[]>();
-    for (const asset of assetRows) {
-      const current = assetMap.get(asset.scene_id) ?? [];
-      current.push(toAsset(asset));
-      assetMap.set(asset.scene_id, current);
-    }
-
-    const scenes = sceneRows.map((scene) => toScene(scene, assetMap.get(scene.id) ?? []));
-    const imageCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image")).length;
-    const project: Project = {
-      id: projectRow.id,
-      title: cleanBrand(projectRow.title),
-      engine: "Animation Engine",
-      credits: demoProject.credits,
-      plan: demoProject.plan,
-      currentVersion: {
-        id: versionRow.id,
-        label: "current",
-        status: versionRow.status,
-        createdAt: new Date(versionRow.created_at).toISOString(),
-        durationSeconds: versionRow.duration_seconds,
-        renderUrl: versionRow.render_url ?? undefined,
-        assetStatus: imageCount === scenes.length ? "ready" : imageCount > 0 ? "partial" : "failed",
-        scenes: scenes.length > 0 ? scenes : demoProject.currentVersion.scenes
-      }
-    };
-
-    return {
-      project,
-      messages: messageRows.length > 0 ? messageRows.map(toMessage) : demoMessages,
-      source: "database"
-    };
+    return await hydrateProjectSnapshot(projectRow)
+      ?? { project: demoProject, messages: demoMessages, source: "mock" };
   } catch (error) {
     console.error("[project-store] Falling back to mock data:", error);
     return { project: demoProject, messages: demoMessages, source: "mock" };

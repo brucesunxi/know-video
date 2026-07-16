@@ -11,6 +11,7 @@ import {
   Download,
   FileVideo2,
   Film,
+  FolderOpen,
   History,
   ImagePlus,
   Layers3,
@@ -21,6 +22,7 @@ import {
   Plus,
   RefreshCcw,
   RotateCcw,
+  Search,
   Send,
   Settings2,
   Sparkles,
@@ -29,10 +31,10 @@ import {
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
 import { VIDEO_FPS } from "@/video/config";
-import type { ChatMessage, EditChange, EditPlan, Project, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, Project, ProjectListItem, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
 
 type Source = "database" | "mock";
-type Stage = "brief" | "generating" | "studio";
+type Stage = "brief" | "generating" | "projects" | "studio";
 type Engine = "ai" | "heuristic";
 type StudioView = "preview" | "storyboard";
 
@@ -79,13 +81,17 @@ function Shell({
   project,
   source,
   stage,
-  onNewVideo
+  onNewVideo,
+  onOpenProjects,
+  onOpenStudio
 }: {
   children: React.ReactNode;
   project: Project;
   source: Source;
   stage: Stage;
   onNewVideo: () => void;
+  onOpenProjects: () => void;
+  onOpenStudio: () => void;
 }) {
   return (
     <main className="kv-shell">
@@ -95,10 +101,10 @@ function Shell({
           <button aria-label="新建视频" className={stage === "brief" ? "active" : ""} onClick={onNewVideo} type="button">
             <Plus size={18} />
           </button>
-          <button aria-label="视频工作室" className={stage === "studio" ? "active" : ""} type="button">
+          <button aria-label="视频工作室" className={stage === "studio" ? "active" : ""} onClick={onOpenStudio} type="button">
             <Clapperboard size={18} />
           </button>
-          <button aria-label="项目列表" type="button">
+          <button aria-label="项目列表" className={stage === "projects" ? "active" : ""} onClick={onOpenProjects} type="button">
             <Layers3 size={18} />
           </button>
           <button aria-label="设置" type="button">
@@ -110,7 +116,7 @@ function Shell({
         <header className="kv-topbar">
           <div>
             <span className="kv-eyebrow">Know Video 智能视频工作室</span>
-            <h1>{stage === "brief" ? "用一句需求，完成一支视频" : project.title}</h1>
+            <h1>{stage === "brief" ? "用一句需求，完成一支视频" : stage === "projects" ? "我的视频项目" : project.title}</h1>
           </div>
           <div className="kv-status-row">
             <span>{source === "database" ? "项目已保存" : "本地预览"}</span>
@@ -121,6 +127,79 @@ function Shell({
         {children}
       </section>
     </main>
+  );
+}
+
+function ProjectLibrary({
+  projects,
+  query,
+  isLoading,
+  onQueryChange,
+  onOpen,
+  onCreate
+}: {
+  projects: ProjectListItem[];
+  query: string;
+  isLoading: boolean;
+  onQueryChange: (value: string) => void;
+  onOpen: (projectId: string) => void;
+  onCreate: () => void;
+}) {
+  const filtered = projects.filter((item) => item.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const statusLabel: Record<ProjectListItem["status"], string> = {
+    draft: "草稿",
+    planning: "规划中",
+    rendering: "渲染中",
+    ready: "可播放",
+    failed: "需处理"
+  };
+
+  return (
+    <div className="kv-projects-page">
+      <div className="kv-projects-heading">
+        <div>
+          <span className="kv-eyebrow">Project library</span>
+          <h2>继续创作，或开始一支新视频</h2>
+          <p>所有脚本、分镜、素材、对话和历史版本都保存在各自项目中。</p>
+        </div>
+        <button className="kv-primary" onClick={onCreate} type="button">
+          <Plus size={18} />
+          新建视频
+        </button>
+      </div>
+      <div className="kv-project-search">
+        <Search size={18} />
+        <input aria-label="搜索项目" onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索视频项目" value={query} />
+        <span>{filtered.length} 个项目</span>
+      </div>
+      {isLoading ? (
+        <div className="kv-project-empty"><Loader2 className="kv-spin" size={24} /><p>正在读取项目...</p></div>
+      ) : filtered.length === 0 ? (
+        <div className="kv-project-empty">
+          <FolderOpen size={28} />
+          <h3>{query ? "没有匹配的项目" : "还没有视频项目"}</h3>
+          <p>{query ? "换一个关键词试试。" : "从一句需求开始创建你的第一支视频。"}</p>
+        </div>
+      ) : (
+        <div className="kv-project-grid">
+          {filtered.map((item) => (
+            <button className="kv-project-card" key={item.id} onClick={() => onOpen(item.id)} type="button">
+              <div className={`kv-project-cover${item.thumbnailUrl ? "" : " empty"}`} style={item.thumbnailUrl ? { backgroundImage: `url(${item.thumbnailUrl})` } : undefined}>
+                {!item.thumbnailUrl ? <Film size={28} /> : null}
+                <span>{durationLabel(item.durationSeconds)}</span>
+              </div>
+              <div className="kv-project-card-body">
+                <div>
+                  <strong>{item.title}</strong>
+                  <span className={`kv-project-status ${item.status}`}>{statusLabel[item.status]}</span>
+                </div>
+                <p>{item.sceneCount} 个场景 · {new Date(item.updatedAt).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -733,6 +812,9 @@ export function WorkspaceClient({
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | undefined>();
   const [assetsOpen, setAssetsOpen] = useState(false);
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projectQuery, setProjectQuery] = useState("");
+  const [projectsLoading, setProjectsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
@@ -776,6 +858,7 @@ export function WorkspaceClient({
       };
 
       setProject(data.project);
+      setProjects([]);
       setMessages([
         ...data.messages,
         {
@@ -1222,8 +1305,53 @@ export function WorkspaceClient({
     setVersionsOpen(false);
   }
 
+  async function openProjects() {
+    setStage("projects");
+    setPendingPlan(undefined);
+    setErrorMessage(undefined);
+    setProjectsLoading(true);
+    try {
+      const response = await fetch("/api/projects", { cache: "no-store" });
+      const data = await response.json() as { projects?: ProjectListItem[]; error?: string };
+      if (!response.ok) throw new Error(data.error || "项目列表读取失败。");
+      setProjects(data.projects ?? []);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "项目列表读取失败。");
+    } finally {
+      setProjectsLoading(false);
+    }
+  }
+
+  async function openProject(projectId: string) {
+    setProjectsLoading(true);
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { cache: "no-store" });
+      const data = await response.json() as { project?: Project; messages?: ChatMessage[]; error?: string };
+      if (!response.ok || !data.project || !data.messages) throw new Error(data.error || "项目读取失败。");
+      setProject(data.project);
+      setMessages(data.messages);
+      setSelectedScene(1);
+      setPendingPlan(undefined);
+      setStudioView("preview");
+      setVersions([]);
+      setStage("studio");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "项目读取失败。");
+    } finally {
+      setProjectsLoading(false);
+    }
+  }
+
   return (
-    <Shell onNewVideo={resetToBrief} project={project} source={source} stage={stage}>
+    <Shell
+      onNewVideo={resetToBrief}
+      onOpenProjects={() => void openProjects()}
+      onOpenStudio={() => setStage("studio")}
+      project={project}
+      source={source}
+      stage={stage}
+    >
       <input accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav" hidden onChange={uploadAsset} ref={fileInputRef} type="file" />
       {stage === "brief" ? (
         <BriefScreen
@@ -1239,6 +1367,16 @@ export function WorkspaceClient({
       ) : null}
       {stage === "generating" ? (
         <GeneratingScreen progress={progress} prompt={generationPrompt} />
+      ) : null}
+      {stage === "projects" ? (
+        <ProjectLibrary
+          isLoading={projectsLoading}
+          onCreate={resetToBrief}
+          onOpen={(projectId) => void openProject(projectId)}
+          onQueryChange={setProjectQuery}
+          projects={projects}
+          query={projectQuery}
+        />
       ) : null}
       {stage === "studio" ? (
         <StudioScreen
