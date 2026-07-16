@@ -10,6 +10,8 @@
     "build": "next build",
     "start": "next start",
     "render:smoke": "node scripts/render-smoke.mjs",
+    "edit:intent:smoke": "node scripts/edit-intent-smoke.mjs",
+    "edit:plan:smoke": "node scripts/edit-plan-normalizer-smoke.mjs",
     "db:init": "node --env-file=.env.local scripts/init-db.mjs",
     "db:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
     "services:check": "node --env-file=.env.local scripts/diagnose-services.mjs",

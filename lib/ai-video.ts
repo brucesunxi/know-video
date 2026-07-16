@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { z } from "zod";
+import { analyzeEditIntent } from "@/lib/edit-intent";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
@@ -86,16 +87,6 @@ const editPlanPayloadSchema = z.object({
 });
 
 type EditPlanPayload = z.infer<typeof editPlanPayloadSchema>;
-
-function isGlobalChineseRewrite(request: string) {
-  const wantsChinese = /中文|汉语|简体/u.test(request);
-  const wantsGlobal = /所有|全部|全片|整体|都/u.test(request);
-  return wantsChinese && wantsGlobal;
-}
-
-function isGlobalScopeRequest(request: string) {
-  return /全片|整个视频|整支视频|所有场景|全部场景|每个场景|所有镜头|全部镜头|整体(?:风格|色调|节奏|画面|旁白|语言)?|都(?:改|换|调整|变成)|entire video|whole video|all scenes|every scene|throughout/iu.test(request);
-}
 
 function hasChinese(value?: string) {
   return Boolean(value && /\p{Script=Han}/u.test(value));
@@ -560,8 +551,12 @@ export async function createEditPlan(params: {
   version: ProjectVersion;
   editNumber: number;
 }): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
-  const globalChineseRewrite = isGlobalChineseRewrite(params.request);
-  const globalScopeRequest = globalChineseRewrite || isGlobalScopeRequest(params.request);
+  const intent = analyzeEditIntent(
+    params.request,
+    params.version.scenes.map((scene) => scene.sceneNumber)
+  );
+  const globalChineseRewrite = intent.globalChineseRewrite;
+  const globalScopeRequest = intent.global;
   const textModel = getTextModel();
   if (!textModel) {
     if (globalChineseRewrite) {
@@ -585,7 +580,7 @@ export async function createEditPlan(params: {
         {
           role: "system",
           content:
-            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. Return strict JSON only."
+            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. A request without a specific scene target that changes language, narration, captions, style, palette, pacing, music, fonts, logos, or watermarks applies to the full video. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. Return strict JSON only."
         },
         {
           role: "user",

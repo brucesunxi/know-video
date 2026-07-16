@@ -1,4 +1,5 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
+import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import { demoProject } from "@/lib/mock-data";
 import { assetUrlForKey } from "@/lib/r2";
 import { applyEditPlan } from "@/lib/video-brain";
@@ -495,20 +496,24 @@ export async function applyPersistedEditPlan(params: {
   message: ChatMessage;
   regeneration: { imageSceneNumbers: number[]; audioSceneNumbers: number[] };
 }> {
-  const changedProject = applyEditPlan(params.project, params.editPlan);
-  const imageSceneNumbers = Array.from(new Set(params.editPlan.changes
-    .filter((change) => change.regenerate.some((type) => ["image", "thumbnail", "clip"].includes(type)))
-    .map((change) => change.sceneNumber)));
-  const audioSceneNumbers = Array.from(new Set(params.editPlan.changes
-    .filter((change) => change.regenerate.includes("audio") || change.after.voiceover !== change.before.voiceover)
-    .map((change) => change.sceneNumber)));
-  const captionSceneNumbers = Array.from(new Set(params.editPlan.changes
-    .filter((change) => (
-      change.regenerate.includes("caption")
-      || change.after.title !== change.before.title
-      || change.after.voiceover !== change.before.voiceover
-    ))
-    .map((change) => change.sceneNumber)));
+  const normalizedPlan = normalizeEditPlanAgainstScenes(
+    params.editPlan,
+    params.project.currentVersion.scenes
+  );
+  const normalizedChanges = normalizedPlan.changes;
+  if (normalizedChanges.length === 0) {
+    throw new Error("修改方案没有产生实际变化，请换一种说法后重新生成。");
+  }
+  const changedProject = applyEditPlan(params.project, normalizedPlan);
+  const imageSceneNumbers = normalizedChanges
+    .filter((change) => change.regenerate.includes("image"))
+    .map((change) => change.sceneNumber);
+  const audioSceneNumbers = normalizedChanges
+    .filter((change) => change.regenerate.includes("audio"))
+    .map((change) => change.sceneNumber);
+  const captionSceneNumbers = normalizedChanges
+    .filter((change) => change.regenerate.includes("caption"))
+    .map((change) => change.sceneNumber);
   const imageTargets = new Set(imageSceneNumbers);
   const audioTargets = new Set(audioSceneNumbers);
   const captionTargets = new Set(captionSceneNumbers);

@@ -1,3 +1,4 @@
+import { analyzeEditIntent } from "@/lib/edit-intent";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
 const palettes = {
@@ -337,12 +338,12 @@ export function buildEditPlanFromRequest(params: {
   editNumber: number;
 }): EditPlan {
   const tone = detectTone(params.request);
-  const targetScenes = params.version.scenes.filter((scene) => {
-    const sceneToken = `scene ${scene.sceneNumber}`;
-    const chineseToken = `第${scene.sceneNumber}`;
-    const lower = params.request.toLowerCase();
-    return lower.includes(sceneToken) || params.request.includes(chineseToken);
-  });
+  const intent = analyzeEditIntent(
+    params.request,
+    params.version.scenes.map((scene) => scene.sceneNumber)
+  );
+  const targeted = new Set(intent.explicitSceneNumbers);
+  const targetScenes = params.version.scenes.filter((scene) => targeted.has(scene.sceneNumber));
   const scenes = targetScenes.length > 0 ? targetScenes : params.version.scenes;
 
   return {
