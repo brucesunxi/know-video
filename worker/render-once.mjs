@@ -5,6 +5,7 @@ import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } fr
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { postRenderCallback } from "./render-callback.mjs";
+import { inspectRenderedOutput } from "./render-output-quality.mjs";
 
 const required = [
   "RENDER_INPUT_PATH",
@@ -93,9 +94,12 @@ async function render(input) {
     await postRenderCallback(input, { jobId: input.jobId, status: "running", progress: 96 });
     const key = `renders/${project.id}/${project.currentVersion.id}/${input.jobId}.mp4`;
     const outputBody = await readFile(output);
-    if (outputBody.length < 50_000) {
-      throw new Error(`Rendered MP4 is unexpectedly small (${outputBody.length} bytes)`);
-    }
+    await inspectRenderedOutput(outputBody, {
+      duration: composition.durationInFrames / composition.fps,
+      width: composition.width,
+      height: composition.height,
+      fps: composition.fps
+    });
     await r2.send(new PutObjectCommand({
       Bucket: process.env.R2_BUCKET,
       Key: key,
