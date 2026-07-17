@@ -7,6 +7,7 @@ const schema = z.object({
   projectId: z.string().uuid(),
   versionId: z.string().uuid(),
   sceneNumber: z.number().int().positive(),
+  instruction: z.string().trim().max(600).optional().default(""),
   quality: z.enum(["standard", "premium"]).default("standard")
 });
 
@@ -33,7 +34,8 @@ export async function POST(request: Request) {
       quality: body.quality,
       replaceExistingImages: false,
       sceneNumbers: [body.sceneNumber],
-      variantKey: crypto.randomUUID()
+      variantKey: crypto.randomUUID(),
+      visualInstruction: body.instruction
     });
     const updatedScene = updated.currentVersion.scenes.find((item) => item.sceneNumber === body.sceneNumber);
     const candidate = updatedScene?.assets.find((asset) => (

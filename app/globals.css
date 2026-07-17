@@ -1055,6 +1055,103 @@ button:disabled {
   white-space: nowrap;
 }
 
+.kv-candidate-composer {
+  display: grid;
+  gap: 10px;
+  margin: 0 -16px;
+  border-top: 1px solid #cfe3df;
+  border-bottom: 1px solid #cfe3df;
+  background: #f3faf8;
+  padding: 14px 16px;
+}
+
+.kv-candidate-composer > div:first-child,
+.kv-candidate-composer > footer,
+.kv-candidate-composer > footer > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kv-candidate-composer label {
+  color: #184e48;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.kv-candidate-composer > div:first-child span,
+.kv-candidate-composer > footer p {
+  color: #667085;
+  font-size: 11px;
+}
+
+.kv-candidate-composer textarea {
+  width: 100%;
+  min-height: 82px;
+  resize: vertical;
+  border: 1px solid #a9d3cd;
+  border-radius: 7px;
+  outline: 0;
+  background: #fff;
+  padding: 10px 11px;
+  color: #1d2939;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.kv-candidate-composer textarea:focus {
+  border-color: #0d9488;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+}
+
+.kv-candidate-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kv-candidate-presets button {
+  border: 1px solid #b8ddd7;
+  border-radius: 6px;
+  background: #fff;
+  padding: 6px 8px;
+  color: #27635b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.kv-candidate-presets button:hover {
+  border-color: #0d9488;
+  background: #e8f7f4;
+}
+
+.kv-candidate-composer > footer p {
+  margin: 0;
+}
+
+.kv-candidate-composer > footer button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #b8c4d1;
+  border-radius: 7px;
+  background: #fff;
+  padding: 7px 10px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.kv-candidate-composer > footer button.kv-primary {
+  border-color: #0d9488;
+  background: #0d9488;
+  color: #fff;
+}
+
 .kv-asset-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -3721,6 +3818,16 @@ button:disabled {
     flex: 1;
     justify-content: center;
     min-width: 0;
+  }
+
+  .kv-candidate-composer > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kv-candidate-composer > footer > div,
+  .kv-candidate-composer > footer button {
+    width: 100%;
   }
 
   .kv-asset-list {

@@ -33,9 +33,10 @@ function imageModel() {
 function buildSceneImagePrompt(
   scene: Scene,
   project: Project,
-  references: Array<{ role: "current" | "anchor" }>
+  references: Array<{ role: "current" | "anchor" }>,
+  visualInstruction?: string
 ) {
-  return sceneImagePrompt(scene, project, references.map((reference) => reference.role));
+  return sceneImagePrompt(scene, project, references.map((reference) => reference.role), visualInstruction);
 }
 
 function buildBrandSafeImagePrompt(scene: Scene, project: Project) {
@@ -103,11 +104,12 @@ async function generateSceneImage(
   project: Project,
   quality: ImageQuality,
   references: ImageReference[],
-  variantKey = "primary"
+  variantKey = "primary",
+  visualInstruction?: string
 ): Promise<{ asset: SceneAsset; reference: ImageReference } | undefined> {
   const usableReferences = hasCloudflareAI() ? references : [];
   const seed = stableImageSeed(`${project.id}:${scene.sceneNumber}:${variantKey}`);
-  let prompt = buildSceneImagePrompt(scene, project, usableReferences);
+  let prompt = buildSceneImagePrompt(scene, project, usableReferences, visualInstruction);
   let body: Buffer;
   let model: string;
   if (hasCloudflareAI()) {
@@ -162,6 +164,7 @@ async function generateSceneImage(
       prompt,
       seed,
       referenceKeys: usableReferences.map((reference) => reference.r2Key),
+      candidateInstruction: visualInstruction || undefined,
       sceneNumber: scene.sceneNumber
     }
   };
@@ -184,6 +187,7 @@ export async function generateProjectSceneImages(
     quality?: ImageQuality;
     candidate?: boolean;
     variantKey?: string;
+    visualInstruction?: string;
   } = {}
 ) {
   const credentialIssue = imageCredentialIssue();
@@ -226,7 +230,8 @@ export async function generateProjectSceneImages(
         project,
         options.quality ?? "standard",
         currentReference ? [currentReference] : [],
-        options.variantKey
+        options.variantKey,
+        options.visualInstruction
       );
       if (generated) {
         const generatedAsset = options.candidate ? {
@@ -259,7 +264,14 @@ export async function generateProjectSceneImages(
           currentReference,
           projectAnchor && projectAnchor.r2Key !== currentReference?.r2Key ? projectAnchor : undefined
         ].filter(Boolean) as ImageReference[];
-        const generated = await generateSceneImage(scene, project, options.quality ?? "standard", references, options.variantKey);
+        const generated = await generateSceneImage(
+          scene,
+          project,
+          options.quality ?? "standard",
+          references,
+          options.variantKey,
+          options.visualInstruction
+        );
         if (!generated) return;
 
         const generatedAsset = options.candidate ? {

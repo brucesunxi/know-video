@@ -1122,7 +1122,7 @@ function VisualCandidateComparison({
         <div className="kv-visual-compare-details">
           <div>
             <strong>{scene.title}</strong>
-            <p>{compactText(String(selected.metadata?.prompt ?? scene.visualPrompt), scene.visualPrompt, 190)}</p>
+            <p>{compactText(String(selected.metadata?.candidateInstruction ?? scene.visualPrompt), scene.visualPrompt, 190)}</p>
           </div>
           <div className="kv-visual-candidate-nav" aria-label="切换候选画面">
             <button aria-label="上一张候选画面" disabled={candidates.length < 2} onClick={() => selectCandidate(-1)} title="上一张" type="button"><ArrowLeft size={17} /></button>
@@ -1156,15 +1156,22 @@ function SceneAssetsPanel({
   scene: Scene;
   isBusy: boolean;
   uploadProgress?: number;
-  onGenerateCandidate: () => void;
+  onGenerateCandidate: (instruction?: string) => void;
   onAdoptCandidate: (assetId: string) => void;
   onUpload: () => void;
   onRemove: (assetId: string) => void;
 }) {
   const assets = scene.assets.filter((asset) => ["image", "thumbnail", "clip", "audio"].includes(asset.type));
   const candidateCount = assets.filter((asset) => asset.type === "thumbnail" && asset.metadata?.candidate === true).length;
+  const hasCurrentImage = assets.some((asset) => asset.type === "image" && asset.url);
   const [comparisonId, setComparisonId] = useState<string>();
-  useEffect(() => setComparisonId(undefined), [scene.id]);
+  const [candidateComposerOpen, setCandidateComposerOpen] = useState(false);
+  const [candidateInstruction, setCandidateInstruction] = useState("");
+  useEffect(() => {
+    setComparisonId(undefined);
+    setCandidateComposerOpen(false);
+    setCandidateInstruction("");
+  }, [scene.id]);
   return (
     <>
     <section className="kv-assets-panel">
@@ -1174,9 +1181,15 @@ function SceneAssetsPanel({
           <h3>管理当前画面、视频片段和配音</h3>
         </div>
         <div className="kv-assets-actions">
-          <button disabled={isBusy || candidateCount >= 3} onClick={onGenerateCandidate} title={candidateCount >= 3 ? "请先移除一张候选画面" : "生成新画面但不替换当前版本"} type="button">
+          <button
+            aria-expanded={candidateComposerOpen}
+            disabled={isBusy || candidateCount >= 3 || !hasCurrentImage}
+            onClick={() => setCandidateComposerOpen((open) => !open)}
+            title={!hasCurrentImage ? "请先生成当前场景画面" : candidateCount >= 3 ? "请先移除一张候选画面" : "按要求生成新画面但不替换当前版本"}
+            type="button"
+          >
             <Sparkles size={16} />
-            生成候选 · {candidateCount}/3
+            改造画面 · {candidateCount}/3
           </button>
           <button disabled={isBusy} onClick={onUpload} type="button">
             {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <Upload size={16} />}
@@ -1184,6 +1197,38 @@ function SceneAssetsPanel({
           </button>
         </div>
       </div>
+      {candidateComposerOpen ? (
+        <form className="kv-candidate-composer" onSubmit={(event) => {
+          event.preventDefault();
+          onGenerateCandidate(candidateInstruction.trim() || "保持主体与叙事不变，优化构图、光影和空间层次，使画面更精致。");
+          setCandidateComposerOpen(false);
+        }}>
+          <div>
+            <label htmlFor={`candidate-instruction-${scene.id}`}>这张画面要怎么改？</label>
+            <span>{candidateInstruction.length}/600</span>
+          </div>
+          <textarea
+            autoFocus
+            id={`candidate-instruction-${scene.id}`}
+            maxLength={600}
+            onChange={(event) => setCandidateInstruction(event.target.value)}
+            placeholder="例如：保持人物和构图不变，改成明亮自然光，去掉画面中的文字。"
+            value={candidateInstruction}
+          />
+          <div className="kv-candidate-presets" aria-label="快捷视觉修改">
+            {["整体更明亮通透", "去掉画面内的文字", "突出主体，弱化背景", "增强电影级光影"].map((preset) => (
+              <button key={preset} onClick={() => setCandidateInstruction(preset)} type="button">{preset}</button>
+            ))}
+          </div>
+          <footer>
+            <p>只生成候选，不改变当前视频。</p>
+            <div>
+              <button onClick={() => setCandidateComposerOpen(false)} type="button">取消</button>
+              <button className="kv-primary" disabled={isBusy} type="submit"><Sparkles size={16} />生成候选画面</button>
+            </div>
+          </footer>
+        </form>
+      ) : null}
       <div className="kv-asset-list">
         {assets.length === 0 ? (
           <div className="kv-assets-empty"><ImagePlus size={20} />这个场景还没有可用素材</div>
@@ -1844,7 +1889,7 @@ function StudioScreen({
   assetsOpen: boolean;
   onToggleAssets: () => void;
   onRemoveAsset: (assetId: string) => void;
-  onGenerateCandidate: (sceneNumber: number) => void;
+  onGenerateCandidate: (sceneNumber: number, instruction?: string) => void;
   productionOpen: boolean;
   productionUploadType?: "logo" | "music";
   onToggleProduction: () => void;
@@ -2108,7 +2153,7 @@ function StudioScreen({
           <SceneAssetsPanel
             isBusy={isBusy}
             onAdoptCandidate={(assetId) => onMutateScene({ operation: "set-visual", sceneNumber: scene.sceneNumber, assetId })}
-            onGenerateCandidate={() => onGenerateCandidate(scene.sceneNumber)}
+            onGenerateCandidate={(instruction) => onGenerateCandidate(scene.sceneNumber, instruction)}
             onRemove={onRemoveAsset}
             onUpload={onUpload}
             scene={scene}
@@ -3340,7 +3385,7 @@ export function WorkspaceClient({
     }
   }
 
-  async function generateImageCandidate(sceneNumber: number) {
+  async function generateImageCandidate(sceneNumber: number, instruction?: string) {
     setIsBusy(true);
     setBusyAction("generating-candidate");
     setErrorMessage(undefined);
@@ -3352,6 +3397,7 @@ export function WorkspaceClient({
           projectId: project.id,
           versionId: project.currentVersion.id,
           sceneNumber,
+          instruction,
           quality: "standard"
         }),
         signal: AbortSignal.timeout(125_000)
@@ -3362,7 +3408,9 @@ export function WorkspaceClient({
       pushMessage({
         role: "assistant",
         type: "text",
-        content: `场景 ${sceneNumber} 新增了一张候选画面。当前视频保持不变，采用后才会创建新版本。`,
+        content: instruction
+          ? `场景 ${sceneNumber} 已按“${compactText(instruction, "视觉修改", 42)}”生成候选画面。当前视频保持不变。`
+          : `场景 ${sceneNumber} 新增了一张候选画面。当前视频保持不变，采用后才会创建新版本。`,
         versionId: data.project.currentVersion.id
       }, true);
     } catch (error) {
@@ -3728,7 +3776,7 @@ export function WorkspaceClient({
           assetsOpen={assetsOpen}
           onToggleAssets={toggleAssets}
           onRemoveAsset={removeSceneAsset}
-          onGenerateCandidate={(sceneNumber) => void generateImageCandidate(sceneNumber)}
+          onGenerateCandidate={(sceneNumber, instruction) => void generateImageCandidate(sceneNumber, instruction)}
           productionOpen={productionOpen}
           productionUploadType={productionUploadType}
           onToggleProduction={toggleProduction}
