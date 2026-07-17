@@ -1004,7 +1004,43 @@ function ProductionSettingsPanel({
   );
 }
 
-function ChangeCard({ change }: { change: EditChange }) {
+function PlanVisualDiff({ change, scene }: { change: EditChange; scene: Scene }) {
+  const image = scene.assets.find((asset) => asset.type === "image" && asset.url);
+  const visualRegeneration = change.regenerate.some((type) => ["image", "clip", "thumbnail"].includes(type));
+  const afterIsLight = change.after.thumbnailTone === "light";
+  const beforeColor = scene.style.palette[0] ?? "#101828";
+  const afterColor = afterIsLight ? "#f5f7fa" : beforeColor;
+
+  return (
+    <div className="kv-plan-visual-diff" aria-label={`场景 ${change.sceneNumber} 画面对比`}>
+      <figure>
+        <figcaption>当前画面</figcaption>
+        <div
+          className={`kv-plan-frame${image ? " has-image" : ""}`}
+          style={image ? { backgroundImage: `url("${image.url}")` } : { backgroundColor: beforeColor }}
+        >
+          {!image ? <><span>S{change.sceneNumber}</span><strong>{change.before.title}</strong></> : null}
+        </div>
+      </figure>
+      <ArrowRight aria-hidden="true" size={16} />
+      <figure>
+        <figcaption>修改后</figcaption>
+        <div
+          className={`kv-plan-frame after${!visualRegeneration && image ? " has-image" : ""}${afterIsLight ? " light" : ""}`}
+          style={!visualRegeneration && image ? { backgroundImage: `url("${image.url}")` } : { backgroundColor: afterColor }}
+        >
+          {visualRegeneration ? (
+            <><ImagePlus size={18} /><strong>{change.after.title}</strong><small>确认后生成新画面</small></>
+          ) : (
+            <><Check size={18} /><strong>沿用当前画面</strong></>
+          )}
+        </div>
+      </figure>
+    </div>
+  );
+}
+
+function ChangeCard({ change, scene }: { change: EditChange; scene?: Scene }) {
   const changedFields = [
     {
       label: "标题",
@@ -1048,6 +1084,7 @@ function ChangeCard({ change }: { change: EditChange }) {
           </div>
         ) : null}
       </div>
+      {scene ? <PlanVisualDiff change={change} scene={scene} /> : null}
       <div className="kv-change-diffs">
         {changedFields.map((field) => (
           <section className={field.label === "旁白" ? "accent" : ""} key={field.label}>
@@ -1081,6 +1118,7 @@ function ChangeCard({ change }: { change: EditChange }) {
 
 function ChatPanel({
   messages,
+  scenes,
   pendingPlan,
   input,
   isBusy,
@@ -1091,6 +1129,7 @@ function ChatPanel({
   onCancel
 }: {
   messages: ChatMessage[];
+  scenes: Scene[];
   pendingPlan?: EditPlan;
   input: string;
   isBusy: boolean;
@@ -1150,7 +1189,11 @@ function ChatPanel({
             ) : null}
             <div className="kv-change-list">
               {pendingPlan.changes.map((change) => (
-                <ChangeCard change={change} key={change.sceneNumber} />
+                <ChangeCard
+                  change={change}
+                  key={change.sceneNumber}
+                  scene={scenes.find((scene) => scene.sceneNumber === change.sceneNumber)}
+                />
               ))}
             </div>
             <div className="kv-review-actions">
@@ -1451,6 +1494,7 @@ function StudioScreen({
                       <strong>{version.label}</strong>
                       {version.isCurrent ? <span>当前</span> : null}
                     </div>
+                    <p className="kv-version-change">{version.changeSummary?.description ?? "版本快照"}</p>
                     <p>{version.sceneCount} 个场景 · {durationLabel(version.durationSeconds)}</p>
                     <time>{new Date(version.createdAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
                     {!version.isCurrent ? (
@@ -1583,6 +1627,7 @@ function StudioScreen({
         onInput={onInput}
         onSubmit={onSubmit}
         pendingPlan={pendingPlan}
+        scenes={project.currentVersion.scenes}
       />
     </div>
   );

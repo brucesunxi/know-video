@@ -66,6 +66,14 @@ export type ProjectVersion = {
   scenes: Scene[];
 };
 
+export type VersionChangeSummary = {
+  changedScenes: number;
+  addedScenes: number;
+  removedScenes: number;
+  durationDelta: number;
+  description: string;
+};
+
 export type ProjectVersionSummary = Pick<
   ProjectVersion,
   "id" | "parentVersionId" | "status" | "createdAt" | "durationSeconds" | "renderUrl"
@@ -73,6 +81,7 @@ export type ProjectVersionSummary = Pick<
   label: string;
   sceneCount: number;
   isCurrent: boolean;
+  changeSummary?: VersionChangeSummary;
 };
 
 export type RenderJob = {

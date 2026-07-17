@@ -343,6 +343,7 @@ export function buildEditPlanFromRequest(params: {
   const requestedVoice = narrationVoiceFromRequest(params.request);
   const requestedClip = requestsGeneratedClip(params.request);
   const requestedProductionSettings = productionSettingsFromRequest(params.request);
+  const chineseRequest = containsChinese(params.request);
   const intent = analyzeEditIntent(
     params.request,
     params.version.scenes.map((scene) => scene.sceneNumber)
@@ -365,7 +366,9 @@ export function buildEditPlanFromRequest(params: {
     userRequest: params.request,
     summary: scenes.length === 0 && Object.keys(requestedProductionSettings).length > 0
       ? `更新全片的播放与品牌设置：${params.request}`
-      : `I will update ${scenes.length === params.version.scenes.length ? "the full video" : `scene ${scenes.map((s) => s.sceneNumber).join(", ")}`} according to: "${params.request}". Timing and narration structure are preserved unless the scene text directly asks for content changes.`,
+      : chineseRequest
+        ? `按照“${params.request}”调整${scenes.length === params.version.scenes.length ? "全部场景" : `场景 ${scenes.map((scene) => scene.sceneNumber).join("、")}`}，保留未被指令影响的时长、旁白和场景结构。`
+        : `I will update ${scenes.length === params.version.scenes.length ? "the full video" : `scene ${scenes.map((s) => s.sceneNumber).join(", ")}`} according to: "${params.request}". Timing and narration structure are preserved unless the scene text directly asks for content changes.`,
     affectedScenes: scenes.map((scene) => scene.sceneNumber),
     changes: scenes.map((scene) => {
       const currentTone = scene.style.theme.includes("light") ? "light" : "dark";
@@ -388,7 +391,9 @@ export function buildEditPlanFromRequest(params: {
           thumbnailTone: mediaOnly ? currentTone : tone === "light" ? "light" : "dark",
           visualPrompt: mediaOnly
             ? scene.visualPrompt
-            : `${scene.visualPrompt} Revision request: ${params.request}. Apply a ${tone} art direction, keep layout readable, and preserve the scene purpose.`,
+            : chineseRequest
+              ? `${scene.visualPrompt}。修改要求：${params.request}。统一调整美术方向，保持画面层级清晰，并保留本场景原有叙事目的。`
+              : `${scene.visualPrompt} Revision request: ${params.request}. Apply a ${tone} art direction, keep layout readable, and preserve the scene purpose.`,
           motionPrompt: requestedClip ? `${scene.motionPrompt}. ${params.request}` : scene.motionPrompt
         },
         regenerate: requestedVoice

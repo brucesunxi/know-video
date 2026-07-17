@@ -12,6 +12,7 @@ import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import { assertRestorableVersion, restorableSceneAssets, restoredVersionStatus } from "@/lib/version-restore";
 import { applyEditPlan } from "@/lib/video-brain";
 import type { ChatMessage, EditPlan, Project, ProjectVersion, ProjectVersionSummary, Scene, SceneAsset } from "@/lib/types";
+import { summarizeVersionChange } from "@/lib/version-diff";
 
 type IdRow = { id: string };
 
@@ -957,6 +958,12 @@ export async function listProjectVersions(projectId: string): Promise<ProjectVer
       pv.duration_seconds,
       pv.render_url,
       pv.created_at,
+      pv.scene_plan_json::text as scene_plan_json,
+      (
+        select parent.scene_plan_json::text
+        from project_versions parent
+        where parent.id = pv.parent_version_id
+      ) as parent_scene_plan_json,
       p.current_version_id,
       count(s.id)::int as scene_count,
       count(s.id) filter (
@@ -1000,6 +1007,8 @@ export async function listProjectVersions(projectId: string): Promise<ProjectVer
     visual_count: number;
     audio_count: number;
     has_active_render: boolean;
+    scene_plan_json: string | null;
+    parent_scene_plan_json: string | null;
   }>;
   return rows.map((row, index) => {
     const mediaComplete = row.scene_count > 0
@@ -1024,7 +1033,8 @@ export async function listProjectVersions(projectId: string): Promise<ProjectVer
       durationSeconds: row.duration_seconds,
       renderUrl: row.render_url ?? undefined,
       sceneCount: row.scene_count,
-      isCurrent: row.id === row.current_version_id
+      isCurrent: row.id === row.current_version_id,
+      changeSummary: summarizeVersionChange(row.scene_plan_json, row.parent_scene_plan_json)
     };
   });
 }
