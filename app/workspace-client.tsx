@@ -418,6 +418,21 @@ function renderJobMetadataItems(job: RenderJob) {
   ].filter(Boolean);
 }
 
+function renderJobRecoveryAdvice(job: RenderJob) {
+  if (job.status !== "failed") return undefined;
+  const error = job.error ?? "";
+  if (/素材|云端|文件|画面|配音|失效|不存在/.test(error)) {
+    return "建议先重做提示中的异常画面或配音，再重新导出。";
+  }
+  if (/版本|刷新|发生变化/.test(error)) {
+    return "建议重新打开当前项目，确认版本无误后再导出。";
+  }
+  if (/超时|连接|暂时|稍后/.test(error)) {
+    return "建议稍等片刻后重新导出；如果连续失败，再检查导出记录里的错误信息。";
+  }
+  return "建议重新导出一次；如果仍失败，先确认所有场景都能正常播放预览。";
+}
+
 function exportActionLabel(input: {
   exportProgress?: number;
   renderUrl?: string;
@@ -2787,6 +2802,8 @@ function StudioScreen({
                   const active = job.status === "queued" || job.status === "running";
                   const qualityLabel = renderJobQualityLabel(job);
                   const metadataItems = renderJobMetadataItems(job);
+                  const recoveryAdvice = renderJobRecoveryAdvice(job);
+                  const canRetryExport = job.status === "failed" && job.versionId === project.currentVersion.id && !isBusy && exportProgress === undefined;
                   return (
                     <article className={`status-${job.status}`} key={job.id}>
                       <div className="kv-export-summary">
@@ -2806,11 +2823,22 @@ function StudioScreen({
                         </div>
                       ) : null}
                       {job.error && job.status === "failed" ? <p>{job.error}</p> : null}
+                      {recoveryAdvice ? (
+                        <div className="kv-export-recovery" role="note">
+                          <AlertCircle size={14} />
+                          <span>{recoveryAdvice}</span>
+                        </div>
+                      ) : null}
                       <div className="kv-export-actions">
                         {job.status === "ready" && job.renderUrl ? (
                           <a download href={job.renderUrl}>
                             <Download size={15} />下载 MP4
                           </a>
+                        ) : null}
+                        {canRetryExport ? (
+                          <button className="kv-export-retry" onClick={onExport} type="button">
+                            <RefreshCcw size={15} />重新导出 MP4
+                          </button>
                         ) : null}
                         {active ? (
                           <button onClick={() => onCancelExport(job.id)} type="button">

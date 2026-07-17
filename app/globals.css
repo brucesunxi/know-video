@@ -1230,6 +1230,29 @@ button:disabled {
   color: #a32525;
 }
 
+.kv-export-actions button.kv-export-retry {
+  border-color: #bfe8e2;
+  color: #087568;
+}
+
+.kv-export-recovery {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 6px;
+  border: 1px solid #fed7aa;
+  border-radius: 7px;
+  background: #fff7ed;
+  padding: 8px;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.kv-export-recovery svg {
+  margin-top: 1px;
+}
+
 .kv-export-empty {
   display: flex;
   min-height: 76px;
