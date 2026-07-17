@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateProjectVoices } from "@/lib/audio-assets";
+import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/media-generation-result";
 import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import { isNarrationVoice } from "@/lib/voice-profiles";
 
@@ -49,13 +50,25 @@ export async function POST(request: Request) {
     const nextAudio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
     return !nextAudio || nextAudio.r2Key === previousAudioKeys.get(scene.sceneNumber);
   });
+  const progress = mediaGenerationProgress(
+    targets.map((scene) => scene.sceneNumber),
+    failed.map((scene) => scene.sceneNumber)
+  );
 
   if (failed.length > 0) {
     return NextResponse.json(
-      { error: "部分场景配音未完成。请缩短过长旁白后重试；如果所有旁白都很短，请检查语音服务配置。", project: updated },
+      {
+        error: mediaGenerationFailureMessage(
+          "配音",
+          progress,
+          "请缩短过长旁白后重试；如果旁白长度正常，请检查语音服务配置。"
+        ),
+        project: updated,
+        ...progress
+      },
       { status: 502 }
     );
   }
 
-  return NextResponse.json({ project: updated });
+  return NextResponse.json({ project: updated, ...progress });
 }

@@ -33,6 +33,7 @@
     "audio:mix:smoke": "node scripts/audio-mix-smoke.mjs",
     "voice:profiles:smoke": "node scripts/voice-profiles-smoke.mjs",
     "asset:policy:smoke": "node scripts/asset-policy-smoke.mjs",
+    "media:generation:smoke": "node scripts/media-generation-result-smoke.mjs",
     "video:response:smoke": "node scripts/cloudflare-video-response-smoke.mjs",
     "video:selection:smoke": "node scripts/motion-scene-selection-smoke.mjs",
     "version:restore:smoke": "node scripts/version-restore-smoke.mjs",

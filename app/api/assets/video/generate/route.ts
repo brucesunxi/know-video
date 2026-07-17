@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/media-generation-result";
 import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import { generateProjectSceneClips } from "@/lib/video-assets";
 
@@ -53,11 +54,20 @@ export async function POST(request: Request) {
     const clip = scene.assets.find((asset) => asset.type === "clip" && asset.url);
     return !clip || clip.r2Key === previousClipKeys.get(scene.sceneNumber);
   });
+  const progress = mediaGenerationProgress(
+    body.sceneNumbers,
+    failed.map((scene) => scene.sceneNumber)
+  );
   if (failed.length > 0) {
     return NextResponse.json({
-      error: `场景 ${failed.map((scene) => scene.sceneNumber).join("、")} 的动态镜头没有生成成功。请确认账户已开通视频生成能力，或稍后重试。`,
-      project: result.project
+      error: mediaGenerationFailureMessage(
+        "动态镜头",
+        progress,
+        "请确认账户已开通视频生成能力，或稍后重试。"
+      ),
+      project: result.project,
+      ...progress
     }, { status: 502 });
   }
-  return NextResponse.json({ project: result.project });
+  return NextResponse.json({ project: result.project, ...progress });
 }

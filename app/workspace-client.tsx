@@ -60,6 +60,13 @@ type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
 type Engine = "ai" | "heuristic";
 type StudioView = "preview" | "storyboard";
+type MediaGenerationResponse = {
+  project?: Project;
+  error?: string;
+  requestedSceneNumbers?: number[];
+  completedSceneNumbers?: number[];
+  failedSceneNumbers?: number[];
+};
 type BusyAction =
   | "planning-edit"
   | "applying-edit"
@@ -3496,11 +3503,12 @@ export function WorkspaceClient({
           versionId: project.currentVersion.id,
           sceneNumbers,
           quality
-        })
+        }),
+        signal: AbortSignal.timeout(125_000)
       });
-      const data = await response.json() as { project?: Project; error?: string };
+      const data = await response.json() as MediaGenerationResponse;
+      if (data.project) setProject(data.project);
       if (!response.ok || !data.project) throw new Error(data.error || "场景画面生成失败。");
-      setProject(data.project);
       pushMessage({
         role: "assistant",
         type: "text",
@@ -3512,7 +3520,7 @@ export function WorkspaceClient({
         versionId: data.project.currentVersion.id
       }, true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "场景画面生成失败。";
+      const message = requestErrorMessage(error, "场景画面生成失败，请稍后重试。");
       setErrorMessage(message);
       pushMessage({ role: "assistant", type: "text", content: message });
     } finally {
@@ -3574,11 +3582,12 @@ export function WorkspaceClient({
           versionId: project.currentVersion.id,
           sceneNumbers,
           narrationVoice
-        })
+        }),
+        signal: AbortSignal.timeout(125_000)
       });
-      const data = await response.json() as { project?: Project; error?: string };
+      const data = await response.json() as MediaGenerationResponse;
+      if (data.project) setProject(data.project);
       if (!response.ok || !data.project) throw new Error(data.error || "场景配音生成失败。");
-      setProject(data.project);
       pushMessage({
         role: "assistant",
         type: "text",
@@ -3590,7 +3599,7 @@ export function WorkspaceClient({
         versionId: data.project.currentVersion.id
       }, true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "场景配音生成失败。";
+      const message = requestErrorMessage(error, "场景配音生成失败，请稍后重试。");
       setErrorMessage(message);
       pushMessage({ role: "assistant", type: "text", content: message });
     } finally {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateProjectSceneImages } from "@/lib/image-assets";
+import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/media-generation-result";
 import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 
 const requestSchema = z.object({
@@ -13,7 +14,11 @@ const requestSchema = z.object({
 export const maxDuration = 120;
 
 export async function POST(request: Request) {
-  const body = requestSchema.parse(await request.json());
+  const parsed = requestSchema.safeParse(await request.json().catch(() => undefined));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "画面生成请求格式无效。" }, { status: 400 });
+  }
+  const body = parsed.data;
   const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
   if (!project) {
     return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重试。" }, { status: 409 });
@@ -48,6 +53,10 @@ export async function POST(request: Request) {
     replaceImages: true,
     sceneNumbers: body.sceneNumbers
   });
+  const progress = mediaGenerationProgress(
+    targetScenes.map((scene) => scene.sceneNumber),
+    failedTargets.map((scene) => scene.sceneNumber)
+  );
 
   if (failedTargets.length > 0) {
     const messages = {
@@ -58,10 +67,15 @@ export async function POST(request: Request) {
     } as const;
     const code = updated.currentVersion.assetErrorCode || "generation_failed";
     return NextResponse.json(
-      { error: messages[code], code, project: updated },
+      {
+        error: mediaGenerationFailureMessage("画面", progress, messages[code]),
+        code,
+        project: updated,
+        ...progress
+      },
       { status: 502 }
     );
   }
 
-  return NextResponse.json({ project: updated });
+  return NextResponse.json({ project: updated, ...progress });
 }
