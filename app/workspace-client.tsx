@@ -1565,6 +1565,13 @@ function Storyboard({
             <span className={`kv-scene-media-status ${mediaState.ready ? "ready" : "partial"}`}>
               {sceneMediaStatusLabel(scene)}
             </span>
+            <span className="kv-scene-asset-dots" aria-label={`场景 ${scene.sceneNumber} 素材状态`}>
+              {sceneMediaDiagnosticItems(scene).map((item) => (
+                <i className={item.status} key={item.key} title={`${item.label}：${item.detail}`}>
+                  {item.label}
+                </i>
+              ))}
+            </span>
           </button>
           );
         })}
