@@ -133,6 +133,20 @@ function generationProgressSteps(motion: GenerationOptions["motion"]) {
     : baseProgressSteps;
 }
 
+function generationSpecItems(options: GenerationOptions) {
+  const sceneLabel = options.sceneCount === "auto" ? "自动规划场景" : `${options.sceneCount} 个场景`;
+  const motionLabel = options.motion === "key-scenes"
+    ? `${Number(options.duration) >= 45 && options.sceneCount !== "3" ? "2" : "1"} 个关键动态镜头`
+    : "全片智能运镜";
+  return [
+    { label: "目标时长", value: `${options.duration} 秒` },
+    { label: "分镜策略", value: sceneLabel },
+    { label: "旁白语言", value: options.language },
+    { label: "视觉风格", value: options.style },
+    { label: "动态策略", value: motionLabel }
+  ];
+}
+
 function elapsedGenerationLabel(startedAt?: number, now = Date.now()) {
   if (!startedAt || startedAt > now) return "刚刚开始";
   const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
@@ -774,6 +788,19 @@ function Shell({
   );
 }
 
+function GenerationSpecStrip({ options }: { options: GenerationOptions }) {
+  return (
+    <div className="kv-generation-spec" aria-label="生成规格确认">
+      {generationSpecItems(options).map((item) => (
+        <span key={item.label}>
+          <strong>{item.value}</strong>
+          <small>{item.label}</small>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function ProjectLibrary({
   projects,
   query,
@@ -990,6 +1017,7 @@ function BriefScreen({
               开始生成
             </button>
           </div>
+          <GenerationSpecStrip options={options} />
         </form>
         {errorMessage ? (
           <div className="kv-inline-error" role="alert">
@@ -1043,12 +1071,14 @@ function GeneratingScreen({
   prompt,
   progress,
   status,
+  options,
   motion,
   startedAt
 }: {
   prompt: string;
   progress: number;
   status: string;
+  options: GenerationOptions;
   motion: GenerationOptions["motion"];
   startedAt?: number;
 }) {
@@ -1080,6 +1110,7 @@ function GeneratingScreen({
         <span><strong>{Math.min(activeIndex + 1, steps.length)} / {steps.length}</strong><small>当前步骤</small></span>
         <span><strong>自动恢复</strong><small>刷新后继续找回任务</small></span>
       </div>
+      <GenerationSpecStrip options={options} />
       <div className="kv-progress-steps">
         {steps.map((step, index) => (
           <div className={index <= activeIndex ? "done" : ""} key={step}>
@@ -4747,6 +4778,7 @@ export function WorkspaceClient({
       {stage === "generating" ? (
         <GeneratingScreen
           motion={generationOptions.motion}
+          options={generationOptions}
           progress={progress}
           prompt={generationPrompt}
           startedAt={generationStartedAt}
