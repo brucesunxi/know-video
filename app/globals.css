@@ -2179,6 +2179,44 @@ button:disabled {
   color: #a45809;
 }
 
+.kv-version-restore-impact {
+  display: grid;
+  gap: 9px;
+  border: 1px solid #bfe7df;
+  border-radius: 8px;
+  background: #f3fbf9;
+  padding: 11px;
+}
+
+.kv-version-restore-impact > strong {
+  color: #0b5f57;
+  font-size: 12px;
+}
+
+.kv-version-restore-impact > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.kv-version-restore-impact span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #ccefe9;
+  border-radius: 999px;
+  background: #fff;
+  padding: 6px 8px;
+  color: #245a55;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.kv-version-restore-impact svg {
+  flex: 0 0 auto;
+  color: #0f8f7f;
+}
+
 .kv-version-scene-diffs {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

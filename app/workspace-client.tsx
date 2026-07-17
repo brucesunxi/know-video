@@ -380,6 +380,24 @@ function versionOutputLabel(version: ProjectVersion) {
   return outputReadiness({ ...summary, status: version.status, renderUrl: version.renderUrl, renderJobId: version.renderJobId }).label;
 }
 
+function versionRestoreImpactItems(preview: ProjectVersionPreview) {
+  const selectedSummary = versionMediaSummary(preview.version);
+  const selectedOutput = outputReadiness({
+    ...selectedSummary,
+    status: preview.version.status,
+    renderUrl: preview.version.renderUrl,
+    renderJobId: preview.version.renderJobId
+  });
+  const items = [
+    "恢复会创建新的当前版本",
+    "当前版本仍保留在历史记录中",
+    `时间线将变为 ${selectedSummary.sceneCount} 个场景 · ${durationLabel(preview.version.durationSeconds)}`,
+    mediaCompletenessClass(selectedSummary) === "complete" ? "恢复后素材完整" : "恢复后需补齐素材",
+    preview.version.renderUrl ? "该版本已有 MP4 可继续播放" : selectedOutput.tone === "ready" ? "恢复后可重新导出 MP4" : "恢复后暂不可导出 MP4"
+  ];
+  return items;
+}
+
 function fileSizeLabel(value: unknown) {
   const bytes = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(bytes) || bytes <= 0) return "云端素材";
@@ -2359,6 +2377,7 @@ function VersionComparison({ preview }: { preview: ProjectVersionPreview }) {
   const changed = rows.filter((row) => row.status !== "未变化");
   const visibleRows = changed.length > 0 ? changed : rows;
   const sameVersion = preview.version.id === preview.currentVersion.id;
+  const restoreImpactItems = versionRestoreImpactItems(preview);
 
   return (
     <section className="kv-version-comparison" aria-label="版本场景比较">
@@ -2378,6 +2397,19 @@ function VersionComparison({ preview }: { preview: ProjectVersionPreview }) {
         </div>
       </div>
       <p>{sameVersion ? "这是当前版本的完整分镜快照。" : preview.changeSummary.description}</p>
+      {!sameVersion ? (
+        <div className="kv-version-restore-impact" aria-label="恢复版本影响">
+          <strong>恢复前确认</strong>
+          <div>
+            {restoreImpactItems.map((item) => (
+              <span key={item}>
+                <Check size={13} />
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="kv-version-scene-diffs">
         {visibleRows.map((row) => (
           <article key={`${row.sceneNumber}-${row.before?.id ?? "new"}-${row.after?.id ?? "removed"}`}>
