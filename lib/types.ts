@@ -130,6 +130,8 @@ export type ProjectListItem = {
   status: ProjectVersion["status"];
   durationSeconds: number;
   sceneCount: number;
+  visualCount: number;
+  audioCount: number;
   thumbnailUrl?: string;
 };
 

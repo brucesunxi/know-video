@@ -55,6 +55,7 @@
     "generation:write-guard:smoke": "node scripts/generation-write-guard-smoke.mjs",
     "workspace:review:smoke": "node scripts/workspace-review-state-smoke.mjs",
     "workspace:media:smoke": "node scripts/workspace-media-readiness-smoke.mjs",
+    "project:library:smoke": "node scripts/project-library-media-smoke.mjs",
     "db:init": "node --env-file=.env.local scripts/init-db.mjs",
     "db:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
     "services:check": "node --env-file=.env.local scripts/diagnose-services.mjs",

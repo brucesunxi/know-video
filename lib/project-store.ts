@@ -268,6 +268,8 @@ export async function listProjects(): Promise<ProjectListItem[]> {
       status: demoProject.currentVersion.status,
       durationSeconds: demoProject.currentVersion.durationSeconds,
       sceneCount: demoProject.currentVersion.scenes.length,
+      visualCount: demoProject.currentVersion.scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length,
+      audioCount: demoProject.currentVersion.scenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio")).length,
       thumbnailUrl: firstImage?.url
     }];
   }
@@ -350,6 +352,8 @@ export async function listProjects(): Promise<ProjectListItem[]> {
       status,
       durationSeconds: row.duration_seconds ?? 0,
       sceneCount: row.scene_count,
+      visualCount: row.visual_count,
+      audioCount: row.audio_count,
       thumbnailUrl: row.thumbnail_r2_key
         ? assetUrlForKey(row.thumbnail_r2_key, row.thumbnail_public_url ?? undefined)
         : undefined

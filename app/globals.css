@@ -540,6 +540,23 @@ button:disabled {
   font-size: 12px;
 }
 
+.kv-project-card-body small {
+  display: block;
+  margin-top: 7px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.kv-project-card-body small.complete {
+  color: #087568;
+}
+
+.kv-project-card-body small.partial {
+  color: #8a5a05;
+}
+
 .kv-project-card-actions,
 .kv-project-rename {
   display: flex;

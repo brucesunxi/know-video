@@ -230,6 +230,14 @@ function sceneNumberListLabel(sceneNumbers: number[]) {
   return sceneNumbers.length > 6 ? `${visible} 等 ${sceneNumbers.length} 个` : visible;
 }
 
+function projectMediaLabel(item: ProjectListItem) {
+  if (item.sceneCount <= 0) return "还没有分镜";
+  const visualReady = item.visualCount >= item.sceneCount;
+  const audioReady = item.audioCount >= item.sceneCount;
+  if (visualReady && audioReady) return "素材完整，可继续预览或导出";
+  return `画面 ${item.visualCount}/${item.sceneCount} · 配音 ${item.audioCount}/${item.sceneCount}`;
+}
+
 function fileSizeLabel(value: unknown) {
   const bytes = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(bytes) || bytes <= 0) return "云端素材";
@@ -507,6 +515,9 @@ function ProjectLibrary({
                     <span className={`kv-project-status ${item.status}`}>{statusLabel[item.status]}</span>
                   </div>
                   <p>{item.sceneCount} 个场景 · {new Date(item.updatedAt).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}</p>
+                  <small className={item.visualCount === item.sceneCount && item.audioCount === item.sceneCount ? "complete" : "partial"}>
+                    {projectMediaLabel(item)}
+                  </small>
                 </div>
               </button>
               {renamingId === item.id ? (
