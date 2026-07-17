@@ -427,6 +427,31 @@ function productionSummaryItems(input: {
   ];
 }
 
+function productionImpactChecks(input: { settings: ProductionSettings; logo?: SceneAsset; music?: SceneAsset }) {
+  return [
+    {
+      label: "字幕层",
+      value: input.settings.captionsEnabled
+        ? `开启 · ${input.settings.captionStyle === "minimal" ? "简洁" : input.settings.captionStyle === "highlight" ? "强调色" : "深色底"}`
+        : "关闭",
+      status: input.settings.captionsEnabled ? "ready" : "muted",
+      detail: input.settings.captionsEnabled ? "导出画面会叠加逐句字幕。" : "导出画面不会显示字幕。"
+    },
+    {
+      label: "背景音乐",
+      value: input.music ? `${Math.round(input.settings.musicVolume * 100)}% · ${input.settings.musicDucking === "off" ? "不避让" : input.settings.musicDucking === "strong" ? "强避让" : "平衡避让"}` : "未添加",
+      status: input.music ? "ready" : "muted",
+      detail: input.music ? "MP4 会混入背景音乐，并按旁白策略压低。" : "最终只保留旁白音轨。"
+    },
+    {
+      label: "品牌 Logo",
+      value: input.logo ? `${input.settings.logoSize}% · ${productionSettingLabels({ logoPosition: input.settings.logoPosition })[0].replace("Logo 位置：", "")}` : "未添加",
+      status: input.logo ? "ready" : "muted",
+      detail: input.logo ? "导出画面会叠加品牌标识。" : "最终画面不会叠加品牌标识。"
+    }
+  ] as const;
+}
+
 function exportReadinessItems(project: Project, settings: ProductionSettings) {
   const scenes = project.currentVersion.scenes;
   const visualCount = scenes.filter(sceneHasVisualAsset).length;
@@ -2223,6 +2248,7 @@ function ProductionSettingsPanel({
   const [musicVolume, setMusicVolume] = useState(settings.musicVolume);
   const [logoSize, setLogoSize] = useState(settings.logoSize);
   const summary = productionSummaryItems({ settings, durationSeconds, logo, music });
+  const impactChecks = productionImpactChecks({ settings, logo, music });
 
   useEffect(() => setMusicVolume(settings.musicVolume), [settings.musicVolume]);
   useEffect(() => setLogoSize(settings.logoSize), [settings.logoSize]);
@@ -2244,6 +2270,24 @@ function ProductionSettingsPanel({
             <em>{item.detail}</em>
           </span>
         ))}
+      </div>
+      <div className="kv-production-impact" aria-label="成片设置导出影响">
+        <div>
+          <strong>导出影响预览</strong>
+          <span>这些设置会直接进入播放器预览和 MP4 合成。</span>
+        </div>
+        <ul>
+          {impactChecks.map((item) => (
+            <li className={item.status === "ready" ? "ready" : "muted"} key={item.label}>
+              {item.status === "ready" ? <Check size={15} /> : <AlertCircle size={15} />}
+              <span>
+                <small>{item.label}</small>
+                <strong>{item.value}</strong>
+                <em>{item.detail}</em>
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
       <div className="kv-production-grid">
         <div className="kv-production-control">

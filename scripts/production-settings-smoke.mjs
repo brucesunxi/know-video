@@ -41,11 +41,23 @@ assert.deepEqual(plain(productionSettingsFromScenes([{ style: { production: {
 assert.equal(productionDurationInFrames({ durationSeconds: 30, scenes: [{ style: { production: { playbackRate: 1.5 } } }] }, 30), 600);
 
 assert.match(workspace, /function productionSummaryItems/);
+assert.match(workspace, /function productionImpactChecks/);
 assert.match(workspace, /aria-label="成片输出摘要"/);
+assert.match(workspace, /aria-label="成片设置导出影响"/);
+assert.match(workspace, /导出影响预览/);
+assert.match(workspace, /这些设置会直接进入播放器预览和 MP4 合成/);
+assert.match(workspace, /字幕层/);
+assert.match(workspace, /背景音乐/);
+assert.match(workspace, /品牌 Logo/);
 assert.match(workspace, /durationSeconds=\{project\.currentVersion\.durationSeconds\}/);
 assert.match(workspace, /导出时自动混音/);
 assert.match(workspace, /仅保留旁白音轨/);
 assert.match(styles, /\.kv-production-summary/);
+assert.match(styles, /\.kv-production-impact/);
+assert.match(styles, /\.kv-production-impact ul/);
+assert.match(styles, /\.kv-production-impact li\.ready/);
+assert.match(styles, /\.kv-production-impact li\.muted/);
 assert.match(styles, /@media \(max-width: 360px\)[\s\S]*\.kv-production-summary|@media \(max-width: 760px\)[\s\S]*\.kv-production-summary|@media \(max-width: 1040px\)[\s\S]*\.kv-production-summary/);
+assert.match(styles, /@media \(max-width: 1040px\)[\s\S]*\.kv-production-impact ul[\s\S]*grid-template-columns: 1fr/);
 
 console.log("Production settings smoke checks passed.");
