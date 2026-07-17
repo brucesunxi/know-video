@@ -25,6 +25,7 @@ import {
   Loader2,
   MessageSquareText,
   Mic2,
+  MoreHorizontal,
   Music2,
   PanelRightOpen,
   Pencil,
@@ -1944,6 +1945,8 @@ function StudioScreen({
   onVoiceChange: (sceneNumber: number, voice: NarrationVoice) => void;
 }) {
   const playerRef = useRef<PlayerRef>(null);
+  const toolMenuRef = useRef<HTMLDivElement>(null);
+  const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === selectedScene) ?? project.currentVersion.scenes[0];
   const missingSceneNumbers = project.currentVersion.scenes
     .filter((item) => !sceneVisualAsset(item))
@@ -1952,6 +1955,21 @@ function StudioScreen({
     .filter((item) => !item.assets.some((asset) => asset.type === "audio" && asset.url))
     .map((item) => item.sceneNumber);
   const filmSettings = productionSettings(project);
+  useEffect(() => {
+    if (!toolMenuOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!toolMenuRef.current?.contains(event.target as Node)) setToolMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setToolMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [toolMenuOpen]);
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
@@ -1980,6 +1998,11 @@ function StudioScreen({
       .reduce((sum, item) => sum + item.durationSeconds, 0);
     playerRef.current?.seekTo(Math.round((seconds * VIDEO_FPS) / filmSettings.playbackRate));
     onSelectScene(sceneNumber);
+  }
+
+  function runTool(action: () => void) {
+    setToolMenuOpen(false);
+    action();
   }
 
   return (
@@ -2011,37 +2034,7 @@ function StudioScreen({
               <MessageSquareText size={16} />
               对话改片
             </button>
-            <button
-              aria-label="版本历史"
-              className={`kv-icon-action${versionsOpen ? " active" : ""}`}
-              onClick={onToggleVersions}
-              title="版本历史"
-              type="button"
-            >
-              <History size={16} />
-            </button>
-            <button
-              aria-label="导出记录"
-              className={`kv-icon-action${exportsOpen ? " active" : ""}`}
-              onClick={onToggleExports}
-              title="导出记录"
-              type="button"
-            >
-              <FileVideo2 size={16} />
-            </button>
-            <button className={assetsOpen ? "active" : ""} disabled={isBusy} onClick={onToggleAssets} type="button">
-              {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <ImagePlus size={16} />}
-              {uploadProgress !== undefined ? `上传 ${uploadProgress}%` : "素材"}
-            </button>
-            <button className={productionOpen ? "active" : ""} disabled={isBusy} onClick={onToggleProduction} type="button">
-              <SlidersHorizontal size={16} />
-              成片设置
-            </button>
-            <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers.length > 0 ? missingSceneNumbers : undefined)} type="button">
-              <RefreshCcw size={16} />
-              {missingSceneNumbers.length > 0 ? "补齐画面" : "重做画面"}
-            </button>
-            <button disabled={isBusy} onClick={() => onEnhanceScene(selectedScene)} type="button">
+            <button className="kv-enhance-action" disabled={isBusy} onClick={() => onEnhanceScene(selectedScene)} type="button">
               <Sparkles size={16} />
               高清画面
             </button>
@@ -2054,14 +2047,48 @@ function StudioScreen({
               <Clapperboard size={16} />
               {scene?.assets.some((asset) => asset.type === "clip" && asset.url) ? "重做动态" : "生成动态"}
             </button>
-            <button
-              disabled={isBusy}
-              onClick={() => onRegenerateAudio(missingAudioSceneNumbers.length > 0 ? missingAudioSceneNumbers : [selectedScene])}
-              type="button"
-            >
-              <Mic2 size={16} />
-              {missingAudioSceneNumbers.length > 0 ? `补齐 ${missingAudioSceneNumbers.length} 段` : "重做配音"}
-            </button>
+            <div className="kv-tool-menu-wrap" ref={toolMenuRef}>
+              <button
+                aria-controls="kv-studio-tool-menu"
+                aria-expanded={toolMenuOpen}
+                className={toolMenuOpen ? "active" : ""}
+                onClick={() => setToolMenuOpen((open) => !open)}
+                type="button"
+              >
+                <MoreHorizontal size={17} />
+                工具
+              </button>
+              {toolMenuOpen ? (
+                <div aria-label="工作室工具" className="kv-tool-menu" id="kv-studio-tool-menu" role="menu">
+                  <span>项目</span>
+                  <button className={assetsOpen ? "active" : ""} disabled={isBusy} onClick={() => runTool(onToggleAssets)} role="menuitem" type="button">
+                    {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <ImagePlus size={16} />}
+                    {uploadProgress !== undefined ? `上传 ${uploadProgress}%` : "素材库"}
+                  </button>
+                  <button className={productionOpen ? "active" : ""} disabled={isBusy} onClick={() => runTool(onToggleProduction)} role="menuitem" type="button">
+                    <SlidersHorizontal size={16} />
+                    成片设置
+                  </button>
+                  <button className={versionsOpen ? "active" : ""} onClick={() => runTool(onToggleVersions)} role="menuitem" type="button">
+                    <History size={16} />
+                    版本历史
+                  </button>
+                  <button className={exportsOpen ? "active" : ""} onClick={() => runTool(onToggleExports)} role="menuitem" type="button">
+                    <FileVideo2 size={16} />
+                    导出记录
+                  </button>
+                  <span>生成</span>
+                  <button disabled={isBusy} onClick={() => runTool(() => onRegenerate(missingSceneNumbers.length > 0 ? missingSceneNumbers : undefined))} role="menuitem" type="button">
+                    <RefreshCcw size={16} />
+                    {missingSceneNumbers.length > 0 ? `补齐 ${missingSceneNumbers.length} 个画面` : "重做全部画面"}
+                  </button>
+                  <button disabled={isBusy} onClick={() => runTool(() => onRegenerateAudio(missingAudioSceneNumbers.length > 0 ? missingAudioSceneNumbers : [selectedScene]))} role="menuitem" type="button">
+                    <Mic2 size={16} />
+                    {missingAudioSceneNumbers.length > 0 ? `补齐 ${missingAudioSceneNumbers.length} 段配音` : "重做本场景配音"}
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <button
               className="kv-primary"
               disabled={isBusy || exportProgress !== undefined || missingSceneNumbers.length > 0 || missingAudioSceneNumbers.length > 0}

@@ -798,9 +798,7 @@ button:disabled {
 
 .kv-actionbar .kv-actions {
   min-width: 0;
-  overflow-x: auto;
-  padding-bottom: 3px;
-  scrollbar-width: thin;
+  overflow: visible;
 }
 
 .kv-actionbar .kv-actions button {
@@ -808,18 +806,67 @@ button:disabled {
   white-space: nowrap;
 }
 
-.kv-actions .kv-icon-action {
-  width: 42px;
-  justify-content: center;
-  padding-inline: 0;
-}
-
 .kv-actions .kv-primary {
-  order: -4;
+  order: 4;
 }
 
 .kv-actions .kv-video-action {
-  order: -3;
+  order: 2;
+}
+
+.kv-tool-menu-wrap {
+  position: relative;
+  order: 3;
+}
+
+.kv-tool-menu-wrap > button {
+  height: 100%;
+}
+
+.kv-tool-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  width: 232px;
+  gap: 3px;
+  border: 1px solid #d7e0e8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 7px;
+  box-shadow: 0 16px 36px rgba(16, 24, 40, 0.14);
+}
+
+.kv-tool-menu > span {
+  padding: 8px 9px 4px;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.kv-actions .kv-tool-menu > button,
+.kv-actions .kv-tool-menu > button:not(.kv-primary) {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  justify-content: flex-start;
+  gap: 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 8px 9px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 750;
+  text-align: left;
+}
+
+.kv-actions .kv-tool-menu > button:hover,
+.kv-actions .kv-tool-menu > button:focus-visible,
+.kv-actions .kv-tool-menu > button.active {
+  background: #edf9f7;
+  color: #087568;
 }
 
 .kv-actions .kv-icon-action {
@@ -3615,13 +3662,6 @@ button:disabled {
     white-space: nowrap;
   }
 
-  .kv-actions {
-    min-width: 0;
-    overflow-x: auto;
-    padding-bottom: 3px;
-    scrollbar-width: thin;
-  }
-
   .kv-actions button {
     flex: 0 0 auto;
     white-space: nowrap;
@@ -3932,15 +3972,10 @@ button:disabled {
     display: flex;
     width: 100%;
     gap: 8px;
-    overflow-x: auto;
-    margin-inline: -12px;
-    padding: 0 12px 5px;
-    scroll-snap-type: x proximity;
-    scrollbar-width: none;
-  }
-
-  .kv-actions::-webkit-scrollbar {
-    display: none;
+    overflow: visible;
+    margin-inline: 0;
+    padding: 0;
+    flex-wrap: wrap;
   }
 
   .kv-actions button {
@@ -3948,20 +3983,37 @@ button:disabled {
     min-height: 44px;
     justify-content: center;
     padding-inline: 10px;
-    scroll-snap-align: start;
     white-space: nowrap;
   }
 
   .kv-actions .kv-primary {
-    order: -5;
+    flex: 1 1 140px;
+    order: 5;
   }
 
   .kv-actions .kv-mobile-chat-action {
     display: inline-flex !important;
-    order: -4;
+    order: 1;
     border-color: #9bded6;
     background: #edf9f7;
     color: #087568;
+  }
+
+  .kv-actions .kv-enhance-action {
+    order: 2;
+  }
+
+  .kv-actions .kv-video-action {
+    order: 3;
+  }
+
+  .kv-tool-menu-wrap {
+    order: 4;
+  }
+
+  .kv-tool-menu {
+    right: auto;
+    left: 0;
   }
 
   .kv-tabs button {
