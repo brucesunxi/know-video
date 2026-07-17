@@ -45,6 +45,8 @@ import { KnowVideoPlayer } from "@/app/video-player";
 import { replacementAssetTypes } from "@/lib/asset-policy";
 import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { editPlanVisualSceneNumbers, planPreviewAsset, removeEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
+import { parsePendingGenerationSession, PENDING_GENERATION_STORAGE_KEY, type PendingGenerationSession } from "@/lib/generation-session";
+import { missingMotionSceneNumbers, missingSceneAssetNumbers } from "@/lib/generation-resume";
 import { selectMotionCriticalScenes } from "@/lib/motion-scene-selection";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
 import { sceneSplitPreview, type SceneStructureMutation } from "@/lib/scene-structure";
@@ -220,6 +222,30 @@ function requestErrorMessage(error: unknown, fallback: string) {
     return `${fallback}请求超时，请稍后重试。`;
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+function readPendingGenerationSession() {
+  try {
+    return parsePendingGenerationSession(window.sessionStorage.getItem(PENDING_GENERATION_STORAGE_KEY));
+  } catch {
+    return undefined;
+  }
+}
+
+function savePendingGenerationSession(session: PendingGenerationSession) {
+  try {
+    window.sessionStorage.setItem(PENDING_GENERATION_STORAGE_KEY, JSON.stringify(session));
+  } catch {
+    // Generation still works when browser storage is unavailable; only refresh recovery is disabled.
+  }
+}
+
+function clearPendingGenerationSession() {
+  try {
+    window.sessionStorage.removeItem(PENDING_GENERATION_STORAGE_KEY);
+  } catch {
+    // Ignore unavailable browser storage.
+  }
 }
 
 async function waitForRenderJob(
@@ -2404,6 +2430,7 @@ export function WorkspaceClient({
   const logoInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
   const recoveringRenderRef = useRef<string>();
+  const recoveringGenerationRef = useRef(false);
   const cancelledRenderIdsRef = useRef(new Set<string>());
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
@@ -2468,6 +2495,39 @@ export function WorkspaceClient({
     };
   }, [project.currentVersion.id, project.currentVersion.renderJobId, project.currentVersion.renderUrl]);
 
+  useEffect(() => {
+    if (recoveringGenerationRef.current) return;
+    const pending = readPendingGenerationSession();
+    if (!pending) {
+      clearPendingGenerationSession();
+      return;
+    }
+    recoveringGenerationRef.current = true;
+    setBriefPrompt(pending.prompt);
+    setGenerationOptions(pending.options);
+    setIsBusy(true);
+    setErrorMessage(undefined);
+    setProgress(36);
+    setGenerationStatus("正在恢复刷新前的视频生成任务");
+    setStage("generating");
+    void waitForGenerationRequest(pending.requestId, () => {
+      setGenerationStatus("正在等待后台完成脚本与分镜");
+    })
+      .then((data) => continueGeneratedProject(data, pending.options, true))
+      .catch((error) => {
+        const message = requestErrorMessage(error, "生成任务恢复失败，请稍后重试。");
+        setErrorMessage(message);
+        setStage("brief");
+        if (/没有完成|没有找到|标识无效|数据不完整/.test(message)) {
+          clearPendingGenerationSession();
+        }
+      })
+      .finally(() => {
+        recoveringGenerationRef.current = false;
+        setIsBusy(false);
+      });
+  }, []);
+
   function pushMessage(message: Omit<ChatMessage, "id">, persist = false) {
     const id = crypto.randomUUID();
     setMessages((current) => {
@@ -2491,6 +2551,135 @@ export function WorkspaceClient({
     });
   }
 
+  async function continueGeneratedProject(
+    data: Required<Pick<StoryboardGenerationResponse, "project" | "messages" | "engine">> & StoryboardGenerationResponse,
+    options: GenerationOptions,
+    resumeMissingOnly = false
+  ) {
+    let generatedProject = data.project;
+    const warnings: string[] = [];
+    setProject(generatedProject);
+    setProjectSource("database");
+    setProjects([]);
+    setVersions([]);
+    setRenderJobs([]);
+    setVersionsOpen(false);
+    setExportsOpen(false);
+    setAssetsOpen(false);
+    setProductionOpen(false);
+    setActiveRenderJobId(undefined);
+    setMessages([
+      ...data.messages,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        type: "text",
+        content: data.engine === "ai"
+          ? "AI 已完成脚本、分镜和镜头提示词。你可以继续用右侧对话改片。"
+          : "已用本地规则生成初版分镜。"
+      }
+    ]);
+
+    const missingImageSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "image");
+    if (!resumeMissingOnly || missingImageSceneNumbers.length > 0) {
+      setProgress(64);
+      setGenerationStatus(resumeMissingOnly ? "正在补齐尚未完成的场景画面" : "正在生成统一风格的场景画面");
+      try {
+        const imageResponse = await fetch("/api/assets/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            projectId: generatedProject.id,
+            versionId: generatedProject.currentVersion.id,
+            sceneNumbers: resumeMissingOnly ? missingImageSceneNumbers : undefined,
+            quality: "standard"
+          }),
+          signal: AbortSignal.timeout(125_000)
+        });
+        const imageData = await imageResponse.json() as MediaGenerationResponse;
+        if (imageData.project) {
+          generatedProject = imageData.project;
+          setProject(generatedProject);
+        }
+        if (!imageResponse.ok) warnings.push(imageData.error || "部分场景画面生成失败。");
+      } catch (error) {
+        warnings.push(requestErrorMessage(error, "场景画面生成失败。"));
+      }
+    }
+
+    const missingAudioSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "audio");
+    if (!resumeMissingOnly || missingAudioSceneNumbers.length > 0) {
+      setProgress(84);
+      setGenerationStatus(resumeMissingOnly ? "正在补齐尚未完成的自然配音" : "正在生成自然配音");
+      try {
+        const audioResponse = await fetch("/api/assets/audio/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            projectId: generatedProject.id,
+            versionId: generatedProject.currentVersion.id,
+            sceneNumbers: resumeMissingOnly ? missingAudioSceneNumbers : undefined
+          }),
+          signal: AbortSignal.timeout(125_000)
+        });
+        const audioData = await audioResponse.json() as MediaGenerationResponse;
+        if (audioData.project) {
+          generatedProject = audioData.project;
+          setProject(generatedProject);
+        }
+        if (!audioResponse.ok) warnings.push(audioData.error || "部分场景配音生成失败。");
+      } catch (error) {
+        warnings.push(requestErrorMessage(error, "场景配音生成失败。"));
+      }
+    }
+
+    if (options.motion === "key-scenes") {
+      const selectedDynamicScenes = selectMotionCriticalScenes(
+        generatedProject.currentVersion.scenes,
+        generatedProject.currentVersion.durationSeconds
+      );
+      const dynamicScenes = resumeMissingOnly
+        ? missingMotionSceneNumbers(generatedProject.currentVersion.scenes, selectedDynamicScenes)
+        : selectedDynamicScenes;
+      if (dynamicScenes.length === 0 && generatedProject.currentVersion.scenes.every((scene) => !sceneVisualAsset(scene))) {
+        warnings.push("没有可用于生成动态镜头的场景画面，请先在工作室补齐画面。");
+      } else {
+        for (const [index, sceneNumber] of dynamicScenes.entries()) {
+          setProgress(88 + Math.round((index / Math.max(1, dynamicScenes.length)) * 6));
+          setGenerationStatus(`正在生成场景 ${sceneNumber} 的动态视频镜头`);
+          try {
+            generatedProject = await requestVideoClips(generatedProject, [sceneNumber], "standard");
+            setProject(generatedProject);
+          } catch (error) {
+            warnings.push(requestErrorMessage(error, `场景 ${sceneNumber} 的动态镜头生成失败。`));
+          }
+        }
+      }
+    }
+
+    setGenerationStatus("正在保存可继续编辑的项目");
+    setProgress(96);
+    if (warnings.length > 0) setErrorMessage(Array.from(new Set(warnings)).join(" "));
+    setMessages((current) => [...current, {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      type: "text",
+      content: warnings.length > 0
+        ? "脚本和分镜已经保存，部分媒体素材需要在工作室中重试。"
+        : resumeMissingOnly
+          ? "生成任务已经恢复，缺失的场景素材已继续完成。"
+          : options.motion === "key-scenes"
+            ? "场景画面、自然配音和关键动态镜头已经完成，可以播放预览或继续通过对话修改。"
+            : "全部场景画面和配音已经完成，可以播放预览或继续通过对话修改。"
+    }]);
+    setSelectedScene(1);
+    setPendingPlan(undefined);
+    setStudioView("preview");
+    setProgress(100);
+    clearPendingGenerationSession();
+    window.setTimeout(() => setStage("studio"), 350);
+  }
+
   async function createVideo(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const prompt = generationPrompt;
@@ -2506,6 +2695,13 @@ export function WorkspaceClient({
       setProgress(18);
       setGenerationStatus("正在规划脚本与分镜");
       const requestId = crypto.randomUUID();
+      const pendingSession: PendingGenerationSession = {
+        requestId,
+        prompt,
+        options: generationOptions,
+        startedAt: Date.now()
+      };
+      savePendingGenerationSession(pendingSession);
       let data: Required<Pick<StoryboardGenerationResponse, "project" | "messages" | "engine">> & StoryboardGenerationResponse;
       try {
         const response = await fetch("/api/projects", {
@@ -2536,114 +2732,7 @@ export function WorkspaceClient({
           setGenerationStatus("连接超时，正在找回后台生成结果");
         });
       }
-      let generatedProject = data.project;
-      const warnings: string[] = [];
-      setProject(generatedProject);
-      setProjectSource("database");
-      setProjects([]);
-      setVersions([]);
-      setRenderJobs([]);
-      setVersionsOpen(false);
-      setExportsOpen(false);
-      setAssetsOpen(false);
-      setProductionOpen(false);
-      setActiveRenderJobId(undefined);
-      setMessages([
-        ...data.messages,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          type: "text",
-          content: data.engine === "ai"
-            ? "AI 已完成脚本、分镜和镜头提示词。你可以继续用右侧对话改片。"
-            : "已用本地规则生成初版分镜。"
-        }
-      ]);
-
-      setProgress(64);
-      setGenerationStatus("正在生成统一风格的场景画面");
-      try {
-        const imageResponse = await fetch("/api/assets/generate", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            projectId: generatedProject.id,
-            versionId: generatedProject.currentVersion.id,
-            quality: "standard"
-          }),
-          signal: AbortSignal.timeout(125_000)
-        });
-        const imageData = await imageResponse.json() as { project?: Project; error?: string };
-        if (imageData.project) {
-          generatedProject = imageData.project;
-          setProject(generatedProject);
-        }
-        if (!imageResponse.ok) warnings.push(imageData.error || "部分场景画面生成失败。");
-      } catch (error) {
-        warnings.push(requestErrorMessage(error, "场景画面生成失败。"));
-      }
-
-      setProgress(84);
-      setGenerationStatus("正在生成自然配音");
-      try {
-        const audioResponse = await fetch("/api/assets/audio/generate", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            projectId: generatedProject.id,
-            versionId: generatedProject.currentVersion.id
-          }),
-          signal: AbortSignal.timeout(125_000)
-        });
-        const audioData = await audioResponse.json() as { project?: Project; error?: string };
-        if (audioData.project) {
-          generatedProject = audioData.project;
-          setProject(generatedProject);
-        }
-        if (!audioResponse.ok) warnings.push(audioData.error || "部分场景配音生成失败。");
-      } catch (error) {
-        warnings.push(requestErrorMessage(error, "场景配音生成失败。"));
-      }
-
-      if (generationOptions.motion === "key-scenes") {
-        const dynamicScenes = selectMotionCriticalScenes(
-          generatedProject.currentVersion.scenes,
-          generatedProject.currentVersion.durationSeconds
-        );
-        if (dynamicScenes.length === 0) {
-          warnings.push("没有可用于生成动态镜头的场景画面，请先在工作室补齐画面。");
-        } else {
-          for (const [index, sceneNumber] of dynamicScenes.entries()) {
-            setProgress(88 + Math.round((index / dynamicScenes.length) * 6));
-            setGenerationStatus(`正在生成场景 ${sceneNumber} 的动态视频镜头`);
-            try {
-              generatedProject = await requestVideoClips(generatedProject, [sceneNumber], "standard");
-              setProject(generatedProject);
-            } catch (error) {
-              warnings.push(requestErrorMessage(error, `场景 ${sceneNumber} 的动态镜头生成失败。`));
-            }
-          }
-        }
-      }
-
-      setGenerationStatus("正在保存可继续编辑的项目");
-      setProgress(96);
-      if (warnings.length > 0) setErrorMessage(Array.from(new Set(warnings)).join(" "));
-      setMessages((current) => [...current, {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        type: "text",
-        content: warnings.length > 0
-          ? "脚本和分镜已经保存，部分媒体素材需要在工作室中重试。"
-          : generationOptions.motion === "key-scenes"
-            ? "场景画面、自然配音和关键动态镜头已经完成，可以播放预览或继续通过对话修改。"
-            : "全部场景画面和配音已经完成，可以播放预览或继续通过对话修改。"
-      }]);
-      setSelectedScene(1);
-      setPendingPlan(undefined);
-      setStudioView("preview");
-      setProgress(100);
-      window.setTimeout(() => setStage("studio"), 350);
+      await continueGeneratedProject(data, generationOptions, data.recovered === true);
     } catch (error) {
       console.error(error);
       setStage("brief");

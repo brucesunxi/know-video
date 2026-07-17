@@ -40,6 +40,8 @@
     "version:diff:smoke": "node scripts/version-diff-smoke.mjs",
     "project:create:smoke": "node scripts/project-creation-smoke.mjs",
     "generation:request:smoke": "node scripts/generation-request-smoke.mjs",
+    "generation:session:smoke": "node scripts/generation-session-smoke.mjs",
+    "generation:resume:smoke": "node scripts/generation-resume-smoke.mjs",
     "db:init": "node --env-file=.env.local scripts/init-db.mjs",
     "db:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
     "services:check": "node --env-file=.env.local scripts/diagnose-services.mjs",
