@@ -4596,29 +4596,47 @@ button:disabled {
   .kv-actionbar {
     display: grid;
     gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 22;
+    margin: -12px -12px 0;
+    border-bottom: 1px solid rgba(207, 216, 227, 0.9);
+    background: rgba(248, 250, 252, 0.94);
+    padding: 10px 12px;
+    backdrop-filter: blur(16px);
   }
 
   .kv-actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
     gap: 8px;
     overflow: visible;
     margin-inline: 0;
     padding: 0;
-    flex-wrap: wrap;
   }
 
   .kv-actions button {
-    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
     min-height: 44px;
     justify-content: center;
     padding-inline: 10px;
     white-space: nowrap;
   }
 
+  .kv-actions button svg {
+    flex: 0 0 auto;
+  }
+
   .kv-actions .kv-primary {
-    flex: 1 1 140px;
+    grid-column: 1 / -1;
     order: 5;
+  }
+
+  .kv-actions .kv-cancel-export {
+    grid-column: 1 / -1;
+    order: 6;
   }
 
   .kv-actions .kv-mobile-chat-action {
@@ -4638,17 +4656,29 @@ button:disabled {
   }
 
   .kv-tool-menu-wrap {
+    min-width: 0;
     order: 4;
+  }
+
+  .kv-tool-menu-wrap > button {
+    width: 100%;
+    justify-content: center;
   }
 
   .kv-tool-menu {
     right: auto;
     left: 0;
+    width: min(100%, 340px);
+  }
+
+  .kv-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .kv-tabs button {
-    flex: 1;
     justify-content: center;
+    min-width: 0;
   }
 
   .kv-prompt-tools .kv-primary {

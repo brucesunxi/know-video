@@ -62,6 +62,7 @@
     "workspace:scene-media:smoke": "node scripts/scene-media-status-smoke.mjs",
     "workspace:status:smoke": "node scripts/workspace-status-badges-smoke.mjs",
     "workspace:export:smoke": "node scripts/workspace-export-action-smoke.mjs",
+    "workspace:mobile:smoke": "node scripts/workspace-mobile-layout-smoke.mjs",
     "project:library:smoke": "node scripts/project-library-media-smoke.mjs",
     "version:library:smoke": "node scripts/version-library-media-smoke.mjs",
     "db:init": "node --env-file=.env.local scripts/init-db.mjs",
