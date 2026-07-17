@@ -148,6 +148,11 @@ function durationLabel(seconds: number) {
   return minutes > 0 ? `${minutes}:${String(rest).padStart(2, "0")}` : `0:${String(rest).padStart(2, "0")}`;
 }
 
+function productionSecondsLabel(seconds: number) {
+  const rounded = Math.max(1, Math.round(seconds));
+  return durationLabel(rounded);
+}
+
 function renderJobStatus(job: RenderJob) {
   if (job.status === "ready") return "已完成";
   if (job.status === "running") return `合成中 ${job.progress}%`;
@@ -226,6 +231,30 @@ function productionSettingLabels(settings?: Partial<ProductionSettings>) {
     }
     return `Logo 大小：${value}%`;
   });
+}
+
+function productionSummaryItems(input: {
+  settings: ProductionSettings;
+  durationSeconds: number;
+  logo?: SceneAsset;
+  music?: SceneAsset;
+}) {
+  const effectiveDuration = input.durationSeconds / input.settings.playbackRate;
+  const caption = input.settings.captionsEnabled
+    ? `字幕开启 · ${input.settings.captionStyle === "minimal" ? "简洁" : input.settings.captionStyle === "highlight" ? "强调色" : "深色底"}`
+    : "字幕关闭";
+  const music = input.music
+    ? `音乐 ${Math.round(input.settings.musicVolume * 100)}% · ${input.settings.musicDucking === "off" ? "不避让" : input.settings.musicDucking === "strong" ? "强避让" : "平衡避让"}`
+    : "未添加背景音乐";
+  const logo = input.logo
+    ? `Logo ${input.settings.logoSize}% · ${productionSettingLabels({ logoPosition: input.settings.logoPosition })[0].replace("Logo 位置：", "")}`
+    : "未添加 Logo";
+  return [
+    { label: "导出时长", value: productionSecondsLabel(effectiveDuration), detail: `${input.settings.playbackRate}x 播放速度` },
+    { label: "字幕", value: caption, detail: input.settings.captionsEnabled ? "随旁白逐句显示" : "画面不叠加字幕" },
+    { label: "声音", value: music, detail: input.music ? "导出时自动混音" : "仅保留旁白音轨" },
+    { label: "品牌", value: logo, detail: input.logo ? "导出时叠加到画面" : "不叠加品牌标识" }
+  ];
 }
 
 function sceneStructureLabel(mutation?: EditPlan["sceneStructure"]) {
@@ -1673,6 +1702,7 @@ function ProductionSettingsPanel({
   settings,
   logo,
   music,
+  durationSeconds,
   isBusy,
   uploadProgress,
   uploadType,
@@ -1683,6 +1713,7 @@ function ProductionSettingsPanel({
   settings: ProductionSettings;
   logo?: SceneAsset;
   music?: SceneAsset;
+  durationSeconds: number;
   isBusy: boolean;
   uploadProgress?: number;
   uploadType?: "logo" | "music";
@@ -1692,6 +1723,7 @@ function ProductionSettingsPanel({
 }) {
   const [musicVolume, setMusicVolume] = useState(settings.musicVolume);
   const [logoSize, setLogoSize] = useState(settings.logoSize);
+  const summary = productionSummaryItems({ settings, durationSeconds, logo, music });
 
   useEffect(() => setMusicVolume(settings.musicVolume), [settings.musicVolume]);
   useEffect(() => setLogoSize(settings.logoSize), [settings.logoSize]);
@@ -1704,6 +1736,15 @@ function ProductionSettingsPanel({
           <h3>字幕、节奏、品牌与背景音乐</h3>
         </div>
         <span>预览与 MP4 同步</span>
+      </div>
+      <div className="kv-production-summary" aria-label="成片输出摘要">
+        {summary.map((item) => (
+          <span key={item.label}>
+            <small>{item.label}</small>
+            <strong>{item.value}</strong>
+            <em>{item.detail}</em>
+          </span>
+        ))}
       </div>
       <div className="kv-production-grid">
         <div className="kv-production-control">
@@ -2752,6 +2793,7 @@ function StudioScreen({
         ) : null}
         {productionOpen ? (
           <ProductionSettingsPanel
+            durationSeconds={project.currentVersion.durationSeconds}
             isBusy={isBusy}
             logo={productionAsset(project, "logo")}
             music={productionAsset(project, "music")}

@@ -4,6 +4,8 @@ import vm from "node:vm";
 import ts from "typescript";
 
 const source = fs.readFileSync(new URL("../lib/production-settings.ts", import.meta.url), "utf8");
+const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
+const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
@@ -37,5 +39,13 @@ assert.deepEqual(plain(productionSettingsFromScenes([{ style: { production: {
   logoSize: "broken"
 } } }])), plain(DEFAULT_PRODUCTION_SETTINGS));
 assert.equal(productionDurationInFrames({ durationSeconds: 30, scenes: [{ style: { production: { playbackRate: 1.5 } } }] }, 30), 600);
+
+assert.match(workspace, /function productionSummaryItems/);
+assert.match(workspace, /aria-label="成片输出摘要"/);
+assert.match(workspace, /durationSeconds=\{project\.currentVersion\.durationSeconds\}/);
+assert.match(workspace, /导出时自动混音/);
+assert.match(workspace, /仅保留旁白音轨/);
+assert.match(styles, /\.kv-production-summary/);
+assert.match(styles, /@media \(max-width: 360px\)[\s\S]*\.kv-production-summary|@media \(max-width: 760px\)[\s\S]*\.kv-production-summary|@media \(max-width: 1040px\)[\s\S]*\.kv-production-summary/);
 
 console.log("Production settings smoke checks passed.");
