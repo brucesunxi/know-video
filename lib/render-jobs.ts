@@ -12,10 +12,13 @@ type RenderJobRow = {
   progress: number;
   error: string | null;
   output_r2_key: string | null;
+  metadata_json: unknown;
   created_at: Date | string;
   updated_at: Date | string;
   version_label?: string | null;
 };
+
+let metadataColumnAvailable: boolean | undefined;
 
 function toRenderJob(row: RenderJobRow): RenderJob {
   return {
@@ -27,10 +30,27 @@ function toRenderJob(row: RenderJobRow): RenderJob {
     error: row.error ?? undefined,
     outputR2Key: row.output_r2_key ?? undefined,
     renderUrl: row.output_r2_key ? assetUrlForKey(row.output_r2_key) : undefined,
+    metadata: row.metadata_json && typeof row.metadata_json === "object"
+      ? row.metadata_json as Record<string, unknown>
+      : undefined,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
     versionLabel: row.version_label ?? undefined
   };
+}
+
+async function renderJobMetadataColumnExists(sql: ReturnType<typeof getSql>) {
+  if (metadataColumnAvailable !== undefined) return metadataColumnAvailable;
+  const rows = await sql`
+    select exists (
+      select 1
+      from information_schema.columns
+      where table_name = 'render_jobs'
+        and column_name = 'metadata_json'
+    ) as exists
+  ` as Array<{ exists: boolean }>;
+  metadataColumnAvailable = Boolean(rows[0]?.exists);
+  return metadataColumnAvailable;
 }
 
 export async function invalidateVersionRender(versionId: string) {
@@ -52,11 +72,11 @@ export async function invalidateVersionRender(versionId: string) {
         for update
       ),
       cancelled as (
-        update render_jobs
-        set status = 'cancelled',
-            error = '场景素材已更新，需要重新导出。',
-            output_r2_key = null,
-            updated_at = now()
+      update render_jobs
+      set status = 'cancelled',
+          error = '场景素材已更新，需要重新导出。',
+          output_r2_key = null,
+          updated_at = now()
         from obsolete
         where render_jobs.id = obsolete.id
         returning obsolete.output_r2_key as previous_output_r2_key
@@ -263,41 +283,79 @@ export async function updateRenderJob(input: {
   progress: number;
   error?: string;
   outputR2Key?: string;
+  metadata?: Record<string, unknown>;
 }) {
   if (!hasDatabaseUrl()) return undefined;
   const sql = getSql();
   const versionStatus = versionStatusAfterRenderJob(input.status);
+  const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
+  const canStoreMetadata = await renderJobMetadataColumnExists(sql);
+  const updateJob = canStoreMetadata ? sql`
+    update render_jobs
+    set status = ${input.status},
+        progress = ${input.progress},
+        error = ${input.error ?? null},
+        output_r2_key = coalesce(${input.outputR2Key ?? null}, output_r2_key),
+        metadata_json = case
+          when ${metadataJson}::jsonb is not null then ${metadataJson}::jsonb
+          when ${input.status} in ('failed', 'cancelled') then '{}'
+          else metadata_json
+        end,
+        updated_at = now()
+    where id = ${input.jobId}
+      and (
+        ${input.status} in ('failed', 'cancelled')
+        or exists (
+          select 1
+          from projects
+          where projects.id = render_jobs.project_id
+            and projects.current_version_id = render_jobs.version_id
+        )
+      )
+      and (
+        (
+          ${input.status} = 'running'
+          and status in ('queued', 'running')
+          and progress <= ${input.progress}
+        )
+        or (
+          ${input.status} in ('ready', 'failed', 'cancelled')
+          and status in ('queued', 'running')
+        )
+      )
+    returning *
+  ` : sql`
+    update render_jobs
+    set status = ${input.status},
+        progress = ${input.progress},
+        error = ${input.error ?? null},
+        output_r2_key = coalesce(${input.outputR2Key ?? null}, output_r2_key),
+        updated_at = now()
+    where id = ${input.jobId}
+      and (
+        ${input.status} in ('failed', 'cancelled')
+        or exists (
+          select 1
+          from projects
+          where projects.id = render_jobs.project_id
+            and projects.current_version_id = render_jobs.version_id
+        )
+      )
+      and (
+        (
+          ${input.status} = 'running'
+          and status in ('queued', 'running')
+          and progress <= ${input.progress}
+        )
+        or (
+          ${input.status} in ('ready', 'failed', 'cancelled')
+          and status in ('queued', 'running')
+        )
+      )
+    returning *
+  `;
   const results = await sql.transaction([
-    sql`
-      update render_jobs
-      set status = ${input.status},
-          progress = ${input.progress},
-          error = ${input.error ?? null},
-          output_r2_key = coalesce(${input.outputR2Key ?? null}, output_r2_key),
-          updated_at = now()
-      where id = ${input.jobId}
-        and (
-          ${input.status} in ('failed', 'cancelled')
-          or exists (
-            select 1
-            from projects
-            where projects.id = render_jobs.project_id
-              and projects.current_version_id = render_jobs.version_id
-          )
-        )
-        and (
-          (
-            ${input.status} = 'running'
-            and status in ('queued', 'running')
-            and progress <= ${input.progress}
-          )
-          or (
-            ${input.status} in ('ready', 'failed', 'cancelled')
-            and status in ('queued', 'running')
-          )
-        )
-      returning *
-    `,
+    updateJob,
     versionStatus ? sql`
       update project_versions
       set

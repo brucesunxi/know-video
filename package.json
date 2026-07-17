@@ -14,6 +14,7 @@
     "render:callback:smoke": "node scripts/render-callback-smoke.mjs",
     "render:preflight:smoke": "node scripts/render-preflight-smoke.mjs",
     "render:output:smoke": "node scripts/render-output-quality-smoke.mjs",
+    "render:export-metadata:smoke": "node scripts/render-export-metadata-smoke.mjs",
     "edit:intent:smoke": "node scripts/edit-intent-smoke.mjs",
     "edit:plan:smoke": "node scripts/edit-plan-normalizer-smoke.mjs",
     "edit:apply:smoke": "node scripts/edit-application-smoke.mjs",

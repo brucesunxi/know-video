@@ -9,12 +9,30 @@ const input = {
 
 let attempts = 0;
 const waits = [];
-await postRenderCallback(input, { jobId: "job", status: "ready", progress: 100, outputR2Key: "render.mp4" }, {
+await postRenderCallback(input, {
+  jobId: "job",
+  status: "ready",
+  progress: 100,
+  outputR2Key: "render.mp4",
+  metadata: {
+    quality: "passed",
+    duration: 30,
+    expectedDuration: 30,
+    width: 1280,
+    height: 720,
+    fps: 30,
+    videoCodec: "h264",
+    audioTrackCount: 1,
+    size: 1_200_000
+  }
+}, {
   fetchImpl: async (_url, options) => {
     attempts += 1;
     assert.equal(options.headers.authorization, "Bearer render-secret");
     const body = JSON.parse(options.body);
     assert.equal(body.sandboxName, input.sandboxName);
+    assert.equal(body.metadata.quality, "passed");
+    assert.equal(body.metadata.audioTrackCount, 1);
     if (attempts === 1) throw new Error("connection reset");
     if (attempts === 2) return { ok: false, status: 503, text: async () => "temporary" };
     return { ok: true, status: 200, text: async () => "" };

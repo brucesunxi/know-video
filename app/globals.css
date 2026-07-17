@@ -1055,6 +1055,30 @@ button:disabled {
   line-height: 1.45;
 }
 
+.kv-export-list p.kv-export-quality {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #087568;
+  font-weight: 850;
+}
+
+.kv-export-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kv-export-metadata span {
+  border: 1px solid #d7e2ec;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 4px 7px;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .kv-export-progress {
   height: 5px;
   overflow: hidden;

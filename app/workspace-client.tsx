@@ -251,6 +251,37 @@ function fileSizeLabel(value: unknown) {
   return `${(bytes / 1_000_000).toFixed(bytes >= 10_000_000 ? 0 : 1)} MB`;
 }
 
+function decimalSecondsLabel(value: unknown) {
+  const seconds = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
+  return `${seconds.toFixed(seconds >= 10 ? 1 : 2)} 秒`;
+}
+
+function renderJobQualityLabel(job: RenderJob) {
+  if (job.status !== "ready") return undefined;
+  return job.metadata?.quality === "passed" ? "成片质检通过" : "成片已生成";
+}
+
+function renderJobMetadataItems(job: RenderJob) {
+  if (job.status !== "ready" || !job.metadata) return [];
+  const metadata = job.metadata;
+  const duration = decimalSecondsLabel(metadata.duration);
+  const expectedDuration = decimalSecondsLabel(metadata.expectedDuration);
+  const size = fileSizeLabel(metadata.size);
+  const dimensions = Number.isFinite(Number(metadata.width)) && Number.isFinite(Number(metadata.height))
+    ? `${metadata.width}×${metadata.height}`
+    : undefined;
+  const fps = Number.isFinite(Number(metadata.fps)) ? `${Number(metadata.fps).toFixed(0)} fps` : undefined;
+  const codec = typeof metadata.videoCodec === "string" && metadata.videoCodec ? metadata.videoCodec.toUpperCase() : undefined;
+  const audioTracks = Number.isFinite(Number(metadata.audioTrackCount)) ? `${metadata.audioTrackCount} 条音轨` : undefined;
+  return [
+    duration && expectedDuration ? `时长 ${duration} / 目标 ${expectedDuration}` : duration ? `时长 ${duration}` : "",
+    size !== "云端素材" ? size : "",
+    [dimensions, fps].filter(Boolean).join(" · "),
+    [codec, audioTracks].filter(Boolean).join(" · ")
+  ].filter(Boolean);
+}
+
 function sceneVisualAsset(scene: Scene) {
   return scene.assets.find((asset) => ["image", "clip"].includes(asset.type) && asset.url);
 }
@@ -2413,6 +2444,8 @@ function StudioScreen({
               <div className="kv-export-list">
                 {renderJobs.map((job) => {
                   const active = job.status === "queued" || job.status === "running";
+                  const qualityLabel = renderJobQualityLabel(job);
+                  const metadataItems = renderJobMetadataItems(job);
                   return (
                     <article className={`status-${job.status}`} key={job.id}>
                       <div className="kv-export-summary">
@@ -2420,6 +2453,12 @@ function StudioScreen({
                         <span>{renderJobStatus(job)}</span>
                       </div>
                       <time>{renderJobTime(job)}</time>
+                      {qualityLabel ? <p className="kv-export-quality"><Check size={14} />{qualityLabel}</p> : null}
+                      {metadataItems.length > 0 ? (
+                        <div className="kv-export-metadata" aria-label="成片校验信息">
+                          {metadataItems.map((item) => <span key={item}>{item}</span>)}
+                        </div>
+                      ) : null}
                       {active ? (
                         <div className="kv-export-progress" aria-label={`导出进度 ${job.progress}%`}>
                           <span style={{ width: `${Math.max(4, job.progress)}%` }} />

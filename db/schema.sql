@@ -94,9 +94,13 @@ create table if not exists render_jobs (
   progress integer not null default 0,
   error text,
   output_r2_key text,
+  metadata_json jsonb not null default '{}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table render_jobs
+  add column if not exists metadata_json jsonb not null default '{}';
 
 create table if not exists generation_requests (
   id uuid primary key,

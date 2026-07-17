@@ -111,6 +111,7 @@ export type RenderJob = {
   error?: string;
   outputR2Key?: string;
   renderUrl?: string;
+  metadata?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
   versionLabel?: string;

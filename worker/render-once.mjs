@@ -94,7 +94,7 @@ async function render(input) {
     await postRenderCallback(input, { jobId: input.jobId, status: "running", progress: 96 });
     const key = `renders/${project.id}/${project.currentVersion.id}/${input.jobId}.mp4`;
     const outputBody = await readFile(output);
-    await inspectRenderedOutput(outputBody, {
+    const outputMetadata = await inspectRenderedOutput(outputBody, {
       duration: composition.durationInFrames / composition.fps,
       width: composition.width,
       height: composition.height,
@@ -118,7 +118,13 @@ async function render(input) {
       jobId: input.jobId,
       status: "ready",
       progress: 100,
-      outputR2Key: key
+      outputR2Key: key,
+      metadata: {
+        quality: "passed",
+        ...outputMetadata,
+        expectedDuration: composition.durationInFrames / composition.fps,
+        inspectedAt: new Date().toISOString()
+      }
     });
     uploadedKey = undefined;
   } catch (error) {

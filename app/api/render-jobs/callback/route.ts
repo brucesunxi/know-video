@@ -13,11 +13,27 @@ const payloadSchema = z.object({
   status: z.enum(["running", "ready", "failed"]),
   progress: z.number().int().min(0).max(100),
   outputR2Key: z.string().optional(),
+  metadata: z.object({
+    quality: z.literal("passed").optional(),
+    duration: z.number().positive().optional(),
+    expectedDuration: z.number().positive().optional(),
+    width: z.number().int().positive().optional(),
+    height: z.number().int().positive().optional(),
+    fps: z.number().positive().optional(),
+    videoCodec: z.string().optional(),
+    videoTrackCount: z.number().int().nonnegative().optional(),
+    audioTrackCount: z.number().int().nonnegative().optional(),
+    size: z.number().int().positive().optional(),
+    inspectedAt: z.string().optional()
+  }).optional(),
   error: z.string().optional(),
   sandboxName: z.string().optional()
 }).superRefine((payload, context) => {
   if (payload.status === "ready" && !payload.outputR2Key) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Ready callback requires outputR2Key" });
+  }
+  if (payload.status === "ready" && !payload.metadata) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Ready callback requires output metadata" });
   }
   if (payload.status === "failed" && !payload.error) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Failed callback requires error" });
