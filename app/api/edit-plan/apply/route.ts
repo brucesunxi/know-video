@@ -6,6 +6,7 @@ import {
   loadCurrentProjectForEdit,
   loadProposedEditPlan
 } from "@/lib/project-mutations";
+import { persistSceneStructureMutation } from "@/lib/scene-structure-mutations";
 import type { EditPlan } from "@/lib/types";
 
 const requestSchema = z.object({
@@ -13,7 +14,7 @@ const requestSchema = z.object({
   versionId: z.string().min(1).max(200),
   direct: z.boolean().optional().default(false),
   editPlan: editPlanObjectSchema.extend({ status: z.literal("proposed") }).refine(
-    (plan) => plan.changes.length > 0 || Object.keys(plan.productionSettings ?? {}).length > 0
+    (plan) => plan.changes.length > 0 || Object.keys(plan.productionSettings ?? {}).length > 0 || Boolean(plan.sceneStructure)
   )
 });
 
@@ -45,6 +46,33 @@ export async function POST(request: Request) {
     const sceneNumbers = new Set(project.currentVersion.scenes.map((scene) => scene.sceneNumber));
     if (editPlan.changes.some((change) => !sceneNumbers.has(change.sceneNumber))) {
       return NextResponse.json({ error: "修改方案包含当前版本中不存在的场景。" }, { status: 409 });
+    }
+    if (editPlan.sceneStructure) {
+      if (!sceneNumbers.has(editPlan.sceneStructure.sceneNumber)) {
+        return NextResponse.json({ error: "修改方案包含当前版本中不存在的场景。" }, { status: 409 });
+      }
+      const structuralProject = editPlan.productionSettings ? {
+        ...project,
+        currentVersion: {
+          ...project.currentVersion,
+          scenes: project.currentVersion.scenes.map((scene, index) => index === 0 ? {
+            ...scene,
+            style: {
+              ...scene.style,
+              production: { ...scene.style.production, ...editPlan.productionSettings }
+            }
+          } : scene)
+        }
+      } : project;
+      const structural = await persistSceneStructureMutation({
+        project: structuralProject,
+        mutation: editPlan.sceneStructure,
+        editPlanId: body.direct ? undefined : editPlan.id
+      });
+      return NextResponse.json({
+        ...structural,
+        regeneration: { imageSceneNumbers: [], audioSceneNumbers: [], clipSceneNumbers: [] }
+      });
     }
     const result = await applyPersistedEditPlan({
       project,

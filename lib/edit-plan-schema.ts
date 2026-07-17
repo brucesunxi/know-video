@@ -1,6 +1,12 @@
 import { z } from "zod";
 
 const narrationVoiceSchema = z.enum(["male-clear", "male-deep", "female-natural"]);
+const sceneStructureSchema = z.discriminatedUnion("operation", [
+  z.object({ operation: z.literal("set-duration"), sceneNumber: z.number().int().positive(), durationSeconds: z.number().int().min(2).max(20) }),
+  z.object({ operation: z.literal("move"), sceneNumber: z.number().int().positive(), direction: z.enum(["earlier", "later"]) }),
+  z.object({ operation: z.literal("duplicate"), sceneNumber: z.number().int().positive() }),
+  z.object({ operation: z.literal("delete"), sceneNumber: z.number().int().positive() })
+]);
 
 export const editSideSchema = z.object({
   title: z.string().min(1).max(240),
@@ -34,9 +40,10 @@ export const editPlanObjectSchema = z.object({
     logoPosition: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]).optional(),
     logoSize: z.number().min(6).max(24).optional()
   }).optional(),
+  sceneStructure: sceneStructureSchema.optional(),
   createdAt: z.string().min(1).max(100)
 });
 
-export const editPlanSchema = editPlanObjectSchema.refine((plan) => plan.changes.length > 0 || Object.keys(plan.productionSettings ?? {}).length > 0, {
+export const editPlanSchema = editPlanObjectSchema.refine((plan) => plan.changes.length > 0 || Object.keys(plan.productionSettings ?? {}).length > 0 || Boolean(plan.sceneStructure), {
   message: "修改方案必须包含场景变化或成片设置。"
 });

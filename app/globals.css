@@ -1868,9 +1868,124 @@ button:disabled {
 .kv-storyboard,
 .kv-scene-panel {
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 8px;
   background: var(--surface);
   padding: 16px;
+}
+
+.kv-timeline-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+  margin: -2px 0 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+  scrollbar-width: thin;
+}
+
+.kv-timeline-controls > * {
+  flex: 0 0 auto;
+}
+
+.kv-timeline-controls > strong {
+  min-width: 36px;
+  color: #087568;
+  font-size: 13px;
+}
+
+.kv-timeline-controls > label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.kv-timeline-controls input {
+  height: 34px;
+  width: 54px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  outline: 0;
+  background: #fff;
+  padding: 0 7px;
+  color: var(--ink);
+  font-weight: 800;
+  text-align: center;
+}
+
+.kv-timeline-controls input:focus {
+  border-color: #5fc8bc;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
+}
+
+.kv-timeline-controls > button,
+.kv-delete-confirm button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 9px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.kv-timeline-controls > button[aria-label] {
+  width: 34px;
+  padding: 0;
+}
+
+.kv-timeline-controls > button.danger {
+  border-color: #f0c6c6;
+  color: #a32525;
+}
+
+.kv-timeline-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.kv-timeline-divider {
+  height: 24px;
+  width: 1px;
+  margin: 0 2px;
+  background: var(--line);
+}
+
+.kv-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #efb4b4;
+  border-radius: 7px;
+  background: #fff7f7;
+  padding: 3px 4px 3px 8px;
+  color: #9f1c1c;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.kv-delete-confirm button:first-of-type {
+  min-height: 27px;
+  border-color: #d45454;
+  background: #b42318;
+  color: #fff;
+}
+
+.kv-delete-confirm button[aria-label] {
+  min-height: 27px;
+  width: 27px;
+  padding: 0;
 }
 
 .kv-strip-heading {
@@ -2031,7 +2146,7 @@ button:disabled {
   grid-template-rows: auto 1fr auto;
   gap: 8px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: #f8fafc;
   padding: 12px;
   color: var(--text);
@@ -2236,6 +2351,34 @@ button:disabled {
   border-radius: 8px;
   background: #f2fbf9;
   padding: 12px;
+}
+
+.kv-structure-plan {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  border: 1px solid #c9d8ee;
+  border-radius: 8px;
+  background: #f5f8fc;
+  padding: 11px 12px;
+  color: #31598e;
+}
+
+.kv-structure-plan > div {
+  display: grid;
+  gap: 3px;
+}
+
+.kv-structure-plan strong {
+  color: #213f68;
+  font-size: 12px;
+}
+
+.kv-structure-plan span {
+  color: #526b8c;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .kv-production-plan strong {

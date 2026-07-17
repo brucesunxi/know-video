@@ -4,11 +4,14 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "re
 import type { PlayerRef } from "@remotion/player";
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowRight,
   Check,
   Captions,
   ChevronRight,
   Clapperboard,
+  Clock3,
+  Copy,
   Download,
   FileVideo2,
   Film,
@@ -36,6 +39,7 @@ import {
 import { KnowVideoPlayer } from "@/app/video-player";
 import { replacementAssetTypes } from "@/lib/asset-policy";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
+import type { SceneStructureMutation } from "@/lib/scene-structure";
 import {
   DEFAULT_NARRATION_VOICE,
   narrationVoiceProfile,
@@ -55,6 +59,7 @@ type BusyAction =
   | "generating-video"
   | "generating-audio"
   | "saving-scene"
+  | "editing-timeline"
   | "saving-production"
   | "uploading-asset"
   | "restoring-version";
@@ -117,6 +122,14 @@ function productionSettingLabels(settings?: Partial<ProductionSettings>) {
     }
     return `Logo 大小：${value}%`;
   });
+}
+
+function sceneStructureLabel(mutation?: EditPlan["sceneStructure"]) {
+  if (!mutation) return undefined;
+  if (mutation.operation === "set-duration") return `场景 ${mutation.sceneNumber} 调整为 ${mutation.durationSeconds} 秒`;
+  if (mutation.operation === "move") return `场景 ${mutation.sceneNumber} 向${mutation.direction === "earlier" ? "前" : "后"}移动一位`;
+  if (mutation.operation === "duplicate") return `复制场景 ${mutation.sceneNumber} 到下一位置`;
+  return `删除场景 ${mutation.sceneNumber}`;
 }
 
 function assetTypeLabel(type: SceneAsset["type"]) {
@@ -202,6 +215,8 @@ function busyActionLabel(action?: BusyAction) {
       return "正在生成自然配音，请保持页面打开";
     case "saving-scene":
       return "正在保存场景并创建可恢复版本";
+    case "editing-timeline":
+      return "正在调整时间线并创建可恢复版本";
     case "saving-production":
       return "正在保存成片设置";
     case "uploading-asset":
@@ -546,18 +561,70 @@ function GeneratingScreen({ prompt, progress, status }: { prompt: string; progre
 function Storyboard({
   scenes,
   selectedScene,
-  onSelect
+  isBusy,
+  onSelect,
+  onMutate
 }: {
   scenes: Scene[];
   selectedScene: number;
+  isBusy: boolean;
   onSelect: (scene: number) => void;
+  onMutate: (mutation: SceneStructureMutation) => void;
 }) {
+  const scene = scenes.find((item) => item.sceneNumber === selectedScene) ?? scenes[0];
+  const [duration, setDuration] = useState(scene?.durationSeconds ?? 5);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    setDuration(scene?.durationSeconds ?? 5);
+    setConfirmDelete(false);
+  }, [scene?.id, scene?.durationSeconds]);
+
   return (
     <section className="kv-storyboard">
       <div className="kv-strip-heading">
         <h3>分镜时间线</h3>
         <span>{scenes.length} 个场景</span>
       </div>
+      {scene ? (
+        <div className="kv-timeline-controls">
+          <strong>S{scene.sceneNumber}</strong>
+          <label>
+            <Clock3 size={15} />
+            <span>时长</span>
+            <input
+              aria-label={`场景 ${scene.sceneNumber} 时长`}
+              disabled={isBusy}
+              max="20"
+              min="2"
+              onChange={(event) => setDuration(Number(event.target.value))}
+              type="number"
+              value={duration}
+            />
+            <span>秒</span>
+          </label>
+          <button
+            disabled={isBusy || duration === scene.durationSeconds || !Number.isInteger(duration) || duration < 2 || duration > 20}
+            onClick={() => onMutate({ operation: "set-duration", sceneNumber: scene.sceneNumber, durationSeconds: duration })}
+            type="button"
+          >
+            <Check size={15} />更新时长
+          </button>
+          <span className="kv-timeline-divider" />
+          <button aria-label="向前移动场景" disabled={isBusy || scene.sceneNumber === 1} onClick={() => onMutate({ operation: "move", sceneNumber: scene.sceneNumber, direction: "earlier" })} title="向前移动" type="button"><ArrowLeft size={16} /></button>
+          <button aria-label="向后移动场景" disabled={isBusy || scene.sceneNumber === scenes.length} onClick={() => onMutate({ operation: "move", sceneNumber: scene.sceneNumber, direction: "later" })} title="向后移动" type="button"><ArrowRight size={16} /></button>
+          <button aria-label="复制场景" disabled={isBusy || scenes.length >= 20} onClick={() => onMutate({ operation: "duplicate", sceneNumber: scene.sceneNumber })} title="复制场景" type="button"><Copy size={16} /></button>
+          {confirmDelete ? (
+            <div className="kv-delete-confirm">
+              <span>删除 S{scene.sceneNumber}？</span>
+              <button disabled={isBusy} onClick={() => onMutate({ operation: "delete", sceneNumber: scene.sceneNumber })} type="button">确认</button>
+              <button aria-label="取消删除" disabled={isBusy} onClick={() => setConfirmDelete(false)} title="取消" type="button"><X size={15} /></button>
+            </div>
+          ) : (
+            <button aria-label="删除场景" className="danger" disabled={isBusy || scenes.length <= 1} onClick={() => setConfirmDelete(true)} title="删除场景" type="button"><Trash2 size={16} /></button>
+          )}
+        </div>
+      ) : null}
       <div className="kv-scene-strip">
         {scenes.map((scene) => (
           <button
@@ -1066,9 +1133,15 @@ function ChatPanel({
           <section className="kv-review-plan">
             <div className="kv-strip-heading">
               <h3>确认修改方案</h3>
-              <span>{pendingPlan.changes.length + productionSettingLabels(pendingPlan.productionSettings).length} 项修改</span>
+              <span>{pendingPlan.changes.length + productionSettingLabels(pendingPlan.productionSettings).length + (pendingPlan.sceneStructure ? 1 : 0)} 项修改</span>
             </div>
             <p>{pendingPlan.summary}</p>
+            {pendingPlan.sceneStructure ? (
+              <div className="kv-structure-plan" aria-label="时间线结构修改">
+                <Layers3 size={17} />
+                <div><strong>时间线结构</strong><span>{sceneStructureLabel(pendingPlan.sceneStructure)}</span></div>
+              </div>
+            ) : null}
             {productionSettingLabels(pendingPlan.productionSettings).length > 0 ? (
               <div className="kv-production-plan" aria-label="全片设置修改">
                 <strong>全片设置</strong>
@@ -1159,6 +1232,7 @@ function StudioScreen({
   onUpdateProduction,
   onUploadProduction,
   onRemoveProduction,
+  onMutateScene,
   onSaveScene,
   onVoiceChange
 }: {
@@ -1204,6 +1278,7 @@ function StudioScreen({
   onUpdateProduction: (settings: Partial<ProductionSettings>) => void;
   onUploadProduction: (type: "logo" | "music") => void;
   onRemoveProduction: (type: "logo" | "music") => void;
+  onMutateScene: (mutation: SceneStructureMutation) => void;
   onSaveScene: (sceneNumber: number, edits: SceneTextEdits) => void;
   onVoiceChange: (sceneNumber: number, voice: NarrationVoice) => void;
 }) {
@@ -1480,7 +1555,13 @@ function StudioScreen({
                 </div>
               </section>
             )}
-            <Storyboard onSelect={selectScene} scenes={project.currentVersion.scenes} selectedScene={selectedScene} />
+            <Storyboard
+              isBusy={isBusy || exportProgress !== undefined}
+              onMutate={onMutateScene}
+              onSelect={selectScene}
+              scenes={project.currentVersion.scenes}
+              selectedScene={selectedScene}
+            />
             <ScenePanel
               isBusy={isBusy}
               onSave={onSaveScene}
@@ -1837,12 +1918,14 @@ export function WorkspaceClient({
     const data = await response.json() as {
       project: Project;
       message: ChatMessage;
+      selectedSceneNumber?: number;
       regeneration: { imageSceneNumbers: number[]; audioSceneNumbers: number[]; clipSceneNumbers: number[] };
     };
     let updatedProject = data.project;
     const warnings: string[] = [];
     setProject(updatedProject);
     setMessages((current) => [...current, data.message]);
+    if (data.selectedSceneNumber) setSelectedScene(data.selectedSceneNumber);
     setVersions([]);
 
     if (data.regeneration.imageSceneNumbers.length > 0) {
@@ -1938,6 +2021,49 @@ export function WorkspaceClient({
         type: "text",
         content: error instanceof Error ? error.message : "应用修改失败，请重试。"
       });
+    } finally {
+      setIsBusy(false);
+      setBusyAction(undefined);
+    }
+  }
+
+  async function mutateSceneStructure(mutation: SceneStructureMutation) {
+    setIsBusy(true);
+    setBusyAction("editing-timeline");
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch("/api/scenes/mutate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          versionId: project.currentVersion.id,
+          ...mutation
+        })
+      });
+      const data = await response.json() as {
+        project?: Project;
+        message?: ChatMessage;
+        selectedSceneNumber?: number;
+        error?: string;
+      };
+      if (!response.ok || !data.project || !data.message || !data.selectedSceneNumber) {
+        throw new Error(data.error || "时间线调整失败。");
+      }
+      setProject(data.project);
+      setMessages((current) => [...current, data.message!]);
+      setSelectedScene(data.selectedSceneNumber);
+      setPendingPlan(undefined);
+      setVersions([]);
+      setVersionsOpen(false);
+      setExportsOpen(false);
+      setAssetsOpen(false);
+      setProductionOpen(false);
+      setActiveRenderJobId(undefined);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "时间线调整失败。";
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
     } finally {
       setIsBusy(false);
       setBusyAction(undefined);
@@ -2858,6 +2984,7 @@ export function WorkspaceClient({
           onUpdateProduction={(settings) => void updateProductionSettingsAction(settings)}
           onUploadProduction={(type) => (type === "logo" ? logoInputRef : musicInputRef).current?.click()}
           onRemoveProduction={(type) => void removeProductionAsset(type)}
+          onMutateScene={(mutation) => void mutateSceneStructure(mutation)}
           onSaveScene={saveSceneEdits}
           onVoiceChange={(sceneNumber, voice) => void regenerateAudio([sceneNumber], voice)}
           onViewChange={setStudioView}

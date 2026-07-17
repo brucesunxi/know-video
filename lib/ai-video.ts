@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { z } from "zod";
 import { analyzeEditIntent, requestsGeneratedClip } from "@/lib/edit-intent";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
+import { requestsSceneStructureChange, sceneStructureFromRequest, sceneStructureSummary } from "@/lib/scene-structure-intent";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
@@ -591,6 +592,44 @@ export async function createEditPlan(params: {
   editNumber: number;
 }): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
   const requestedProductionSettings = productionSettingsFromRequest(params.request);
+  const requestedStructure = sceneStructureFromRequest(
+    params.request,
+    params.version.scenes.map((scene) => scene.sceneNumber)
+  );
+  if (requestsSceneStructureChange(params.request) && !requestedStructure) {
+    throw new Error("请明确指定一个场景和操作，例如“删除第 2 场景”“复制第 3 场景”或“第 1 场景改成 6 秒”。");
+  }
+  if (requestedStructure) {
+    const index = params.version.scenes.findIndex((scene) => scene.sceneNumber === requestedStructure.sceneNumber);
+    if (requestedStructure.operation === "delete" && params.version.scenes.length <= 1) {
+      throw new Error("视频至少需要保留一个场景。");
+    }
+    if (requestedStructure.operation === "move") {
+      const atBoundary = requestedStructure.direction === "earlier"
+        ? index === 0
+        : index === params.version.scenes.length - 1;
+      if (atBoundary) throw new Error("该场景已经位于时间线边界。");
+    }
+    const structureSummary = sceneStructureSummary(requestedStructure);
+    return {
+      engine: "heuristic",
+      editPlan: {
+        id: crypto.randomUUID(),
+        editNumber: params.editNumber,
+        baseVersionId: params.version.id,
+        status: "proposed",
+        userRequest: params.request,
+        summary: Object.keys(requestedProductionSettings).length > 0
+          ? `${structureSummary} 同时更新指定的全片设置。`
+          : structureSummary,
+        affectedScenes: [requestedStructure.sceneNumber],
+        changes: [],
+        sceneStructure: requestedStructure,
+        productionSettings: Object.keys(requestedProductionSettings).length > 0 ? requestedProductionSettings : undefined,
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
   if (isProductionOnlyRequest(params.request)) {
     return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
   }

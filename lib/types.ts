@@ -13,6 +13,12 @@ export type ProductionSettings = {
   logoSize: number;
 };
 
+export type SceneStructureMutation =
+  | { operation: "set-duration"; sceneNumber: number; durationSeconds: number }
+  | { operation: "move"; sceneNumber: number; direction: "earlier" | "later" }
+  | { operation: "duplicate"; sceneNumber: number }
+  | { operation: "delete"; sceneNumber: number };
+
 export type GenerationOptions = {
   duration: "15" | "30" | "45" | "60";
   sceneCount: "auto" | "3" | "5" | "6";
@@ -134,6 +140,7 @@ export type EditPlan = {
   affectedScenes: number[];
   changes: EditChange[];
   productionSettings?: Partial<ProductionSettings>;
+  sceneStructure?: SceneStructureMutation;
   createdAt: string;
 };
 
