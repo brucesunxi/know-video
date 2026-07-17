@@ -421,6 +421,18 @@ function versionOutputLabel(version: ProjectVersion) {
   return outputReadiness({ ...summary, status: version.status, renderUrl: version.renderUrl, renderJobId: version.renderJobId }).label;
 }
 
+function versionActionInsight(version: ProjectVersionSummary) {
+  const output = outputReadiness(version);
+  if (version.isCurrent) {
+    if (output.tone === "ready") return version.renderUrl ? "当前版本已有成片，可下载或继续迭代。" : "当前版本素材齐全，可直接导出 MP4。";
+    if (output.tone === "working") return "当前版本正在合成成片，请稍后查看导出记录。";
+    return "当前版本需要先补齐素材，再继续预览或导出。";
+  }
+  if (output.tone === "ready") return version.renderUrl ? "恢复会创建新版本，并保留这份已导出 MP4。" : "恢复会创建新版本，随后可重新导出 MP4。";
+  if (output.tone === "working") return "恢复会创建新版本，原有合成任务不会被当作当前任务。";
+  return "恢复后需要先补齐素材，再导出新的 MP4。";
+}
+
 function versionRestoreImpactItems(preview: ProjectVersionPreview) {
   const selectedSummary = versionMediaSummary(preview.version);
   const selectedOutput = outputReadiness({
@@ -2962,6 +2974,7 @@ function StudioScreen({
                     <small className={`kv-output-status ${outputReadiness(version).tone}`}>
                       {outputReadiness(version).label}
                     </small>
+                    <p className="kv-version-action-insight">{versionActionInsight(version)}</p>
                     <time>{new Date(version.createdAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
                     <button disabled={isBusy || versionPreviewLoading} onClick={() => onPreviewVersion(version.id)} type="button">
                       <Eye size={15} />预览比较
