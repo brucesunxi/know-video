@@ -39,7 +39,7 @@ function toRenderJob(row: RenderJobRow): RenderJob {
   };
 }
 
-async function renderJobMetadataColumnExists(sql: ReturnType<typeof getSql>) {
+async function ensureRenderJobMetadataColumn(sql: ReturnType<typeof getSql>) {
   if (metadataColumnAvailable !== undefined) return metadataColumnAvailable;
   const rows = await sql`
     select exists (
@@ -50,6 +50,15 @@ async function renderJobMetadataColumnExists(sql: ReturnType<typeof getSql>) {
     ) as exists
   ` as Array<{ exists: boolean }>;
   metadataColumnAvailable = Boolean(rows[0]?.exists);
+  if (!metadataColumnAvailable) {
+    try {
+      await sql`alter table render_jobs add column if not exists metadata_json jsonb not null default '{}'`;
+      metadataColumnAvailable = true;
+    } catch (error) {
+      metadataColumnAvailable = false;
+      console.error("[render-jobs] Unable to add render metadata column; continuing without metadata persistence:", error);
+    }
+  }
   return metadataColumnAvailable;
 }
 
@@ -289,7 +298,7 @@ export async function updateRenderJob(input: {
   const sql = getSql();
   const versionStatus = versionStatusAfterRenderJob(input.status);
   const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
-  const canStoreMetadata = await renderJobMetadataColumnExists(sql);
+  const canStoreMetadata = await ensureRenderJobMetadataColumn(sql);
   const updateJob = canStoreMetadata ? sql`
     update render_jobs
     set status = ${input.status},
