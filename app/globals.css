@@ -1311,6 +1311,23 @@ button:disabled {
   accent-color: #0d9488;
 }
 
+.kv-production-subcontrol {
+  display: grid;
+  gap: 7px;
+  border-top: 1px solid var(--line);
+  padding-top: 11px;
+}
+
+.kv-production-subcontrol > span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.kv-production-subcontrol .kv-segmented button {
+  min-height: 31px;
+  font-size: 11px;
+}
+
 .kv-production-inline {
   min-width: 0;
   gap: 14px;

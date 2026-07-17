@@ -24,6 +24,7 @@
     "image:continuity:smoke": "node scripts/image-continuity-smoke.mjs",
     "speech:timing:smoke": "node scripts/speech-timing-smoke.mjs",
     "audio:quality:smoke": "node scripts/audio-quality-smoke.mjs",
+    "audio:mix:smoke": "node scripts/audio-mix-smoke.mjs",
     "voice:profiles:smoke": "node scripts/voice-profiles-smoke.mjs",
     "asset:policy:smoke": "node scripts/asset-policy-smoke.mjs",
     "video:response:smoke": "node scripts/cloudflare-video-response-smoke.mjs",

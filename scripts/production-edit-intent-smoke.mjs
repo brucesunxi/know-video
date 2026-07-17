@@ -24,7 +24,20 @@ assert.deepEqual(
   plain(productionSettingsFromRequest("把 Logo 放在左上角并放大")),
   { logoPosition: "top-left", logoSize: 16 }
 );
+assert.deepEqual(
+  plain(productionSettingsFromRequest("开启旁白避让，背景音乐调到 16%")),
+  { musicVolume: 0.16, musicDucking: "balanced" }
+);
+assert.deepEqual(
+  plain(productionSettingsFromRequest("旁白时强力压低音乐")),
+  { musicDucking: "strong" }
+);
+assert.deepEqual(
+  plain(productionSettingsFromRequest("关闭音乐避让")),
+  { musicDucking: "off" }
+);
 assert.equal(isProductionOnlyRequest("关闭字幕，全片改成 1.25 倍速"), true);
+assert.equal(isProductionOnlyRequest("旁白时强力压低音乐"), true);
 assert.equal(isProductionOnlyRequest("关闭字幕，再把第 2 场景改成浅色"), false);
 assert.deepEqual(plain(productionSettingsFromRequest("把所有旁白改成中文")), {});
 

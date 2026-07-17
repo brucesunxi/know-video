@@ -3,12 +3,14 @@ export type NarrationVoice = "male-clear" | "male-deep" | "female-natural";
 export type PlaybackRate = 0.75 | 1 | 1.25 | 1.5;
 export type CaptionStyle = "minimal" | "boxed" | "highlight";
 export type LogoPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export type MusicDucking = "off" | "balanced" | "strong";
 
 export type ProductionSettings = {
   captionsEnabled: boolean;
   captionStyle: CaptionStyle;
   playbackRate: PlaybackRate;
   musicVolume: number;
+  musicDucking: MusicDucking;
   logoPosition: LogoPosition;
   logoSize: number;
 };

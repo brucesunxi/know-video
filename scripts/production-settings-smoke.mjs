@@ -25,6 +25,7 @@ assert.deepEqual(plain(productionSettingsFromScenes([{ style: { production: {
   captionStyle: "highlight",
   playbackRate: 1.25,
   musicVolume: 0.5,
+  musicDucking: "balanced",
   logoPosition: "bottom-left",
   logoSize: 24
 });

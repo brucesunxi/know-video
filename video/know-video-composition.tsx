@@ -11,6 +11,7 @@ import {
   useCurrentFrame
 } from "remotion";
 import type { Project, Scene } from "@/lib/types";
+import { musicMixEnvelope, type NarrationFrameRange } from "@/lib/audio-mix";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
 import { VIDEO_FPS } from "@/video/config";
 
@@ -346,6 +347,7 @@ function SceneFrame({
 
 export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
   let from = 0;
+  const narrationRanges: NarrationFrameRange[] = [];
   const transitionFrames = Math.round(VIDEO_FPS * 0.5);
   const settings = productionSettings(project);
   const logo = productionAsset(project, "logo");
@@ -363,6 +365,9 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
         const contentDurationInFrames = Math.max(1, Math.round((scene.durationSeconds * VIDEO_FPS) / settings.playbackRate));
         const start = from;
         from += contentDurationInFrames;
+        if (scene.assets.some((asset) => asset.type === "audio" && asset.url)) {
+          narrationRanges.push({ startFrame: start, endFrame: start + contentDurationInFrames - 1 });
+        }
         const hasTransitionOut = index < project.currentVersion.scenes.length - 1;
         return (
           <Sequence
@@ -389,12 +394,14 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
         <Audio
           loop
           src={music.url}
-          volume={(frame) => settings.musicVolume * interpolate(
+          volume={(frame) => settings.musicVolume * musicMixEnvelope({
             frame,
-            [0, 18, Math.max(19, from - 24), Math.max(20, from - 1)],
-            [0, 1, 1, 0],
-            { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-          )}
+            totalFrames: from,
+            narrationRanges,
+            ducking: settings.musicDucking,
+            attackFrames: Math.round(VIDEO_FPS * 0.2),
+            releaseFrames: Math.round(VIDEO_FPS * 0.4)
+          })}
         />
       ) : null}
       {logo ? (

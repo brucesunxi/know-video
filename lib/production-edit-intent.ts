@@ -48,6 +48,14 @@ export function productionSettingsFromRequest(request: string): Partial<Producti
     settings.musicVolume = 0.2;
   }
 
+  if (/(?:关闭|取消|不要|禁用).{0,8}(?:音乐避让|自动压低|旁白避让)|(?:音乐避让|自动压低|旁白避让).{0,8}(?:关闭|取消|不要|禁用)/iu.test(normalized)) {
+    settings.musicDucking = "off";
+  } else if (/(?:音乐避让|自动压低|旁白避让|旁白时压低音乐).{0,10}(?:明显|强|强力|更多|大幅)|(?:明显|强|强力|更多|大幅).{0,10}(?:音乐避让|自动压低|旁白避让)|(?:旁白|配音).{0,8}(?:明显|强|强力|更多|大幅).{0,6}(?:压低|降低).{0,4}(?:背景音乐|音乐)/iu.test(normalized)) {
+    settings.musicDucking = "strong";
+  } else if (/(?:开启|打开|启用|使用).{0,8}(?:音乐避让|自动压低|旁白避让)|(?:音乐避让|自动压低|旁白避让|旁白时压低音乐)/iu.test(normalized)) {
+    settings.musicDucking = "balanced";
+  }
+
   if (/(?:logo|标志|品牌标识).{0,12}(?:左上|左上角)/iu.test(normalized)) settings.logoPosition = "top-left";
   if (/(?:logo|标志|品牌标识).{0,12}(?:右上|右上角)/iu.test(normalized)) settings.logoPosition = "top-right";
   if (/(?:logo|标志|品牌标识).{0,12}(?:左下|左下角)/iu.test(normalized)) settings.logoPosition = "bottom-left";
@@ -65,7 +73,10 @@ export function productionSettingsFromRequest(request: string): Partial<Producti
 }
 
 export function isProductionOnlyRequest(request: string) {
-  if (Object.keys(productionSettingsFromRequest(request)).length === 0) return false;
+  const settings = productionSettingsFromRequest(request);
+  if (Object.keys(settings).length === 0) return false;
+  if (settings.musicDucking && !/(?:第\s*[0-9一二三四五六七八九十]+|场景|镜头|章节|画面|视觉|标题|文案|语言|中文|英文|人物|角色|背景|构图|风格|画风|色调|配色|主题)/iu.test(request)) {
+    return true;
+  }
   return !/(?:第\s*[0-9一二三四五六七八九十]+|场景|镜头|章节|画面|视觉|旁白|配音音色|标题|文案|语言|中文|英文|人物|角色|背景|构图|风格|画风|色调|配色|主题)/iu.test(request);
 }
-

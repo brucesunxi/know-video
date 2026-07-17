@@ -123,6 +123,7 @@ function productionSettingLabels(settings?: Partial<ProductionSettings>) {
     if (key === "captionStyle") return `字幕样式：${value === "minimal" ? "简洁" : value === "highlight" ? "强调色" : "深色底"}`;
     if (key === "playbackRate") return `全片速度：${value}x`;
     if (key === "musicVolume") return `音乐音量：${Math.round(Number(value) * 100)}%`;
+    if (key === "musicDucking") return `旁白避让：${value === "off" ? "关闭" : value === "strong" ? "明显" : "平衡"}`;
     if (key === "logoPosition") {
       const positions = { "top-left": "左上", "top-right": "右上", "bottom-left": "左下", "bottom-right": "右下" } as const;
       return `Logo 位置：${positions[value as keyof typeof positions]}`;
@@ -1098,6 +1099,20 @@ function ProductionSettingsPanel({
               value={musicVolume}
             />
           </label>
+          <div className="kv-production-subcontrol">
+            <span>旁白时自动压低音乐</span>
+            <div className="kv-segmented" aria-label="旁白音乐避让">
+              {(["off", "balanced", "strong"] as const).map((mode) => (
+                <button
+                  className={settings.musicDucking === mode ? "active" : ""}
+                  disabled={isBusy || !music}
+                  key={mode}
+                  onClick={() => onChange({ musicDucking: mode })}
+                  type="button"
+                >{mode === "off" ? "关闭" : mode === "balanced" ? "平衡" : "明显"}</button>
+              ))}
+            </div>
+          </div>
         </div>
         <div className="kv-production-control">
           <div className="kv-production-control-title"><ImagePlus size={17} /><strong>品牌 Logo</strong></div>

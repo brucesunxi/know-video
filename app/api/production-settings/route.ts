@@ -11,6 +11,7 @@ const schema = z.object({
     captionStyle: z.enum(["minimal", "boxed", "highlight"]).optional(),
     playbackRate: z.union([z.literal(0.75), z.literal(1), z.literal(1.25), z.literal(1.5)]).optional(),
     musicVolume: z.number().min(0).max(0.5).optional(),
+    musicDucking: z.enum(["off", "balanced", "strong"]).optional(),
     logoPosition: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]).optional(),
     logoSize: z.number().min(6).max(24).optional()
   }).refine((settings) => Object.keys(settings).length > 0, "至少需要修改一项成片设置。")

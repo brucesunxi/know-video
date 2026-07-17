@@ -5,6 +5,7 @@ export const DEFAULT_PRODUCTION_SETTINGS: ProductionSettings = {
   captionStyle: "boxed",
   playbackRate: 1,
   musicVolume: 0.12,
+  musicDucking: "balanced",
   logoPosition: "top-right",
   logoSize: 12
 };
@@ -32,6 +33,9 @@ export function productionSettingsFromScenes(scenes: Scene[]): ProductionSetting
     captionStyle,
     playbackRate,
     musicVolume: boundedNumber(stored?.musicVolume, 0, 0.5, DEFAULT_PRODUCTION_SETTINGS.musicVolume),
+    musicDucking: ["off", "balanced", "strong"].includes(String(stored?.musicDucking))
+      ? stored?.musicDucking as ProductionSettings["musicDucking"]
+      : DEFAULT_PRODUCTION_SETTINGS.musicDucking,
     logoPosition,
     logoSize: boundedNumber(stored?.logoSize, 6, 24, DEFAULT_PRODUCTION_SETTINGS.logoSize)
   };
