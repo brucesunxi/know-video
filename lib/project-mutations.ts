@@ -11,7 +11,7 @@ import { invalidateVersionRender } from "@/lib/render-jobs";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import { assertRestorableVersion, restorableSceneAssets, restoredVersionStatus } from "@/lib/version-restore";
 import { applyEditPlan } from "@/lib/video-brain";
-import type { ChatMessage, EditPlan, Project, ProjectVersion, ProjectVersionSummary, Scene, SceneAsset } from "@/lib/types";
+import type { ChatMessage, EditPlan, Project, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, Scene, SceneAsset } from "@/lib/types";
 import { summarizeVersionChange } from "@/lib/version-diff";
 
 type IdRow = { id: string };
@@ -948,7 +948,21 @@ export async function applyPersistedEditPlan(params: {
 }
 
 export async function listProjectVersions(projectId: string): Promise<ProjectVersionSummary[]> {
-  if (!canPersist()) return [];
+  if (!canPersist()) {
+    if (projectId !== demoProject.id) return [];
+    return [{
+      id: demoProject.currentVersion.id,
+      parentVersionId: demoProject.currentVersion.parentVersionId,
+      label: "演示版本",
+      status: demoProject.currentVersion.status,
+      createdAt: demoProject.currentVersion.createdAt,
+      durationSeconds: demoProject.currentVersion.durationSeconds,
+      renderUrl: demoProject.currentVersion.renderUrl,
+      sceneCount: demoProject.currentVersion.scenes.length,
+      isCurrent: true,
+      changeSummary: summarizeVersionChange(demoProject.currentVersion.scenes, null)
+    }];
+  }
   const sql = getSql();
   const rows = await sql`
     select
@@ -1037,6 +1051,40 @@ export async function listProjectVersions(projectId: string): Promise<ProjectVer
       changeSummary: summarizeVersionChange(row.scene_plan_json, row.parent_scene_plan_json)
     };
   });
+}
+
+export async function loadProjectVersionPreview(
+  projectId: string,
+  versionId: string
+): Promise<ProjectVersionPreview | undefined> {
+  if (!canPersist()) {
+    if (projectId !== demoProject.id || versionId !== demoProject.currentVersion.id) return undefined;
+    return {
+      version: demoProject.currentVersion,
+      currentVersion: demoProject.currentVersion,
+      changeSummary: summarizeVersionChange(demoProject.currentVersion.scenes, demoProject.currentVersion.scenes)
+    };
+  }
+
+  const ownership = await getSql()`
+    select p.current_version_id
+    from projects p
+    join project_versions target on target.project_id = p.id
+    where p.id = ${projectId} and target.id = ${versionId}
+    limit 1
+  ` as Array<{ current_version_id: string | null }>;
+  const currentVersionId = ownership[0]?.current_version_id;
+  if (!currentVersionId) return undefined;
+  const [version, currentVersion] = await Promise.all([
+    loadVersion(versionId),
+    loadVersion(currentVersionId)
+  ]);
+  if (!version || !currentVersion) return undefined;
+  return {
+    version,
+    currentVersion,
+    changeSummary: summarizeVersionChange(currentVersion.scenes, version.scenes)
+  };
 }
 
 export async function restoreProjectVersion(params: {

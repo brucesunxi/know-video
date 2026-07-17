@@ -84,6 +84,12 @@ export type ProjectVersionSummary = Pick<
   changeSummary?: VersionChangeSummary;
 };
 
+export type ProjectVersionPreview = {
+  version: ProjectVersion;
+  currentVersion: ProjectVersion;
+  changeSummary: VersionChangeSummary;
+};
+
 export type RenderJob = {
   id: string;
   projectId: string;

@@ -17,6 +17,7 @@ import {
   Film,
   FolderOpen,
   History,
+  Eye,
   ImagePlus,
   Layers3,
   Loader2,
@@ -46,7 +47,7 @@ import {
   narrationVoiceProfiles
 } from "@/lib/voice-profiles";
 import { VIDEO_FPS } from "@/video/config";
-import type { ChatMessage, EditChange, EditPlan, GenerationOptions, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, GenerationOptions, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
@@ -1232,6 +1233,72 @@ function ChatPanel({
   );
 }
 
+function versionSceneSignature(scene?: Scene) {
+  if (!scene) return "";
+  return JSON.stringify({
+    title: scene.title,
+    voiceover: scene.voiceover,
+    visualPrompt: scene.visualPrompt,
+    motionPrompt: scene.motionPrompt,
+    durationSeconds: scene.durationSeconds,
+    style: scene.style
+  });
+}
+
+function VersionSceneSide({ label, scene }: { label: string; scene?: Scene }) {
+  const image = scene?.assets.find((asset) => asset.type === "image" && asset.url);
+  const clip = scene?.assets.find((asset) => asset.type === "clip" && asset.url);
+  return (
+    <div className="kv-version-scene-side">
+      <span>{label}</span>
+      <div
+        className={`kv-version-scene-thumb${image ? " has-image" : ""}`}
+        style={image ? { backgroundImage: `url("${image.url}")` } : undefined}
+      >
+        {!image ? clip ? <FileVideo2 size={20} /> : <ImagePlus size={20} /> : null}
+      </div>
+      <strong>{scene?.title ?? "没有这个场景"}</strong>
+      <small>{scene ? `${scene.durationSeconds} 秒` : "已删除"}</small>
+    </div>
+  );
+}
+
+function VersionComparison({ preview }: { preview: ProjectVersionPreview }) {
+  const count = Math.max(preview.version.scenes.length, preview.currentVersion.scenes.length);
+  const rows = Array.from({ length: count }, (_, index) => {
+    const before = preview.version.scenes[index];
+    const after = preview.currentVersion.scenes[index];
+    const status = !before ? "新增" : !after ? "删除" : versionSceneSignature(before) === versionSceneSignature(after) ? "未变化" : "已修改";
+    return { sceneNumber: index + 1, before, after, status };
+  });
+  const changed = rows.filter((row) => row.status !== "未变化");
+  const visibleRows = changed.length > 0 ? changed : rows;
+  const sameVersion = preview.version.id === preview.currentVersion.id;
+
+  return (
+    <section className="kv-version-comparison" aria-label="版本场景比较">
+      <div className="kv-version-comparison-summary">
+        <div><span>所选版本</span><strong>{preview.version.scenes.length} 个场景 · {durationLabel(preview.version.durationSeconds)}</strong></div>
+        <ArrowRight size={17} />
+        <div><span>当前版本</span><strong>{preview.currentVersion.scenes.length} 个场景 · {durationLabel(preview.currentVersion.durationSeconds)}</strong></div>
+      </div>
+      <p>{sameVersion ? "这是当前版本的完整分镜快照。" : preview.changeSummary.description}</p>
+      <div className="kv-version-scene-diffs">
+        {visibleRows.map((row) => (
+          <article key={`${row.sceneNumber}-${row.before?.id ?? "new"}-${row.after?.id ?? "removed"}`}>
+            <header><strong>场景 {row.sceneNumber}</strong><span className={`status-${row.status}`}>{row.status}</span></header>
+            <div>
+              <VersionSceneSide label="所选版本" scene={row.before} />
+              <ArrowRight aria-hidden="true" size={16} />
+              <VersionSceneSide label="当前版本" scene={row.after} />
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function StudioScreen({
   project,
   messages,
@@ -1263,7 +1330,11 @@ function StudioScreen({
   versions,
   versionsOpen,
   versionsLoading,
+  versionPreview,
+  versionPreviewLoading,
   onToggleVersions,
+  onPreviewVersion,
+  onCloseVersionPreview,
   onRestoreVersion,
   uploadProgress,
   assetsOpen,
@@ -1309,7 +1380,11 @@ function StudioScreen({
   versions: ProjectVersionSummary[];
   versionsOpen: boolean;
   versionsLoading: boolean;
+  versionPreview?: ProjectVersionPreview;
+  versionPreviewLoading: boolean;
   onToggleVersions: () => void;
+  onPreviewVersion: (versionId: string) => void;
+  onCloseVersionPreview: () => void;
   onRestoreVersion: (versionId: string) => void;
   uploadProgress?: number;
   assetsOpen: boolean;
@@ -1497,6 +1572,9 @@ function StudioScreen({
                     <p className="kv-version-change">{version.changeSummary?.description ?? "版本快照"}</p>
                     <p>{version.sceneCount} 个场景 · {durationLabel(version.durationSeconds)}</p>
                     <time>{new Date(version.createdAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
+                    <button disabled={isBusy || versionPreviewLoading} onClick={() => onPreviewVersion(version.id)} type="button">
+                      <Eye size={15} />预览比较
+                    </button>
                     {!version.isCurrent ? (
                       <button disabled={isBusy} onClick={() => onRestoreVersion(version.id)} type="button">
                         <RotateCcw size={15} />恢复为新版本
@@ -1506,6 +1584,17 @@ function StudioScreen({
                 ))}
               </div>
             )}
+            {versionPreviewLoading ? (
+              <div className="kv-version-loading"><Loader2 className="kv-spin" size={18} />正在准备版本对比...</div>
+            ) : versionPreview ? (
+              <div className="kv-version-preview">
+                <div className="kv-strip-heading">
+                  <div><span className="kv-eyebrow">版本比较</span><h3>确认差异后再决定是否恢复</h3></div>
+                  <button aria-label="关闭版本比较" onClick={onCloseVersionPreview} title="关闭" type="button"><X size={17} /></button>
+                </div>
+                <VersionComparison preview={versionPreview} />
+              </div>
+            ) : null}
           </section>
         ) : null}
         {exportsOpen ? (
@@ -1662,6 +1751,8 @@ export function WorkspaceClient({
   const [versions, setVersions] = useState<ProjectVersionSummary[]>([]);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionPreview, setVersionPreview] = useState<ProjectVersionPreview>();
+  const [versionPreviewLoading, setVersionPreviewLoading] = useState(false);
   const [renderJobs, setRenderJobs] = useState<RenderJob[]>([]);
   const [exportsOpen, setExportsOpen] = useState(false);
   const [exportsLoading, setExportsLoading] = useState(false);
@@ -2218,6 +2309,27 @@ export function WorkspaceClient({
     }
   }
 
+  async function previewVersion(versionId: string) {
+    setVersionPreviewLoading(true);
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(project.id)}/versions/${encodeURIComponent(versionId)}`,
+        { cache: "no-store" }
+      );
+      const data = await response.json() as ProjectVersionPreview & { error?: string };
+      if (!response.ok || !data.version || !data.currentVersion) {
+        throw new Error(data.error || "版本预览读取失败。");
+      }
+      setVersionPreview(data);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "版本预览读取失败。");
+      setVersionPreview(undefined);
+    } finally {
+      setVersionPreviewLoading(false);
+    }
+  }
+
   function toggleVersions() {
     const next = !versionsOpen;
     setVersionsOpen(next);
@@ -2226,6 +2338,7 @@ export function WorkspaceClient({
       setExportsOpen(false);
       setProductionOpen(false);
     }
+    if (!next) setVersionPreview(undefined);
     if (next) void loadVersions();
   }
 
@@ -2255,6 +2368,7 @@ export function WorkspaceClient({
     if (next) {
       setAssetsOpen(false);
       setVersionsOpen(false);
+      setVersionPreview(undefined);
       setProductionOpen(false);
       void loadRenderJobs();
     }
@@ -2269,6 +2383,7 @@ export function WorkspaceClient({
   function toggleAssets() {
     setAssetsOpen((current) => !current);
     setVersionsOpen(false);
+    setVersionPreview(undefined);
     setExportsOpen(false);
     setProductionOpen(false);
   }
@@ -2277,6 +2392,7 @@ export function WorkspaceClient({
     setProductionOpen((current) => !current);
     setAssetsOpen(false);
     setVersionsOpen(false);
+    setVersionPreview(undefined);
     setExportsOpen(false);
   }
 
@@ -2333,6 +2449,7 @@ export function WorkspaceClient({
       setMessages((current) => [...current, data.message!]);
       setSelectedScene(1);
       setPendingPlan(undefined);
+      setVersionPreview(undefined);
       await loadVersions();
     } catch (error) {
       const message = error instanceof Error ? error.message : "版本恢复失败。";
@@ -2641,6 +2758,7 @@ export function WorkspaceClient({
     setBusyAction("generating-images");
     setErrorMessage(undefined);
     setVersionsOpen(false);
+    setVersionPreview(undefined);
     setAssetsOpen(false);
     try {
       const response = await fetch("/api/assets/generate", {
@@ -2836,6 +2954,7 @@ export function WorkspaceClient({
     setChatInput("");
     setErrorMessage(undefined);
     setVersionsOpen(false);
+    setVersionPreview(undefined);
     setExportsOpen(false);
   }
 
@@ -2875,6 +2994,7 @@ export function WorkspaceClient({
       setPendingPlan(data.pendingPlan);
       setStudioView("preview");
       setVersions([]);
+      setVersionPreview(undefined);
       setRenderJobs([]);
       setVersionsOpen(false);
       setExportsOpen(false);
@@ -3017,7 +3137,11 @@ export function WorkspaceClient({
           versions={versions}
           versionsOpen={versionsOpen}
           versionsLoading={versionsLoading}
+          versionPreview={versionPreview}
+          versionPreviewLoading={versionPreviewLoading}
           onToggleVersions={toggleVersions}
+          onPreviewVersion={(versionId) => void previewVersion(versionId)}
+          onCloseVersionPreview={() => setVersionPreview(undefined)}
           onRestoreVersion={restoreVersion}
           uploadProgress={uploadProgress}
           assetsOpen={assetsOpen}
