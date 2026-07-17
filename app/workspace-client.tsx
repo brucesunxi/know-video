@@ -297,6 +297,21 @@ function renderJobMetadataItems(job: RenderJob) {
   ].filter(Boolean);
 }
 
+function exportActionLabel(input: {
+  exportProgress?: number;
+  renderUrl?: string;
+  missingVisualCount: number;
+  missingAudioCount: number;
+}) {
+  if (input.exportProgress !== undefined) return `正在合成 MP4 ${input.exportProgress}%`;
+  if (input.missingVisualCount > 0 && input.missingAudioCount > 0) {
+    return `缺 ${input.missingVisualCount} 个画面 · ${input.missingAudioCount} 段配音`;
+  }
+  if (input.missingVisualCount > 0) return `缺 ${input.missingVisualCount} 个画面`;
+  if (input.missingAudioCount > 0) return `缺 ${input.missingAudioCount} 段配音`;
+  return input.renderUrl ? "下载 MP4" : "导出 MP4";
+}
+
 function sceneVisualAsset(scene: Scene) {
   return scene.assets.find((asset) => ["image", "clip"].includes(asset.type) && asset.url);
 }
@@ -2392,11 +2407,12 @@ function StudioScreen({
               type="button"
             >
               {exportProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <Download size={16} />}
-              {exportProgress !== undefined
-                ? `正在合成 MP4 ${exportProgress}%`
-                : project.currentVersion.renderUrl
-                  ? "下载 MP4"
-                  : "导出 MP4"}
+              {exportActionLabel({
+                exportProgress,
+                renderUrl: project.currentVersion.renderUrl,
+                missingVisualCount: missingSceneNumbers.length,
+                missingAudioCount: missingAudioSceneNumbers.length
+              })}
             </button>
             {exportProgress !== undefined && activeRenderJobId ? (
               <button className="kv-cancel-export" onClick={() => onCancelExport(activeRenderJobId)} type="button">
