@@ -39,6 +39,12 @@ assert(storyboardQualityIssues(mutate(0, { visualPrompt: "A plain studio dashboa
 assert(storyboardQualityIssues(scenes.map((scene) => ({ ...scene, visualPrompt: scenes[0].visualPrompt })), { language: "中文" }).includes("scene visuals are too repetitive"));
 assert(storyboardQualityIssues(scenes.map((scene) => ({ ...scene, visualPrompt: scene.visualPrompt.replace(/^[^，,]+/u, "中等景别 medium shot") })), { language: "中文" }).includes("shot scale and camera angle lack variety"));
 assert(storyboardQualityIssues(scenes.map((scene) => ({ ...scene, voiceover: `现在开始讲述故事${scene.voiceover}` })), { language: "中文" }).includes("voiceover openings repeat mechanically"));
+assert(storyboardQualityIssues(mutate(3, {
+  title: "空间延展",
+  voiceover: "画面继续展示更多细节，让观众看到系统内部的持续变化。",
+  visualPrompt: "低机位远景 low angle，一个持续变化的工作室空间向远处展开；前景深色座椅形成引导线，中景观众剪影保持克制，背景银幕与建筑结构构成稳定中心，顶部柔光和银幕反射照亮混凝土与织物材质，冷青、炭黑和暖金色彩统一。",
+  motionPrompt: "摄影机从低机位缓慢后移，银幕画面继续变化，观众轮廓产生轻微呼吸感，前景座椅形成稳定视差，环境光逐步聚焦到主色调。"
+}), { language: "中文" }).includes("final scene lacks delivery or call-to-action resolve"));
 assert(storyboardQualityIssues(mutate(1, { visualPrompt: "人物出现，内容空泛，没有可执行的画面细节。" }), { language: "中文" }).includes("visual direction lacks production-ready composition details"));
 assert(storyboardQualityIssues(mutate(2, { voiceover: "这是一段明显过长而且无法在六秒时间里自然说完的旁白内容，它会让配音变得非常急促，也破坏整支影片原本应有的呼吸和节奏。" }), { language: "中文" }).includes("voiceover does not fit comfortably inside its scene duration"));
 

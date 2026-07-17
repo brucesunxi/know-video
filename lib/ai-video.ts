@@ -375,6 +375,7 @@ async function createTreatment(
           "Develop one coherent, specific treatment for an AI-generated short video.",
           "Find a visual concept rooted in the user's actual subject, not a software feature list.",
           "Each beat must advance one narrative arc and introduce a distinct visual event.",
+          "The final beat must resolve into a concrete delivery, outcome, or call-to-action moment.",
           "Establish a reusable visual bible so separately generated shots still feel like one film.",
           "Prefer observable actions, environments, objects, transformations, and human stakes over dashboards or floating UI cards.",
           "Return strict JSON only. Do not mention model providers or internal production notes."
@@ -417,12 +418,13 @@ async function repairStoryboard(params: {
           "Use concrete filmable imagery, distinct shot purposes, natural narration, and coherent visual continuity.",
           "Across four or more scenes, use at least three clearly named shot scales or camera angles.",
           "Do not reuse the same narration opening, composition, or visual event in multiple scenes.",
+          "The final scene must clearly feel like completion, delivery, launch, export, share, or the next action.",
           "Do not explain the changes."
         ].join(" ")
       },
       {
         role: "user",
-        content: `Original request:\n${params.prompt}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. ${params.options ? `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters. Across four or more scenes, explicitly use at least three different shot scales or camera angles. Give every scene a different narration opening, composition, and visual event.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
+        content: `Original request:\n${params.prompt}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. ${params.options ? `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters. Across four or more scenes, explicitly use at least three different shot scales or camera angles. Give every scene a different narration opening, composition, and visual event. The last scene must resolve the film with a concrete completion, delivery, launch, export, share, or next-action moment.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
       }
     ],
     temperature: 0.35
@@ -473,12 +475,13 @@ export async function createStoryboardProject(
               `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must be written in ${options?.language ?? treatment.language}.`,
               "Voiceover must be natural finished narration, fit comfortably in its scene duration, and avoid repeating the title.",
               "Every scene must begin its narration differently and depict a different visual event and composition.",
+              "The final scene must unmistakably resolve the promise with a deliverable outcome or clear next action, not just another feature beat.",
               "Motion prompts must specify camera movement, subject movement, depth behavior, and the handoff into the next shot."
             ].join(" ")
         },
         {
           role: "user",
-          content: `Original request:\n${prompt}\n\nApproved director treatment:\n${JSON.stringify(treatment, null, 2)}\n\nReturn JSON in this exact shape:\n{ "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }\n\nFor each visualPrompt include: the central subject and action, location/environment, foreground-midground-background composition, lens or framing, lighting, material/color details, and the treatment beat's visual anchor. Keep visual continuity without making shots visually repetitive.`
+          content: `Original request:\n${prompt}\n\nApproved director treatment:\n${JSON.stringify(treatment, null, 2)}\n\nReturn JSON in this exact shape:\n{ "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }\n\nFor each visualPrompt include: the central subject and action, location/environment, foreground-midground-background composition, lens or framing, lighting, material/color details, and the treatment beat's visual anchor. Keep visual continuity without making shots visually repetitive. The final scene must be a resolved delivery, launch, export, share, or next-action moment that can function as a strong ending.`
         }
       ],
       temperature: 0.5

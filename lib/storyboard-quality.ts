@@ -27,6 +27,8 @@ const shotPatterns = [
   ["low", /(?:low angle|worm'?s-eye|低机位|仰拍)/iu]
 ] as const;
 
+const finalResolvePattern = /(?:final|finish|finished|resolve|resolved|closing|complete|completed|deliver|delivery|export|launch|publish|share|start|try|book|demo|call to action|next step|outcome|result|ready|ship|交付|完成|成片|导出|发布|上线|分享|行动|下一步|预约|试用|开始|结果|成果|收束|落点|终章|准备就绪|可直接使用)/iu;
+
 function hasChinese(value?: string) {
   return Boolean(value && /\p{Script=Han}/u.test(value));
 }
@@ -64,6 +66,16 @@ function repeatedNarrationOpenings(scenes: Scene[]) {
     return (scene.voiceover.toLowerCase().match(/[a-z0-9]+/g) ?? []).slice(0, 4).join(" ");
   }).filter((opening) => opening.length >= 6);
   return new Set(openings).size !== openings.length;
+}
+
+function hasFinalResolve(scene: Scene) {
+  return [
+    scene.title,
+    scene.voiceover,
+    baseVisualPrompt(scene),
+    baseMotionPrompt(scene),
+    scene.style.mood
+  ].some((value) => finalResolvePattern.test(value));
 }
 
 function visualPromptsRepeat(scenes: Scene[]) {
@@ -119,6 +131,8 @@ export function storyboardQualityIssues(
   if (visualPromptsRepeat(scenes)) issues.push("scene visuals are too repetitive");
   if (scenes.length >= 4 && detectedShotVariety(scenes) < 3) issues.push("shot scale and camera angle lack variety");
   if (repeatedNarrationOpenings(scenes)) issues.push("voiceover openings repeat mechanically");
+  const finalScene = scenes.at(-1);
+  if (finalScene && !hasFinalResolve(finalScene)) issues.push("final scene lacks delivery or call-to-action resolve");
   if (scenes.some((scene) => {
     const hanCharacters = (scene.voiceover.match(/\p{Script=Han}/gu) ?? []).length;
     const latinWords = (scene.voiceover.match(/[A-Za-z0-9]+/g) ?? []).length;
