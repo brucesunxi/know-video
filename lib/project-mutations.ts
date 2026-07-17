@@ -1,5 +1,6 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { isEditApplicationConflict, materializeAppliedVersion } from "@/lib/edit-application";
+import { promoteEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { editPlanSchema } from "@/lib/edit-plan-schema";
 import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import { materializeEditProposal } from "@/lib/edit-proposal";
@@ -474,19 +475,36 @@ export async function rejectPersistedEditPlan(params: {
             and current_version_id = ${params.versionId}
         )
       returning id
+    ), deleted_previews as (
+      delete from scene_assets
+      using scenes, rejected
+      where scene_assets.scene_id = scenes.id
+        and scenes.version_id = ${params.versionId}
+        and scene_assets.asset_type = 'thumbnail'
+        and scene_assets.metadata_json ->> 'planPreview' = 'true'
+        and scene_assets.metadata_json ->> 'editPlanId' = ${params.editPlanId}
+      returning scene_assets.r2_key
+    ), inserted_message as (
+      insert into chat_messages (id, project_id, version_id, role, message_type, content)
+      select
+        ${messageId},
+        ${params.projectId},
+        ${params.versionId},
+        'assistant',
+        'text',
+        ${content}
+      from rejected
+      returning id
     )
-    insert into chat_messages (id, project_id, version_id, role, message_type, content)
     select
-      ${messageId},
-      ${params.projectId},
-      ${params.versionId},
-      'assistant',
-      'text',
-      ${content}
-    from rejected
-    returning id
-  ` as IdRow[];
+      inserted_message.id,
+      coalesce((select json_agg(r2_key) from deleted_previews), '[]'::json) as deleted_keys
+    from inserted_message
+  ` as Array<IdRow & { deleted_keys: string[] }>;
   if (!rows[0]) throw new Error("修改方案已经失效，无需再次取消。");
+  await deleteUnreferencedStorageObjects(rows[0].deleted_keys).catch((error) => {
+    console.error("[project-mutations] Unable to clean rejected plan previews:", error);
+  });
   return { id: messageId, role: "assistant", type: "text", content, versionId: params.versionId };
 }
 
@@ -762,9 +780,12 @@ export async function applyPersistedEditPlan(params: {
     throw new Error("修改方案没有产生实际变化，请换一种说法后重新生成。");
   }
   const changedProject = applyEditPlan(params.project, normalizedPlan);
-  const imageSceneNumbers = normalizedChanges
+  const imageSceneNumbersRequested = normalizedChanges
     .filter((change) => change.regenerate.includes("image"))
     .map((change) => change.sceneNumber);
+  const promoted = promoteEditPlanPreviewAssets(changedProject, normalizedPlan);
+  const adoptedPreviewScenes = new Set(promoted.adoptedSceneNumbers);
+  const imageSceneNumbers = imageSceneNumbersRequested.filter((sceneNumber) => !adoptedPreviewScenes.has(sceneNumber));
   const audioSceneNumbers = normalizedChanges
     .filter((change) => change.regenerate.includes("audio"))
     .map((change) => change.sceneNumber);
@@ -778,7 +799,7 @@ export async function applyPersistedEditPlan(params: {
   const audioTargets = new Set(audioSceneNumbers);
   const clipTargets = new Set(clipSceneNumbers);
   const captionTargets = new Set(captionSceneNumbers);
-  const scenes = changedProject.currentVersion.scenes.map((scene) => ({
+  const scenes = promoted.project.currentVersion.scenes.map((scene) => ({
     ...scene,
     assets: scene.assets.filter((asset) => {
       if (asset.type === "render") return false;

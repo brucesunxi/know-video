@@ -15,6 +15,7 @@
     "edit:plan:smoke": "node scripts/edit-plan-normalizer-smoke.mjs",
     "edit:apply:smoke": "node scripts/edit-application-smoke.mjs",
     "edit:proposal:smoke": "node scripts/edit-proposal-smoke.mjs",
+    "edit:preview:smoke": "node scripts/edit-plan-preview-smoke.mjs",
     "edit:language:smoke": "node scripts/heuristic-edit-language-smoke.mjs",
     "edit:schema:smoke": "node scripts/edit-plan-schema-smoke.mjs",
     "production:intent:smoke": "node scripts/production-edit-intent-smoke.mjs",

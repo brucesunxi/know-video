@@ -43,6 +43,7 @@ import {
 import { KnowVideoPlayer } from "@/app/video-player";
 import { replacementAssetTypes } from "@/lib/asset-policy";
 import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
+import { editPlanVisualSceneNumbers, planPreviewAsset, removeEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { selectMotionCriticalScenes } from "@/lib/motion-scene-selection";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
 import { sceneSplitPreview, type SceneStructureMutation } from "@/lib/scene-structure";
@@ -63,6 +64,7 @@ type BusyAction =
   | "applying-edit"
   | "generating-images"
   | "generating-candidate"
+  | "previewing-plan"
   | "generating-video"
   | "generating-audio"
   | "saving-scene"
@@ -245,6 +247,8 @@ function busyActionLabel(action?: BusyAction) {
       return "正在生成场景画面，请保持页面打开";
     case "generating-candidate":
       return "正在生成候选画面，当前视频不会被替换";
+    case "previewing-plan":
+      return "正在生成修改后的真实画面预览，当前视频保持不变";
     case "generating-video":
       return "正在生成动态视频镜头，请保持页面打开";
     case "generating-audio":
@@ -1441,8 +1445,9 @@ function ProductionSettingsPanel({
   );
 }
 
-function PlanVisualDiff({ change, scene }: { change: EditChange; scene: Scene }) {
+function PlanVisualDiff({ change, scene, editPlanId }: { change: EditChange; scene: Scene; editPlanId: string }) {
   const image = scene.assets.find((asset) => asset.type === "image" && asset.url);
+  const preview = planPreviewAsset(scene, editPlanId);
   const visualRegeneration = change.regenerate.some((type) => ["image", "clip", "thumbnail"].includes(type));
   const afterIsLight = change.after.thumbnailTone === "light";
   const beforeColor = scene.style.palette[0] ?? "#101828";
@@ -1463,10 +1468,14 @@ function PlanVisualDiff({ change, scene }: { change: EditChange; scene: Scene })
       <figure>
         <figcaption>修改后</figcaption>
         <div
-          className={`kv-plan-frame after${!visualRegeneration && image ? " has-image" : ""}${afterIsLight ? " light" : ""}`}
-          style={!visualRegeneration && image ? { backgroundImage: `url("${image.url}")` } : { backgroundColor: afterColor }}
+          className={`kv-plan-frame after${preview || (!visualRegeneration && image) ? " has-image" : ""}${afterIsLight && !preview ? " light" : ""}`}
+          style={preview
+            ? { backgroundImage: `url("${preview.url}")` }
+            : !visualRegeneration && image
+              ? { backgroundImage: `url("${image.url}")` }
+              : { backgroundColor: afterColor }}
         >
-          {visualRegeneration ? (
+          {preview ? <span className="kv-plan-preview-ready"><Check size={13} />真实预览</span> : visualRegeneration ? (
             <><ImagePlus size={18} /><strong>{change.after.title}</strong><small>确认后生成新画面</small></>
           ) : (
             <><Check size={18} /><strong>沿用当前画面</strong></>
@@ -1477,7 +1486,7 @@ function PlanVisualDiff({ change, scene }: { change: EditChange; scene: Scene })
   );
 }
 
-function ChangeCard({ change, scene }: { change: EditChange; scene?: Scene }) {
+function ChangeCard({ change, scene, editPlanId }: { change: EditChange; scene?: Scene; editPlanId: string }) {
   const changedFields = [
     {
       label: "标题",
@@ -1521,7 +1530,7 @@ function ChangeCard({ change, scene }: { change: EditChange; scene?: Scene }) {
           </div>
         ) : null}
       </div>
-      {scene ? <PlanVisualDiff change={change} scene={scene} /> : null}
+      {scene ? <PlanVisualDiff change={change} editPlanId={editPlanId} scene={scene} /> : null}
       <div className="kv-change-diffs">
         {changedFields.map((field) => (
           <section className={field.label === "旁白" ? "accent" : ""} key={field.label}>
@@ -1633,6 +1642,7 @@ function ChatPanel({
   busyAction,
   onInput,
   onSubmit,
+  onPreview,
   onApply,
   onCancel
 }: {
@@ -1644,10 +1654,16 @@ function ChatPanel({
   busyAction?: BusyAction;
   onInput: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onPreview: () => void;
   onApply: () => void;
   onCancel: () => void;
 }) {
   const logRef = useRef<HTMLDivElement>(null);
+  const visualSceneNumbers = pendingPlan ? editPlanVisualSceneNumbers(pendingPlan) : [];
+  const previewedSceneNumbers = pendingPlan ? visualSceneNumbers.filter((sceneNumber) => {
+    const scene = scenes.find((item) => item.sceneNumber === sceneNumber);
+    return scene && planPreviewAsset(scene, pendingPlan.id);
+  }) : [];
 
   useEffect(() => {
     const log = logRef.current;
@@ -1702,12 +1718,21 @@ function ChatPanel({
               {pendingPlan.changes.map((change) => (
                 <ChangeCard
                   change={change}
+                  editPlanId={pendingPlan.id}
                   key={change.sceneNumber}
                   scene={scenes.find((scene) => scene.sceneNumber === change.sceneNumber)}
                 />
               ))}
             </div>
             <div className="kv-review-actions">
+              {visualSceneNumbers.length > 0 ? (
+                <button className="kv-preview-plan" disabled={isBusy || previewedSceneNumbers.length === visualSceneNumbers.length} onClick={onPreview} type="button">
+                  {isBusy && busyAction === "previewing-plan" ? <Loader2 className="kv-spin" size={16} /> : previewedSceneNumbers.length === visualSceneNumbers.length ? <Check size={16} /> : <Eye size={16} />}
+                  {previewedSceneNumbers.length === visualSceneNumbers.length
+                    ? `真实预览已就绪 · ${previewedSceneNumbers.length} 个场景`
+                    : `生成真实预览 · ${visualSceneNumbers.length - previewedSceneNumbers.length} 个场景`}
+                </button>
+              ) : null}
               <button className="kv-primary" disabled={isBusy} onClick={onApply} type="button">
                 {isBusy ? <Loader2 className="kv-spin" size={16} /> : <Check size={16} />}
                 应用修改
@@ -1820,6 +1845,7 @@ function StudioScreen({
   busyAction,
   onInput,
   onSubmit,
+  onPreviewPlan,
   onApply,
   onCancel,
   onSelectScene,
@@ -1873,6 +1899,7 @@ function StudioScreen({
   busyAction?: BusyAction;
   onInput: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onPreviewPlan: () => void;
   onApply: () => void;
   onCancel: () => void;
   onSelectScene: (scene: number) => void;
@@ -2234,6 +2261,7 @@ function StudioScreen({
         onApply={onApply}
         onCancel={onCancel}
         onInput={onInput}
+        onPreview={onPreviewPlan}
         onSubmit={onSubmit}
         pendingPlan={pendingPlan}
         scenes={project.currentVersion.scenes}
@@ -2716,6 +2744,37 @@ export function WorkspaceClient({
     return updatedProject;
   }
 
+  async function previewPendingPlan() {
+    if (!pendingPlan) return;
+    setIsBusy(true);
+    setBusyAction("previewing-plan");
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch("/api/edit-plan/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          versionId: project.currentVersion.id,
+          editPlanId: pendingPlan.id
+        }),
+        signal: AbortSignal.timeout(125_000)
+      });
+      const data = await response.json() as { project?: Project; error?: string };
+      if (!response.ok || !data.project) throw new Error(data.error || "真实画面预览生成失败。");
+      setProject(data.project);
+      const firstScene = editPlanVisualSceneNumbers(pendingPlan)[0];
+      if (firstScene) setSelectedScene(firstScene);
+    } catch (error) {
+      const message = requestErrorMessage(error, "真实画面预览生成失败，请稍后重试。");
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
+    } finally {
+      setIsBusy(false);
+      setBusyAction(undefined);
+    }
+  }
+
   async function applyPlan() {
     if (!pendingPlan) return;
 
@@ -2923,6 +2982,7 @@ export function WorkspaceClient({
       });
       const data = await response.json() as { message?: ChatMessage; error?: string };
       if (!response.ok || !data.message) throw new Error(data.error || "取消修改方案失败。");
+      setProject((current) => removeEditPlanPreviewAssets(current, plan.id));
       setMessages((current) => [...current, data.message!]);
     } catch (error) {
       console.error(error);
@@ -3803,6 +3863,7 @@ export function WorkspaceClient({
           onApply={applyPlan}
           onCancel={cancelPlan}
           onInput={setChatInput}
+          onPreviewPlan={previewPendingPlan}
           onSelectScene={setSelectedScene}
           onSubmit={submitChat}
           onUpload={() => fileInputRef.current?.click()}

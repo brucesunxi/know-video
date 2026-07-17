@@ -3143,6 +3143,7 @@ button:disabled {
 }
 
 .kv-plan-frame {
+  position: relative;
   display: flex;
   width: 100%;
   min-width: 0;
@@ -3159,6 +3160,35 @@ button:disabled {
   padding: 12px;
   color: #fff;
   text-align: center;
+}
+
+.kv-plan-preview-ready {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: 999px;
+  background: rgba(4, 120, 87, 0.9);
+  padding: 4px 6px;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.kv-review-actions .kv-preview-plan {
+  border-color: #9fd8d1;
+  background: #edf9f7;
+  color: #08766c;
+}
+
+.kv-review-actions .kv-preview-plan:disabled {
+  border-color: #c7e8e3;
+  background: #f1faf8;
+  color: #08766c;
+  opacity: 1;
 }
 
 .kv-plan-frame:not(.has-image) {
