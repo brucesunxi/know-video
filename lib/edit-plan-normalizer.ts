@@ -1,5 +1,5 @@
 import type { AssetType, EditPlan, Scene } from "@/lib/types";
-import { analyzeEditIntent, requestsGeneratedClip } from "@/lib/edit-intent";
+import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip } from "@/lib/edit-intent";
 
 export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) {
   const sceneByNumber = new Map(scenes.map((scene) => [scene.sceneNumber, scene]));
@@ -7,6 +7,31 @@ export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) 
   const preserveVisualAssets = intent.preserveVisualAssetsOnLocalization;
   const clipRequested = requestsGeneratedClip(plan.userRequest);
   const ambiguousClipRequest = clipRequested && intent.explicitSceneNumbers.length === 0 && !intent.global;
+  const globalTargets = intent.global
+    ? globalEditTargetSceneNumbers(plan.userRequest, scenes.map((scene) => scene.sceneNumber))
+    : [];
+  if (intent.global && plan.changes.length > 0) {
+    const updatedChanges = plan.changes.filter((change) => change.status === "updated");
+    const planned = new Set(updatedChanges.map((change) => change.sceneNumber));
+    const targets = new Set(globalTargets);
+    if (
+      updatedChanges.length !== planned.size
+      || globalTargets.some((sceneNumber) => !planned.has(sceneNumber))
+      || updatedChanges.some((change) => !targets.has(change.sceneNumber))
+    ) {
+      throw new Error("全局修改方案没有覆盖所有目标场景，请重新生成方案。");
+    }
+    if (intent.globalChineseRewrite) {
+      const changes = new Map(plan.changes.map((change) => [change.sceneNumber, change]));
+      const completeChinese = globalTargets.every((sceneNumber) => {
+        const after = changes.get(sceneNumber)?.after;
+        return after
+          && [after.title, after.voiceover, after.visualPrompt, after.motionPrompt]
+            .every((value) => Boolean(value && /\p{Script=Han}/u.test(value)));
+      });
+      if (!completeChinese) throw new Error("全片中文修改方案存在未完成的中文字段，请重新生成方案。");
+    }
+  }
   const explicitlyAllowed = !intent.global && intent.explicitSceneNumbers.length > 0
     ? new Set(intent.explicitSceneNumbers)
     : undefined;

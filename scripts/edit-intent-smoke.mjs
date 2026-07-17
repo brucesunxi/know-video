@@ -13,7 +13,7 @@ const output = ts.transpileModule(source, {
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports });
 
-const { analyzeEditIntent, extractRequestedSceneNumbers, requestsGeneratedClip } = module.exports;
+const { analyzeEditIntent, extractRequestedSceneNumbers, globalEditTargetSceneNumbers, requestsGeneratedClip } = module.exports;
 const scenes = [1, 2, 3, 4, 5, 6];
 
 assert.deepEqual(Array.from(extractRequestedSceneNumbers("只修改第五个镜头", scenes)), [5]);
@@ -30,6 +30,10 @@ assert.deepEqual(Array.from(extractRequestedSceneNumbers("修改最后一个场�
 assert.equal(requestsGeneratedClip("让第 2 场景动起来"), true);
 assert.equal(requestsGeneratedClip("把全片生成动态镜头"), true);
 assert.equal(requestsGeneratedClip("把第 2 场景标题改短"), false);
+assert.deepEqual(Array.from(globalEditTargetSceneNumbers("把全片改成浅色", scenes)), scenes);
+assert.deepEqual(Array.from(globalEditTargetSceneNumbers("把全片改成浅色，但第 2 场保持不变", scenes)), [1, 3, 4, 5, 6]);
+assert.deepEqual(Array.from(globalEditTargetSceneNumbers("Change every scene except scene 4", scenes)), [1, 2, 3, 5, 6]);
+assert.deepEqual(Array.from(globalEditTargetSceneNumbers("只修改第 3 场景", scenes)), [3]);
 
 assert.deepEqual(
   JSON.parse(JSON.stringify(analyzeEditIntent("把语言都改为中文", scenes))),

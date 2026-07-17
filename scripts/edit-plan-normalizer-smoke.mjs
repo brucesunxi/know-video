@@ -188,6 +188,77 @@ const globalWithExclusion = normalizeEditPlanAgainstScenes({
 assert.deepEqual(Array.from(globalWithExclusion.affectedScenes), [1]);
 assert.equal(globalWithExclusion.changes[0].sceneNumber, 1);
 
+assert.throws(() => normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "把所有场景都改成浅色，但第 2 场保持不变",
+  affectedScenes: [1, 2],
+  changes: [{
+    sceneNumber: 1,
+    status: "updated",
+    before: side,
+    after: { ...side, thumbnailTone: "light", visualPrompt: "Bright first scene" },
+    regenerate: []
+  }, {
+    sceneNumber: 2,
+    status: "updated",
+    before: secondSide,
+    after: { ...secondSide, thumbnailTone: "light", visualPrompt: "Excluded scene must not change" },
+    regenerate: []
+  }]
+}, [scene, secondScene]), /没有覆盖所有目标场景/);
+
+assert.throws(() => normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "把全片改成浅色",
+  affectedScenes: [1],
+  changes: [{
+    sceneNumber: 1,
+    status: "updated",
+    before: side,
+    after: { ...side, thumbnailTone: "light", visualPrompt: "Bright first scene" },
+    regenerate: []
+  }]
+}, [scene, secondScene]), /没有覆盖所有目标场景/);
+
+const completeGlobal = normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "把全片改成浅色",
+  affectedScenes: [1, 2],
+  changes: [{
+    sceneNumber: 1,
+    status: "updated",
+    before: side,
+    after: { ...side, thumbnailTone: "light", visualPrompt: "Bright first scene" },
+    regenerate: []
+  }, {
+    sceneNumber: 2,
+    status: "updated",
+    before: secondSide,
+    after: { ...secondSide, thumbnailTone: "light", visualPrompt: "Bright second scene" },
+    regenerate: []
+  }]
+}, [scene, secondScene]);
+assert.deepEqual(Array.from(completeGlobal.affectedScenes), [1, 2]);
+
+assert.throws(() => normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "把全片语言都改为中文",
+  affectedScenes: [1, 2],
+  changes: [{
+    sceneNumber: 1,
+    status: "updated",
+    before: side,
+    after: { ...side, title: "中文标题", voiceover: "中文旁白", visualPrompt: "中文画面", motionPrompt: "中文运镜" },
+    regenerate: []
+  }, {
+    sceneNumber: 2,
+    status: "updated",
+    before: secondSide,
+    after: { ...secondSide, title: "中文标题", voiceover: "中文旁白", visualPrompt: "Still English", motionPrompt: "中文运镜" },
+    regenerate: []
+  }]
+}, [scene, secondScene]), /未完成的中文字段/);
+
 const unsupportedTopology = normalizeEditPlanAgainstScenes({
   ...basePlan,
   changes: [{

@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { z } from "zod";
-import { analyzeEditIntent, requestsGeneratedClip } from "@/lib/edit-intent";
+import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip } from "@/lib/edit-intent";
 import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import { requestsSceneStructureChange, sceneStructureFromRequest, sceneStructureSummary } from "@/lib/scene-structure-intent";
@@ -88,9 +88,10 @@ function hasChinese(value?: string) {
   return Boolean(value && /\p{Script=Han}/u.test(value));
 }
 
-function validGlobalChinesePayload(payload: EditPlanPayload, version: ProjectVersion) {
+function validGlobalChinesePayload(payload: EditPlanPayload, version: ProjectVersion, request: string) {
   const changes = new Map(payload.changes.map((change) => [change.sceneNumber, change]));
-  return version.scenes.every((scene) => {
+  const targets = new Set(globalEditTargetSceneNumbers(request, version.scenes.map((scene) => scene.sceneNumber)));
+  return version.scenes.filter((scene) => targets.has(scene.sceneNumber)).every((scene) => {
     const change = changes.get(scene.sceneNumber);
     const after = change?.after;
     return after
@@ -102,13 +103,19 @@ function validGlobalChinesePayload(payload: EditPlanPayload, version: ProjectVer
   });
 }
 
-function validGlobalScopePayload(payload: EditPlanPayload, version: ProjectVersion) {
+function validGlobalScopePayload(payload: EditPlanPayload, version: ProjectVersion, request: string) {
   const affected = new Set(payload.affectedScenes);
   const changes = new Map(payload.changes.map((change) => [change.sceneNumber, change]));
-  return version.scenes.every((scene) => (
-    affected.has(scene.sceneNumber)
-    && changes.get(scene.sceneNumber)?.status === "updated"
-  ));
+  const targets = new Set(globalEditTargetSceneNumbers(request, version.scenes.map((scene) => scene.sceneNumber)));
+  return affected.size === targets.size
+    && changes.size === targets.size
+    && payload.changes.length === targets.size
+    && Array.from(targets).every((sceneNumber) => (
+      affected.has(sceneNumber)
+      && changes.get(sceneNumber)?.status === "updated"
+    ))
+    && payload.affectedScenes.every((sceneNumber) => targets.has(sceneNumber))
+    && payload.changes.every((change) => targets.has(change.sceneNumber));
 }
 
 const regenerateOrder = ["image", "audio", "clip", "thumbnail", "caption", "render"] as const;
@@ -164,6 +171,10 @@ function normalizeEditPayload(
     userRequest,
     version.scenes.map((scene) => scene.sceneNumber)
   );
+  const globalTargets = globalEditTargetSceneNumbers(
+    userRequest,
+    version.scenes.map((scene) => scene.sceneNumber)
+  );
   const explicitlyAllowed = options?.resolvedSceneNumbers
     ?? (!globalScopeRequest && intent.explicitSceneNumbers.length > 0
       ? new Set(intent.explicitSceneNumbers)
@@ -209,17 +220,15 @@ function normalizeEditPayload(
         summary: options?.preservePayloadScope
           ? payload.summary
           : preserveVisualAssetsOnLocalization
-            ? `将全部 ${version.scenes.length} 个场景的标题、旁白、字幕和制作描述统一改为中文，并保留现有视觉素材。`
-            : `将全部 ${version.scenes.length} 个场景的标题、旁白、字幕和视觉方案统一改为中文。`,
-        affectedScenes: options?.preservePayloadScope
-          ? changes.map((change) => change.sceneNumber)
-          : version.scenes.map((scene) => scene.sceneNumber),
+            ? `将 ${globalTargets.length} 个目标场景的标题、旁白、字幕和制作描述统一改为中文，并保留现有视觉素材。`
+            : `将 ${globalTargets.length} 个目标场景的标题、旁白、字幕和视觉方案统一改为中文。`,
+        affectedScenes: options?.preservePayloadScope ? changes.map((change) => change.sceneNumber) : globalTargets,
         changes
       }
     : {
         ...payload,
         affectedScenes: globalScopeRequest && !options?.preservePayloadScope
-          ? version.scenes.map((scene) => scene.sceneNumber)
+          ? globalTargets
           : changes.map((change) => change.sceneNumber),
         changes
       };
@@ -618,9 +627,9 @@ export async function createEditPlan(params: {
   const activeTextModel = textModel;
 
   const globalDirective = globalChineseRewrite
-    ? `\n\nThis is a GLOBAL Simplified Chinese localization. You MUST return one updated change for every scene. Every after.title, after.voiceover, after.visualPrompt, and after.motionPrompt must be written in Simplified Chinese. Do not limit translation to scenes that visibly contain text. affectedScenes must contain every scene number. ${preserveVisualAssetsOnLocalization ? "This is translation-only: preserve the existing visual meaning and assets; regenerate must include audio, caption, and render, but must not include image, clip, or thumbnail." : "The request also changes visual direction; regenerate must include image, audio, thumbnail, caption, and render."}`
+    ? `\n\nThis is a GLOBAL Simplified Chinese localization. The exact target scenes are ${globalEditTargetSceneNumbers(params.request, params.version.scenes.map((scene) => scene.sceneNumber)).join(", ")}. You MUST return one updated change for every target scene and no excluded scene. Every after.title, after.voiceover, after.visualPrompt, and after.motionPrompt must be written in Simplified Chinese. affectedScenes must exactly match the target scenes. ${preserveVisualAssetsOnLocalization ? "This is translation-only: preserve the existing visual meaning and assets; regenerate must include audio, caption, and render, but must not include image, clip, or thumbnail." : "The request also changes visual direction; regenerate must include image, audio, thumbnail, caption, and render."}`
     : globalScopeRequest
-      ? `\n\nThis is a GLOBAL edit request. You MUST return one updated change for every scene, preserve each scene's narrative purpose, and include every scene number in affectedScenes.`
+      ? `\n\nThis is a GLOBAL edit request. The exact target scenes are ${globalEditTargetSceneNumbers(params.request, params.version.scenes.map((scene) => scene.sceneNumber)).join(", ")}. You MUST return one updated change for every target scene and no excluded scene, preserve each target scene's narrative purpose, and make affectedScenes exactly match the target scenes.`
       : "";
   const generatedClipDirective = generatedClipRequest
     ? "\n\nThis request asks for generated moving video clips. Preserve title, voiceover, narrationVoice, thumbnailTone, and visualPrompt exactly unless the user explicitly requests another change. You may refine motionPrompt to describe the desired physical movement. regenerate must include clip and render."
@@ -648,16 +657,16 @@ export async function createEditPlan(params: {
 
   try {
     let payload = await requestPayload();
-    if (globalScopeRequest && !validGlobalScopePayload(payload, params.version)) {
+    if (globalScopeRequest && !validGlobalScopePayload(payload, params.version, params.request)) {
       payload = await requestPayload(true);
     }
-    if (globalScopeRequest && !validGlobalScopePayload(payload, params.version)) {
+    if (globalScopeRequest && !validGlobalScopePayload(payload, params.version, params.request)) {
       throw new Error("Global edit plan did not cover every scene");
     }
-    if (globalChineseRewrite && !validGlobalChinesePayload(payload, params.version)) {
+    if (globalChineseRewrite && !validGlobalChinesePayload(payload, params.version, params.request)) {
       payload = await requestPayload(true);
     }
-    if (globalChineseRewrite && !validGlobalChinesePayload(payload, params.version)) {
+    if (globalChineseRewrite && !validGlobalChinesePayload(payload, params.version, params.request)) {
       throw new Error("Global Chinese edit plan did not cover every scene and field");
     }
     const normalized = normalizeEditPayload(
@@ -718,36 +727,58 @@ export async function refineEditPlan(params: {
   if (!textModel) {
     throw new Error("当前方案需要语义改写服务才能继续细化，请稍后重试。");
   }
+  const activeTextModel = textModel;
 
   const available = new Set(params.version.scenes.map((scene) => scene.sceneNumber));
   const combinedRequest = `${params.existingPlan.userRequest}\n补充要求：${params.request}`;
   const combinedIntent = analyzeEditIntent(combinedRequest, Array.from(available));
+  const combinedTargets = globalEditTargetSceneNumbers(combinedRequest, Array.from(available));
+  const refinementDirective = combinedIntent.globalChineseRewrite
+    ? `\n\nThe combined request is a GLOBAL Simplified Chinese localization. The exact target scenes are ${combinedTargets.join(", ")}. Return one updated change for every target scene and no excluded scene. Every after.title, after.voiceover, after.visualPrompt, and after.motionPrompt must be written in Simplified Chinese. affectedScenes must exactly match the targets.`
+    : combinedIntent.global
+      ? `\n\nThe combined request is GLOBAL. The exact target scenes are ${combinedTargets.join(", ")}. Return one updated change for every target scene and no excluded scene. affectedScenes must exactly match the targets.`
+      : "";
   try {
-    const completion = await textModel.client.chat.completions.create({
-      model: textModel.model,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: [
-            "You are a precise AI video edit-plan reviewer.",
-            "Revise the existing proposed plan according to the user's follow-up instruction; do not apply it.",
-            "The follow-up instruction has priority and may add, remove, or alter scene changes.",
-            "Return the complete revised plan, not only the delta from the previous plan.",
-            "Use only existing scene numbers and status updated. Preserve every unrelated field exactly.",
-            "If a scene should remain unchanged, omit it from changes and affectedScenes.",
-            "Keep all user-facing summary text in the user's language.",
-            "Return strict JSON only."
-          ].join(" ")
-        },
-        {
-          role: "user",
-          content: `Current scenes:\n${JSON.stringify(params.version.scenes, null, 2)}\n\nExisting proposed plan:\n${JSON.stringify(params.existingPlan, null, 2)}\n\nFollow-up instruction:\n${params.request}\n\nReturn JSON in this exact shape:\n{ "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
-        }
-      ],
-      temperature: 0.2
-    });
-    const payload = editPlanPayloadSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+    async function requestRefinedPayload(retry = false) {
+      const completion = await activeTextModel.client.chat.completions.create({
+        model: activeTextModel.model,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: [
+              "You are a precise AI video edit-plan reviewer.",
+              "Revise the existing proposed plan according to the user's follow-up instruction; do not apply it.",
+              "The follow-up instruction has priority and may add, remove, or alter scene changes.",
+              "Return the complete revised plan, not only the delta from the previous plan.",
+              "Use only existing scene numbers and status updated. Preserve every unrelated field exactly.",
+              "If a scene should remain unchanged, omit it from changes and affectedScenes.",
+              "Keep all user-facing summary text in the user's language.",
+              "Return strict JSON only."
+            ].join(" ")
+          },
+          {
+            role: "user",
+            content: `Current scenes:\n${JSON.stringify(params.version.scenes, null, 2)}\n\nExisting proposed plan:\n${JSON.stringify(params.existingPlan, null, 2)}\n\nFollow-up instruction:\n${params.request}${refinementDirective}${retry ? "\n\nThe previous response failed scope or language validation. Rebuild the complete plan exactly as directed." : ""}\n\nReturn JSON in this exact shape:\n{ "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
+          }
+        ],
+        temperature: 0.2
+      });
+      return editPlanPayloadSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+    }
+    let payload = await requestRefinedPayload();
+    if (combinedIntent.global && !validGlobalScopePayload(payload, params.version, combinedRequest)) {
+      payload = await requestRefinedPayload(true);
+    }
+    if (combinedIntent.global && !validGlobalScopePayload(payload, params.version, combinedRequest)) {
+      throw new Error("Refined global edit plan did not cover the exact target scenes");
+    }
+    if (combinedIntent.globalChineseRewrite && !validGlobalChinesePayload(payload, params.version, combinedRequest)) {
+      payload = await requestRefinedPayload(true);
+    }
+    if (combinedIntent.globalChineseRewrite && !validGlobalChinesePayload(payload, params.version, combinedRequest)) {
+      throw new Error("Refined Chinese edit plan did not localize every target field");
+    }
     const seen = new Set<number>();
     for (const change of payload.changes) {
       if (!available.has(change.sceneNumber) || seen.has(change.sceneNumber) || change.status !== "updated") {
@@ -767,7 +798,6 @@ export async function refineEditPlan(params: {
       combinedIntent.global,
       combinedIntent.preserveVisualAssetsOnLocalization,
       {
-        resolvedSceneNumbers: new Set(payload.changes.map((change) => change.sceneNumber)),
         preservePayloadScope: true
       }
     );
@@ -776,7 +806,7 @@ export async function refineEditPlan(params: {
     }
 
     return {
-      engine: textModel.engine,
+      engine: activeTextModel.engine,
       editPlan: {
         ...params.existingPlan,
         id: crypto.randomUUID(),
