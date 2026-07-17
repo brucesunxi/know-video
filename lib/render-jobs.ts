@@ -211,6 +211,52 @@ export async function cancelRenderJob(projectId: string, jobId: string) {
   return row ? toRenderJob(row) : undefined;
 }
 
+export async function invalidateReadyRenderJob(jobId: string, reason: string) {
+  if (!hasDatabaseUrl()) return undefined;
+  const sql = getSql();
+  const results = await sql.transaction([
+    sql`select pg_advisory_xact_lock(hashtextextended(${jobId}, 0))`,
+    sql`
+      with target as (
+        select id, output_r2_key
+        from render_jobs
+        where id = ${jobId}
+          and status = 'ready'
+        for update
+      ), invalidated as (
+        update render_jobs
+        set status = 'failed',
+            progress = 0,
+            error = ${reason},
+            output_r2_key = null,
+            updated_at = now()
+        from target
+        where render_jobs.id = target.id
+        returning render_jobs.*, target.output_r2_key as previous_output_r2_key
+      )
+      select * from invalidated
+    `,
+    sql`
+      update project_versions
+      set status = 'draft', render_url = null
+      where id = (select version_id from render_jobs where id = ${jobId} and status = 'failed')
+        and exists (
+          select 1 from projects
+          where projects.id = project_versions.project_id
+            and projects.current_version_id = project_versions.id
+        )
+    `
+  ]);
+  const row = (results[1] as Array<RenderJobRow & { previous_output_r2_key: string | null }>)[0];
+  if (!row) return undefined;
+  if (row.previous_output_r2_key) {
+    await deleteUnreferencedStorageObjects([row.previous_output_r2_key]).catch((error) => {
+      console.error("[render-jobs] Unable to clean invalid render output:", error);
+    });
+  }
+  return toRenderJob(row);
+}
+
 export async function updateRenderJob(input: {
   jobId: string;
   status: RenderJob["status"];

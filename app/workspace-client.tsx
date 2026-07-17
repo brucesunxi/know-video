@@ -3816,13 +3816,6 @@ export function WorkspaceClient({
 
   async function exportVideo() {
     setErrorMessage(undefined);
-    if (project.currentVersion.renderUrl) {
-      const anchor = document.createElement("a");
-      anchor.href = project.currentVersion.renderUrl;
-      anchor.download = `${project.title}.mp4`;
-      anchor.click();
-      return;
-    }
     setExportProgress(5);
     let requestedJobId: string | undefined;
     try {

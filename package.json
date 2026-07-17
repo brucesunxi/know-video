@@ -11,6 +11,8 @@
     "start": "next start",
     "render:smoke": "node scripts/render-smoke.mjs",
     "render:lifecycle:smoke": "node scripts/render-lifecycle-smoke.mjs",
+    "render:callback:smoke": "node scripts/render-callback-smoke.mjs",
+    "render:preflight:smoke": "node scripts/render-preflight-smoke.mjs",
     "edit:intent:smoke": "node scripts/edit-intent-smoke.mjs",
     "edit:plan:smoke": "node scripts/edit-plan-normalizer-smoke.mjs",
     "edit:apply:smoke": "node scripts/edit-application-smoke.mjs",

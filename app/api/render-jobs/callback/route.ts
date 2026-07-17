@@ -2,8 +2,9 @@ import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { getOptionalEnv } from "@/lib/env";
-import { matchesRenderSandbox, renderOutputKey } from "@/lib/render-lifecycle";
+import { isRenderCallbackReplay, matchesRenderSandbox, renderOutputKey, renderOutputMetadataIssue } from "@/lib/render-lifecycle";
 import { getRenderJob, updateRenderJob } from "@/lib/render-jobs";
+import { headR2Object } from "@/lib/r2";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import { stopRenderSandbox } from "@/lib/vercel-renderer";
 
@@ -44,6 +45,18 @@ export async function POST(request: Request) {
   if (!existing) return NextResponse.json({ error: "Render job not found" }, { status: 404 });
   if (payload.outputR2Key && payload.outputR2Key !== renderOutputKey(existing)) {
     return NextResponse.json({ error: "Render output path does not match job" }, { status: 400 });
+  }
+  if (isRenderCallbackReplay(existing, payload)) {
+    return NextResponse.json({ renderJob: existing, replayed: true });
+  }
+  if (payload.status === "ready" && payload.outputR2Key) {
+    try {
+      const issue = renderOutputMetadataIssue(await headR2Object(payload.outputR2Key));
+      if (issue) return NextResponse.json({ error: issue }, { status: 409 });
+    } catch (error) {
+      console.error("[render-callback] Unable to verify uploaded render:", error);
+      return NextResponse.json({ error: "Unable to verify uploaded render" }, { status: 503 });
+    }
   }
   const renderJob = await updateRenderJob(payload);
   if (!renderJob && payload.outputR2Key) {

@@ -1,5 +1,7 @@
 import type { RenderJob } from "@/lib/types";
 
+export const MIN_RENDER_OUTPUT_BYTES = 50_000;
+
 export function renderSandboxName(jobId: string) {
   return `know-video-job-${jobId}`;
 }
@@ -29,4 +31,30 @@ export function versionStatusAfterRenderJob(status: RenderJob["status"]) {
   if (status === "ready") return "ready";
   if (status === "failed" || status === "cancelled") return "draft";
   return undefined;
+}
+
+export function renderOutputMetadataIssue(input: {
+  contentLength?: number;
+  contentType?: string;
+}) {
+  if (!input.contentLength || input.contentLength < MIN_RENDER_OUTPUT_BYTES) {
+    return "渲染文件大小异常。";
+  }
+  if (!input.contentType?.toLowerCase().startsWith("video/mp4")) {
+    return "渲染文件格式不是 MP4。";
+  }
+  return undefined;
+}
+
+export function isRenderCallbackReplay(
+  existing: Pick<RenderJob, "status" | "progress" | "outputR2Key">,
+  incoming: Pick<RenderJob, "status" | "progress" | "outputR2Key">
+) {
+  if (existing.status !== incoming.status) return false;
+  if (incoming.status === "ready") {
+    return Boolean(incoming.outputR2Key && existing.outputR2Key === incoming.outputR2Key);
+  }
+  if (incoming.status === "failed") return true;
+  if (incoming.status === "running") return existing.progress >= incoming.progress;
+  return false;
 }

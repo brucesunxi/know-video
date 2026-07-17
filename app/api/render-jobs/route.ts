@@ -1,8 +1,10 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { loadCurrentProjectForEdit } from "@/lib/project-mutations";
-import { publicRenderError, renderSandboxName } from "@/lib/render-lifecycle";
-import { acquireRenderJob, cancelRenderJob, getRenderJob, listRenderJobs, updateRenderJob } from "@/lib/render-jobs";
+import { publicRenderError, renderOutputMetadataIssue, renderSandboxName } from "@/lib/render-lifecycle";
+import { renderInputAssets, renderInputMetadataIssue } from "@/lib/render-preflight";
+import { acquireRenderJob, cancelRenderJob, getRenderJob, invalidateReadyRenderJob, listRenderJobs, updateRenderJob } from "@/lib/render-jobs";
+import { headR2Object } from "@/lib/r2";
 import { startSandboxRender, stopRenderSandbox } from "@/lib/vercel-renderer";
 
 const requestSchema = z.object({
@@ -24,6 +26,13 @@ function publicRenderJob(renderJob: Awaited<ReturnType<typeof getRenderJob>>) {
 }
 
 export const maxDuration = 300;
+
+function isMissingRenderObject(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+  return candidate.$metadata?.httpStatusCode === 404
+    || [candidate.name, candidate.Code].some((value) => value === "NotFound" || value === "NoSuchKey");
+}
 
 export async function GET(request: Request) {
   const searchParams = new URL(request.url).searchParams;
@@ -91,12 +100,38 @@ export async function POST(request: Request) {
       { status: 409 }
     );
   }
-  const acquired = await acquireRenderJob(body.projectId, body.versionId);
+  let acquired = await acquireRenderJob(body.projectId, body.versionId);
   if (!acquired) {
     return NextResponse.json(
       { error: "视频版本已经发生变化，请刷新后导出当前版本。" },
       { status: 409 }
     );
+  }
+  if (acquired.reused && acquired.renderJob.status === "ready" && acquired.renderJob.outputR2Key) {
+    let invalidReason: string | undefined;
+    try {
+      invalidReason = renderOutputMetadataIssue(await headR2Object(acquired.renderJob.outputR2Key));
+    } catch (error) {
+      if (isMissingRenderObject(error)) {
+        invalidReason = "云端成片文件已经不存在。";
+      } else {
+        console.error("[render-jobs] Unable to verify existing render output:", error);
+        return NextResponse.json(
+          { error: "暂时无法确认云端成片状态，请稍后重试，现有成片不会被删除。" },
+          { status: 503 }
+        );
+      }
+    }
+    if (invalidReason) {
+      await invalidateReadyRenderJob(acquired.renderJob.id, invalidReason);
+      acquired = await acquireRenderJob(body.projectId, body.versionId);
+      if (!acquired) {
+        return NextResponse.json(
+          { error: "旧成片已经失效，但新的导出任务未能创建，请稍后重试。" },
+          { status: 503 }
+        );
+      }
+    }
   }
   if (acquired.reused) {
     return NextResponse.json(
@@ -105,6 +140,40 @@ export async function POST(request: Request) {
     );
   }
   const renderJob = acquired.renderJob;
+  const invalidMedia: Array<{ sceneNumber: number; type: "visual" | "audio"; reason: string }> = [];
+  let transientStorageError = false;
+  await Promise.all(renderInputAssets(project).map(async (input) => {
+    if (!input.asset.r2Key) {
+      invalidMedia.push({ sceneNumber: input.sceneNumber, type: input.role, reason: "没有云端文件" });
+      return;
+    }
+    try {
+      const issue = renderInputMetadataIssue(input, await headR2Object(input.asset.r2Key));
+      if (issue) invalidMedia.push({ sceneNumber: input.sceneNumber, type: input.role, reason: issue });
+    } catch (error) {
+      if (isMissingRenderObject(error)) {
+        invalidMedia.push({ sceneNumber: input.sceneNumber, type: input.role, reason: "云端文件不存在" });
+      } else {
+        transientStorageError = true;
+        console.error(`[render-jobs] Unable to verify scene ${input.sceneNumber} ${input.role}:`, error);
+      }
+    }
+  }));
+  if (transientStorageError) {
+    await updateRenderJob({ jobId: renderJob.id, status: "failed", progress: 0, error: "场景素材检查暂时失败。" });
+    return NextResponse.json(
+      { error: "暂时无法检查场景素材，请稍后重试，当前素材不会被修改。" },
+      { status: 503 }
+    );
+  }
+  if (invalidMedia.length > 0) {
+    await updateRenderJob({ jobId: renderJob.id, status: "failed", progress: 0, error: "场景云端素材已经失效。" });
+    const scenes = Array.from(new Set(invalidMedia.map((item) => item.sceneNumber))).sort((left, right) => left - right);
+    return NextResponse.json({
+      error: `场景 ${scenes.join("、")} 的云端素材已失效，请重新生成这些场景的画面或配音后再导出。`,
+      invalidMedia
+    }, { status: 409 });
+  }
   const running = await updateRenderJob({ jobId: renderJob.id, status: "running", progress: 5 });
   if (!running) {
     await updateRenderJob({

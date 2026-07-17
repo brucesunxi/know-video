@@ -1,9 +1,10 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
+import { postRenderCallback } from "./render-callback.mjs";
 
 const required = [
   "RENDER_INPUT_PATH",
@@ -40,27 +41,16 @@ function withAbsoluteAssetUrls(project, baseUrl) {
   };
 }
 
-async function callback(input, payload) {
-  const response = await fetch(input.callbackUrl, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${process.env.WORKER_SHARED_SECRET}`,
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({ ...payload, sandboxName: input.sandboxName })
-  });
-  if (!response.ok) throw new Error(`Render callback returned ${response.status}`);
-}
-
 async function render(input) {
   const directory = await mkdtemp(join(tmpdir(), "know-video-"));
   const output = join(directory, "output.mp4");
   const project = withAbsoluteAssetUrls(input.project, input.assetBaseUrl);
   let lastProgress = 0;
   let progressCallbacks = Promise.resolve();
+  let uploadedKey;
 
   try {
-    await callback(input, { jobId: input.jobId, status: "running", progress: 10 });
+    await postRenderCallback(input, { jobId: input.jobId, status: "running", progress: 10 });
     const serveUrl = await bundle({
       entryPoint: resolve("video/remotion-root.tsx"),
       webpackOverride: (config) => ({
@@ -71,7 +61,7 @@ async function render(input) {
         }
       })
     });
-    await callback(input, { jobId: input.jobId, status: "running", progress: 18 });
+    await postRenderCallback(input, { jobId: input.jobId, status: "running", progress: 18 });
     const composition = await selectComposition({
       serveUrl,
       id: "KnowVideoFilm",
@@ -89,7 +79,7 @@ async function render(input) {
         const percent = Math.min(94, 20 + Math.floor(progress * 74));
         if (percent >= lastProgress + 5) {
           lastProgress = percent;
-          progressCallbacks = progressCallbacks.then(() => callback(input, {
+          progressCallbacks = progressCallbacks.then(() => postRenderCallback(input, {
             jobId: input.jobId,
             status: "running",
             progress: percent
@@ -100,7 +90,7 @@ async function render(input) {
     });
 
     await progressCallbacks;
-    await callback(input, { jobId: input.jobId, status: "running", progress: 96 });
+    await postRenderCallback(input, { jobId: input.jobId, status: "running", progress: 96 });
     const key = `renders/${project.id}/${project.currentVersion.id}/${input.jobId}.mp4`;
     const outputBody = await readFile(output);
     if (outputBody.length < 50_000) {
@@ -112,15 +102,30 @@ async function render(input) {
       Body: outputBody,
       ContentType: "video/mp4"
     }));
-    await callback(input, {
+    uploadedKey = key;
+    const uploaded = await r2.send(new HeadObjectCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: key
+    }));
+    if (uploaded.ContentLength !== outputBody.length || !uploaded.ContentType?.toLowerCase().startsWith("video/mp4")) {
+      throw new Error(`Uploaded MP4 verification failed (${uploaded.ContentLength ?? 0} bytes, ${uploaded.ContentType ?? "unknown type"})`);
+    }
+    await postRenderCallback(input, {
       jobId: input.jobId,
       status: "ready",
       progress: 100,
       outputR2Key: key
     });
+    uploadedKey = undefined;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Render failed";
-    await callback(input, {
+    if (uploadedKey) {
+      await r2.send(new DeleteObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: uploadedKey
+      })).catch((cleanupError) => console.error("Unable to clean failed render upload", cleanupError));
+    }
+    await postRenderCallback(input, {
       jobId: input.jobId,
       status: "failed",
       progress: 0,
