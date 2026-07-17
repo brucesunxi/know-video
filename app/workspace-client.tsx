@@ -251,6 +251,44 @@ function planRequestTrail(plan: EditPlan) {
   };
 }
 
+function chatInputMode({
+  input,
+  pendingPlan,
+  sceneNumbers,
+  selectedScene
+}: {
+  input: string;
+  pendingPlan?: EditPlan;
+  sceneNumbers: number[];
+  selectedScene: number;
+}) {
+  if (pendingPlan) {
+    return {
+      tone: "working",
+      title: "继续调整待确认方案",
+      detail: "发送后会先修改当前方案，不会直接改动视频。"
+    } as const;
+  }
+
+  const request = input.trim();
+  const candidateIntent = request.length > 1
+    ? candidateEditFromRequest(request, sceneNumbers, selectedScene)
+    : undefined;
+  if (candidateIntent) {
+    return {
+      tone: "ready",
+      title: `生成场景 ${candidateIntent.sceneNumber} 的候选画面`,
+      detail: "只生成候选素材，采用前不会替换当前视频。"
+    } as const;
+  }
+
+  return {
+    tone: "neutral",
+    title: "先生成可确认的修改方案",
+    detail: "发送后会创建改片计划，点击应用才会生成新版本。"
+  } as const;
+}
+
 function productionSettingLabels(settings?: Partial<ProductionSettings>) {
   if (!settings) return [];
   return Object.entries(settings).map(([key, value]) => {
@@ -2272,6 +2310,7 @@ function StructurePlanPreview({ plan, scenes }: { plan: EditPlan; scenes: Scene[
 function ChatPanel({
   messages,
   scenes,
+  selectedScene,
   pendingPlan,
   input,
   isBusy,
@@ -2284,6 +2323,7 @@ function ChatPanel({
 }: {
   messages: ChatMessage[];
   scenes: Scene[];
+  selectedScene: number;
   pendingPlan?: EditPlan;
   input: string;
   isBusy: boolean;
@@ -2307,6 +2347,12 @@ function ChatPanel({
   const applyLabel = pendingPlan ? planApplyLabel(pendingPlan, visualPreviewState) : "应用修改";
   const checklist = pendingPlan ? planReviewChecklist(pendingPlan, visualPreviewState) : [];
   const requestTrail = pendingPlan ? planRequestTrail(pendingPlan) : undefined;
+  const inputMode = chatInputMode({
+    input,
+    pendingPlan,
+    sceneNumbers: scenes.map((scene) => scene.sceneNumber),
+    selectedScene
+  });
 
   useEffect(() => {
     const log = logRef.current;
@@ -2443,6 +2489,13 @@ function ChatPanel({
           </div>
         </div>
       ) : null}
+      <div className={`kv-chat-input-mode ${inputMode.tone}`} role="note" aria-label="发送后会发生什么">
+        <MessageSquareText size={14} />
+        <div>
+          <strong>{inputMode.title}</strong>
+          <span>{inputMode.detail}</span>
+        </div>
+      </div>
       <form className="kv-chat-form" onSubmit={onSubmit}>
         <textarea
           disabled={isBusy}
@@ -3151,6 +3204,7 @@ function StudioScreen({
         onSubmit={onSubmit}
         pendingPlan={pendingPlan}
         scenes={project.currentVersion.scenes}
+        selectedScene={selectedScene}
       />
     </div>
   );
@@ -3580,6 +3634,7 @@ export function WorkspaceClient({
           projectId: project.id,
           versionId: project.currentVersion.id,
           editPlanId: pendingPlan?.id,
+          selectedSceneNumber: selectedScene,
           request
         }),
         signal: AbortSignal.timeout(candidateIntent ? 125_000 : 45_000)

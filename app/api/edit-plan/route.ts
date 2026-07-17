@@ -11,6 +11,7 @@ const requestSchema = z.object({
   request: z.string().trim().min(1).max(4000),
   projectId: z.string().optional(),
   versionId: z.string().optional(),
+  selectedSceneNumber: z.number().int().positive().optional(),
   editPlanId: z.string().min(1).max(200).optional()
 }).refine(
   (value) => Boolean(value.projectId) === Boolean(value.versionId),
@@ -59,7 +60,11 @@ export async function POST(request: Request) {
     );
   }
   const candidateIntent = currentProject
-    ? candidateEditFromRequest(body.request, currentProject.currentVersion.scenes.map((scene) => scene.sceneNumber))
+    ? candidateEditFromRequest(
+        body.request,
+        currentProject.currentVersion.scenes.map((scene) => scene.sceneNumber),
+        body.selectedSceneNumber
+      )
     : undefined;
   if (!existingPlan && currentProject && body.projectId && body.versionId && candidateIntent) {
     try {

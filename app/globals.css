@@ -4224,12 +4224,54 @@ button:disabled {
   color: #fff;
 }
 
+.kv-chat-input-mode {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding: 10px 14px 0;
+  color: #5f6b7a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.kv-chat-input-mode svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.kv-chat-input-mode > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.kv-chat-input-mode strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.kv-chat-input-mode.ready strong,
+.kv-chat-input-mode.ready svg {
+  color: #0f766e;
+}
+
+.kv-chat-input-mode.working strong,
+.kv-chat-input-mode.working svg {
+  color: #b45309;
+}
+
+.kv-chat-input-mode.neutral strong,
+.kv-chat-input-mode.neutral svg {
+  color: #2563eb;
+}
+
 .kv-chat-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 44px;
   gap: 10px;
-  border-top: 1px solid var(--line);
-  padding: 14px;
+  padding: 10px 14px 14px;
 }
 
 .kv-chat-form textarea {

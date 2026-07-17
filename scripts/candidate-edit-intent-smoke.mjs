@@ -36,6 +36,10 @@ assert.deepEqual(
 assert.equal(candidateEditFromRequest("把第 2 场景改得更明亮", scenes), undefined);
 assert.equal(candidateEditFromRequest("给第 2 和第 3 场景都做候选图", scenes), undefined);
 assert.equal(candidateEditFromRequest("做一张更电影感的候选图", scenes), undefined);
+assert.deepEqual(
+  plain(candidateEditFromRequest("给这个场景做一张更电影感的候选图", scenes, 4)),
+  { sceneNumber: 4, instruction: "更电影感" }
+);
 assert.equal(candidateEditFromRequest("给第 9 场景做候选图", scenes), undefined);
 assert.deepEqual(
   plain(candidateEditFromRequest("为最后一个场景生成候选画面", scenes)),
