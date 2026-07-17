@@ -5,6 +5,7 @@ const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.
 const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
 assert.match(workspace, /function exportActionLabel/);
+assert.match(workspace, /function exportReadinessItems/);
 assert.match(workspace, /function renderJobRecoveryAdvice/);
 assert.match(workspace, /建议先重做提示中的异常画面或配音/);
 assert.match(workspace, /建议稍等片刻后重新导出/);
@@ -15,12 +16,21 @@ assert.match(workspace, /缺 \$\{input\.missingVisualCount\} 个画面 · \$\{in
 assert.match(workspace, /缺 \$\{input\.missingVisualCount\} 个画面/);
 assert.match(workspace, /缺 \$\{input\.missingAudioCount\} 段配音/);
 assert.match(workspace, /exportActionLabel\(\{\s*exportProgress,\s*renderUrl: project\.currentVersion\.renderUrl,\s*missingVisualCount: missingSceneNumbers\.length,\s*missingAudioCount: missingAudioSceneNumbers\.length,\s*invalidMediaCount: invalidRenderMedia\.length/s);
+assert.match(workspace, /const exportReady = missingSceneNumbers\.length === 0/);
+assert.match(workspace, /const exportReadiness = exportReady \? exportReadinessItems\(project, filmSettings\) : \[\]/);
+assert.match(workspace, /aria-label="MP4 导出检查通过"/);
+assert.match(workspace, /MP4 导出检查通过/);
+assert.match(workspace, /画面、配音和成片设置已经就绪/);
+assert.match(workspace, /动态镜头/);
+assert.match(workspace, /预览与 MP4 画面完整/);
 assert.match(workspace, /invalidRenderMedia\.length > 0/);
 assert.match(workspace, /const recoveryAdvice = renderJobRecoveryAdvice\(job\)/);
 assert.match(workspace, /role="note"[\s\S]*\{recoveryAdvice\}/);
 assert.match(workspace, /className="kv-export-retry"[\s\S]*重新导出 MP4/);
 assert.doesNotMatch(workspace, /\? "下载 MP4"\s*:\s*"导出 MP4"\}/);
 assert.match(styles, /\.kv-export-recovery/);
+assert.match(styles, /\.kv-export-readiness/);
+assert.match(styles, /\.kv-export-readiness-grid/);
 assert.match(styles, /button\.kv-export-retry/);
 
 console.log("Workspace export action smoke checks passed.");

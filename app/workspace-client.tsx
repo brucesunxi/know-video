@@ -291,6 +291,24 @@ function productionSummaryItems(input: {
   ];
 }
 
+function exportReadinessItems(project: Project, settings: ProductionSettings) {
+  const scenes = project.currentVersion.scenes;
+  const visualCount = scenes.filter(sceneHasVisualAsset).length;
+  const audioCount = scenes.filter(sceneHasAudioAsset).length;
+  const clipCount = scenes.filter(sceneHasMotionAsset).length;
+  return [
+    { label: "画面", value: `${visualCount}/${scenes.length}`, detail: "预览与 MP4 画面完整" },
+    { label: "配音", value: `${audioCount}/${scenes.length}`, detail: "旁白音轨完整" },
+    { label: "动态镜头", value: clipCount > 0 ? `${clipCount} 个` : "智能运镜", detail: clipCount > 0 ? "优先使用视频片段" : "使用图片运镜合成" },
+    ...productionSummaryItems({
+      settings,
+      durationSeconds: project.currentVersion.durationSeconds,
+      logo: productionAsset(project, "logo"),
+      music: productionAsset(project, "music")
+    })
+  ];
+}
+
 function sceneStructureLabel(mutation?: EditPlan["sceneStructure"]) {
   if (!mutation) return undefined;
   if (mutation.operation === "set-duration") return `场景 ${mutation.sceneNumber} 调整为 ${mutation.durationSeconds} 秒`;
@@ -2654,6 +2672,11 @@ function StudioScreen({
   const generationIssue = generationIssueSummary(generationIssues);
   const generationIssueCount = generationIssues.length;
   const filmSettings = productionSettings(project);
+  const exportReady = missingSceneNumbers.length === 0
+    && missingAudioSceneNumbers.length === 0
+    && invalidRenderMedia.length === 0
+    && exportProgress === undefined;
+  const exportReadiness = exportReady ? exportReadinessItems(project, filmSettings) : [];
   useEffect(() => {
     if (!toolMenuOpen) return;
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -2811,6 +2834,26 @@ function StudioScreen({
             ) : null}
           </div>
         </div>
+        {exportReady ? (
+          <section className="kv-export-readiness" role="status" aria-label="MP4 导出检查通过">
+            <div>
+              <Check size={18} />
+              <div>
+                <strong>MP4 导出检查通过</strong>
+                <span>画面、配音和成片设置已经就绪，可以合成当前版本。</span>
+              </div>
+            </div>
+            <div className="kv-export-readiness-grid">
+              {exportReadiness.map((item) => (
+                <span key={`${item.label}-${item.value}`}>
+                  <strong>{item.value}</strong>
+                  <small>{item.label}</small>
+                  <em>{item.detail}</em>
+                </span>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {missingSceneNumbers.length > 0 || missingAudioSceneNumbers.length > 0 ? (
           <section className="kv-media-readiness" role="status" aria-label="成片素材检查">
             <div>

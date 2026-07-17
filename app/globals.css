@@ -1025,6 +1025,82 @@ button:disabled {
   color: #334aa0;
 }
 
+.kv-export-readiness {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #b9e5dc;
+  border-radius: 8px;
+  background: #f3fbf9;
+  padding: 12px;
+  color: #0b6258;
+}
+
+.kv-export-readiness > div:first-child {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.kv-export-readiness > div:first-child svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #087568;
+}
+
+.kv-export-readiness strong {
+  display: block;
+  color: #0b4f48;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.kv-export-readiness span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.kv-export-readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+  gap: 8px;
+}
+
+.kv-export-readiness-grid span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  border: 1px solid #ccebe5;
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px 9px;
+}
+
+.kv-export-readiness-grid strong {
+  overflow: hidden;
+  color: #102033;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv-export-readiness-grid small {
+  color: #667085;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.kv-export-readiness-grid em {
+  overflow: hidden;
+  color: #526171;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .kv-media-readiness > div:first-child {
   display: inline-flex;
   align-items: flex-start;
