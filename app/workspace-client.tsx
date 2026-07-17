@@ -651,6 +651,57 @@ function exportActionLabel(input: {
   return input.renderUrl ? "下载 MP4" : "导出 MP4";
 }
 
+function exportBlockingItems(input: {
+  missingVisualSceneNumbers: number[];
+  missingAudioSceneNumbers: number[];
+  invalidMedia: ReturnType<typeof invalidRenderMediaSummary>;
+}) {
+  return [
+    input.missingVisualSceneNumbers.length > 0
+      ? {
+          key: "missing-visual",
+          tone: "attention",
+          title: "缺少画面素材",
+          detail: `场景 ${sceneNumberListLabel(input.missingVisualSceneNumbers)} 没有可用于预览和导出的图片或视频片段。`,
+          action: "生成缺失画面"
+        }
+      : undefined,
+    input.missingAudioSceneNumbers.length > 0
+      ? {
+          key: "missing-audio",
+          tone: "attention",
+          title: "缺少旁白配音",
+          detail: `场景 ${sceneNumberListLabel(input.missingAudioSceneNumbers)} 没有旁白音轨，导出会静音或不完整。`,
+          action: "生成缺失配音"
+        }
+      : undefined,
+    input.invalidMedia.visual.length > 0
+      ? {
+          key: "invalid-visual",
+          tone: "danger",
+          title: "画面文件异常",
+          detail: `场景 ${sceneNumberListLabel(input.invalidMedia.visual)} 的云端画面文件可能已失效或格式异常。`,
+          action: "重做异常画面"
+        }
+      : undefined,
+    input.invalidMedia.audio.length > 0
+      ? {
+          key: "invalid-audio",
+          tone: "danger",
+          title: "配音文件异常",
+          detail: `场景 ${sceneNumberListLabel(input.invalidMedia.audio)} 的云端音频文件可能已失效或格式异常。`,
+          action: "重做异常配音"
+        }
+      : undefined
+  ].filter(Boolean) as Array<{
+    key: string;
+    tone: "attention" | "danger";
+    title: string;
+    detail: string;
+    action: string;
+  }>;
+}
+
 function sceneVisualAsset(scene: Scene) {
   return scene.assets.find((asset) => ["image", "clip"].includes(asset.type) && asset.url);
 }
@@ -2815,6 +2866,11 @@ function StudioScreen({
     && invalidRenderMedia.length === 0
     && exportProgress === undefined;
   const exportReadiness = exportReady ? exportReadinessItems(project, filmSettings) : [];
+  const exportBlockers = exportBlockingItems({
+    missingVisualSceneNumbers: missingSceneNumbers,
+    missingAudioSceneNumbers,
+    invalidMedia
+  });
   useEffect(() => {
     if (!toolMenuOpen) return;
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -2987,6 +3043,27 @@ function StudioScreen({
                   <strong>{item.value}</strong>
                   <small>{item.label}</small>
                   <em>{item.detail}</em>
+                </span>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {exportBlockers.length > 0 ? (
+          <section className="kv-export-blockers" role="status" aria-label="MP4 导出阻塞清单">
+            <div>
+              <AlertCircle size={18} />
+              <div>
+                <strong>MP4 导出前需要处理 {exportBlockers.length} 项问题</strong>
+                <span>先处理下列场景素材，导出按钮会在检查通过后自动启用。</span>
+              </div>
+            </div>
+            <div className="kv-export-blocker-list">
+              {exportBlockers.map((item) => (
+                <span className={item.tone} key={item.key}>
+                  {item.tone === "danger" ? <AlertCircle size={14} /> : <Clock3 size={14} />}
+                  <strong>{item.title}</strong>
+                  <small>{item.detail}</small>
+                  <em>{item.action}</em>
                 </span>
               ))}
             </div>
