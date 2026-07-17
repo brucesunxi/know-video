@@ -1,6 +1,7 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { demoMessages, demoProject } from "@/lib/mock-data";
 import { editPlanSchema } from "@/lib/edit-plan-schema";
+import { mediaAssetStatus } from "@/lib/generation-resume";
 import { assetUrlForKey } from "@/lib/r2";
 import type { ChatMessage, EditPlan, Project, ProjectListItem, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
 
@@ -209,6 +210,7 @@ async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSn
   const visualCount = scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
   const audioCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio")).length;
   const mediaComplete = scenes.length > 0 && visualCount === scenes.length && audioCount === scenes.length;
+  const assetStatus = mediaAssetStatus(scenes);
   const versionStatus = ["planning", "rendering", "failed"].includes(versionRow.status)
     ? versionRow.status
     : mediaComplete
@@ -228,7 +230,7 @@ async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSn
       durationSeconds: versionRow.duration_seconds,
       renderUrl: versionRow.render_url ?? undefined,
       renderJobId: versionRow.active_render_job_id ?? undefined,
-      assetStatus: visualCount === scenes.length ? "ready" : visualCount > 0 ? "partial" : "failed",
+      assetStatus,
       scenes: scenes.length > 0 ? scenes : demoProject.currentVersion.scenes
     }
   };
