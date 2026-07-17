@@ -4,6 +4,7 @@ import vm from "node:vm";
 import ts from "typescript";
 
 const source = fs.readFileSync(new URL("../lib/edit-application.ts", import.meta.url), "utf8");
+const route = fs.readFileSync(new URL("../app/api/edit-plan/apply/route.ts", import.meta.url), "utf8");
 const output = ts.transpileModule(source, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
@@ -57,5 +58,14 @@ assert.equal(materialized.scenes[0].assets[0].id, "id-5");
 assert.equal(isEditApplicationConflict({ code: "23503" }), true);
 assert.equal(isEditApplicationConflict(new Error("duplicate key value")), true);
 assert.equal(isEditApplicationConflict(new Error("network unavailable")), false);
+
+assert.match(route, /normalizeEditPlanAgainstScenes/);
+assert.match(route, /const normalizedPlan = normalizeEditPlanAgainstScenes\(\s*editPlan,\s*project\.currentVersion\.scenes\s*\)/);
+assert.match(route, /if \(normalizedPlan\.sceneStructure\)/);
+assert.match(route, /normalizedPlan\.changes\.length > 0/);
+assert.match(route, /时间线结构方案暂不支持同时修改场景内容/);
+assert.match(route, /mutation: normalizedPlan\.sceneStructure/);
+assert.match(route, /editPlan: normalizedPlan/);
+assert.match(route, /没有覆盖\|未完成的中文字段\|暂不支持同时修改场景内容/);
 
 console.log("Edit application smoke checks passed.");

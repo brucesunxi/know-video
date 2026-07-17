@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { editPlanObjectSchema } from "@/lib/edit-plan-schema";
+import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import {
   applyPersistedEditPlan,
   loadCurrentProjectForEdit,
@@ -47,14 +48,21 @@ export async function POST(request: Request) {
     if (editPlan.changes.some((change) => !sceneNumbers.has(change.sceneNumber))) {
       return NextResponse.json({ error: "修改方案包含当前版本中不存在的场景。" }, { status: 409 });
     }
-    if (editPlan.sceneStructure) {
-      if (!sceneNumbers.has(editPlan.sceneStructure.sceneNumber)) {
+    const normalizedPlan = normalizeEditPlanAgainstScenes(
+      editPlan,
+      project.currentVersion.scenes
+    );
+    if (normalizedPlan.sceneStructure) {
+      if (!sceneNumbers.has(normalizedPlan.sceneStructure.sceneNumber)) {
         return NextResponse.json({ error: "修改方案包含当前版本中不存在的场景。" }, { status: 409 });
       }
-      if (editPlan.sceneStructure.operation === "move-to" && !sceneNumbers.has(editPlan.sceneStructure.targetSceneNumber)) {
+      if (normalizedPlan.sceneStructure.operation === "move-to" && !sceneNumbers.has(normalizedPlan.sceneStructure.targetSceneNumber)) {
         return NextResponse.json({ error: "修改方案包含当前版本中不存在的目标位置。" }, { status: 409 });
       }
-      const structuralProject = editPlan.productionSettings ? {
+      if (normalizedPlan.changes.length > 0) {
+        return NextResponse.json({ error: "时间线结构方案暂不支持同时修改场景内容，请拆成两次修改。" }, { status: 400 });
+      }
+      const structuralProject = normalizedPlan.productionSettings ? {
         ...project,
         currentVersion: {
           ...project.currentVersion,
@@ -62,15 +70,15 @@ export async function POST(request: Request) {
             ...scene,
             style: {
               ...scene.style,
-              production: { ...scene.style.production, ...editPlan.productionSettings }
+              production: { ...scene.style.production, ...normalizedPlan.productionSettings }
             }
           } : scene)
         }
       } : project;
       const structural = await persistSceneStructureMutation({
         project: structuralProject,
-        mutation: editPlan.sceneStructure,
-        editPlanId: body.direct ? undefined : editPlan.id
+        mutation: normalizedPlan.sceneStructure,
+        editPlanId: body.direct ? undefined : normalizedPlan.id
       });
       return NextResponse.json({
         ...structural,
@@ -79,7 +87,7 @@ export async function POST(request: Request) {
     }
     const result = await applyPersistedEditPlan({
       project,
-      editPlan,
+      editPlan: normalizedPlan,
       direct: body.direct
     });
     return NextResponse.json(result);
@@ -90,7 +98,7 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "应用修改失败。";
     const status = /已经失效|版本已经发生变化/.test(message)
       ? 409
-      : /没有变化|没有覆盖|未完成的中文字段|边界|超出了|必须是|最多支持|至少需要|无法拆分|没有后一场景|合并后|首个场景|转场时长|候选画面/.test(message)
+      : /没有变化|没有覆盖|未完成的中文字段|暂不支持同时修改场景内容|边界|超出了|必须是|最多支持|至少需要|无法拆分|没有后一场景|合并后|首个场景|转场时长|候选画面/.test(message)
         ? 400
         : 502;
     return NextResponse.json({ error: message }, { status });
