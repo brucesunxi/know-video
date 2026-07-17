@@ -545,6 +545,54 @@ function versionRestoreImpactItems(preview: ProjectVersionPreview) {
   return items;
 }
 
+function versionRestoreDeltaItems(preview: ProjectVersionPreview) {
+  const selectedSummary = versionMediaSummary(preview.version);
+  const currentSummary = versionMediaSummary(preview.currentVersion);
+  const selectedOutput = outputReadiness({
+    ...selectedSummary,
+    status: preview.version.status,
+    renderUrl: preview.version.renderUrl,
+    renderJobId: preview.version.renderJobId
+  });
+  const currentOutput = outputReadiness({
+    ...currentSummary,
+    status: preview.currentVersion.status,
+    renderUrl: preview.currentVersion.renderUrl,
+    renderJobId: preview.currentVersion.renderJobId
+  });
+  const sceneDelta = selectedSummary.sceneCount - currentSummary.sceneCount;
+  const visualDelta = selectedSummary.visualCount - currentSummary.visualCount;
+  const audioDelta = selectedSummary.audioCount - currentSummary.audioCount;
+  const outputChanged = selectedOutput.label !== currentOutput.label;
+  const deltaLabel = (value: number, unit: string) => value === 0
+    ? `保持 ${unit}`
+    : value > 0
+      ? `增加 ${value} ${unit}`
+      : `减少 ${Math.abs(value)} ${unit}`;
+  return [
+    {
+      label: "时间线",
+      value: deltaLabel(sceneDelta, "个场景"),
+      tone: sceneDelta === 0 ? "neutral" : "attention"
+    },
+    {
+      label: "画面素材",
+      value: deltaLabel(visualDelta, "个画面"),
+      tone: visualDelta >= 0 ? "ready" : "attention"
+    },
+    {
+      label: "配音素材",
+      value: deltaLabel(audioDelta, "段配音"),
+      tone: audioDelta >= 0 ? "ready" : "attention"
+    },
+    {
+      label: "MP4 状态",
+      value: outputChanged ? `${currentOutput.label} → ${selectedOutput.label}` : `保持 ${selectedOutput.label}`,
+      tone: selectedOutput.tone === "ready" ? "ready" : selectedOutput.tone === "working" ? "working" : "attention"
+    }
+  ] as const;
+}
+
 function fileSizeLabel(value: unknown) {
   const bytes = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(bytes) || bytes <= 0) return "云端素材";
@@ -2684,6 +2732,7 @@ function VersionComparison({ preview }: { preview: ProjectVersionPreview }) {
   const visibleRows = changed.length > 0 ? changed : rows;
   const sameVersion = preview.version.id === preview.currentVersion.id;
   const restoreImpactItems = versionRestoreImpactItems(preview);
+  const restoreDeltaItems = versionRestoreDeltaItems(preview);
 
   return (
     <section className="kv-version-comparison" aria-label="版本场景比较">
@@ -2714,6 +2763,17 @@ function VersionComparison({ preview }: { preview: ProjectVersionPreview }) {
               </span>
             ))}
           </div>
+          <section className="kv-version-restore-delta" aria-label="恢复后变化摘要">
+            <strong>恢复后变化</strong>
+            <div>
+              {restoreDeltaItems.map((item) => (
+                <span className={item.tone} key={item.label}>
+                  <small>{item.label}</small>
+                  <em>{item.value}</em>
+                </span>
+              ))}
+            </div>
+          </section>
         </div>
       ) : null}
       <div className="kv-version-scene-diffs">
