@@ -56,7 +56,7 @@ import {
   narrationVoiceProfiles
 } from "@/lib/voice-profiles";
 import { VIDEO_FPS } from "@/video/config";
-import type { ChatMessage, EditChange, EditPlan, GenerationOptions, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, GenerationOptions, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
@@ -242,6 +242,21 @@ function mediaCompletenessClass(item: { sceneCount: number; visualCount: number;
   return item.sceneCount > 0 && item.visualCount >= item.sceneCount && item.audioCount >= item.sceneCount
     ? "complete"
     : "partial";
+}
+
+function versionMediaSummary(version: ProjectVersion) {
+  return {
+    sceneCount: version.scenes.length,
+    visualCount: version.scenes.filter(sceneHasVisualAsset).length,
+    audioCount: version.scenes.filter(sceneHasAudioAsset).length
+  };
+}
+
+function versionOutputLabel(version: ProjectVersion) {
+  if (version.status === "rendering" || version.renderJobId) return "成片合成中";
+  if (version.renderUrl) return "已有 MP4 成片";
+  const summary = versionMediaSummary(version);
+  return mediaCompletenessClass(summary) === "complete" ? "可重新导出 MP4" : "恢复后需补齐素材";
 }
 
 function fileSizeLabel(value: unknown) {
@@ -2070,6 +2085,8 @@ function VersionSceneSide({ label, scene }: { label: string; scene?: Scene }) {
 
 function VersionComparison({ preview }: { preview: ProjectVersionPreview }) {
   const count = Math.max(preview.version.scenes.length, preview.currentVersion.scenes.length);
+  const selectedSummary = versionMediaSummary(preview.version);
+  const currentSummary = versionMediaSummary(preview.currentVersion);
   const rows = Array.from({ length: count }, (_, index) => {
     const before = preview.version.scenes[index];
     const after = preview.currentVersion.scenes[index];
@@ -2083,9 +2100,19 @@ function VersionComparison({ preview }: { preview: ProjectVersionPreview }) {
   return (
     <section className="kv-version-comparison" aria-label="版本场景比较">
       <div className="kv-version-comparison-summary">
-        <div><span>所选版本</span><strong>{preview.version.scenes.length} 个场景 · {durationLabel(preview.version.durationSeconds)}</strong></div>
+        <div>
+          <span>所选版本</span>
+          <strong>{preview.version.scenes.length} 个场景 · {durationLabel(preview.version.durationSeconds)}</strong>
+          <small className={mediaCompletenessClass(selectedSummary)}>{mediaCompletenessLabel(selectedSummary)}</small>
+          <small>{versionOutputLabel(preview.version)}</small>
+        </div>
         <ArrowRight size={17} />
-        <div><span>当前版本</span><strong>{preview.currentVersion.scenes.length} 个场景 · {durationLabel(preview.currentVersion.durationSeconds)}</strong></div>
+        <div>
+          <span>当前版本</span>
+          <strong>{preview.currentVersion.scenes.length} 个场景 · {durationLabel(preview.currentVersion.durationSeconds)}</strong>
+          <small className={mediaCompletenessClass(currentSummary)}>{mediaCompletenessLabel(currentSummary)}</small>
+          <small>{versionOutputLabel(preview.currentVersion)}</small>
+        </div>
       </div>
       <p>{sameVersion ? "这是当前版本的完整分镜快照。" : preview.changeSummary.description}</p>
       <div className="kv-version-scene-diffs">

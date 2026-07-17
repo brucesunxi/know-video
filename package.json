@@ -49,6 +49,7 @@
     "composition:video-layer:smoke": "node scripts/composition-video-layer-smoke.mjs",
     "version:restore:smoke": "node scripts/version-restore-smoke.mjs",
     "version:diff:smoke": "node scripts/version-diff-smoke.mjs",
+    "version:preview:smoke": "node scripts/version-preview-readiness-smoke.mjs",
     "project:create:smoke": "node scripts/project-creation-smoke.mjs",
     "generation:request:smoke": "node scripts/generation-request-smoke.mjs",
     "generation:session:smoke": "node scripts/generation-session-smoke.mjs",
