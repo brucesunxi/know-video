@@ -354,13 +354,26 @@ export async function persistGeneratedSceneAssets(
 
   const sql = getSql();
   const rows = await sql`
-    select id, scene_number
-    from scenes
-    where version_id = ${versionId}
+    select s.id, s.scene_number
+    from scenes s
+    join project_versions pv on pv.id = s.version_id
+    join projects p on p.id = pv.project_id
+    where s.version_id = ${versionId}
+      and p.current_version_id = ${versionId}
   ` as Array<{ id: string; scene_number: number }>;
+  if (scenes.length > 0 && rows.length === 0) {
+    throw new Error("视频版本已经发生变化，生成的素材未写入旧版本。");
+  }
   const sceneIdByNumber = new Map(rows.map((row) => [row.scene_number, row.id]));
   const selected = options.sceneNumbers ? new Set(options.sceneNumbers) : undefined;
-  const queries = [];
+  const queries = [sql`
+    select p.id
+    from projects p
+    join project_versions pv on pv.id = p.current_version_id
+    where p.current_version_id = ${versionId}
+      and pv.id = ${versionId}
+    for update
+  `];
   const deletionIndexes: number[] = [];
 
   for (const scene of scenes) {
@@ -373,6 +386,12 @@ export async function persistGeneratedSceneAssets(
         update scenes
         set style_json = ${JSON.stringify(scene.style)}
         where id = ${sceneId}
+          and exists (
+            select 1
+            from project_versions pv
+            join projects p on p.id = pv.project_id
+            where pv.id = ${versionId} and p.current_version_id = ${versionId}
+          )
       `);
     }
 
@@ -381,6 +400,12 @@ export async function persistGeneratedSceneAssets(
       queries.push(sql`
         delete from scene_assets
         where scene_id = ${sceneId} and asset_type = 'audio'
+          and exists (
+            select 1
+            from project_versions pv
+            join projects p on p.id = pv.project_id
+            where pv.id = ${versionId} and p.current_version_id = ${versionId}
+          )
         returning r2_key
       `);
     }
@@ -389,6 +414,12 @@ export async function persistGeneratedSceneAssets(
       queries.push(sql`
         delete from scene_assets
         where scene_id = ${sceneId} and asset_type in ('image', 'clip')
+          and exists (
+            select 1
+            from project_versions pv
+            join projects p on p.id = pv.project_id
+            where pv.id = ${versionId} and p.current_version_id = ${versionId}
+          )
         returning r2_key
       `);
     }
@@ -397,6 +428,12 @@ export async function persistGeneratedSceneAssets(
       queries.push(sql`
         delete from scene_assets
         where scene_id = ${sceneId} and asset_type = 'clip'
+          and exists (
+            select 1
+            from project_versions pv
+            join projects p on p.id = pv.project_id
+            where pv.id = ${versionId} and p.current_version_id = ${versionId}
+          )
         returning r2_key
       `);
     }
@@ -408,6 +445,12 @@ export async function persistGeneratedSceneAssets(
         where not exists (
           select 1 from scene_assets where scene_id = ${sceneId} and r2_key = ${asset.r2Key}
         )
+          and exists (
+            select 1
+            from project_versions pv
+            join projects p on p.id = pv.project_id
+            where pv.id = ${versionId} and p.current_version_id = ${versionId}
+          )
       `);
     }
   }
@@ -415,6 +458,9 @@ export async function persistGeneratedSceneAssets(
   const results = queries.length > 0
     ? await sql.transaction(queries)
     : [];
+  if (!((results[0] as Array<{ id: string }> | undefined)?.[0])) {
+    throw new Error("视频版本已经发生变化，生成的素材未写入旧版本。");
+  }
   const replacedKeys = deletionIndexes.flatMap((index) => (
     results[index] as Array<{ r2_key: string }> | undefined
   )?.map((row) => row.r2_key) ?? []);

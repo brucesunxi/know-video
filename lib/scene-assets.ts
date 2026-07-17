@@ -18,9 +18,11 @@ export async function findOwnedScene(input: {
     select s.id
     from scenes s
     join project_versions pv on pv.id = s.version_id
+    join projects p on p.id = pv.project_id
     where s.version_id = ${input.versionId}
       and s.scene_number = ${input.sceneNumber}
       and pv.project_id = ${input.projectId}
+      and p.current_version_id = ${input.versionId}
     limit 1
   ` as Array<{ id: string }>;
   return rows[0]?.id;
@@ -95,13 +97,15 @@ export async function detachSceneAsset(input: {
   if (!hasDatabaseUrl()) return { detached: true, preserveRender: false };
   const rows = await getSql()`
     delete from scene_assets sa
-    using scenes s, project_versions pv
+    using scenes s, project_versions pv, projects p
     where sa.id = ${input.assetId}
       and sa.scene_id = s.id
       and s.version_id = ${input.versionId}
       and s.scene_number = ${input.sceneNumber}
       and pv.id = s.version_id
       and pv.project_id = ${input.projectId}
+      and p.id = pv.project_id
+      and p.current_version_id = ${input.versionId}
     returning sa.id, sa.r2_key, sa.asset_type, sa.metadata_json
   ` as Array<{ id: string; r2_key: string; asset_type: string; metadata_json: Record<string, unknown> | null }>;
   const preserveRender = rows[0]?.asset_type === "thumbnail" && rows[0]?.metadata_json?.candidate === true;
