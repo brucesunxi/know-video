@@ -224,6 +224,12 @@ function compactText(text: string | undefined, fallback: string, maxLength = 72)
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 1)}…` : trimmed;
 }
 
+function sceneNumberListLabel(sceneNumbers: number[]) {
+  if (sceneNumbers.length === 0) return "";
+  const visible = sceneNumbers.slice(0, 6).join("、");
+  return sceneNumbers.length > 6 ? `${visible} 等 ${sceneNumbers.length} 个` : visible;
+}
+
 function fileSizeLabel(value: unknown) {
   const bytes = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(bytes) || bytes <= 0) return "云端素材";
@@ -2234,15 +2240,30 @@ function StudioScreen({
             ) : null}
           </div>
         </div>
-        {missingAudioSceneNumbers.length > 0 ? (
-          <div className="kv-media-warning" role="status">
-            <Mic2 size={17} />
-            <span>还有 {missingAudioSceneNumbers.length} 个场景缺少配音。补齐后才能导出 MP4，避免生成静音或旁白不完整的视频。</span>
-            <button disabled={isBusy} onClick={() => onRegenerateAudio(missingAudioSceneNumbers)} type="button">
-              {isBusy ? <Loader2 className="kv-spin" size={15} /> : <RefreshCcw size={15} />}
-              生成缺失配音
-            </button>
-          </div>
+        {missingSceneNumbers.length > 0 || missingAudioSceneNumbers.length > 0 ? (
+          <section className="kv-media-readiness" role="status" aria-label="成片素材检查">
+            <div>
+              <AlertCircle size={18} />
+              <div>
+                <strong>成片素材还没有补齐</strong>
+                <span>补齐后才能导出 MP4，避免画面缺失、静音或旁白不完整。</span>
+              </div>
+            </div>
+            <div className="kv-media-readiness-actions">
+              {missingSceneNumbers.length > 0 ? (
+                <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers)} type="button">
+                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <ImagePlus size={15} />}
+                  补齐画面：场景 {sceneNumberListLabel(missingSceneNumbers)}
+                </button>
+              ) : null}
+              {missingAudioSceneNumbers.length > 0 ? (
+                <button disabled={isBusy} onClick={() => onRegenerateAudio(missingAudioSceneNumbers)} type="button">
+                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Mic2 size={15} />}
+                  补齐配音：场景 {sceneNumberListLabel(missingAudioSceneNumbers)}
+                </button>
+              ) : null}
+            </div>
+          </section>
         ) : null}
         {versionsOpen ? (
           <section className="kv-version-panel">
