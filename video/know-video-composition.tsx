@@ -68,6 +68,36 @@ function motionValues(scene: Scene, frame: number, durationInFrames: number) {
   return { x, y, scale };
 }
 
+function visualLayerStyle({
+  motion,
+  nativeVideo
+}: {
+  motion: ReturnType<typeof motionValues>;
+  nativeVideo: boolean;
+}): React.CSSProperties {
+  if (nativeVideo) {
+    return {
+      height: "100%",
+      left: 0,
+      objectFit: "cover",
+      position: "absolute",
+      top: 0,
+      transform: "none",
+      width: "100%"
+    };
+  }
+
+  return {
+    height: "106%",
+    left: `${motion.x}%`,
+    objectFit: "cover",
+    position: "absolute",
+    top: `${-3 + motion.y}%`,
+    transform: `scale(${motion.scale})`,
+    width: "106%"
+  };
+}
+
 function transitionStyle(kind: ResolvedSceneTransitionKind, frame: number, transitionFrames: number, active: boolean) {
   if (!active || frame >= transitionFrames) return {};
   const progress = interpolate(frame, [0, transitionFrames], [0, 1], {
@@ -191,29 +221,13 @@ function SceneFrame({
             muted
             playbackRate={playbackRate}
             src={clip}
-            style={{
-              height: "106%",
-              left: `${motion.x}%`,
-              objectFit: "cover",
-              position: "absolute",
-              top: `${-3 + motion.y}%`,
-              transform: `scale(${motion.scale})`,
-              width: "106%"
-            }}
+            style={visualLayerStyle({ motion, nativeVideo: true })}
           />
         </Freeze>
       ) : image ? (
         <Img
           src={image}
-          style={{
-            height: "106%",
-            left: `${motion.x}%`,
-            objectFit: "cover",
-            position: "absolute",
-            top: `${-3 + motion.y}%`,
-            transform: `scale(${motion.scale})`,
-            width: "106%"
-          }}
+          style={visualLayerStyle({ motion, nativeVideo: false })}
         />
       ) : null}
       <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(2,8,18,.16) 0%, rgba(2,8,18,.02) 42%, rgba(2,8,18,.9) 100%)" }} />

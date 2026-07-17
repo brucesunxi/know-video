@@ -45,6 +45,7 @@
     "video:assets:smoke": "node scripts/video-assets-smoke.mjs",
     "video:quality:smoke": "node scripts/video-quality-smoke.mjs",
     "video:selection:smoke": "node scripts/motion-scene-selection-smoke.mjs",
+    "composition:video-layer:smoke": "node scripts/composition-video-layer-smoke.mjs",
     "version:restore:smoke": "node scripts/version-restore-smoke.mjs",
     "version:diff:smoke": "node scripts/version-diff-smoke.mjs",
     "project:create:smoke": "node scripts/project-creation-smoke.mjs",
