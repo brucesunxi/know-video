@@ -4,6 +4,7 @@ export type PlaybackRate = 0.75 | 1 | 1.25 | 1.5;
 export type CaptionStyle = "minimal" | "boxed" | "highlight";
 export type LogoPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type MusicDucking = "off" | "balanced" | "strong";
+export type SceneTransitionKind = "auto" | "cut" | "dissolve" | "push-left" | "push-right" | "zoom" | "wipe";
 
 export type ProductionSettings = {
   captionsEnabled: boolean;
@@ -17,6 +18,7 @@ export type ProductionSettings = {
 
 export type SceneStructureMutation =
   | { operation: "set-duration"; sceneNumber: number; durationSeconds: number }
+  | { operation: "set-transition"; sceneNumber: number; kind: SceneTransitionKind; durationSeconds: number }
   | { operation: "move"; sceneNumber: number; direction: "earlier" | "later" }
   | { operation: "move-to"; sceneNumber: number; targetSceneNumber: number }
   | { operation: "split"; sceneNumber: number }
@@ -54,6 +56,7 @@ export type Scene = {
     mood: string;
     narrationVoice?: NarrationVoice;
     production?: Partial<ProductionSettings>;
+    transition?: { kind: SceneTransitionKind; durationSeconds: number };
   };
   assets: SceneAsset[];
 };

@@ -13,6 +13,7 @@ import {
 import type { Project, Scene } from "@/lib/types";
 import { musicMixEnvelope, type NarrationFrameRange } from "@/lib/audio-mix";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
+import { boundedTransitionFrames, resolvedSceneTransition, type ResolvedSceneTransitionKind } from "@/lib/scene-transitions";
 import { VIDEO_FPS } from "@/video/config";
 
 export type KnowVideoCompositionProps = { project: Project };
@@ -104,22 +105,7 @@ function motionValues(scene: Scene, frame: number, durationInFrames: number) {
   return { x, y, scale };
 }
 
-type TransitionKind = "dissolve" | "push-left" | "push-right" | "zoom" | "wipe";
-
-function transitionKind(scene: Scene): TransitionKind {
-  const direction = scene.motionPrompt.toLowerCase();
-  if (direction.includes("wipe") || direction.includes("遮罩") || direction.includes("擦除")) return "wipe";
-  if (direction.includes("right") || direction.includes("向右")) return "push-right";
-  if (direction.includes("left") || direction.includes("向左")) return "push-left";
-  if (direction.includes("zoom") || direction.includes("push in") || direction.includes("推进") || direction.includes("推近")) return "zoom";
-  return scene.sceneNumber % 4 === 0
-    ? "wipe"
-    : scene.sceneNumber % 3 === 0
-      ? "zoom"
-      : "dissolve";
-}
-
-function transitionStyle(kind: TransitionKind, frame: number, transitionFrames: number, active: boolean) {
+function transitionStyle(kind: ResolvedSceneTransitionKind, frame: number, transitionFrames: number, active: boolean) {
   if (!active || frame >= transitionFrames) return {};
   const progress = interpolate(frame, [0, transitionFrames], [0, 1], {
     extrapolateLeft: "clamp",
@@ -154,9 +140,8 @@ function SceneFrame({
   captionStyle,
   playbackRate,
   contentDurationInFrames,
-  hasTransitionIn,
-  hasTransitionOut,
-  transitionFrames
+  transitionInFrames,
+  transitionOutFrames
 }: {
   scene: Scene;
   projectTitle: string;
@@ -164,19 +149,20 @@ function SceneFrame({
   captionStyle: "minimal" | "boxed" | "highlight";
   playbackRate: number;
   contentDurationInFrames: number;
-  hasTransitionIn: boolean;
-  hasTransitionOut: boolean;
-  transitionFrames: number;
+  transitionInFrames: number;
+  transitionOutFrames: number;
 }) {
   const frame = useCurrentFrame();
   const entrance = spring({ frame, fps: VIDEO_FPS, config: { damping: 18, mass: 0.8 } });
+  const hasTransitionIn = transitionInFrames > 0;
+  const hasTransitionOut = transitionOutFrames > 0;
   const fadeIn = hasTransitionIn
-    ? interpolate(frame, [0, transitionFrames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+    ? interpolate(frame, [0, transitionInFrames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
     : 1;
   const fadeOut = hasTransitionOut
     ? interpolate(
       frame,
-      [contentDurationInFrames, contentDurationInFrames + transitionFrames],
+      [contentDurationInFrames, contentDurationInFrames + transitionOutFrames],
       [1, 0],
       { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
     )
@@ -185,7 +171,7 @@ function SceneFrame({
   const copyFadeOut = hasTransitionOut
     ? interpolate(
       frame,
-      [Math.max(0, contentDurationInFrames - transitionFrames), contentDurationInFrames],
+      [Math.max(0, contentDurationInFrames - transitionOutFrames), contentDurationInFrames],
       [1, 0],
       { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
     )
@@ -193,7 +179,7 @@ function SceneFrame({
   const copyFadeIn = hasTransitionIn
     ? interpolate(
       frame,
-      [Math.round(transitionFrames * 0.45), transitionFrames],
+      [Math.round(transitionInFrames * 0.45), transitionInFrames],
       [0, 1],
       { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
     )
@@ -214,7 +200,7 @@ function SceneFrame({
     [1, 1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
-  const transition = transitionKind(scene);
+  const transition = resolvedSceneTransition(scene).kind;
   const accent = scene.style.palette.find((color) => /^#[0-9a-f]{6}$/i.test(color)) ?? "#22c7b8";
   const clipAsset = scene.assets.find((asset) => asset.type === "clip" && asset.url);
   const clip = clipAsset?.url;
@@ -231,7 +217,7 @@ function SceneFrame({
         backgroundColor: "#08111f",
         opacity: fade,
         overflow: "hidden",
-        ...transitionStyle(transition, frame, transitionFrames, hasTransitionIn)
+        ...transitionStyle(transition, frame, transitionInFrames, hasTransitionIn)
       }}
     >
       {clip ? (
@@ -268,12 +254,12 @@ function SceneFrame({
       <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(2,8,18,.16) 0%, rgba(2,8,18,.02) 42%, rgba(2,8,18,.9) 100%)" }} />
       <AbsoluteFill style={{ background: "linear-gradient(90deg, rgba(2,8,18,.5), transparent 62%)" }} />
       <AbsoluteFill style={{ boxShadow: "inset 0 0 180px rgba(0,0,0,.3)" }} />
-      {hasTransitionIn && frame < transitionFrames ? (
+      {hasTransitionIn && frame < transitionInFrames ? (
         <AbsoluteFill
           style={{
             background: `linear-gradient(90deg, transparent 0%, ${accent}44 48%, transparent 100%)`,
-            opacity: interpolate(frame, [0, transitionFrames], [0.7, 0], { extrapolateRight: "clamp" }),
-            transform: `translateX(${interpolate(frame, [0, transitionFrames], [-35, 35])}%)`
+            opacity: interpolate(frame, [0, transitionInFrames], [0.7, 0], { extrapolateRight: "clamp" }),
+            transform: `translateX(${interpolate(frame, [0, transitionInFrames], [-35, 35])}%)`
           }}
         />
       ) : null}
@@ -348,8 +334,18 @@ function SceneFrame({
 export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
   let from = 0;
   const narrationRanges: NarrationFrameRange[] = [];
-  const transitionFrames = Math.round(VIDEO_FPS * 0.5);
   const settings = productionSettings(project);
+  const sceneFrames = project.currentVersion.scenes.map((scene) => (
+    Math.max(1, Math.round((scene.durationSeconds * VIDEO_FPS) / settings.playbackRate))
+  ));
+  const transitionFrames = project.currentVersion.scenes.map((scene, index) => index === 0
+    ? 0
+    : boundedTransitionFrames({
+      scene,
+      fps: VIDEO_FPS,
+      previousSceneFrames: sceneFrames[index - 1],
+      sceneFrames: sceneFrames[index]
+    }));
   const logo = productionAsset(project, "logo");
   const music = productionAsset(project, "music");
   const logoPosition = {
@@ -362,16 +358,17 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
   return (
     <AbsoluteFill style={{ backgroundColor: "#08111f" }}>
       {project.currentVersion.scenes.map((scene, index) => {
-        const contentDurationInFrames = Math.max(1, Math.round((scene.durationSeconds * VIDEO_FPS) / settings.playbackRate));
+        const contentDurationInFrames = sceneFrames[index];
+        const transitionInFrames = transitionFrames[index];
+        const transitionOutFrames = transitionFrames[index + 1] ?? 0;
         const start = from;
         from += contentDurationInFrames;
         if (scene.assets.some((asset) => asset.type === "audio" && asset.url)) {
           narrationRanges.push({ startFrame: start, endFrame: start + contentDurationInFrames - 1 });
         }
-        const hasTransitionOut = index < project.currentVersion.scenes.length - 1;
         return (
           <Sequence
-            durationInFrames={contentDurationInFrames + (hasTransitionOut ? transitionFrames : 0)}
+            durationInFrames={contentDurationInFrames + transitionOutFrames}
             from={start}
             key={scene.id}
             premountFor={VIDEO_FPS}
@@ -380,12 +377,11 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
               captionsEnabled={settings.captionsEnabled}
               captionStyle={settings.captionStyle}
               contentDurationInFrames={contentDurationInFrames}
-              hasTransitionIn={index > 0}
-              hasTransitionOut={hasTransitionOut}
               projectTitle={project.title}
               playbackRate={settings.playbackRate}
               scene={scene}
-              transitionFrames={transitionFrames}
+              transitionInFrames={transitionInFrames}
+              transitionOutFrames={transitionOutFrames}
             />
           </Sequence>
         );

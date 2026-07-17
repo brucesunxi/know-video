@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "应用修改失败。";
     const status = /已经失效|版本已经发生变化/.test(message)
       ? 409
-      : /没有变化|边界|超出了|必须是|最多支持|至少需要|无法拆分|没有后一场景|合并后/.test(message)
+      : /没有变化|边界|超出了|必须是|最多支持|至少需要|无法拆分|没有后一场景|合并后|首个场景|转场时长/.test(message)
         ? 400
         : 502;
     return NextResponse.json({ error: message }, { status });

@@ -2051,8 +2051,8 @@ button:disabled {
   display: flex;
   min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
-  overflow-x: auto;
   margin: -2px 0 12px;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -2085,6 +2085,41 @@ button:disabled {
   border-radius: 7px;
   background: #fff;
   padding: 1px 4px 1px 9px;
+}
+
+.kv-timeline-controls > .kv-transition-control {
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 1px 4px 1px 8px;
+}
+
+.kv-transition-control select {
+  height: 30px;
+  max-width: 112px;
+  border: 0;
+  border-radius: 5px;
+  outline: 0;
+  background: #eef2f6;
+  padding: 0 24px 0 7px;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.kv-transition-control select:disabled {
+  opacity: 0.48;
+}
+
+.kv-opening-scene-label {
+  border: 1px solid #b9e0db;
+  border-radius: 999px;
+  background: #effaf8;
+  padding: 6px 9px;
+  color: #087568;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .kv-move-to-control select {
@@ -3266,6 +3301,11 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
+  .kv-timeline-controls {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
   .kv-shell {
     grid-template-columns: 1fr;
     padding-bottom: calc(76px + env(safe-area-inset-bottom));

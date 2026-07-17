@@ -77,6 +77,19 @@ export function applySceneStructureMutation(
     if (scenes[index].durationSeconds === mutation.durationSeconds) throw new Error("场景时长没有变化。");
     scenes[index] = { ...scenes[index], durationSeconds: mutation.durationSeconds };
     description = `场景 ${mutation.sceneNumber} 已调整为 ${mutation.durationSeconds} 秒。`;
+  } else if (mutation.operation === "set-transition") {
+    if (mutation.sceneNumber === 1) throw new Error("首个场景没有进入转场，请调整后续场景的转场。");
+    if (!Number.isFinite(mutation.durationSeconds) || mutation.durationSeconds < 0 || mutation.durationSeconds > 1.2) {
+      throw new Error("转场时长必须在 0 到 1.2 秒之间。");
+    }
+    const durationSeconds = mutation.kind === "cut" ? 0 : Math.max(0.2, mutation.durationSeconds);
+    const current = scenes[index].style.transition ?? { kind: "auto" as const, durationSeconds: 0.5 };
+    if (current.kind === mutation.kind && current.durationSeconds === durationSeconds) throw new Error("场景转场没有变化。");
+    scenes[index] = {
+      ...scenes[index],
+      style: { ...scenes[index].style, transition: { kind: mutation.kind, durationSeconds } }
+    };
+    description = `场景 ${mutation.sceneNumber} 的进入转场已更新。`;
   } else if (mutation.operation === "move") {
     const target = mutation.direction === "earlier" ? index - 1 : index + 1;
     if (target < 0 || target >= scenes.length) throw new Error("该场景已经位于时间线边界。");

@@ -51,7 +51,7 @@ import {
   narrationVoiceProfiles
 } from "@/lib/voice-profiles";
 import { VIDEO_FPS } from "@/video/config";
-import type { ChatMessage, EditChange, EditPlan, GenerationOptions, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, GenerationOptions, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
@@ -72,6 +72,15 @@ const promptExamples = [
   "生成一个 30 秒的 AI 视频生成平台产品介绍视频，风格高级、节奏快、适合官网首屏。",
   "做一个关于跨境电商库存管理 SaaS 的解释视频，目标客户是运营负责人。",
   "制作一个教育产品宣传视频，展示老师如何用 AI 快速生成课程内容。"
+];
+const transitionOptions: Array<{ value: SceneTransitionKind; label: string }> = [
+  { value: "auto", label: "自动" },
+  { value: "cut", label: "硬切" },
+  { value: "dissolve", label: "叠化" },
+  { value: "push-left", label: "向左推进" },
+  { value: "push-right", label: "向右推进" },
+  { value: "zoom", label: "缩放" },
+  { value: "wipe", label: "擦除" }
 ];
 
 const baseProgressSteps = [
@@ -142,6 +151,10 @@ function productionSettingLabels(settings?: Partial<ProductionSettings>) {
 function sceneStructureLabel(mutation?: EditPlan["sceneStructure"]) {
   if (!mutation) return undefined;
   if (mutation.operation === "set-duration") return `场景 ${mutation.sceneNumber} 调整为 ${mutation.durationSeconds} 秒`;
+  if (mutation.operation === "set-transition") {
+    const label = transitionOptions.find((option) => option.value === mutation.kind)?.label ?? mutation.kind;
+    return `场景 ${mutation.sceneNumber} 进入转场：${label}${mutation.kind === "cut" ? "" : ` · ${mutation.durationSeconds} 秒`}`;
+  }
   if (mutation.operation === "move") return `场景 ${mutation.sceneNumber} 向${mutation.direction === "earlier" ? "前" : "后"}移动一位`;
   if (mutation.operation === "move-to") return `场景 ${mutation.sceneNumber} 移动到第 ${mutation.targetSceneNumber} 位`;
   if (mutation.operation === "split") return `拆分场景 ${mutation.sceneNumber} 为两个镜头`;
@@ -601,6 +614,8 @@ function Storyboard({
 }) {
   const scene = scenes.find((item) => item.sceneNumber === selectedScene) ?? scenes[0];
   const [duration, setDuration] = useState(scene?.durationSeconds ?? 5);
+  const [transitionKind, setTransitionKind] = useState<SceneTransitionKind>(scene?.style.transition?.kind ?? "auto");
+  const [transitionDuration, setTransitionDuration] = useState(scene?.style.transition?.durationSeconds ?? 0.5);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [draggedSceneNumber, setDraggedSceneNumber] = useState<number>();
   const [dropTargetSceneNumber, setDropTargetSceneNumber] = useState<number>();
@@ -609,8 +624,15 @@ function Storyboard({
 
   useEffect(() => {
     setDuration(scene?.durationSeconds ?? 5);
+    setTransitionKind(scene?.style.transition?.kind ?? "auto");
+    setTransitionDuration(scene?.style.transition?.durationSeconds ?? 0.5);
     setConfirmDelete(false);
-  }, [scene?.id, scene?.durationSeconds]);
+  }, [scene?.id, scene?.durationSeconds, scene?.style.transition?.durationSeconds, scene?.style.transition?.kind]);
+
+  const savedTransitionKind = scene?.style.transition?.kind ?? "auto";
+  const savedTransitionDuration = scene?.style.transition?.durationSeconds ?? 0.5;
+  const transitionChanged = transitionKind !== savedTransitionKind
+    || (transitionKind !== "cut" && transitionDuration !== savedTransitionDuration);
 
   function clearDragState() {
     dragSourceRef.current = undefined;
@@ -701,6 +723,56 @@ function Storyboard({
           >
             <Check size={15} />更新时长
           </button>
+          {scene.sceneNumber > 1 ? (
+            <>
+              <span className="kv-timeline-divider" />
+              <label className="kv-transition-control">
+                <Sparkles size={15} />
+                <span>进入转场</span>
+                <select
+                  aria-label={`场景 ${scene.sceneNumber} 进入转场`}
+                  disabled={isBusy}
+                  onChange={(event) => {
+                    const nextKind = event.target.value as SceneTransitionKind;
+                    setTransitionKind(nextKind);
+                    if (nextKind !== "cut" && transitionDuration < 0.2) setTransitionDuration(0.5);
+                  }}
+                  value={transitionKind}
+                >
+                  {transitionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label className="kv-transition-control">
+                <span>时长</span>
+                <select
+                  aria-label={`场景 ${scene.sceneNumber} 转场时长`}
+                  disabled={isBusy || transitionKind === "cut"}
+                  onChange={(event) => setTransitionDuration(Number(event.target.value))}
+                  value={transitionDuration}
+                >
+                  {![0.25, 0.5, 0.75, 1].includes(transitionDuration) ? (
+                    <option value={transitionDuration}>{transitionDuration} 秒</option>
+                  ) : null}
+                  <option value="0.25">0.25 秒</option>
+                  <option value="0.5">0.5 秒</option>
+                  <option value="0.75">0.75 秒</option>
+                  <option value="1">1 秒</option>
+                </select>
+              </label>
+              <button
+                disabled={isBusy || !transitionChanged}
+                onClick={() => onMutate({
+                  operation: "set-transition",
+                  sceneNumber: scene.sceneNumber,
+                  kind: transitionKind,
+                  durationSeconds: transitionKind === "cut" ? 0 : transitionDuration
+                })}
+                type="button"
+              >
+                <Check size={15} />应用转场
+              </button>
+            </>
+          ) : <span className="kv-opening-scene-label">开场镜头</span>}
           <span className="kv-timeline-divider" />
           <button aria-label="向前移动场景" disabled={isBusy || scene.sceneNumber === 1} onClick={() => onMutate({ operation: "move", sceneNumber: scene.sceneNumber, direction: "earlier" })} title="向前移动" type="button"><ArrowLeft size={16} /></button>
           <button aria-label="向后移动场景" disabled={isBusy || scene.sceneNumber === scenes.length} onClick={() => onMutate({ operation: "move", sceneNumber: scene.sceneNumber, direction: "later" })} title="向后移动" type="button"><ArrowRight size={16} /></button>

@@ -83,6 +83,18 @@ assert.equal(editPlanSchema.safeParse({
 }).success, false);
 assert.equal(editPlanSchema.safeParse({
   ...valid,
+  affectedScenes: [3],
+  changes: [],
+  sceneStructure: { operation: "set-transition", sceneNumber: 3, kind: "dissolve", durationSeconds: 0.75 }
+}).success, true);
+assert.equal(editPlanSchema.safeParse({
+  ...valid,
+  affectedScenes: [3],
+  changes: [],
+  sceneStructure: { operation: "set-transition", sceneNumber: 3, kind: "flash", durationSeconds: 2 }
+}).success, false);
+assert.equal(editPlanSchema.safeParse({
+  ...valid,
   changes: [{ ...valid.changes[0], regenerate: ["unknown"] }]
 }).success, false);
 assert.equal(editPlanSchema.safeParse({

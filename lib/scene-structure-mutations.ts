@@ -38,6 +38,8 @@ export async function persistSceneStructureMutation(input: {
   const persistedScenes = materialized.scenes;
   const operationLabel = input.mutation.operation === "set-duration"
     ? `将场景 ${input.mutation.sceneNumber} 调整为 ${input.mutation.durationSeconds} 秒`
+    : input.mutation.operation === "set-transition"
+      ? `调整场景 ${input.mutation.sceneNumber} 的进入转场`
     : input.mutation.operation === "move"
       ? `将场景 ${input.mutation.sceneNumber} 向${input.mutation.direction === "earlier" ? "前" : "后"}移动`
       : input.mutation.operation === "move-to"

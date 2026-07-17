@@ -59,6 +59,11 @@ const shortened = applySceneStructureMutation(project, { operation: "set-duratio
 assert.equal(shortened.project.currentVersion.durationSeconds, 13);
 assert.equal(shortened.project.currentVersion.scenes[1].durationSeconds, 3);
 
+const transitioned = applySceneStructureMutation(project, { operation: "set-transition", sceneNumber: 2, kind: "dissolve", durationSeconds: 0.75 }, createId);
+assert.deepEqual(plain(transitioned.project.currentVersion.scenes[1].style.transition), { kind: "dissolve", durationSeconds: 0.75 });
+assert.equal(transitioned.project.currentVersion.renderUrl, undefined);
+assert.deepEqual(plain(transitioned.regeneration), { imageSceneNumbers: [], audioSceneNumbers: [], clipSceneNumbers: [] });
+
 const movedTo = applySceneStructureMutation(project, { operation: "move-to", sceneNumber: 1, targetSceneNumber: 3 }, createId);
 assert.deepEqual(plain(movedTo.project.currentVersion.scenes.map((item) => item.title)), ["B", "C", "A"]);
 assert.equal(movedTo.selectedSceneNumber, 3);
@@ -99,6 +104,7 @@ assert.equal(deleted.project.currentVersion.scenes[0].style.production.captionsE
 assert.equal(deleted.project.currentVersion.scenes[0].assets.filter((asset) => ["logo", "music"].includes(asset.type)).length, 2);
 
 assert.throws(() => applySceneStructureMutation(project, { operation: "move", sceneNumber: 1, direction: "earlier" }, createId), /边界/);
+assert.throws(() => applySceneStructureMutation(project, { operation: "set-transition", sceneNumber: 1, kind: "wipe", durationSeconds: 0.5 }, createId), /首个场景/);
 assert.throws(() => applySceneStructureMutation(project, { operation: "move-to", sceneNumber: 2, targetSceneNumber: 2 }, createId), /没有变化/);
 assert.throws(() => applySceneStructureMutation(project, { operation: "move-to", sceneNumber: 2, targetSceneNumber: 9 }, createId), /超出了/);
 assert.throws(() => applySceneStructureMutation(project, { operation: "split", sceneNumber: 2 }, createId), /无法拆分/);

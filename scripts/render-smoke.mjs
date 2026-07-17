@@ -109,7 +109,12 @@ const smokeProject = {
         visualPrompt: "Audio transition verification",
         motionPrompt: "Camera pushes in slowly with foreground parallax",
         durationSeconds: 2,
-        style: { theme: "cinematic", palette: ["#10223d", "#f5c46b"], mood: "flowing" },
+        style: {
+          theme: "cinematic",
+          palette: ["#10223d", "#f5c46b"],
+          mood: "flowing",
+          transition: { kind: "wipe", durationSeconds: 0.75 }
+        },
         assets: [
           { id: "smoke-image-2", type: "image", url: pngDataUrl, r2Key: "smoke/image-2.png" },
           { id: "smoke-audio-2", type: "audio", url: wavDataUrl(2, 520), r2Key: "smoke/audio-2.wav" }
@@ -123,7 +128,12 @@ const smokeProject = {
         visualPrompt: "Final render verification",
         motionPrompt: "A clean wipe reveals the final composition",
         durationSeconds: 2,
-        style: { theme: "cinematic", palette: ["#15152a", "#8fd8ff"], mood: "resolved" },
+        style: {
+          theme: "cinematic",
+          palette: ["#15152a", "#8fd8ff"],
+          mood: "resolved",
+          transition: { kind: "cut", durationSeconds: 0 }
+        },
         assets: [
           { id: "smoke-image-3", type: "image", url: pngDataUrl, r2Key: "smoke/image-3.png" },
           { id: "smoke-audio-3", type: "audio", url: wavDataUrl(2, 620), r2Key: "smoke/audio-3.wav" }
