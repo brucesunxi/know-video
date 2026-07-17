@@ -14,7 +14,7 @@ assert.match(schema, /metadata_json jsonb not null default '\{\}'/);
 assert.match(renderJobs, /metadata_json: unknown/);
 assert.match(renderJobs, /metadata: row\.metadata_json/);
 assert.match(renderJobs, /metadata\?: Record<string, unknown>/);
-assert.match(callback, /Ready callback requires output metadata/);
+assert.doesNotMatch(callback, /Ready callback requires output metadata/);
 assert.match(callback, /quality: z\.literal\("passed"\)/);
 assert.match(worker, /const outputMetadata = await inspectRenderedOutput/);
 assert.match(worker, /metadata: \{\s*quality: "passed"/);

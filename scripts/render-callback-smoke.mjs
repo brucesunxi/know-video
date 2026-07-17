@@ -43,6 +43,19 @@ assert.equal(attempts, 3);
 assert.deepEqual(waits, [750, 1500]);
 
 attempts = 0;
+await postRenderCallback(input, { jobId: "job", status: "ready", progress: 100, outputR2Key: "legacy-render.mp4" }, {
+  fetchImpl: async (_url, options) => {
+    attempts += 1;
+    const body = JSON.parse(options.body);
+    assert.equal(body.metadata, undefined);
+    assert.equal(body.outputR2Key, "legacy-render.mp4");
+    return { ok: true, status: 200, text: async () => "" };
+  },
+  wait: async () => undefined
+});
+assert.equal(attempts, 1);
+
+attempts = 0;
 await assert.rejects(
   postRenderCallback(input, { jobId: "job", status: "running", progress: 40 }, {
     fetchImpl: async () => {

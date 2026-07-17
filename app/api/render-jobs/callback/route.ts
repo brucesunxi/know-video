@@ -32,9 +32,6 @@ const payloadSchema = z.object({
   if (payload.status === "ready" && !payload.outputR2Key) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Ready callback requires outputR2Key" });
   }
-  if (payload.status === "ready" && !payload.metadata) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "Ready callback requires output metadata" });
-  }
   if (payload.status === "failed" && !payload.error) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Failed callback requires error" });
   }
