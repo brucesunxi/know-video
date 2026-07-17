@@ -1087,6 +1087,8 @@ export async function listProjectVersions(projectId: string): Promise<ProjectVer
       durationSeconds: demoProject.currentVersion.durationSeconds,
       renderUrl: demoProject.currentVersion.renderUrl,
       sceneCount: demoProject.currentVersion.scenes.length,
+      visualCount: demoProject.currentVersion.scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length,
+      audioCount: demoProject.currentVersion.scenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio")).length,
       isCurrent: true,
       changeSummary: summarizeVersionChange(demoProject.currentVersion.scenes, null)
     }];
@@ -1175,6 +1177,8 @@ export async function listProjectVersions(projectId: string): Promise<ProjectVer
       durationSeconds: row.duration_seconds,
       renderUrl: row.render_url ?? undefined,
       sceneCount: row.scene_count,
+      visualCount: row.visual_count,
+      audioCount: row.audio_count,
       isCurrent: row.id === row.current_version_id,
       changeSummary: summarizeVersionChange(row.scene_plan_json, row.parent_scene_plan_json)
     };

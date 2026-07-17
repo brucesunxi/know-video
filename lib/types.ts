@@ -90,6 +90,8 @@ export type ProjectVersionSummary = Pick<
 > & {
   label: string;
   sceneCount: number;
+  visualCount: number;
+  audioCount: number;
   isCurrent: boolean;
   changeSummary?: VersionChangeSummary;
 };

@@ -230,12 +230,18 @@ function sceneNumberListLabel(sceneNumbers: number[]) {
   return sceneNumbers.length > 6 ? `${visible} 等 ${sceneNumbers.length} 个` : visible;
 }
 
-function projectMediaLabel(item: ProjectListItem) {
+function mediaCompletenessLabel(item: { sceneCount: number; visualCount: number; audioCount: number }) {
   if (item.sceneCount <= 0) return "还没有分镜";
   const visualReady = item.visualCount >= item.sceneCount;
   const audioReady = item.audioCount >= item.sceneCount;
   if (visualReady && audioReady) return "素材完整，可继续预览或导出";
   return `画面 ${item.visualCount}/${item.sceneCount} · 配音 ${item.audioCount}/${item.sceneCount}`;
+}
+
+function mediaCompletenessClass(item: { sceneCount: number; visualCount: number; audioCount: number }) {
+  return item.sceneCount > 0 && item.visualCount >= item.sceneCount && item.audioCount >= item.sceneCount
+    ? "complete"
+    : "partial";
 }
 
 function fileSizeLabel(value: unknown) {
@@ -515,8 +521,8 @@ function ProjectLibrary({
                     <span className={`kv-project-status ${item.status}`}>{statusLabel[item.status]}</span>
                   </div>
                   <p>{item.sceneCount} 个场景 · {new Date(item.updatedAt).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}</p>
-                  <small className={item.visualCount === item.sceneCount && item.audioCount === item.sceneCount ? "complete" : "partial"}>
-                    {projectMediaLabel(item)}
+                  <small className={mediaCompletenessClass(item)}>
+                    {mediaCompletenessLabel(item)}
                   </small>
                 </div>
               </button>
@@ -2297,6 +2303,7 @@ function StudioScreen({
                     </div>
                     <p className="kv-version-change">{version.changeSummary?.description ?? "版本快照"}</p>
                     <p>{version.sceneCount} 个场景 · {durationLabel(version.durationSeconds)}</p>
+                    <small className={mediaCompletenessClass(version)}>{mediaCompletenessLabel(version)}</small>
                     <time>{new Date(version.createdAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
                     <button disabled={isBusy || versionPreviewLoading} onClick={() => onPreviewVersion(version.id)} type="button">
                       <Eye size={15} />预览比较

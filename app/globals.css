@@ -1825,6 +1825,21 @@ button:disabled {
   font-size: 12px;
 }
 
+.kv-version-list small {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.kv-version-list small.complete {
+  color: #087568;
+}
+
+.kv-version-list small.partial {
+  color: #8a5a05;
+}
+
 .kv-version-list .kv-version-change {
   min-height: 34px;
   color: #344054;

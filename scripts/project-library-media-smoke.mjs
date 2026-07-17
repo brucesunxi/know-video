@@ -11,9 +11,10 @@ assert.match(types, /audioCount: number/);
 assert.match(store, /visualCount: row\.visual_count/);
 assert.match(store, /audioCount: row\.audio_count/);
 assert.match(store, /visualCount: demoProject\.currentVersion\.scenes\.filter/);
-assert.match(workspace, /function projectMediaLabel/);
+assert.match(workspace, /function mediaCompletenessLabel/);
+assert.match(workspace, /function mediaCompletenessClass/);
 assert.match(workspace, /画面 \$\{item\.visualCount\}\/\$\{item\.sceneCount\} · 配音 \$\{item\.audioCount\}\/\$\{item\.sceneCount\}/);
-assert.match(workspace, /className=\{item\.visualCount === item\.sceneCount && item\.audioCount === item\.sceneCount \? "complete" : "partial"\}/);
+assert.match(workspace, /className=\{mediaCompletenessClass\(item\)\}/);
 assert.match(styles, /\.kv-project-card-body small\.complete/);
 assert.match(styles, /\.kv-project-card-body small\.partial/);
 
