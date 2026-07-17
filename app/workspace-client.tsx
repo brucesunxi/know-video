@@ -436,8 +436,17 @@ function decimalSecondsLabel(value: unknown) {
 
 function audioAssetQualityItems(asset: SceneAsset) {
   if (asset.type !== "audio") return [];
-  const actual = decimalSecondsLabel(asset.metadata?.actualDurationSeconds);
-  const target = decimalSecondsLabel(asset.metadata?.targetDurationSeconds);
+  const actualSeconds = typeof asset.metadata?.actualDurationSeconds === "number" ? asset.metadata.actualDurationSeconds : Number(asset.metadata?.actualDurationSeconds);
+  const targetSeconds = typeof asset.metadata?.targetDurationSeconds === "number" ? asset.metadata.targetDurationSeconds : Number(asset.metadata?.targetDurationSeconds);
+  const actual = decimalSecondsLabel(actualSeconds);
+  const target = decimalSecondsLabel(targetSeconds);
+  const timing = Number.isFinite(actualSeconds) && Number.isFinite(targetSeconds) && actualSeconds > 0 && targetSeconds > 0
+    ? actualSeconds > targetSeconds * 1.03
+      ? "旁白偏长"
+      : actualSeconds < targetSeconds * 0.55
+        ? "旁白偏短"
+        : "时长匹配"
+    : "";
   const voice = typeof asset.metadata?.narrationVoice === "string"
     ? narrationVoiceProfile(asset.metadata.narrationVoice as NarrationVoice).label
     : typeof asset.metadata?.voice === "string"
@@ -446,6 +455,7 @@ function audioAssetQualityItems(asset: SceneAsset) {
   const model = typeof asset.metadata?.model === "string" ? asset.metadata.model : undefined;
   return [
     actual && target ? `配音 ${actual} / 场景 ${target}` : actual ? `配音 ${actual}` : "",
+    timing,
     voice ? `音色 ${voice}` : "",
     model ? `来源 ${model}` : ""
   ].filter(Boolean);
