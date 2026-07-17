@@ -367,6 +367,12 @@ function Shell({
   onOpenProjects: () => void;
   onOpenStudio: () => void;
 }) {
+  const appRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    appRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [stage]);
+
   return (
     <main className="kv-shell">
       <aside className="kv-sidebar">
@@ -383,7 +389,7 @@ function Shell({
           </button>
         </nav>
       </aside>
-      <section className="kv-app">
+      <section className="kv-app" ref={appRef}>
         <header className="kv-topbar">
           <div>
             <span className="kv-eyebrow">Know Video 智能视频工作室</span>
