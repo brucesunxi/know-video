@@ -9,9 +9,13 @@ function splitLongCue(text: string) {
     const maxLength = 15;
     if (text.length <= maxLength) return [text];
     const chunks: string[] = [];
-    for (let index = 0; index < text.length; index += maxLength) {
-      chunks.push(text.slice(index, index + maxLength));
+    let rest = text;
+    while (rest.length > maxLength) {
+      const cut = preferredChineseCueBreak(rest, maxLength);
+      chunks.push(rest.slice(0, cut));
+      rest = rest.slice(cut);
     }
+    if (rest) chunks.push(rest);
     return chunks;
   }
 
@@ -22,6 +26,33 @@ function splitLongCue(text: string) {
     chunks.push(words.slice(index, index + 8).join(" "));
   }
   return chunks;
+}
+
+function preferredChineseCueBreak(text: string, maxLength: number) {
+  const windowStart = Math.max(6, Math.floor(maxLength * 0.56));
+  const punctuation = /[，。！？；,.!?;]/u;
+  const badNextStart = /[格性化们]/u;
+  for (let index = maxLength; index >= windowStart; index -= 1) {
+    if (punctuation.test(text[index - 1] ?? "")) return index;
+  }
+
+  const softBefore = /[的了和与及为在从向把被将对就而或、频产]/u;
+  for (let index = windowStart; index <= maxLength; index += 1) {
+    const current = text[index - 1] ?? "";
+    const next = text[index] ?? "";
+    if (softBefore.test(current) && !punctuation.test(next) && !badNextStart.test(next)) return index;
+  }
+
+  const softAfter = /[但并让使需能会可]/u;
+  for (let index = windowStart; index <= maxLength; index += 1) {
+    if (softAfter.test(text[index] ?? "")) return index;
+  }
+
+  for (let index = maxLength; index >= windowStart; index -= 1) {
+    if (!badNextStart.test(text[index] ?? "")) return index;
+  }
+
+  return maxLength;
 }
 
 export function narrationCaptionCues(text: string) {

@@ -17,6 +17,14 @@ assert.deepEqual(
 );
 assert.ok(narrationCaptionCues("这是一个没有标点而且长度明显超过单行字幕限制的中文旁白内容").every((cue) => cue.length <= 15));
 assert.deepEqual(
+  Array.from(narrationCaptionCues("实时生成高质量视频资产支持多风格和自然中文配音")),
+  ["实时生成高质量视频", "资产支持多风格和自然中文配音"]
+);
+assert.deepEqual(
+  Array.from(narrationCaptionCues("系统会根据品牌风格和受众需求快速生成统一视觉")),
+  ["系统会根据品牌风格和", "受众需求快速生成统一视觉"]
+);
+assert.deepEqual(
   Array.from(narrationCaptionCues("Create a polished product video with clear pacing and a confident natural voice.")),
   ["Create a polished product video with clear pacing", "and a confident natural voice."]
 );
