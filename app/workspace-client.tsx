@@ -45,6 +45,7 @@ import { KnowVideoPlayer } from "@/app/video-player";
 import { replacementAssetTypes } from "@/lib/asset-policy";
 import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { editPlanVisualSceneNumbers, planPreviewAsset, removeEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
+import { analyzeEditIntent, globalEditTargetSceneNumbers } from "@/lib/edit-intent";
 import { parsePendingGenerationSession, PENDING_GENERATION_STORAGE_KEY, type PendingGenerationSession } from "@/lib/generation-session";
 import { missingMotionSceneNumbers, missingSceneAssetNumbers, sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
 import { selectMotionCriticalScenes } from "@/lib/motion-scene-selection";
@@ -238,6 +239,61 @@ function planReviewChecklist(plan: EditPlan, visualPreview: { total: number; rea
     { label: "执行任务", value: planAssetWorkLabel(plan), tone: uniqueRegenerate(plan) || plan.sceneStructure ? "working" : "ready" },
     { label: "成片影响", value: planRenderImpactLabel(plan), tone: planRenderImpactLabel(plan).includes("重新导出") ? "attention" : "ready" }
   ] as Array<{ label: string; value: string; tone: "ready" | "working" | "attention" }>;
+}
+
+function planCoverageState(plan: EditPlan, scenes: Scene[]) {
+  const sceneNumbers = scenes.map((scene) => scene.sceneNumber);
+  const intent = analyzeEditIntent(plan.userRequest, sceneNumbers);
+  const changes = Array.from(new Set(plan.changes.map((change) => change.sceneNumber))).sort((left, right) => left - right);
+  const affected = Array.from(new Set(plan.affectedScenes)).sort((left, right) => left - right);
+  const covered = changes.length > 0 ? changes : affected;
+
+  if (intent.global) {
+    const targets = globalEditTargetSceneNumbers(plan.userRequest, sceneNumbers);
+    const targetSet = new Set(targets);
+    const coveredSet = new Set(covered);
+    const missing = targets.filter((sceneNumber) => !coveredSet.has(sceneNumber));
+    const extra = covered.filter((sceneNumber) => !targetSet.has(sceneNumber));
+    if (missing.length > 0 || extra.length > 0) {
+      return {
+        tone: "attention",
+        title: "全局覆盖异常",
+        detail: [
+          missing.length > 0 ? `缺少场景 ${missing.join("、")}` : "",
+          extra.length > 0 ? `多出场景 ${extra.join("、")}` : ""
+        ].filter(Boolean).join("；") || "目标场景与方案不一致"
+      } as const;
+    }
+    return {
+      tone: "ready",
+      title: "全局覆盖已校验",
+      detail: `目标场景 ${targets.join("、")} 已全部包含，应用时会按全片意图逐场景处理。`
+    } as const;
+  }
+
+  if (intent.explicitSceneNumbers.length > 0) {
+    return {
+      tone: "ready",
+      title: "按指定场景执行",
+      detail: `识别到明确目标：场景 ${intent.explicitSceneNumbers.join("、")}；未列出的场景保持不变。`
+    } as const;
+  }
+
+  if (covered.length === 0 && productionSettingLabels(plan.productionSettings).length > 0) {
+    return {
+      tone: "ready",
+      title: "只调整全片设置",
+      detail: "本方案不改动单个场景内容，只更新音乐、字幕、Logo 或播放参数。"
+    } as const;
+  }
+
+  return {
+    tone: "working",
+    title: "按语义范围执行",
+    detail: covered.length > 0
+      ? `当前方案覆盖场景 ${covered.join("、")}；确认前可继续补充范围要求。`
+      : "当前方案没有单独列出场景改动。"
+  } as const;
 }
 
 function planRequestTrail(plan: EditPlan) {
@@ -2347,6 +2403,7 @@ function ChatPanel({
   const applyLabel = pendingPlan ? planApplyLabel(pendingPlan, visualPreviewState) : "应用修改";
   const checklist = pendingPlan ? planReviewChecklist(pendingPlan, visualPreviewState) : [];
   const requestTrail = pendingPlan ? planRequestTrail(pendingPlan) : undefined;
+  const coverageState = pendingPlan ? planCoverageState(pendingPlan, scenes) : undefined;
   const inputMode = chatInputMode({
     input,
     pendingPlan,
@@ -2406,6 +2463,15 @@ function ChatPanel({
                   </span>
                 ))}
               </div>
+              {coverageState ? (
+                <div className={`kv-plan-coverage ${coverageState.tone}`} aria-label="方案覆盖校验">
+                  {coverageState.tone === "attention" ? <AlertCircle size={15} /> : <Check size={15} />}
+                  <div>
+                    <strong>{coverageState.title}</strong>
+                    <span>{coverageState.detail}</span>
+                  </div>
+                </div>
+              ) : null}
             </div>
             {requestTrail ? (
               <div className="kv-plan-request-trail" aria-label="方案对话脉络">

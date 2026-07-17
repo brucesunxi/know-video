@@ -3922,6 +3922,57 @@ button:disabled {
   font-weight: 800;
 }
 
+.kv-plan-coverage {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid #d7ebe8;
+  border-radius: 7px;
+  background: #fff;
+  padding: 9px 10px;
+}
+
+.kv-plan-coverage svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.kv-plan-coverage > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.kv-plan-coverage strong {
+  color: #1f3442;
+  font-size: 12px;
+}
+
+.kv-plan-coverage span {
+  color: #526171;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.kv-plan-coverage.ready svg {
+  color: #087568;
+}
+
+.kv-plan-coverage.working svg {
+  color: #4565d8;
+}
+
+.kv-plan-coverage.attention {
+  border-color: #fed7aa;
+  background: #fff8ed;
+}
+
+.kv-plan-coverage.attention svg,
+.kv-plan-coverage.attention strong {
+  color: #b05d00;
+}
+
 .kv-change-list {
   display: grid;
   gap: 10px;
