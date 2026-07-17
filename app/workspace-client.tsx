@@ -684,6 +684,22 @@ function assetUsageItems(asset: SceneAsset) {
   return [];
 }
 
+function assetStateBadge(asset: SceneAsset) {
+  if (asset.type === "image") {
+    return { label: "当前画面", tone: "active", detail: "预览和 MP4 导出会使用这张画面" } as const;
+  }
+  if (asset.type === "clip") {
+    return { label: "当前动态", tone: "active", detail: "预览和导出优先使用这个视频片段" } as const;
+  }
+  if (asset.type === "audio") {
+    return { label: "当前配音", tone: "active", detail: "导出旁白音轨会使用这段音频" } as const;
+  }
+  if (asset.type === "thumbnail" && asset.metadata?.candidate === true) {
+    return { label: "候选未采用", tone: "candidate", detail: "对比或采用前不会影响当前视频" } as const;
+  }
+  return { label: "辅助素材", tone: "neutral", detail: "不直接改变当前场景预览" } as const;
+}
+
 function renderJobQualityLabel(job: RenderJob) {
   if (job.status !== "ready") return undefined;
   return job.metadata?.quality === "passed" ? "成片质检通过" : "成片已生成";
@@ -2117,6 +2133,7 @@ function SceneAssetsPanel({
         ) : assets.map((asset) => {
           const audioQualityItems = audioAssetQualityItems(asset);
           const usageItems = assetUsageItems(asset);
+          const stateBadge = assetStateBadge(asset);
           return (
             <article key={asset.id}>
               {asset.type === "image" || asset.type === "thumbnail" ? (
@@ -2129,6 +2146,10 @@ function SceneAssetsPanel({
               <div>
                 <strong>{String(asset.metadata?.name ?? (asset.type === "image" ? "当前画面" : asset.type === "thumbnail" ? "候选画面" : asset.type === "clip" ? "视频片段" : "场景配音"))}</strong>
                 <span>{asset.type === "image" ? "使用中" : asset.type === "thumbnail" ? "可对比采用" : asset.type === "clip" ? "视频" : "音频"} · {fileSizeLabel(asset.metadata?.size)}</span>
+                <div className={`kv-asset-state ${stateBadge.tone}`} aria-label="素材采用状态">
+                  <small>{stateBadge.label}</small>
+                  <em>{stateBadge.detail}</em>
+                </div>
                 {usageItems.length > 0 ? (
                   <div className="kv-asset-usage" aria-label="素材用途">
                     {usageItems.map((item) => <small key={item}>{item}</small>)}

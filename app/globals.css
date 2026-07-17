@@ -1735,6 +1735,54 @@ button:disabled {
   font-size: 11px;
 }
 
+.kv-asset-state {
+  display: grid !important;
+  min-width: 0;
+  gap: 2px;
+  border: 1px solid #d7e1ea;
+  border-radius: 7px;
+  background: #fff;
+  padding: 5px 6px;
+}
+
+.kv-asset-state small {
+  color: #344054;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.kv-asset-state em {
+  overflow: hidden;
+  color: #667085;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv-asset-state.active {
+  border-color: #bce9df;
+  background: #effaf7;
+}
+
+.kv-asset-state.active small {
+  color: #087568;
+}
+
+.kv-asset-state.candidate {
+  border-color: #c9defa;
+  background: #f1f7ff;
+}
+
+.kv-asset-state.candidate small {
+  color: #255aa8;
+}
+
+.kv-asset-state.neutral {
+  background: #f8fafc;
+}
+
 .kv-asset-audio-quality {
   display: flex !important;
   flex-wrap: wrap;
