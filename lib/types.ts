@@ -16,6 +16,7 @@ export type ProductionSettings = {
 export type SceneStructureMutation =
   | { operation: "set-duration"; sceneNumber: number; durationSeconds: number }
   | { operation: "move"; sceneNumber: number; direction: "earlier" | "later" }
+  | { operation: "move-to"; sceneNumber: number; targetSceneNumber: number }
   | { operation: "duplicate"; sceneNumber: number }
   | { operation: "delete"; sceneNumber: number };
 

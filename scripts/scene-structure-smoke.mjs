@@ -59,6 +59,11 @@ const shortened = applySceneStructureMutation(project, { operation: "set-duratio
 assert.equal(shortened.project.currentVersion.durationSeconds, 13);
 assert.equal(shortened.project.currentVersion.scenes[1].durationSeconds, 3);
 
+const movedTo = applySceneStructureMutation(project, { operation: "move-to", sceneNumber: 1, targetSceneNumber: 3 }, createId);
+assert.deepEqual(plain(movedTo.project.currentVersion.scenes.map((item) => item.title)), ["B", "C", "A"]);
+assert.equal(movedTo.selectedSceneNumber, 3);
+assert.equal(movedTo.project.currentVersion.scenes[0].style.production.playbackRate, 1.25);
+
 const duplicated = applySceneStructureMutation(project, { operation: "duplicate", sceneNumber: 2 }, createId);
 assert.deepEqual(plain(duplicated.project.currentVersion.scenes.map((item) => item.title)), ["A", "B", "B 副本", "C"]);
 assert.equal(duplicated.selectedSceneNumber, 3);
@@ -70,6 +75,8 @@ assert.equal(deleted.project.currentVersion.scenes[0].style.production.captionsE
 assert.equal(deleted.project.currentVersion.scenes[0].assets.filter((asset) => ["logo", "music"].includes(asset.type)).length, 2);
 
 assert.throws(() => applySceneStructureMutation(project, { operation: "move", sceneNumber: 1, direction: "earlier" }, createId), /边界/);
+assert.throws(() => applySceneStructureMutation(project, { operation: "move-to", sceneNumber: 2, targetSceneNumber: 2 }, createId), /没有变化/);
+assert.throws(() => applySceneStructureMutation(project, { operation: "move-to", sceneNumber: 2, targetSceneNumber: 9 }, createId), /超出了/);
 assert.throws(() => applySceneStructureMutation({ ...project, currentVersion: { ...project.currentVersion, scenes: [project.currentVersion.scenes[0]] } }, { operation: "delete", sceneNumber: 1 }, createId), /至少需要保留/);
 
 console.log("Scene structure smoke checks passed.");

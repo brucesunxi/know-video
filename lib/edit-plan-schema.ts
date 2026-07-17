@@ -4,6 +4,7 @@ const narrationVoiceSchema = z.enum(["male-clear", "male-deep", "female-natural"
 const sceneStructureSchema = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("set-duration"), sceneNumber: z.number().int().positive(), durationSeconds: z.number().int().min(2).max(20) }),
   z.object({ operation: z.literal("move"), sceneNumber: z.number().int().positive(), direction: z.enum(["earlier", "later"]) }),
+  z.object({ operation: z.literal("move-to"), sceneNumber: z.number().int().positive(), targetSceneNumber: z.number().int().positive() }),
   z.object({ operation: z.literal("duplicate"), sceneNumber: z.number().int().positive() }),
   z.object({ operation: z.literal("delete"), sceneNumber: z.number().int().positive() })
 ]);

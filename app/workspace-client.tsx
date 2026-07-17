@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PlayerRef } from "@remotion/player";
 import {
   AlertCircle,
@@ -16,6 +16,7 @@ import {
   FileVideo2,
   Film,
   FolderOpen,
+  GripVertical,
   History,
   Eye,
   ImagePlus,
@@ -129,6 +130,7 @@ function sceneStructureLabel(mutation?: EditPlan["sceneStructure"]) {
   if (!mutation) return undefined;
   if (mutation.operation === "set-duration") return `场景 ${mutation.sceneNumber} 调整为 ${mutation.durationSeconds} 秒`;
   if (mutation.operation === "move") return `场景 ${mutation.sceneNumber} 向${mutation.direction === "earlier" ? "前" : "后"}移动一位`;
+  if (mutation.operation === "move-to") return `场景 ${mutation.sceneNumber} 移动到第 ${mutation.targetSceneNumber} 位`;
   if (mutation.operation === "duplicate") return `复制场景 ${mutation.sceneNumber} 到下一位置`;
   return `删除场景 ${mutation.sceneNumber}`;
 }
@@ -575,11 +577,74 @@ function Storyboard({
   const scene = scenes.find((item) => item.sceneNumber === selectedScene) ?? scenes[0];
   const [duration, setDuration] = useState(scene?.durationSeconds ?? 5);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [draggedSceneNumber, setDraggedSceneNumber] = useState<number>();
+  const [dropTargetSceneNumber, setDropTargetSceneNumber] = useState<number>();
+  const dragSourceRef = useRef<number>();
+  const dragTargetRef = useRef<number>();
 
   useEffect(() => {
     setDuration(scene?.durationSeconds ?? 5);
     setConfirmDelete(false);
   }, [scene?.id, scene?.durationSeconds]);
+
+  function clearDragState() {
+    dragSourceRef.current = undefined;
+    dragTargetRef.current = undefined;
+    setDraggedSceneNumber(undefined);
+    setDropTargetSceneNumber(undefined);
+  }
+
+  function setDragState(sourceSceneNumber: number, targetSceneNumber = sourceSceneNumber) {
+    dragSourceRef.current = sourceSceneNumber;
+    dragTargetRef.current = targetSceneNumber;
+    setDraggedSceneNumber(sourceSceneNumber);
+    setDropTargetSceneNumber(targetSceneNumber);
+  }
+
+  function startDrag(event: DragEvent<HTMLButtonElement>, sceneNumber: number) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(sceneNumber));
+    setDragState(sceneNumber);
+  }
+
+  function dropScene(event: DragEvent<HTMLButtonElement>, targetSceneNumber: number) {
+    event.preventDefault();
+    const sourceSceneNumber = draggedSceneNumber ?? Number(event.dataTransfer.getData("text/plain"));
+    clearDragState();
+    if (!Number.isInteger(sourceSceneNumber) || sourceSceneNumber === targetSceneNumber) return;
+    onMutate({ operation: "move-to", sceneNumber: sourceSceneNumber, targetSceneNumber });
+  }
+
+  function updatePointerTarget(clientX: number, clientY: number) {
+    const target = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>("[data-scene-number]");
+    const sceneNumber = Number(target?.dataset.sceneNumber);
+    if (!Number.isInteger(sceneNumber) || sceneNumber === dragTargetRef.current) return;
+    dragTargetRef.current = sceneNumber;
+    setDropTargetSceneNumber(sceneNumber);
+  }
+
+  function startPointerDrag(event: ReactPointerEvent<HTMLSpanElement>, sceneNumber: number) {
+    if (isBusy) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragState(sceneNumber);
+  }
+
+  function movePointerDrag(event: ReactPointerEvent<HTMLSpanElement>) {
+    if (dragSourceRef.current === undefined) return;
+    event.preventDefault();
+    updatePointerTarget(event.clientX, event.clientY);
+  }
+
+  function finishPointerDrag(event: ReactPointerEvent<HTMLSpanElement>) {
+    const sourceSceneNumber = dragSourceRef.current;
+    const targetSceneNumber = dragTargetRef.current;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    clearDragState();
+    if (sourceSceneNumber === undefined || targetSceneNumber === undefined || sourceSceneNumber === targetSceneNumber) return;
+    onMutate({ operation: "move-to", sceneNumber: sourceSceneNumber, targetSceneNumber });
+  }
 
   return (
     <section className="kv-storyboard">
@@ -614,6 +679,22 @@ function Storyboard({
           <span className="kv-timeline-divider" />
           <button aria-label="向前移动场景" disabled={isBusy || scene.sceneNumber === 1} onClick={() => onMutate({ operation: "move", sceneNumber: scene.sceneNumber, direction: "earlier" })} title="向前移动" type="button"><ArrowLeft size={16} /></button>
           <button aria-label="向后移动场景" disabled={isBusy || scene.sceneNumber === scenes.length} onClick={() => onMutate({ operation: "move", sceneNumber: scene.sceneNumber, direction: "later" })} title="向后移动" type="button"><ArrowRight size={16} /></button>
+          <label className="kv-move-to-control">
+            <span>移到</span>
+            <select
+              aria-label={`场景 ${scene.sceneNumber} 目标位置`}
+              disabled={isBusy}
+              onChange={(event) => {
+                const targetSceneNumber = Number(event.target.value);
+                if (targetSceneNumber !== scene.sceneNumber) {
+                  onMutate({ operation: "move-to", sceneNumber: scene.sceneNumber, targetSceneNumber });
+                }
+              }}
+              value={scene.sceneNumber}
+            >
+              {scenes.map((item) => <option key={item.id} value={item.sceneNumber}>第 {item.sceneNumber} 位</option>)}
+            </select>
+          </label>
           <button aria-label="复制场景" disabled={isBusy || scenes.length >= 20} onClick={() => onMutate({ operation: "duplicate", sceneNumber: scene.sceneNumber })} title="复制场景" type="button"><Copy size={16} /></button>
           {confirmDelete ? (
             <div className="kv-delete-confirm">
@@ -629,11 +710,36 @@ function Storyboard({
       <div className="kv-scene-strip">
         {scenes.map((scene) => (
           <button
-            className={scene.sceneNumber === selectedScene ? "active" : ""}
+            aria-label={`场景 ${scene.sceneNumber} ${scene.title}，拖动可调整顺序`}
+            className={[
+              scene.sceneNumber === selectedScene ? "active" : "",
+              scene.sceneNumber === draggedSceneNumber ? "dragging" : "",
+              scene.sceneNumber === dropTargetSceneNumber && scene.sceneNumber !== draggedSceneNumber ? "drop-target" : ""
+            ].filter(Boolean).join(" ")}
+            draggable={!isBusy}
+            data-scene-number={scene.sceneNumber}
             key={scene.id}
+            onDragEnd={clearDragState}
+            onDragOver={(event) => {
+              if (isBusy || draggedSceneNumber === undefined) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+              setDropTargetSceneNumber(scene.sceneNumber);
+            }}
+            onDragStart={(event) => startDrag(event, scene.sceneNumber)}
+            onDrop={(event) => dropScene(event, scene.sceneNumber)}
             onClick={() => onSelect(scene.sceneNumber)}
             type="button"
           >
+            <span
+              aria-hidden="true"
+              className="kv-drag-handle"
+              onPointerCancel={clearDragState}
+              onPointerDown={(event) => startPointerDrag(event, scene.sceneNumber)}
+              onPointerMove={movePointerDrag}
+              onPointerUp={finishPointerDrag}
+              title="拖动调整顺序"
+            ><GripVertical size={15} /></span>
             {scene.assets.find((asset) => asset.type === "image" && asset.url) ? (
               <span
                 className="kv-scene-thumb"

@@ -28,9 +28,12 @@ const scenes = [1, 2, 3, 4, 5];
 assert.deepEqual(plain(sceneStructureFromRequest("删除第 2 场景", scenes)), { operation: "delete", sceneNumber: 2 });
 assert.deepEqual(plain(sceneStructureFromRequest("复制第 3 个镜头", scenes)), { operation: "duplicate", sceneNumber: 3 });
 assert.deepEqual(plain(sceneStructureFromRequest("把第 4 场景向前移动", scenes)), { operation: "move", sceneNumber: 4, direction: "earlier" });
+assert.deepEqual(plain(sceneStructureFromRequest("把第 2 场景移动到第 5 位", scenes)), { operation: "move-to", sceneNumber: 2, targetSceneNumber: 5 });
+assert.deepEqual(plain(sceneStructureFromRequest("第 4 个镜头移到第 1 个场景", scenes)), { operation: "move-to", sceneNumber: 4, targetSceneNumber: 1 });
 assert.deepEqual(plain(sceneStructureFromRequest("第 1 场景时长改成 6 秒", scenes)), { operation: "set-duration", sceneNumber: 1, durationSeconds: 6 });
 assert.equal(sceneStructureFromRequest("删除一个场景", scenes), undefined);
 assert.equal(requestsSceneStructureChange("删除第 2 场景"), true);
+assert.equal(requestsSceneStructureChange("把第 2 场景移动到第 5 位"), true);
 assert.equal(requestsSceneStructureChange("把第 2 场景改成浅色"), false);
 
 console.log("Scene structure intent smoke checks passed.");

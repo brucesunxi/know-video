@@ -61,6 +61,12 @@ assert.equal(editPlanSchema.safeParse({
   ...valid,
   affectedScenes: [2],
   changes: [],
+  sceneStructure: { operation: "move-to", sceneNumber: 2, targetSceneNumber: 5 }
+}).success, true);
+assert.equal(editPlanSchema.safeParse({
+  ...valid,
+  affectedScenes: [2],
+  changes: [],
   sceneStructure: { operation: "set-duration", sceneNumber: 2, durationSeconds: 30 }
 }).success, false);
 assert.equal(editPlanSchema.safeParse({

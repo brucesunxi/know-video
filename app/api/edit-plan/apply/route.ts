@@ -51,6 +51,9 @@ export async function POST(request: Request) {
       if (!sceneNumbers.has(editPlan.sceneStructure.sceneNumber)) {
         return NextResponse.json({ error: "修改方案包含当前版本中不存在的场景。" }, { status: 409 });
       }
+      if (editPlan.sceneStructure.operation === "move-to" && !sceneNumbers.has(editPlan.sceneStructure.targetSceneNumber)) {
+        return NextResponse.json({ error: "修改方案包含当前版本中不存在的目标位置。" }, { status: 409 });
+      }
       const structuralProject = editPlan.productionSettings ? {
         ...project,
         currentVersion: {

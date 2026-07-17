@@ -34,6 +34,8 @@ export async function persistSceneStructureMutation(input: {
     ? `将场景 ${input.mutation.sceneNumber} 调整为 ${input.mutation.durationSeconds} 秒`
     : input.mutation.operation === "move"
       ? `将场景 ${input.mutation.sceneNumber} 向${input.mutation.direction === "earlier" ? "前" : "后"}移动`
+      : input.mutation.operation === "move-to"
+        ? `将场景 ${input.mutation.sceneNumber} 移动到第 ${input.mutation.targetSceneNumber} 位`
       : input.mutation.operation === "duplicate"
         ? `复制场景 ${input.mutation.sceneNumber}`
         : `删除场景 ${input.mutation.sceneNumber}`;

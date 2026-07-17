@@ -610,6 +610,9 @@ export async function createEditPlan(params: {
         : index === params.version.scenes.length - 1;
       if (atBoundary) throw new Error("该场景已经位于时间线边界。");
     }
+    if (requestedStructure.operation === "move-to" && requestedStructure.sceneNumber === requestedStructure.targetSceneNumber) {
+      throw new Error("场景位置没有变化。");
+    }
     const structureSummary = sceneStructureSummary(requestedStructure);
     return {
       engine: "heuristic",

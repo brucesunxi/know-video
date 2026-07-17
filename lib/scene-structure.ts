@@ -49,6 +49,15 @@ export function applySceneStructureMutation(
     [scenes[index], scenes[target]] = [scenes[target], scenes[index]];
     selectedSceneNumber = target + 1;
     description = `场景已向${mutation.direction === "earlier" ? "前" : "后"}移动一位。`;
+  } else if (mutation.operation === "move-to") {
+    if (!Number.isInteger(mutation.targetSceneNumber) || mutation.targetSceneNumber < 1 || mutation.targetSceneNumber > scenes.length) {
+      throw new Error("目标位置超出了当前时间线范围。");
+    }
+    if (mutation.targetSceneNumber === mutation.sceneNumber) throw new Error("场景位置没有变化。");
+    const [moved] = scenes.splice(index, 1);
+    scenes.splice(mutation.targetSceneNumber - 1, 0, moved);
+    selectedSceneNumber = mutation.targetSceneNumber;
+    description = `场景 ${mutation.sceneNumber} 已移动到第 ${mutation.targetSceneNumber} 位。`;
   } else if (mutation.operation === "duplicate") {
     if (scenes.length >= 20) throw new Error("单个视频最多支持 20 个场景。");
     const source = scenes[index];

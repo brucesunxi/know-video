@@ -2062,6 +2062,26 @@ button:disabled {
   font-weight: 750;
 }
 
+.kv-timeline-controls > .kv-move-to-control {
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 1px 4px 1px 9px;
+}
+
+.kv-move-to-control select {
+  height: 30px;
+  border: 0;
+  border-radius: 5px;
+  outline: 0;
+  background: #eef2f6;
+  padding: 0 24px 0 7px;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .kv-timeline-controls input {
   height: 34px;
   width: 54px;
@@ -2328,6 +2348,41 @@ button:disabled {
   background: #f0fdfa;
   transform: translateY(-2px);
   box-shadow: 0 12px 28px rgba(18, 183, 166, 0.14);
+}
+
+.kv-scene-strip button.dragging {
+  opacity: 0.42;
+  transform: scale(0.98);
+  box-shadow: none;
+}
+
+.kv-scene-strip button.drop-target {
+  border-color: #0d9488;
+  background: #ecfdf8;
+  box-shadow: inset 4px 0 0 #0d9488;
+}
+
+.kv-drag-handle {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.56);
+  border-radius: 6px;
+  background: rgba(8, 17, 29, 0.72);
+  color: #fff !important;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  backdrop-filter: blur(6px);
+}
+
+.kv-scene-strip button:active .kv-drag-handle {
+  cursor: grabbing;
 }
 
 .kv-scene-strip span,
@@ -3302,6 +3357,10 @@ button:disabled {
   .kv-actionbar,
   .kv-tabs {
     width: 100%;
+  }
+
+  .kv-drag-handle {
+    display: none;
   }
 
   .kv-actionbar {

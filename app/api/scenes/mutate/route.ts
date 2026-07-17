@@ -11,6 +11,7 @@ const common = {
 const schema = z.discriminatedUnion("operation", [
   z.object({ ...common, operation: z.literal("set-duration"), durationSeconds: z.number().int().min(2).max(20) }),
   z.object({ ...common, operation: z.literal("move"), direction: z.enum(["earlier", "later"]) }),
+  z.object({ ...common, operation: z.literal("move-to"), targetSceneNumber: z.number().int().positive() }),
   z.object({ ...common, operation: z.literal("duplicate") }),
   z.object({ ...common, operation: z.literal("delete") })
 ]);
@@ -24,6 +25,11 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "时间线调整参数无效。" }, { status: 400 });
     const message = error instanceof Error ? error.message : "时间线调整失败。";
-    return NextResponse.json({ error: message }, { status: /版本已经发生变化/.test(message) ? 409 : 502 });
+    const status = /版本已经发生变化/.test(message)
+      ? 409
+      : /没有变化|边界|超出了|必须是|最多支持|至少需要/.test(message)
+        ? 400
+        : 502;
+    return NextResponse.json({ error: message }, { status });
   }
 }
