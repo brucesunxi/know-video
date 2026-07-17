@@ -2,7 +2,7 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { loadCurrentProjectForEdit } from "@/lib/project-mutations";
 import { publicRenderError, renderOutputMetadataIssue, renderSandboxName } from "@/lib/render-lifecycle";
-import { renderInputAssets, renderInputMetadataIssue } from "@/lib/render-preflight";
+import { renderInputMetadataIssue, renderInputReadiness } from "@/lib/render-preflight";
 import { acquireRenderJob, cancelRenderJob, getRenderJob, invalidateReadyRenderJob, listRenderJobs, updateRenderJob } from "@/lib/render-jobs";
 import { headR2Object } from "@/lib/r2";
 import { startSandboxRender, stopRenderSandbox } from "@/lib/vercel-renderer";
@@ -84,19 +84,10 @@ export async function POST(request: Request) {
       { status: 409 }
     );
   }
-  const missingVisuals = project.currentVersion.scenes
-    .filter((scene) => !scene.assets.some((asset) => asset.type === "image" || asset.type === "clip"))
-    .map((scene) => scene.sceneNumber);
-  const missingAudio = project.currentVersion.scenes
-    .filter((scene) => !scene.assets.some((asset) => asset.type === "audio"))
-    .map((scene) => scene.sceneNumber);
-  if (project.currentVersion.scenes.length === 0 || missingVisuals.length > 0 || missingAudio.length > 0) {
-    const details = [
-      missingVisuals.length > 0 ? `缺少画面的场景：${missingVisuals.join("、")}` : "",
-      missingAudio.length > 0 ? `缺少配音的场景：${missingAudio.join("、")}` : ""
-    ].filter(Boolean).join("；");
+  const readiness = renderInputReadiness(project);
+  if (!readiness.ready) {
     return NextResponse.json(
-      { error: details ? `视频素材尚未完整。${details}。` : "视频还没有可渲染的场景。" },
+      { error: readiness.error ?? "视频素材尚未完整，请补齐画面和配音后再导出。" },
       { status: 409 }
     );
   }
@@ -142,7 +133,7 @@ export async function POST(request: Request) {
   const renderJob = acquired.renderJob;
   const invalidMedia: Array<{ sceneNumber: number; type: "visual" | "audio"; reason: string }> = [];
   let transientStorageError = false;
-  await Promise.all(renderInputAssets(project).map(async (input) => {
+  await Promise.all(readiness.inputs.map(async (input) => {
     if (!input.asset.r2Key) {
       invalidMedia.push({ sceneNumber: input.sceneNumber, type: input.role, reason: "没有云端文件" });
       return;

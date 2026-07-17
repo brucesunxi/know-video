@@ -18,6 +18,34 @@ export function renderInputAssets(project: Project) {
   });
 }
 
+export function renderInputReadiness(project: Project) {
+  const inputs = renderInputAssets(project);
+  const visualScenes = new Set(inputs.filter((input) => input.role === "visual").map((input) => input.sceneNumber));
+  const audioScenes = new Set(inputs.filter((input) => input.role === "audio").map((input) => input.sceneNumber));
+  const missingVisuals = project.currentVersion.scenes
+    .filter((scene) => !visualScenes.has(scene.sceneNumber))
+    .map((scene) => scene.sceneNumber);
+  const missingAudio = project.currentVersion.scenes
+    .filter((scene) => !audioScenes.has(scene.sceneNumber))
+    .map((scene) => scene.sceneNumber);
+  const details = [
+    missingVisuals.length > 0 ? `缺少画面的场景：${missingVisuals.join("、")}` : "",
+    missingAudio.length > 0 ? `缺少配音的场景：${missingAudio.join("、")}` : ""
+  ].filter(Boolean).join("；");
+
+  return {
+    inputs,
+    missingVisuals,
+    missingAudio,
+    ready: project.currentVersion.scenes.length > 0 && missingVisuals.length === 0 && missingAudio.length === 0,
+    error: project.currentVersion.scenes.length === 0
+      ? "视频还没有可渲染的场景。"
+      : details
+        ? `视频素材尚未完整。${details}。`
+        : undefined
+  };
+}
+
 export function renderInputMetadataIssue(
   input: RenderInputAsset,
   metadata: { contentLength?: number; contentType?: string }
