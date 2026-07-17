@@ -30,10 +30,16 @@ assert.deepEqual(plain(sceneStructureFromRequest("复制第 3 个镜头", scenes
 assert.deepEqual(plain(sceneStructureFromRequest("把第 4 场景向前移动", scenes)), { operation: "move", sceneNumber: 4, direction: "earlier" });
 assert.deepEqual(plain(sceneStructureFromRequest("把第 2 场景移动到第 5 位", scenes)), { operation: "move-to", sceneNumber: 2, targetSceneNumber: 5 });
 assert.deepEqual(plain(sceneStructureFromRequest("第 4 个镜头移到第 1 个场景", scenes)), { operation: "move-to", sceneNumber: 4, targetSceneNumber: 1 });
+assert.deepEqual(plain(sceneStructureFromRequest("把第 2 场景拆分成两个镜头", scenes)), { operation: "split", sceneNumber: 2 });
+assert.deepEqual(plain(sceneStructureFromRequest("合并第 2 和第 3 场景", scenes)), { operation: "merge-next", sceneNumber: 2 });
+assert.deepEqual(plain(sceneStructureFromRequest("把第 4 场景和后一场景合并", scenes)), { operation: "merge-next", sceneNumber: 4 });
+assert.equal(sceneStructureFromRequest("合并第 2 和第 4 场景", scenes), undefined);
 assert.deepEqual(plain(sceneStructureFromRequest("第 1 场景时长改成 6 秒", scenes)), { operation: "set-duration", sceneNumber: 1, durationSeconds: 6 });
 assert.equal(sceneStructureFromRequest("删除一个场景", scenes), undefined);
 assert.equal(requestsSceneStructureChange("删除第 2 场景"), true);
 assert.equal(requestsSceneStructureChange("把第 2 场景移动到第 5 位"), true);
+assert.equal(requestsSceneStructureChange("把第 2 场景拆成两个镜头"), true);
+assert.equal(requestsSceneStructureChange("合并第 2 和第 3 场景"), true);
 assert.equal(requestsSceneStructureChange("把第 2 场景改成浅色"), false);
 
 console.log("Scene structure intent smoke checks passed.");

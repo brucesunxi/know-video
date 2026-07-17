@@ -8,13 +8,19 @@ export async function persistSceneStructureMutation(input: {
   project: Project;
   mutation: SceneStructureMutation;
   editPlanId?: string;
-}): Promise<{ project: Project; message: ChatMessage; selectedSceneNumber: number }> {
+}): Promise<{
+  project: Project;
+  message: ChatMessage;
+  selectedSceneNumber: number;
+  regeneration: { imageSceneNumbers: number[]; audioSceneNumbers: number[]; clipSceneNumbers: number[] };
+}> {
   const result = applySceneStructureMutation(input.project, input.mutation);
   const content = `${result.description} 已保存为可恢复的新版本。`;
   if (!canPersist()) {
     return {
       project: result.project,
       selectedSceneNumber: result.selectedSceneNumber,
+      regeneration: result.regeneration,
       message: {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -36,6 +42,10 @@ export async function persistSceneStructureMutation(input: {
       ? `将场景 ${input.mutation.sceneNumber} 向${input.mutation.direction === "earlier" ? "前" : "后"}移动`
       : input.mutation.operation === "move-to"
         ? `将场景 ${input.mutation.sceneNumber} 移动到第 ${input.mutation.targetSceneNumber} 位`
+      : input.mutation.operation === "split"
+        ? `拆分场景 ${input.mutation.sceneNumber}`
+      : input.mutation.operation === "merge-next"
+        ? `合并场景 ${input.mutation.sceneNumber} 与后一场景`
       : input.mutation.operation === "duplicate"
         ? `复制场景 ${input.mutation.sceneNumber}`
         : `删除场景 ${input.mutation.sceneNumber}`;
@@ -120,6 +130,7 @@ export async function persistSceneStructureMutation(input: {
 
   return {
     selectedSceneNumber: result.selectedSceneNumber,
+    regeneration: result.regeneration,
     project: {
       ...result.project,
       currentVersion: {

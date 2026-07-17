@@ -10,6 +10,7 @@ This project is the first implementation pass for a Knowlify-style workflow:
 - Produce an `edit_plan` with scene-level before/after diffs
 - Confirm the plan
 - Regenerate only affected scene assets
+- Split, merge, duplicate, delete, resize, and reorder scenes while preserving version history
 - Save every result as a version
 
 ## Stack

@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Clapperboard,
   Clock3,
+  Combine,
   Copy,
   Download,
   FileVideo2,
@@ -30,6 +31,7 @@ import {
   Plus,
   RefreshCcw,
   RotateCcw,
+  Scissors,
   Search,
   Send,
   SlidersHorizontal,
@@ -41,7 +43,7 @@ import {
 import { KnowVideoPlayer } from "@/app/video-player";
 import { replacementAssetTypes } from "@/lib/asset-policy";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
-import type { SceneStructureMutation } from "@/lib/scene-structure";
+import { sceneSplitPreview, type SceneStructureMutation } from "@/lib/scene-structure";
 import {
   DEFAULT_NARRATION_VOICE,
   narrationVoiceProfile,
@@ -106,7 +108,10 @@ function renderJobTime(job: RenderJob) {
 }
 
 function uniqueRegenerate(plan: EditPlan) {
-  return Array.from(new Set(plan.changes.flatMap((change) => change.regenerate)))
+  const structural = plan.sceneStructure?.operation === "split" || plan.sceneStructure?.operation === "merge-next"
+    ? ["image", "audio", "thumbnail", "caption", "render"] as SceneAsset["type"][]
+    : [];
+  return Array.from(new Set([...plan.changes.flatMap((change) => change.regenerate), ...structural]))
     .map(assetTypeLabel)
     .join("、");
 }
@@ -131,6 +136,8 @@ function sceneStructureLabel(mutation?: EditPlan["sceneStructure"]) {
   if (mutation.operation === "set-duration") return `场景 ${mutation.sceneNumber} 调整为 ${mutation.durationSeconds} 秒`;
   if (mutation.operation === "move") return `场景 ${mutation.sceneNumber} 向${mutation.direction === "earlier" ? "前" : "后"}移动一位`;
   if (mutation.operation === "move-to") return `场景 ${mutation.sceneNumber} 移动到第 ${mutation.targetSceneNumber} 位`;
+  if (mutation.operation === "split") return `拆分场景 ${mutation.sceneNumber} 为两个镜头`;
+  if (mutation.operation === "merge-next") return `合并场景 ${mutation.sceneNumber} 与后一场景`;
   if (mutation.operation === "duplicate") return `复制场景 ${mutation.sceneNumber} 到下一位置`;
   return `删除场景 ${mutation.sceneNumber}`;
 }
@@ -695,6 +702,20 @@ function Storyboard({
               {scenes.map((item) => <option key={item.id} value={item.sceneNumber}>第 {item.sceneNumber} 位</option>)}
             </select>
           </label>
+          <button
+            aria-label="拆分当前场景"
+            disabled={isBusy || scenes.length >= 20 || scene.durationSeconds < 4 || scene.voiceover.trim().length < 8}
+            onClick={() => onMutate({ operation: "split", sceneNumber: scene.sceneNumber })}
+            title="按旁白拆分为两个镜头"
+            type="button"
+          ><Scissors size={16} /></button>
+          <button
+            aria-label="与后一场景合并"
+            disabled={isBusy || scene.sceneNumber === scenes.length || scene.durationSeconds + (scenes[scene.sceneNumber]?.durationSeconds ?? 0) > 20}
+            onClick={() => onMutate({ operation: "merge-next", sceneNumber: scene.sceneNumber })}
+            title="与后一场景合并"
+            type="button"
+          ><Combine size={16} /></button>
           <button aria-label="复制场景" disabled={isBusy || scenes.length >= 20} onClick={() => onMutate({ operation: "duplicate", sceneNumber: scene.sceneNumber })} title="复制场景" type="button"><Copy size={16} /></button>
           {confirmDelete ? (
             <div className="kv-delete-confirm">
@@ -1223,6 +1244,77 @@ function ChangeCard({ change, scene }: { change: EditChange; scene?: Scene }) {
   );
 }
 
+function StructureSceneCard({
+  scene,
+  title,
+  durationSeconds,
+  willRegenerate = false
+}: {
+  scene?: Scene;
+  title: string;
+  durationSeconds: number;
+  willRegenerate?: boolean;
+}) {
+  const image = !willRegenerate ? scene?.assets.find((asset) => asset.type === "image" && asset.url) : undefined;
+  return (
+    <div
+      className={`kv-structure-scene${image ? " has-image" : ""}${willRegenerate ? " regenerating" : ""}`}
+      style={image ? { backgroundImage: `url("${image.url}")` } : undefined}
+    >
+      {willRegenerate ? <ImagePlus size={16} /> : null}
+      <strong>{title}</strong>
+      <span>{durationSeconds} 秒{willRegenerate ? " · 更新画面与配音" : ""}</span>
+    </div>
+  );
+}
+
+function StructurePlanPreview({ plan, scenes }: { plan: EditPlan; scenes: Scene[] }) {
+  const mutation = plan.sceneStructure;
+  if (!mutation || (mutation.operation !== "split" && mutation.operation !== "merge-next")) return null;
+  const source = scenes.find((scene) => scene.sceneNumber === mutation.sceneNumber);
+  if (!source) return null;
+
+  if (mutation.operation === "split") {
+    const split = sceneSplitPreview(source);
+    return (
+      <div className="kv-structure-preview" aria-label={`场景 ${mutation.sceneNumber} 拆分预览`}>
+        <div><small>当前</small><StructureSceneCard durationSeconds={source.durationSeconds} scene={source} title={source.title} /></div>
+        <ArrowRight aria-hidden="true" size={16} />
+        <div>
+          <small>拆分后</small>
+          <div className="kv-structure-stack">
+            <StructureSceneCard durationSeconds={split.first.durationSeconds} title={split.first.title} willRegenerate />
+            <StructureSceneCard durationSeconds={split.second.durationSeconds} title={split.second.title} willRegenerate />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const next = scenes.find((scene) => scene.sceneNumber === mutation.sceneNumber + 1);
+  if (!next) return null;
+  return (
+    <div className="kv-structure-preview" aria-label={`场景 ${mutation.sceneNumber} 合并预览`}>
+      <div>
+        <small>当前</small>
+        <div className="kv-structure-stack">
+          <StructureSceneCard durationSeconds={source.durationSeconds} scene={source} title={source.title} />
+          <StructureSceneCard durationSeconds={next.durationSeconds} scene={next} title={next.title} />
+        </div>
+      </div>
+      <ArrowRight aria-hidden="true" size={16} />
+      <div>
+        <small>合并后</small>
+        <StructureSceneCard
+          durationSeconds={source.durationSeconds + next.durationSeconds}
+          title={/\p{Script=Han}/u.test(source.title + next.title) ? `${source.title}与${next.title}` : `${source.title} + ${next.title}`}
+          willRegenerate
+        />
+      </div>
+    </div>
+  );
+}
+
 function ChatPanel({
   messages,
   scenes,
@@ -1283,10 +1375,13 @@ function ChatPanel({
             </div>
             <p>{pendingPlan.summary}</p>
             {pendingPlan.sceneStructure ? (
-              <div className="kv-structure-plan" aria-label="时间线结构修改">
-                <Layers3 size={17} />
-                <div><strong>时间线结构</strong><span>{sceneStructureLabel(pendingPlan.sceneStructure)}</span></div>
-              </div>
+              <>
+                <div className="kv-structure-plan" aria-label="时间线结构修改">
+                  <Layers3 size={17} />
+                  <div><strong>时间线结构</strong><span>{sceneStructureLabel(pendingPlan.sceneStructure)}</span></div>
+                </div>
+                <StructurePlanPreview plan={pendingPlan} scenes={scenes} />
+              </>
             ) : null}
             {productionSettingLabels(pendingPlan.productionSettings).length > 0 ? (
               <div className="kv-production-plan" aria-label="全片设置修改">
@@ -2287,12 +2382,15 @@ export function WorkspaceClient({
         project?: Project;
         message?: ChatMessage;
         selectedSceneNumber?: number;
+        regeneration?: { imageSceneNumbers: number[]; audioSceneNumbers: number[]; clipSceneNumbers: number[] };
         error?: string;
       };
       if (!response.ok || !data.project || !data.message || !data.selectedSceneNumber) {
         throw new Error(data.error || "时间线调整失败。");
       }
-      setProject(data.project);
+      let updatedProject = data.project;
+      const warnings: string[] = [];
+      setProject(updatedProject);
       setMessages((current) => [...current, data.message!]);
       setSelectedScene(data.selectedSceneNumber);
       setPendingPlan(undefined);
@@ -2302,6 +2400,67 @@ export function WorkspaceClient({
       setAssetsOpen(false);
       setProductionOpen(false);
       setActiveRenderJobId(undefined);
+
+      const regeneration = data.regeneration ?? { imageSceneNumbers: [], audioSceneNumbers: [], clipSceneNumbers: [] };
+      if (regeneration.imageSceneNumbers.length > 0) {
+        setBusyAction("generating-images");
+        try {
+          const imageResponse = await fetch("/api/assets/generate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              projectId: updatedProject.id,
+              versionId: updatedProject.currentVersion.id,
+              sceneNumbers: regeneration.imageSceneNumbers,
+              quality: "standard"
+            }),
+            signal: AbortSignal.timeout(125_000)
+          });
+          const imageData = await imageResponse.json() as { project?: Project; error?: string };
+          if (imageData.project) {
+            updatedProject = imageData.project;
+            setProject(updatedProject);
+          }
+          if (!imageResponse.ok) warnings.push(imageData.error || "拆分或合并后的画面生成失败。");
+        } catch (error) {
+          warnings.push(requestErrorMessage(error, "拆分或合并后的画面生成失败。"));
+        }
+      }
+      if (regeneration.audioSceneNumbers.length > 0) {
+        setBusyAction("generating-audio");
+        try {
+          const audioResponse = await fetch("/api/assets/audio/generate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              projectId: updatedProject.id,
+              versionId: updatedProject.currentVersion.id,
+              sceneNumbers: regeneration.audioSceneNumbers
+            }),
+            signal: AbortSignal.timeout(125_000)
+          });
+          const audioData = await audioResponse.json() as { project?: Project; error?: string };
+          if (audioData.project) {
+            updatedProject = audioData.project;
+            setProject(updatedProject);
+          }
+          if (!audioResponse.ok) warnings.push(audioData.error || "拆分或合并后的配音生成失败。");
+        } catch (error) {
+          warnings.push(requestErrorMessage(error, "拆分或合并后的配音生成失败。"));
+        }
+      }
+      if (regeneration.imageSceneNumbers.length > 0 || regeneration.audioSceneNumbers.length > 0) {
+        const uniqueWarnings = Array.from(new Set(warnings));
+        pushMessage({
+          role: "assistant",
+          type: "text",
+          content: uniqueWarnings.length > 0
+            ? `分镜结构和新版本已经保存。${uniqueWarnings.join(" ")}`
+            : "分镜结构、场景画面和配音已经全部更新。",
+          versionId: updatedProject.currentVersion.id
+        }, true);
+        if (uniqueWarnings.length > 0) setErrorMessage(uniqueWarnings.join(" "));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "时间线调整失败。";
       setErrorMessage(message);

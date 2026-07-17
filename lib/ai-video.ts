@@ -597,7 +597,7 @@ export async function createEditPlan(params: {
     params.version.scenes.map((scene) => scene.sceneNumber)
   );
   if (requestsSceneStructureChange(params.request) && !requestedStructure) {
-    throw new Error("请明确指定一个场景和操作，例如“删除第 2 场景”“复制第 3 场景”或“第 1 场景改成 6 秒”。");
+    throw new Error("请明确指定场景和操作，例如“拆分第 2 场景”“合并第 2 和第 3 场景”或“第 1 场景改成 6 秒”。");
   }
   if (requestedStructure) {
     const index = params.version.scenes.findIndex((scene) => scene.sceneNumber === requestedStructure.sceneNumber);
@@ -613,6 +613,21 @@ export async function createEditPlan(params: {
     if (requestedStructure.operation === "move-to" && requestedStructure.sceneNumber === requestedStructure.targetSceneNumber) {
       throw new Error("场景位置没有变化。");
     }
+    if (requestedStructure.operation === "split") {
+      const source = params.version.scenes[index];
+      if (!source || source.durationSeconds < 4 || source.voiceover.trim().length < 8) {
+        throw new Error("该场景内容过短，无法拆分为两个完整镜头。");
+      }
+      if (params.version.scenes.length >= 20) throw new Error("单个视频最多支持 20 个场景。");
+    }
+    if (requestedStructure.operation === "merge-next") {
+      const source = params.version.scenes[index];
+      const next = params.version.scenes[index + 1];
+      if (!next) throw new Error("该场景没有后一场景可以合并。");
+      if (source.durationSeconds + next.durationSeconds > 20) {
+        throw new Error("合并后的场景超过 20 秒，请先缩短两个场景的时长。");
+      }
+    }
     const structureSummary = sceneStructureSummary(requestedStructure);
     return {
       engine: "heuristic",
@@ -625,7 +640,9 @@ export async function createEditPlan(params: {
         summary: Object.keys(requestedProductionSettings).length > 0
           ? `${structureSummary} 同时更新指定的全片设置。`
           : structureSummary,
-        affectedScenes: [requestedStructure.sceneNumber],
+        affectedScenes: requestedStructure.operation === "merge-next"
+          ? [requestedStructure.sceneNumber, requestedStructure.sceneNumber + 1]
+          : [requestedStructure.sceneNumber],
         changes: [],
         sceneStructure: requestedStructure,
         productionSettings: Object.keys(requestedProductionSettings).length > 0 ? requestedProductionSettings : undefined,

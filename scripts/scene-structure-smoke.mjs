@@ -69,6 +69,30 @@ assert.deepEqual(plain(duplicated.project.currentVersion.scenes.map((item) => it
 assert.equal(duplicated.selectedSceneNumber, 3);
 assert.equal(duplicated.project.currentVersion.durationSeconds, 20);
 
+const splitSource = {
+  ...project,
+  currentVersion: {
+    ...project.currentVersion,
+    scenes: project.currentVersion.scenes.map((item) => item.sceneNumber === 2
+      ? { ...item, durationSeconds: 6, voiceover: "先介绍用户面对的问题。然后展示完整的解决方案。" }
+      : item)
+  }
+};
+const split = applySceneStructureMutation(splitSource, { operation: "split", sceneNumber: 2 }, createId);
+assert.deepEqual(plain(split.project.currentVersion.scenes.map((item) => item.title)), ["A", "B · Part 1", "B · Part 2", "C"]);
+assert.deepEqual(plain(split.project.currentVersion.scenes.slice(1, 3).map((item) => item.durationSeconds)), [3, 3]);
+assert.equal(split.project.currentVersion.durationSeconds, 16);
+assert.equal(split.project.currentVersion.scenes[1].assets.some((asset) => ["image", "audio", "clip"].includes(asset.type)), false);
+assert.equal(split.project.currentVersion.scenes[2].assets.length, 0);
+assert.deepEqual(plain(split.regeneration), { imageSceneNumbers: [2, 3], audioSceneNumbers: [2, 3], clipSceneNumbers: [] });
+assert.equal(split.selectedSceneNumber, 3);
+
+const merged = applySceneStructureMutation(split.project, { operation: "merge-next", sceneNumber: 2 }, createId);
+assert.equal(merged.project.currentVersion.scenes.length, 3);
+assert.equal(merged.project.currentVersion.scenes[1].durationSeconds, 6);
+assert.match(merged.project.currentVersion.scenes[1].voiceover, /问题.*解决方案/);
+assert.deepEqual(plain(merged.regeneration), { imageSceneNumbers: [2], audioSceneNumbers: [2], clipSceneNumbers: [] });
+
 const deleted = applySceneStructureMutation(project, { operation: "delete", sceneNumber: 1 }, createId);
 assert.deepEqual(plain(deleted.project.currentVersion.scenes.map((item) => item.title)), ["B", "C"]);
 assert.equal(deleted.project.currentVersion.scenes[0].style.production.captionsEnabled, false);
@@ -77,6 +101,8 @@ assert.equal(deleted.project.currentVersion.scenes[0].assets.filter((asset) => [
 assert.throws(() => applySceneStructureMutation(project, { operation: "move", sceneNumber: 1, direction: "earlier" }, createId), /边界/);
 assert.throws(() => applySceneStructureMutation(project, { operation: "move-to", sceneNumber: 2, targetSceneNumber: 2 }, createId), /没有变化/);
 assert.throws(() => applySceneStructureMutation(project, { operation: "move-to", sceneNumber: 2, targetSceneNumber: 9 }, createId), /超出了/);
+assert.throws(() => applySceneStructureMutation(project, { operation: "split", sceneNumber: 2 }, createId), /无法拆分/);
+assert.throws(() => applySceneStructureMutation(project, { operation: "merge-next", sceneNumber: 3 }, createId), /没有后一场景/);
 assert.throws(() => applySceneStructureMutation({ ...project, currentVersion: { ...project.currentVersion, scenes: [project.currentVersion.scenes[0]] } }, { operation: "delete", sceneNumber: 1 }, createId), /至少需要保留/);
 
 console.log("Scene structure smoke checks passed.");

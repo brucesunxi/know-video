@@ -21,6 +21,40 @@ function mediaStatus(scenes: Scene[]) {
   };
 }
 
+function splitText(value: string) {
+  const trimmed = value.trim();
+  const candidates = Array.from(trimmed.matchAll(/[。！？!?；;，,]\s*/gu))
+    .map((match) => (match.index ?? 0) + match[0].length)
+    .filter((index) => index >= Math.floor(trimmed.length * 0.28) && index <= Math.ceil(trimmed.length * 0.72));
+  const midpoint = trimmed.length / 2;
+  const boundary = candidates.sort((left, right) => Math.abs(left - midpoint) - Math.abs(right - midpoint))[0]
+    ?? Math.max(1, Math.round(midpoint));
+  return [trimmed.slice(0, boundary).trim(), trimmed.slice(boundary).trim()] as const;
+}
+
+function splitTitle(title: string) {
+  return /\p{Script=Han}/u.test(title)
+    ? [`${title}（上）`, `${title}（下）`] as const
+    : [`${title} · Part 1`, `${title} · Part 2`] as const;
+}
+
+export function sceneSplitPreview(scene: Pick<Scene, "title" | "voiceover" | "durationSeconds">) {
+  const [firstVoiceover, secondVoiceover] = splitText(scene.voiceover);
+  const [firstTitle, secondTitle] = splitTitle(scene.title);
+  const firstWeight = firstVoiceover.replace(/\s/gu, "").length;
+  const secondWeight = secondVoiceover.replace(/\s/gu, "").length;
+  const totalWeight = Math.max(1, firstWeight + secondWeight);
+  const firstDuration = Math.max(2, Math.min(scene.durationSeconds - 2, Math.round((scene.durationSeconds * firstWeight) / totalWeight)));
+  return {
+    first: { title: firstTitle, voiceover: firstVoiceover, durationSeconds: firstDuration },
+    second: { title: secondTitle, voiceover: secondVoiceover, durationSeconds: scene.durationSeconds - firstDuration }
+  };
+}
+
+function generatedMediaOnly(assets: SceneAsset[]) {
+  return assets.filter((asset) => asset.type === "logo" || asset.type === "music");
+}
+
 export function applySceneStructureMutation(
   project: Project,
   mutation: SceneStructureMutation,
@@ -58,6 +92,57 @@ export function applySceneStructureMutation(
     scenes.splice(mutation.targetSceneNumber - 1, 0, moved);
     selectedSceneNumber = mutation.targetSceneNumber;
     description = `场景 ${mutation.sceneNumber} 已移动到第 ${mutation.targetSceneNumber} 位。`;
+  } else if (mutation.operation === "split") {
+    if (scenes.length >= 20) throw new Error("单个视频最多支持 20 个场景。");
+    const source = scenes[index];
+    if (source.durationSeconds < 4 || source.voiceover.trim().length < 8) {
+      throw new Error("该场景内容过短，无法拆分为两个完整镜头。");
+    }
+    const split = sceneSplitPreview(source);
+    const { voiceover: firstVoiceover, title: firstTitle, durationSeconds: firstDuration } = split.first;
+    const { voiceover: secondVoiceover, title: secondTitle, durationSeconds: secondDuration } = split.second;
+    if (!firstVoiceover || !secondVoiceover) throw new Error("该场景旁白缺少可用的拆分位置。");
+    const retainedAssets = generatedMediaOnly(source.assets);
+    scenes[index] = {
+      ...source,
+      title: firstTitle,
+      voiceover: firstVoiceover,
+      visualPrompt: `${source.visualPrompt}\nOpening beat: establish the first narrative idea with a distinct composition and clear visual focus.`,
+      motionPrompt: `${source.motionPrompt} Resolve the movement at a natural midpoint for the next shot.`,
+      durationSeconds: firstDuration,
+      assets: retainedAssets
+    };
+    scenes.splice(index + 1, 0, {
+      ...source,
+      id: createId(),
+      title: secondTitle,
+      voiceover: secondVoiceover,
+      visualPrompt: `${source.visualPrompt}\nContinuation beat: advance to the second narrative idea with a visibly different framing while preserving visual continuity.`,
+      motionPrompt: `${source.motionPrompt} Begin from the previous shot's visual direction and complete the scene with a decisive ending.`,
+      durationSeconds: secondDuration,
+      assets: []
+    });
+    selectedSceneNumber = index + 2;
+    description = `场景 ${mutation.sceneNumber} 已按旁白拆分为两个连续镜头。`;
+  } else if (mutation.operation === "merge-next") {
+    const source = scenes[index];
+    const next = scenes[index + 1];
+    if (!next) throw new Error("该场景没有后一场景可以合并。");
+    const mergedDuration = source.durationSeconds + next.durationSeconds;
+    if (mergedDuration > 20) throw new Error("合并后的场景超过 20 秒，请先缩短两个场景的时长。");
+    const chinese = /\p{Script=Han}/u.test(source.title + next.title);
+    scenes[index] = {
+      ...source,
+      title: chinese ? `${source.title}与${next.title}` : `${source.title} + ${next.title}`,
+      voiceover: `${source.voiceover.trim()} ${next.voiceover.trim()}`.trim(),
+      visualPrompt: `${source.visualPrompt}\nMerged continuation: ${next.visualPrompt}`,
+      motionPrompt: `${source.motionPrompt} Continue seamlessly into: ${next.motionPrompt}`,
+      durationSeconds: mergedDuration,
+      assets: generatedMediaOnly(source.assets)
+    };
+    scenes.splice(index + 1, 1);
+    selectedSceneNumber = index + 1;
+    description = `场景 ${mutation.sceneNumber} 已与后一场景合并。`;
   } else if (mutation.operation === "duplicate") {
     if (scenes.length >= 20) throw new Error("单个视频最多支持 20 个场景。");
     const source = scenes[index];
@@ -89,6 +174,11 @@ export function applySceneStructureMutation(
   return {
     description,
     selectedSceneNumber,
+    regeneration: mutation.operation === "split"
+      ? { imageSceneNumbers: [index + 1, index + 2], audioSceneNumbers: [index + 1, index + 2], clipSceneNumbers: [] }
+      : mutation.operation === "merge-next"
+        ? { imageSceneNumbers: [index + 1], audioSceneNumbers: [index + 1], clipSceneNumbers: [] }
+        : { imageSceneNumbers: [], audioSceneNumbers: [], clipSceneNumbers: [] },
     project: {
       ...project,
       currentVersion: {
