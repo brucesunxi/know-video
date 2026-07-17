@@ -1466,6 +1466,27 @@ button:disabled {
   margin-top: 1px;
 }
 
+.kv-asset-usage {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 1px;
+}
+
+.kv-asset-usage small {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid #d7e1ea;
+  border-radius: 999px;
+  background: #fff;
+  padding: 3px 6px;
+  color: #475467;
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .kv-asset-audio-quality small {
   max-width: 100%;
   overflow: hidden;

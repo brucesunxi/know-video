@@ -437,6 +437,15 @@ function audioAssetQualityItems(asset: SceneAsset) {
   ].filter(Boolean);
 }
 
+function assetUsageItems(asset: SceneAsset) {
+  if (asset.type === "image") return ["用于预览和 MP4 导出"];
+  if (asset.type === "clip") return ["动态镜头优先播放", "用于 MP4 导出"];
+  if (asset.type === "audio") return ["进入旁白音轨", "用于 MP4 导出"];
+  if (asset.type === "thumbnail" && asset.metadata?.candidate === true) return ["候选画面", "不影响当前视频"];
+  if (asset.type === "thumbnail") return ["封面素材"];
+  return [];
+}
+
 function renderJobQualityLabel(job: RenderJob) {
   if (job.status !== "ready") return undefined;
   return job.metadata?.quality === "passed" ? "成片质检通过" : "成片已生成";
@@ -1780,6 +1789,7 @@ function SceneAssetsPanel({
           <div className="kv-assets-empty"><ImagePlus size={20} />这个场景还没有可用素材</div>
         ) : assets.map((asset) => {
           const audioQualityItems = audioAssetQualityItems(asset);
+          const usageItems = assetUsageItems(asset);
           return (
             <article key={asset.id}>
               {asset.type === "image" || asset.type === "thumbnail" ? (
@@ -1792,6 +1802,11 @@ function SceneAssetsPanel({
               <div>
                 <strong>{String(asset.metadata?.name ?? (asset.type === "image" ? "当前画面" : asset.type === "thumbnail" ? "候选画面" : asset.type === "clip" ? "视频片段" : "场景配音"))}</strong>
                 <span>{asset.type === "image" ? "使用中" : asset.type === "thumbnail" ? "可对比采用" : asset.type === "clip" ? "视频" : "音频"} · {fileSizeLabel(asset.metadata?.size)}</span>
+                {usageItems.length > 0 ? (
+                  <div className="kv-asset-usage" aria-label="素材用途">
+                    {usageItems.map((item) => <small key={item}>{item}</small>)}
+                  </div>
+                ) : null}
                 {audioQualityItems.length > 0 ? (
                   <div className="kv-asset-audio-quality" aria-label="配音质量信息">
                     {audioQualityItems.map((item) => <small key={item}>{item}</small>)}
