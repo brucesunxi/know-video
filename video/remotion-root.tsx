@@ -1,6 +1,7 @@
 import React from "react";
 import { Composition, registerRoot } from "remotion";
 import { demoProject } from "@/lib/mock-data";
+import { productionDurationInFrames } from "@/lib/production-settings";
 import { KnowVideoComposition, type KnowVideoCompositionProps } from "@/video/know-video-composition";
 import { VIDEO_COMPOSITION_ID, VIDEO_FPS, VIDEO_HEIGHT, VIDEO_WIDTH } from "@/video/config";
 
@@ -15,11 +16,10 @@ function RemotionRoot() {
       height={VIDEO_HEIGHT}
       width={VIDEO_WIDTH}
       calculateMetadata={({ props }: { props: KnowVideoCompositionProps }) => ({
-        durationInFrames: Math.max(1, Math.round(props.project.currentVersion.durationSeconds * VIDEO_FPS))
+        durationInFrames: productionDurationInFrames(props.project.currentVersion, VIDEO_FPS)
       })}
     />
   );
 }
 
 registerRoot(RemotionRoot);
-

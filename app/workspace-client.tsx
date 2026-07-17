@@ -6,6 +6,7 @@ import {
   AlertCircle,
   ArrowRight,
   Check,
+  Captions,
   ChevronRight,
   Clapperboard,
   Download,
@@ -26,6 +27,7 @@ import {
   RotateCcw,
   Search,
   Send,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Upload,
@@ -33,13 +35,14 @@ import {
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
 import { replacementAssetTypes } from "@/lib/asset-policy";
+import { productionAsset, productionSettings } from "@/lib/production-settings";
 import {
   DEFAULT_NARRATION_VOICE,
   narrationVoiceProfile,
   narrationVoiceProfiles
 } from "@/lib/voice-profiles";
 import { VIDEO_FPS } from "@/video/config";
-import type { ChatMessage, EditChange, EditPlan, GenerationOptions, NarrationVoice, Project, ProjectListItem, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, GenerationOptions, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersionSummary, RenderJob, Scene, SceneAsset } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
@@ -52,6 +55,7 @@ type BusyAction =
   | "generating-video"
   | "generating-audio"
   | "saving-scene"
+  | "saving-production"
   | "uploading-asset"
   | "restoring-version";
 const promptExamples = [
@@ -100,6 +104,21 @@ function uniqueRegenerate(plan: EditPlan) {
     .join("、");
 }
 
+function productionSettingLabels(settings?: Partial<ProductionSettings>) {
+  if (!settings) return [];
+  return Object.entries(settings).map(([key, value]) => {
+    if (key === "captionsEnabled") return value ? "显示字幕" : "隐藏字幕";
+    if (key === "captionStyle") return `字幕样式：${value === "minimal" ? "简洁" : value === "highlight" ? "强调色" : "深色底"}`;
+    if (key === "playbackRate") return `全片速度：${value}x`;
+    if (key === "musicVolume") return `音乐音量：${Math.round(Number(value) * 100)}%`;
+    if (key === "logoPosition") {
+      const positions = { "top-left": "左上", "top-right": "右上", "bottom-left": "左下", "bottom-right": "右下" } as const;
+      return `Logo 位置：${positions[value as keyof typeof positions]}`;
+    }
+    return `Logo 大小：${value}%`;
+  });
+}
+
 function assetTypeLabel(type: SceneAsset["type"]) {
   const labels: Record<SceneAsset["type"], string> = {
     image: "画面",
@@ -107,7 +126,9 @@ function assetTypeLabel(type: SceneAsset["type"]) {
     clip: "视频片段",
     thumbnail: "缩略图",
     caption: "字幕",
-    render: "成片"
+    render: "成片",
+    logo: "Logo",
+    music: "背景音乐"
   };
   return labels[type];
 }
@@ -181,6 +202,8 @@ function busyActionLabel(action?: BusyAction) {
       return "正在生成自然配音，请保持页面打开";
     case "saving-scene":
       return "正在保存场景并创建可恢复版本";
+    case "saving-production":
+      return "正在保存成片设置";
     case "uploading-asset":
       return "正在上传并应用场景素材";
     case "restoring-version":
@@ -779,6 +802,141 @@ function SceneAssetsPanel({
   );
 }
 
+function ProductionSettingsPanel({
+  settings,
+  logo,
+  music,
+  isBusy,
+  uploadProgress,
+  uploadType,
+  onChange,
+  onUpload,
+  onRemove
+}: {
+  settings: ProductionSettings;
+  logo?: SceneAsset;
+  music?: SceneAsset;
+  isBusy: boolean;
+  uploadProgress?: number;
+  uploadType?: "logo" | "music";
+  onChange: (settings: Partial<ProductionSettings>) => void;
+  onUpload: (type: "logo" | "music") => void;
+  onRemove: (type: "logo" | "music") => void;
+}) {
+  const [musicVolume, setMusicVolume] = useState(settings.musicVolume);
+  const [logoSize, setLogoSize] = useState(settings.logoSize);
+
+  useEffect(() => setMusicVolume(settings.musicVolume), [settings.musicVolume]);
+  useEffect(() => setLogoSize(settings.logoSize), [settings.logoSize]);
+
+  return (
+    <section className="kv-production-panel">
+      <div className="kv-strip-heading">
+        <div>
+          <span className="kv-eyebrow">成片设置</span>
+          <h3>字幕、节奏、品牌与背景音乐</h3>
+        </div>
+        <span>预览与 MP4 同步</span>
+      </div>
+      <div className="kv-production-grid">
+        <div className="kv-production-control">
+          <div className="kv-production-control-title"><Captions size={17} /><strong>字幕</strong></div>
+          <label className="kv-switch-row">
+            <span>显示逐句字幕</span>
+            <input
+              checked={settings.captionsEnabled}
+              disabled={isBusy}
+              onChange={(event) => onChange({ captionsEnabled: event.target.checked })}
+              type="checkbox"
+            />
+          </label>
+          <div className="kv-segmented" aria-label="字幕样式">
+            {(["minimal", "boxed", "highlight"] as const).map((style) => (
+              <button
+                className={settings.captionStyle === style ? "active" : ""}
+                disabled={isBusy || !settings.captionsEnabled}
+                key={style}
+                onClick={() => onChange({ captionStyle: style })}
+                type="button"
+              >
+                {style === "minimal" ? "简洁" : style === "boxed" ? "深色底" : "强调色"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="kv-production-control">
+          <div className="kv-production-control-title"><SlidersHorizontal size={17} /><strong>播放速度</strong></div>
+          <div className="kv-segmented" aria-label="播放速度">
+            {([0.75, 1, 1.25, 1.5] as const).map((rate) => (
+              <button
+                className={settings.playbackRate === rate ? "active" : ""}
+                disabled={isBusy}
+                key={rate}
+                onClick={() => onChange({ playbackRate: rate })}
+                type="button"
+              >{rate}x</button>
+            ))}
+          </div>
+          <small>画面、旁白和字幕保持同步。</small>
+        </div>
+        <div className="kv-production-control">
+          <div className="kv-production-control-title"><Music2 size={17} /><strong>背景音乐</strong></div>
+          <div className="kv-production-asset-row">
+            <div><strong>{String(music?.metadata?.name ?? "尚未添加")}</strong><span>{music ? fileSizeLabel(music.metadata?.size) : "MP3 或 WAV"}</span></div>
+            <button disabled={isBusy} onClick={() => onUpload("music")} type="button">
+              {uploadType === "music" ? <Loader2 className="kv-spin" size={15} /> : <Upload size={15} />}
+              {uploadType === "music" ? `${uploadProgress ?? 0}%` : music ? "替换" : "添加"}
+            </button>
+            {music ? <button aria-label="移除背景音乐" disabled={isBusy} onClick={() => onRemove("music")} title="移除背景音乐" type="button"><Trash2 size={15} /></button> : null}
+          </div>
+          <label className="kv-range-row">
+            <span>音量 {Math.round(musicVolume * 100)}%</span>
+            <input
+              disabled={isBusy || !music}
+              max="0.5"
+              min="0"
+              onChange={(event) => setMusicVolume(Number(event.target.value))}
+              onKeyUp={() => onChange({ musicVolume })}
+              onPointerUp={() => onChange({ musicVolume })}
+              step="0.02"
+              type="range"
+              value={musicVolume}
+            />
+          </label>
+        </div>
+        <div className="kv-production-control">
+          <div className="kv-production-control-title"><ImagePlus size={17} /><strong>品牌 Logo</strong></div>
+          <div className="kv-production-asset-row">
+            <div><strong>{String(logo?.metadata?.name ?? "尚未添加")}</strong><span>{logo ? fileSizeLabel(logo.metadata?.size) : "透明 PNG 效果最佳"}</span></div>
+            <button disabled={isBusy} onClick={() => onUpload("logo")} type="button">
+              {uploadType === "logo" ? <Loader2 className="kv-spin" size={15} /> : <Upload size={15} />}
+              {uploadType === "logo" ? `${uploadProgress ?? 0}%` : logo ? "替换" : "添加"}
+            </button>
+            {logo ? <button aria-label="移除 Logo" disabled={isBusy} onClick={() => onRemove("logo")} title="移除 Logo" type="button"><Trash2 size={15} /></button> : null}
+          </div>
+          <div className="kv-production-inline">
+            <label>位置<select disabled={isBusy || !logo} onChange={(event) => onChange({ logoPosition: event.target.value as ProductionSettings["logoPosition"] })} value={settings.logoPosition}><option value="top-left">左上</option><option value="top-right">右上</option><option value="bottom-left">左下</option><option value="bottom-right">右下</option></select></label>
+            <label className="kv-range-row">
+              <span>大小 {logoSize}%</span>
+              <input
+                disabled={isBusy || !logo}
+                max="24"
+                min="6"
+                onChange={(event) => setLogoSize(Number(event.target.value))}
+                onKeyUp={() => onChange({ logoSize })}
+                onPointerUp={() => onChange({ logoSize })}
+                step="1"
+                type="range"
+                value={logoSize}
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function ChangeCard({ change }: { change: EditChange }) {
   const changedFields = [
     {
@@ -898,8 +1056,8 @@ function ChatPanel({
             <p>{message.content}</p>
             {message.editPlan ? (
               <div className="kv-plan-summary">
-                <span>影响场景：{message.editPlan.affectedScenes.join(", ")}</span>
-                <span>重新生成：{uniqueRegenerate(message.editPlan)}</span>
+                <span>{message.editPlan.affectedScenes.length > 0 ? `影响场景：${message.editPlan.affectedScenes.join(", ")}` : "作用范围：全片设置"}</span>
+                <span>{uniqueRegenerate(message.editPlan) ? `重新生成：${uniqueRegenerate(message.editPlan)}` : "无需重做场景素材"}</span>
               </div>
             ) : null}
           </div>
@@ -908,9 +1066,15 @@ function ChatPanel({
           <section className="kv-review-plan">
             <div className="kv-strip-heading">
               <h3>确认修改方案</h3>
-              <span>{pendingPlan.changes.length} 项修改</span>
+              <span>{pendingPlan.changes.length + productionSettingLabels(pendingPlan.productionSettings).length} 项修改</span>
             </div>
             <p>{pendingPlan.summary}</p>
+            {productionSettingLabels(pendingPlan.productionSettings).length > 0 ? (
+              <div className="kv-production-plan" aria-label="全片设置修改">
+                <strong>全片设置</strong>
+                <div>{productionSettingLabels(pendingPlan.productionSettings).map((label) => <span key={label}>{label}</span>)}</div>
+              </div>
+            ) : null}
             <div className="kv-change-list">
               {pendingPlan.changes.map((change) => (
                 <ChangeCard change={change} key={change.sceneNumber} />
@@ -989,6 +1153,12 @@ function StudioScreen({
   assetsOpen,
   onToggleAssets,
   onRemoveAsset,
+  productionOpen,
+  productionUploadType,
+  onToggleProduction,
+  onUpdateProduction,
+  onUploadProduction,
+  onRemoveProduction,
   onSaveScene,
   onVoiceChange
 }: {
@@ -1028,6 +1198,12 @@ function StudioScreen({
   assetsOpen: boolean;
   onToggleAssets: () => void;
   onRemoveAsset: (assetId: string) => void;
+  productionOpen: boolean;
+  productionUploadType?: "logo" | "music";
+  onToggleProduction: () => void;
+  onUpdateProduction: (settings: Partial<ProductionSettings>) => void;
+  onUploadProduction: (type: "logo" | "music") => void;
+  onRemoveProduction: (type: "logo" | "music") => void;
   onSaveScene: (sceneNumber: number, edits: SceneTextEdits) => void;
   onVoiceChange: (sceneNumber: number, voice: NarrationVoice) => void;
 }) {
@@ -1039,11 +1215,12 @@ function StudioScreen({
   const missingAudioSceneNumbers = project.currentVersion.scenes
     .filter((item) => !item.assets.some((asset) => asset.type === "audio" && asset.url))
     .map((item) => item.sceneNumber);
+  const filmSettings = productionSettings(project);
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
     const handleFrameUpdate = ({ detail }: { detail: { frame: number } }) => {
-      const seconds = detail.frame / VIDEO_FPS;
+      const seconds = (detail.frame / VIDEO_FPS) * filmSettings.playbackRate;
       let cursor = 0;
       const activeScene = project.currentVersion.scenes.find((item) => {
         cursor += item.durationSeconds;
@@ -1059,13 +1236,13 @@ function StudioScreen({
       player.removeEventListener("frameupdate", handleFrameUpdate);
       player.removeEventListener("seeked", handleFrameUpdate);
     };
-  }, [onSelectScene, project.currentVersion.id, project.currentVersion.scenes, selectedScene]);
+  }, [filmSettings.playbackRate, onSelectScene, project.currentVersion.id, project.currentVersion.scenes, selectedScene]);
 
   function selectScene(sceneNumber: number) {
     const seconds = project.currentVersion.scenes
       .filter((item) => item.sceneNumber < sceneNumber)
       .reduce((sum, item) => sum + item.durationSeconds, 0);
-    playerRef.current?.seekTo(Math.round(seconds * VIDEO_FPS));
+    playerRef.current?.seekTo(Math.round((seconds * VIDEO_FPS) / filmSettings.playbackRate));
     onSelectScene(sceneNumber);
   }
 
@@ -1119,6 +1296,10 @@ function StudioScreen({
             <button className={assetsOpen ? "active" : ""} disabled={isBusy} onClick={onToggleAssets} type="button">
               {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <ImagePlus size={16} />}
               {uploadProgress !== undefined ? `上传 ${uploadProgress}%` : "素材"}
+            </button>
+            <button className={productionOpen ? "active" : ""} disabled={isBusy} onClick={onToggleProduction} type="button">
+              <SlidersHorizontal size={16} />
+              成片设置
             </button>
             <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers.length > 0 ? missingSceneNumbers : undefined)} type="button">
               <RefreshCcw size={16} />
@@ -1269,6 +1450,19 @@ function StudioScreen({
             uploadProgress={uploadProgress}
           />
         ) : null}
+        {productionOpen ? (
+          <ProductionSettingsPanel
+            isBusy={isBusy}
+            logo={productionAsset(project, "logo")}
+            music={productionAsset(project, "music")}
+            onChange={onUpdateProduction}
+            onRemove={onRemoveProduction}
+            onUpload={onUploadProduction}
+            settings={filmSettings}
+            uploadProgress={uploadProgress}
+            uploadType={productionUploadType}
+          />
+        ) : null}
         {view === "preview" ? (
           <>
             {missingSceneNumbers.length === 0 ? (
@@ -1348,6 +1542,8 @@ export function WorkspaceClient({
   const [activeRenderJobId, setActiveRenderJobId] = useState<string | undefined>(initialProject.currentVersion.renderJobId);
   const [uploadProgress, setUploadProgress] = useState<number | undefined>();
   const [assetsOpen, setAssetsOpen] = useState(false);
+  const [productionOpen, setProductionOpen] = useState(false);
+  const [productionUploadType, setProductionUploadType] = useState<"logo" | "music">();
   const [generationOptions, setGenerationOptions] = useState<GenerationOptions>({
     duration: "30",
     sceneCount: "auto",
@@ -1359,6 +1555,8 @@ export function WorkspaceClient({
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectActionBusy, setProjectActionBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const musicInputRef = useRef<HTMLInputElement>(null);
   const recoveringRenderRef = useRef<string>();
   const cancelledRenderIdsRef = useRef(new Set<string>());
 
@@ -1482,6 +1680,7 @@ export function WorkspaceClient({
       setVersionsOpen(false);
       setExportsOpen(false);
       setAssetsOpen(false);
+      setProductionOpen(false);
       setActiveRenderJobId(undefined);
       setMessages([
         ...data.messages,
@@ -1854,6 +2053,7 @@ export function WorkspaceClient({
     if (next) {
       setAssetsOpen(false);
       setExportsOpen(false);
+      setProductionOpen(false);
     }
     if (next) void loadVersions();
   }
@@ -1884,6 +2084,7 @@ export function WorkspaceClient({
     if (next) {
       setAssetsOpen(false);
       setVersionsOpen(false);
+      setProductionOpen(false);
       void loadRenderJobs();
     }
   }
@@ -1896,6 +2097,14 @@ export function WorkspaceClient({
 
   function toggleAssets() {
     setAssetsOpen((current) => !current);
+    setVersionsOpen(false);
+    setExportsOpen(false);
+    setProductionOpen(false);
+  }
+
+  function toggleProduction() {
+    setProductionOpen((current) => !current);
+    setAssetsOpen(false);
     setVersionsOpen(false);
     setExportsOpen(false);
   }
@@ -2081,6 +2290,141 @@ export function WorkspaceClient({
     if (!attachResponse.ok || !attached.asset) throw new Error(attached.error || "无法绑定场景素材。");
     setUploadProgress(100);
     return attached.asset;
+  }
+
+  async function updateProductionSettingsAction(settings: Partial<ProductionSettings>) {
+    setIsBusy(true);
+    setBusyAction("saving-production");
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch("/api/production-settings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          versionId: project.currentVersion.id,
+          settings
+        })
+      });
+      const data = await response.json() as { project?: Project; error?: string };
+      if (!response.ok || !data.project) throw new Error(data.error || "成片设置保存失败。");
+      setProject(data.project);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "成片设置保存失败。";
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
+    } finally {
+      setIsBusy(false);
+      setBusyAction(undefined);
+    }
+  }
+
+  async function uploadProductionAsset(type: "logo" | "music", event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setIsBusy(true);
+    setBusyAction("uploading-asset");
+    setProductionUploadType(type);
+    setUploadProgress(0);
+    setErrorMessage(undefined);
+    try {
+      if (type === "logo" && !["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+        throw new Error("Logo 仅支持 PNG、JPEG 或 WebP，建议使用透明 PNG。");
+      }
+      if (type === "music" && !["audio/mpeg", "audio/wav", "audio/x-wav"].includes(file.type)) {
+        throw new Error("背景音乐仅支持 MP3 或 WAV。");
+      }
+      const limit = type === "logo" ? 25_000_000 : 80_000_000;
+      if (file.size > limit) throw new Error(`${type === "logo" ? "Logo" : "背景音乐"}不能超过 ${type === "logo" ? "25MB" : "80MB"}。`);
+
+      const descriptor = {
+        projectId: project.id,
+        versionId: project.currentVersion.id,
+        type,
+        name: file.name,
+        size: file.size,
+        contentType: file.type
+      };
+      const initResponse = await fetch("/api/production-assets/upload-url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(descriptor)
+      });
+      const session = await initResponse.json() as { key?: string; uploadUrl?: string; error?: string };
+      if (!initResponse.ok || !session.key || !session.uploadUrl) throw new Error(session.error || "无法开始成片素材上传。");
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", session.uploadUrl!);
+        xhr.setRequestHeader("content-type", file.type);
+        xhr.upload.onprogress = (progressEvent) => {
+          if (progressEvent.lengthComputable) {
+            setUploadProgress(Math.min(96, Math.round((progressEvent.loaded / progressEvent.total) * 96)));
+          }
+        };
+        xhr.onload = () => xhr.status >= 200 && xhr.status < 300
+          ? resolve()
+          : reject(new Error(`云端存储拒绝了上传（${xhr.status}）。`));
+        xhr.onerror = () => reject(new Error("成片素材直传失败，请检查 R2 Bucket 的 CORS 设置。"));
+        xhr.send(file);
+      });
+
+      const attachResponse = await fetch("/api/production-assets/attach", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...descriptor, key: session.key })
+      });
+      const attached = await attachResponse.json() as { project?: Project; error?: string };
+      if (!attachResponse.ok || !attached.project) throw new Error(attached.error || "无法应用成片素材。");
+      setUploadProgress(100);
+      setProject(attached.project);
+      pushMessage({
+        role: "assistant",
+        type: "text",
+        content: `${type === "logo" ? "品牌 Logo" : "背景音乐"}“${file.name}”已应用到当前成片。`,
+        versionId: attached.project.currentVersion.id
+      }, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "成片素材上传失败。";
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
+    } finally {
+      setIsBusy(false);
+      setBusyAction(undefined);
+      setProductionUploadType(undefined);
+      setUploadProgress(undefined);
+    }
+  }
+
+  async function removeProductionAsset(type: "logo" | "music") {
+    setIsBusy(true);
+    setBusyAction("saving-production");
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch("/api/production-assets/detach", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, versionId: project.currentVersion.id, type })
+      });
+      const data = await response.json() as { project?: Project; error?: string };
+      if (!response.ok || !data.project) throw new Error(data.error || "无法移除成片素材。");
+      setProject(data.project);
+      pushMessage({
+        role: "assistant",
+        type: "text",
+        content: `${type === "logo" ? "品牌 Logo" : "背景音乐"}已从当前成片移除。`,
+        versionId: data.project.currentVersion.id
+      }, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法移除成片素材。";
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
+    } finally {
+      setIsBusy(false);
+      setBusyAction(undefined);
+    }
   }
 
   async function removeSceneAsset(assetId: string) {
@@ -2364,6 +2708,7 @@ export function WorkspaceClient({
       setVersionsOpen(false);
       setExportsOpen(false);
       setAssetsOpen(false);
+      setProductionOpen(false);
       setActiveRenderJobId(data.project.currentVersion.renderJobId);
       setStage("studio");
     } catch (error) {
@@ -2433,6 +2778,8 @@ export function WorkspaceClient({
       stage={stage}
     >
       <input accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav" hidden onChange={uploadAsset} ref={fileInputRef} type="file" />
+      <input accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => void uploadProductionAsset("logo", event)} ref={logoInputRef} type="file" />
+      <input accept="audio/mpeg,audio/wav" hidden onChange={(event) => void uploadProductionAsset("music", event)} ref={musicInputRef} type="file" />
       {stage === "studio" && errorMessage ? (
         <div className="kv-global-error" role="alert">
           <AlertCircle size={18} />
@@ -2505,6 +2852,12 @@ export function WorkspaceClient({
           assetsOpen={assetsOpen}
           onToggleAssets={toggleAssets}
           onRemoveAsset={removeSceneAsset}
+          productionOpen={productionOpen}
+          productionUploadType={productionUploadType}
+          onToggleProduction={toggleProduction}
+          onUpdateProduction={(settings) => void updateProductionSettingsAction(settings)}
+          onUploadProduction={(type) => (type === "logo" ? logoInputRef : musicInputRef).current?.click()}
+          onRemoveProduction={(type) => void removeProductionAsset(type)}
           onSaveScene={saveSceneEdits}
           onVoiceChange={(sceneNumber, voice) => void regenerateAudio([sceneNumber], voice)}
           onViewChange={setStudioView}

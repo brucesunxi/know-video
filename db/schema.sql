@@ -55,6 +55,13 @@ create table if not exists scene_assets (
   created_at timestamptz not null default now()
 );
 
+alter table scene_assets
+  drop constraint if exists scene_assets_asset_type_check;
+
+alter table scene_assets
+  add constraint scene_assets_asset_type_check
+  check (asset_type in ('image', 'audio', 'clip', 'thumbnail', 'caption', 'render', 'logo', 'music'));
+
 create table if not exists chat_messages (
   id uuid primary key default uuid_generate_v4(),
   project_id uuid not null references projects(id) on delete cascade,

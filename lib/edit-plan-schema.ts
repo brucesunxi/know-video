@@ -11,20 +11,32 @@ export const editSideSchema = z.object({
   motionPrompt: z.string().min(1).max(4000).optional()
 });
 
-export const editPlanSchema = z.object({
+export const editPlanObjectSchema = z.object({
   id: z.string().min(1).max(200),
   editNumber: z.number().int().positive(),
   baseVersionId: z.string().min(1).max(200),
   status: z.enum(["proposed", "approved", "rejected", "applied"]),
   userRequest: z.string().min(1).max(4000),
   summary: z.string().min(1).max(4000),
-  affectedScenes: z.array(z.number().int().positive()).min(1).max(20),
+  affectedScenes: z.array(z.number().int().positive()).max(20),
   changes: z.array(z.object({
     sceneNumber: z.number().int().positive(),
     status: z.enum(["updated", "added", "deleted", "unchanged"]),
     before: editSideSchema,
     after: editSideSchema,
     regenerate: z.array(z.enum(["image", "audio", "clip", "thumbnail", "caption", "render"]))
-  })).min(1).max(20),
+  })).max(20),
+  productionSettings: z.object({
+    captionsEnabled: z.boolean().optional(),
+    captionStyle: z.enum(["minimal", "boxed", "highlight"]).optional(),
+    playbackRate: z.union([z.literal(0.75), z.literal(1), z.literal(1.25), z.literal(1.5)]).optional(),
+    musicVolume: z.number().min(0).max(0.5).optional(),
+    logoPosition: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]).optional(),
+    logoSize: z.number().min(6).max(24).optional()
+  }).optional(),
   createdAt: z.string().min(1).max(100)
+});
+
+export const editPlanSchema = editPlanObjectSchema.refine((plan) => plan.changes.length > 0 || Object.keys(plan.productionSettings ?? {}).length > 0, {
+  message: "修改方案必须包含场景变化或成片设置。"
 });

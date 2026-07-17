@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import { analyzeEditIntent, requestsGeneratedClip } from "@/lib/edit-intent";
+import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
@@ -589,6 +590,10 @@ export async function createEditPlan(params: {
   version: ProjectVersion;
   editNumber: number;
 }): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
+  const requestedProductionSettings = productionSettingsFromRequest(params.request);
+  if (isProductionOnlyRequest(params.request)) {
+    return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
+  }
   const intent = analyzeEditIntent(
     params.request,
     params.version.scenes.map((scene) => scene.sceneNumber)
@@ -671,6 +676,9 @@ export async function createEditPlan(params: {
         summary: normalized.summary,
         affectedScenes: normalized.affectedScenes,
         changes: normalized.changes,
+        productionSettings: Object.keys(requestedProductionSettings).length > 0
+          ? requestedProductionSettings
+          : undefined,
         createdAt: new Date().toISOString()
       }
     };

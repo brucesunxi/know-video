@@ -1,6 +1,7 @@
 import { analyzeEditIntent, requestsGeneratedClip } from "@/lib/edit-intent";
 import { narrationVoiceFromRequest } from "@/lib/voice-profiles";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
+import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 
 const palettes = {
   dark: ["#07111d", "#143044", "#38d5e5", "#f8fafc"],
@@ -341,13 +342,16 @@ export function buildEditPlanFromRequest(params: {
   const tone = detectTone(params.request);
   const requestedVoice = narrationVoiceFromRequest(params.request);
   const requestedClip = requestsGeneratedClip(params.request);
+  const requestedProductionSettings = productionSettingsFromRequest(params.request);
   const intent = analyzeEditIntent(
     params.request,
     params.version.scenes.map((scene) => scene.sceneNumber)
   );
   const targeted = new Set(intent.explicitSceneNumbers);
   const targetScenes = params.version.scenes.filter((scene) => targeted.has(scene.sceneNumber));
-  const scenes = targetScenes.length > 0
+  const scenes = isProductionOnlyRequest(params.request)
+    ? []
+    : targetScenes.length > 0
     ? targetScenes
     : requestedClip && !intent.global
       ? []
@@ -359,7 +363,9 @@ export function buildEditPlanFromRequest(params: {
     baseVersionId: params.version.id,
     status: "proposed",
     userRequest: params.request,
-    summary: `I will update ${scenes.length === params.version.scenes.length ? "the full video" : `scene ${scenes.map((s) => s.sceneNumber).join(", ")}`} according to: "${params.request}". Timing and narration structure are preserved unless the scene text directly asks for content changes.`,
+    summary: scenes.length === 0 && Object.keys(requestedProductionSettings).length > 0
+      ? `更新全片的播放与品牌设置：${params.request}`
+      : `I will update ${scenes.length === params.version.scenes.length ? "the full video" : `scene ${scenes.map((s) => s.sceneNumber).join(", ")}`} according to: "${params.request}". Timing and narration structure are preserved unless the scene text directly asks for content changes.`,
     affectedScenes: scenes.map((scene) => scene.sceneNumber),
     changes: scenes.map((scene) => {
       const currentTone = scene.style.theme.includes("light") ? "light" : "dark";
@@ -392,14 +398,24 @@ export function buildEditPlanFromRequest(params: {
             : ["image", "clip", "thumbnail", "render"]
       };
     }),
+    productionSettings: Object.keys(requestedProductionSettings).length > 0 ? requestedProductionSettings : undefined,
     createdAt: new Date().toISOString()
   };
 }
 
 export function applyEditPlan(project: Project, plan: EditPlan): Project {
-  const nextScenes = project.currentVersion.scenes.map((scene) => {
+  const nextScenes = project.currentVersion.scenes.map((scene, index) => {
     const change = plan.changes.find((item) => item.sceneNumber === scene.sceneNumber);
-    if (!change) return scene;
+    if (!change) {
+      if (index !== 0 || !plan.productionSettings) return scene;
+      return {
+        ...scene,
+        style: {
+          ...scene.style,
+          production: { ...scene.style.production, ...plan.productionSettings }
+        }
+      };
+    }
 
     const theme = change.after.thumbnailTone === "light" ? "premium light" : scene.style.theme;
     return {
@@ -412,7 +428,10 @@ export function applyEditPlan(project: Project, plan: EditPlan): Project {
         ...scene.style,
         theme,
         palette: change.after.thumbnailTone === "light" ? palettes.light : scene.style.palette,
-        narrationVoice: change.after.narrationVoice ?? scene.style.narrationVoice
+        narrationVoice: change.after.narrationVoice ?? scene.style.narrationVoice,
+        production: index === 0 && plan.productionSettings
+          ? { ...scene.style.production, ...plan.productionSettings }
+          : scene.style.production
       }
     };
   });

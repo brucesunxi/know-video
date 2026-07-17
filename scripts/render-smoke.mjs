@@ -80,11 +80,25 @@ const smokeProject = {
         visualPrompt: "Render verification",
         motionPrompt: "Camera pans slowly to the right",
         durationSeconds: 2,
-        style: { theme: "cinematic", palette: ["#08111f", "#22c7b8"], mood: "precise" },
+        style: {
+          theme: "cinematic",
+          palette: ["#08111f", "#22c7b8"],
+          mood: "precise",
+          production: {
+            captionsEnabled: true,
+            captionStyle: "highlight",
+            playbackRate: 1.25,
+            musicVolume: 0.05,
+            logoPosition: "top-right",
+            logoSize: 10
+          }
+        },
         assets: [
           ...(clipUrl ? [{ id: "smoke-clip", type: "clip", url: clipUrl, r2Key: "smoke/clip.mp4", metadata: { duration: 2 } }] : []),
           { id: "smoke-image", type: "image", url: pngDataUrl, r2Key: "smoke/image.png" },
-          { id: "smoke-audio", type: "audio", url: wavDataUrl(), r2Key: "smoke/audio.wav" }
+          { id: "smoke-audio", type: "audio", url: wavDataUrl(), r2Key: "smoke/audio.wav" },
+          { id: "smoke-logo", type: "logo", url: pngDataUrl, r2Key: "smoke/logo.png" },
+          { id: "smoke-music", type: "music", url: wavDataUrl(1, 220), r2Key: "smoke/music.wav" }
         ]
       },
       {
@@ -134,7 +148,7 @@ await renderMedia({
   codec: "h264",
   audioCodec: "aac",
   outputLocation: output,
-  frameRange: [frameStart, frameEnd],
+  frameRange: [frameStart, Math.min(frameEnd, composition.durationInFrames - 1)],
   inputProps,
   ...(process.env.REMOTION_BROWSER_EXECUTABLE
     ? { browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE }

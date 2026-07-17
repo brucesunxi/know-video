@@ -5,6 +5,7 @@ import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import { materializeEditProposal } from "@/lib/edit-proposal";
 import { demoProject } from "@/lib/mock-data";
 import { initialVersionStatus, materializeNewProject } from "@/lib/project-creation";
+import { productionSettingsFromScenes } from "@/lib/production-settings";
 import { assetUrlForKey } from "@/lib/r2";
 import { invalidateVersionRender } from "@/lib/render-jobs";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
@@ -692,7 +693,10 @@ export async function applyPersistedEditPlan(params: {
     params.project.currentVersion.scenes
   );
   const normalizedChanges = normalizedPlan.changes;
-  if (normalizedChanges.length === 0) {
+  const currentProduction = productionSettingsFromScenes(params.project.currentVersion.scenes);
+  const productionChanged = Object.entries(normalizedPlan.productionSettings ?? {})
+    .some(([key, value]) => currentProduction[key as keyof typeof currentProduction] !== value);
+  if (normalizedChanges.length === 0 && !productionChanged) {
     throw new Error("修改方案没有产生实际变化，请换一种说法后重新生成。");
   }
   const changedProject = applyEditPlan(params.project, normalizedPlan);

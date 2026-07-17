@@ -1,5 +1,17 @@
-export type AssetType = "image" | "audio" | "clip" | "thumbnail" | "caption" | "render";
+export type AssetType = "image" | "audio" | "clip" | "thumbnail" | "caption" | "render" | "logo" | "music";
 export type NarrationVoice = "male-clear" | "male-deep" | "female-natural";
+export type PlaybackRate = 0.75 | 1 | 1.25 | 1.5;
+export type CaptionStyle = "minimal" | "boxed" | "highlight";
+export type LogoPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+export type ProductionSettings = {
+  captionsEnabled: boolean;
+  captionStyle: CaptionStyle;
+  playbackRate: PlaybackRate;
+  musicVolume: number;
+  logoPosition: LogoPosition;
+  logoSize: number;
+};
 
 export type GenerationOptions = {
   duration: "15" | "30" | "45" | "60";
@@ -29,6 +41,7 @@ export type Scene = {
     palette: string[];
     mood: string;
     narrationVoice?: NarrationVoice;
+    production?: Partial<ProductionSettings>;
   };
   assets: SceneAsset[];
 };
@@ -120,6 +133,7 @@ export type EditPlan = {
   summary: string;
   affectedScenes: number[];
   changes: EditChange[];
+  productionSettings?: Partial<ProductionSettings>;
   createdAt: string;
 };
 

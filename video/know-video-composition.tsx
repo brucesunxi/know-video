@@ -11,6 +11,7 @@ import {
   useCurrentFrame
 } from "remotion";
 import type { Project, Scene } from "@/lib/types";
+import { productionAsset, productionSettings } from "@/lib/production-settings";
 import { VIDEO_FPS } from "@/video/config";
 
 export type KnowVideoCompositionProps = { project: Project };
@@ -148,6 +149,9 @@ function audioVolume(frame: number, durationInFrames: number) {
 function SceneFrame({
   scene,
   projectTitle,
+  captionsEnabled,
+  captionStyle,
+  playbackRate,
   contentDurationInFrames,
   hasTransitionIn,
   hasTransitionOut,
@@ -155,6 +159,9 @@ function SceneFrame({
 }: {
   scene: Scene;
   projectTitle: string;
+  captionsEnabled: boolean;
+  captionStyle: "minimal" | "boxed" | "highlight";
+  playbackRate: number;
   contentDurationInFrames: number;
   hasTransitionIn: boolean;
   hasTransitionOut: boolean;
@@ -212,7 +219,7 @@ function SceneFrame({
   const clip = clipAsset?.url;
   const declaredClipDuration = Number(clipAsset?.metadata?.duration);
   const lastClipFrame = Number.isFinite(declaredClipDuration) && declaredClipDuration > 0
-    ? Math.max(0, Math.round(declaredClipDuration * VIDEO_FPS) - 1)
+    ? Math.max(0, Math.round((declaredClipDuration * VIDEO_FPS) / playbackRate) - 1)
     : Math.max(0, contentDurationInFrames - 1);
   const image = scene.assets.find((asset) => asset.type === "image" && asset.url)?.url;
   const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url)?.url;
@@ -230,6 +237,7 @@ function SceneFrame({
         <Freeze active={(currentFrame) => currentFrame > lastClipFrame} frame={lastClipFrame}>
           <OffthreadVideo
             muted
+            playbackRate={playbackRate}
             src={clip}
             style={{
               height: "106%",
@@ -301,35 +309,35 @@ function SceneFrame({
           {scene.title}
         </div>
       </div>
-      <div
+      {captionsEnabled ? <div
         style={{
           bottom: 102,
           left: "50%",
           maxWidth: 1420,
-          padding: "13px 24px 15px",
+          padding: captionStyle === "minimal" ? "5px 12px" : "13px 24px 15px",
           position: "absolute",
-          borderRadius: 8,
-          background: "rgba(2,8,18,.76)",
-          color: "#fff",
+          borderRadius: captionStyle === "highlight" ? 2 : 8,
+          background: captionStyle === "minimal" ? "transparent" : captionStyle === "highlight" ? accent : "rgba(2,8,18,.76)",
+          color: captionStyle === "highlight" ? "#06111f" : "#fff",
           fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif",
           fontSize: captionFontSize(caption.text),
-          fontWeight: 600,
+          fontWeight: captionStyle === "highlight" ? 800 : 600,
           letterSpacing: 0,
           lineHeight: 1.35,
           overflowWrap: "anywhere",
           opacity: copyOpacity * captionEntrance,
           textAlign: "center",
-          textShadow: "0 2px 12px rgba(0,0,0,.65)",
+          textShadow: captionStyle === "minimal" ? "0 2px 12px rgba(0,0,0,.9)" : "none",
           transform: `translate(-50%, ${(1 - captionEntrance) * 8}px)`
         }}
-      >{caption.text}</div>
+      >{caption.text}</div> : null}
       <div style={{ bottom: 52, color: "rgba(255,255,255,.7)", fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif", fontSize: 19, left: 74, opacity: copyOpacity, position: "absolute" }}>{projectTitle}</div>
       <div style={{ background: "rgba(255,255,255,.22)", bottom: 56, height: 5, left: 520, opacity: copyOpacity, position: "absolute", right: 74 }}>
         <div style={{ background: accent, height: "100%", width: `${(visualFrame / Math.max(1, contentDurationInFrames - 1)) * 100}%` }} />
       </div>
       {audio ? (
         <Sequence durationInFrames={contentDurationInFrames}>
-          <Audio src={audio} volume={(audioFrame) => audioVolume(audioFrame, contentDurationInFrames)} />
+          <Audio playbackRate={playbackRate} src={audio} volume={(audioFrame) => audioVolume(audioFrame, contentDurationInFrames)} />
         </Sequence>
       ) : null}
     </AbsoluteFill>
@@ -339,11 +347,20 @@ function SceneFrame({
 export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
   let from = 0;
   const transitionFrames = Math.round(VIDEO_FPS * 0.5);
+  const settings = productionSettings(project);
+  const logo = productionAsset(project, "logo");
+  const music = productionAsset(project, "music");
+  const logoPosition = {
+    "top-left": { left: 58, top: 52 },
+    "top-right": { right: 58, top: 52 },
+    "bottom-left": { bottom: 168, left: 58 },
+    "bottom-right": { bottom: 168, right: 58 }
+  }[settings.logoPosition];
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#08111f" }}>
       {project.currentVersion.scenes.map((scene, index) => {
-        const contentDurationInFrames = Math.max(1, Math.round(scene.durationSeconds * VIDEO_FPS));
+        const contentDurationInFrames = Math.max(1, Math.round((scene.durationSeconds * VIDEO_FPS) / settings.playbackRate));
         const start = from;
         from += contentDurationInFrames;
         const hasTransitionOut = index < project.currentVersion.scenes.length - 1;
@@ -355,16 +372,43 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
             premountFor={VIDEO_FPS}
           >
             <SceneFrame
+              captionsEnabled={settings.captionsEnabled}
+              captionStyle={settings.captionStyle}
               contentDurationInFrames={contentDurationInFrames}
               hasTransitionIn={index > 0}
               hasTransitionOut={hasTransitionOut}
               projectTitle={project.title}
+              playbackRate={settings.playbackRate}
               scene={scene}
               transitionFrames={transitionFrames}
             />
           </Sequence>
         );
       })}
+      {music ? (
+        <Audio
+          loop
+          src={music.url}
+          volume={(frame) => settings.musicVolume * interpolate(
+            frame,
+            [0, 18, Math.max(19, from - 24), Math.max(20, from - 1)],
+            [0, 1, 1, 0],
+            { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+          )}
+        />
+      ) : null}
+      {logo ? (
+        <Img
+          src={logo.url}
+          style={{
+            ...logoPosition,
+            maxHeight: "16%",
+            objectFit: "contain",
+            position: "absolute",
+            width: `${settings.logoSize}%`
+          }}
+        />
+      ) : null}
     </AbsoluteFill>
   );
 }

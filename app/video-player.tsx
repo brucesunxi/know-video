@@ -4,6 +4,7 @@ import { Player, type PlayerRef } from "@remotion/player";
 import { AlertCircle, FileVideo2, Loader2, RefreshCcw } from "lucide-react";
 import { forwardRef, useEffect, useState } from "react";
 import type { Project } from "@/lib/types";
+import { productionDurationInFrames } from "@/lib/production-settings";
 import { KnowVideoComposition } from "@/video/know-video-composition";
 import { VIDEO_FPS, VIDEO_HEIGHT, VIDEO_WIDTH } from "@/video/config";
 
@@ -66,7 +67,7 @@ export const KnowVideoPlayer = forwardRef<PlayerRef, { project: Project; classNa
         ref={ref}
         component={KnowVideoComposition}
         inputProps={{ project }}
-        durationInFrames={Math.max(1, Math.round(project.currentVersion.durationSeconds * VIDEO_FPS))}
+        durationInFrames={productionDurationInFrames(project.currentVersion, VIDEO_FPS)}
         compositionWidth={VIDEO_WIDTH}
         compositionHeight={VIDEO_HEIGHT}
         fps={VIDEO_FPS}

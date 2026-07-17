@@ -44,7 +44,13 @@ const valid = {
 
 assert.equal(editPlanSchema.safeParse(valid).success, true);
 assert.equal(editPlanSchema.safeParse({ ...valid, changes: [] }).success, false);
-assert.equal(editPlanSchema.safeParse({ ...valid, affectedScenes: [] }).success, false);
+assert.equal(editPlanSchema.safeParse({
+  ...valid,
+  affectedScenes: [],
+  changes: [],
+  productionSettings: { captionsEnabled: false, playbackRate: 1.25 }
+}).success, true);
+assert.equal(editPlanSchema.safeParse({ ...valid, affectedScenes: [], changes: [], productionSettings: {} }).success, false);
 assert.equal(editPlanSchema.safeParse({
   ...valid,
   changes: [{ ...valid.changes[0], regenerate: ["unknown"] }]

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { editPlanSchema } from "@/lib/edit-plan-schema";
+import { editPlanObjectSchema } from "@/lib/edit-plan-schema";
 import {
   applyPersistedEditPlan,
   loadCurrentProjectForEdit,
@@ -12,7 +12,9 @@ const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
   versionId: z.string().min(1).max(200),
   direct: z.boolean().optional().default(false),
-  editPlan: editPlanSchema.extend({ status: z.literal("proposed") })
+  editPlan: editPlanObjectSchema.extend({ status: z.literal("proposed") }).refine(
+    (plan) => plan.changes.length > 0 || Object.keys(plan.productionSettings ?? {}).length > 0
+  )
 });
 
 export const maxDuration = 120;
