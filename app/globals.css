@@ -3112,6 +3112,67 @@ button:disabled {
   line-height: 1.5;
 }
 
+.kv-plan-state {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  border: 1px solid #b8d9d4;
+  border-radius: 8px;
+  background: #f5fbfa;
+  padding: 12px;
+}
+
+.kv-plan-state > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #0f6f65;
+}
+
+.kv-plan-state > div:first-child svg {
+  flex: 0 0 auto;
+}
+
+.kv-plan-state strong {
+  font-size: 13px;
+}
+
+.kv-plan-state p {
+  margin: 0;
+  color: #526171;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.kv-plan-state-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.kv-plan-state-grid span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  border: 1px solid #d7ebe8;
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px 9px;
+}
+
+.kv-plan-state-grid strong {
+  overflow-wrap: anywhere;
+  color: #1f3442;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.kv-plan-state-grid small {
+  color: #6b7a8c;
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .kv-change-list {
   display: grid;
   gap: 10px;
@@ -3356,6 +3417,25 @@ button:disabled {
 
 .kv-review-actions {
   margin-top: 12px;
+}
+
+.kv-chat-draft-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-top: 1px solid #d6eee9;
+  background: #f6fbfa;
+  padding: 10px 14px 0;
+  color: #345460;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.kv-chat-draft-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #0f766e;
 }
 
 .kv-chat-form {

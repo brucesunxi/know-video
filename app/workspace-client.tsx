@@ -155,6 +155,23 @@ function uniqueRegenerate(plan: EditPlan) {
     .join("、");
 }
 
+function planScopeLabel(plan: EditPlan, sceneCount: number) {
+  const targetScenes = Array.from(new Set(plan.affectedScenes)).sort((a, b) => a - b);
+  if (targetScenes.length === 0) return "只调整全片设置";
+  if (targetScenes.length === sceneCount && sceneCount > 1) return `覆盖全片 ${sceneCount} 个场景`;
+  if (targetScenes.length === 1) return `只影响场景 ${targetScenes[0]}`;
+  return `影响场景 ${targetScenes.join("、")}`;
+}
+
+function planAssetWorkLabel(plan: EditPlan) {
+  const regenerate = uniqueRegenerate(plan);
+  const settingCount = productionSettingLabels(plan.productionSettings).length;
+  const structure = plan.sceneStructure ? "时间线结构" : "";
+  return [regenerate ? `重做${regenerate}` : "", structure, settingCount > 0 ? `${settingCount} 项成片设置` : ""]
+    .filter(Boolean)
+    .join("、") || "只更新文字和版本记录";
+}
+
 function productionSettingLabels(settings?: Partial<ProductionSettings>) {
   if (!settings) return [];
   return Object.entries(settings).map(([key, value]) => {
@@ -1752,6 +1769,9 @@ function ChatPanel({
     const scene = scenes.find((item) => item.sceneNumber === sceneNumber);
     return scene && planPreviewAsset(scene, pendingPlan.id);
   }) : [];
+  const planModificationCount = pendingPlan
+    ? pendingPlan.changes.length + productionSettingLabels(pendingPlan.productionSettings).length + (pendingPlan.sceneStructure ? 1 : 0)
+    : 0;
 
   useEffect(() => {
     const log = logRef.current;
@@ -1784,7 +1804,18 @@ function ChatPanel({
           <section className="kv-review-plan">
             <div className="kv-strip-heading">
               <h3>确认修改方案</h3>
-              <span>{pendingPlan.changes.length + productionSettingLabels(pendingPlan.productionSettings).length + (pendingPlan.sceneStructure ? 1 : 0)} 项修改</span>
+              <span>{planModificationCount} 项修改</span>
+            </div>
+            <div className="kv-plan-state" role="status">
+              <div>
+                <Clock3 size={16} />
+                <strong>方案待确认，当前视频还没有被改动</strong>
+              </div>
+              <p>确认后才会创建新版本并生成受影响素材；继续输入会先调整这个方案。</p>
+              <div className="kv-plan-state-grid">
+                <span><strong>{planScopeLabel(pendingPlan, scenes.length)}</strong><small>作用范围</small></span>
+                <span><strong>{planAssetWorkLabel(pendingPlan)}</strong><small>确认后执行</small></span>
+              </div>
             </div>
             <p>{pendingPlan.summary}</p>
             {pendingPlan.sceneStructure ? (
@@ -1836,6 +1867,12 @@ function ChatPanel({
           </div>
         ) : null}
       </div>
+      {pendingPlan ? (
+        <div className="kv-chat-draft-note" role="note">
+          <Check size={15} />
+          <span>正在审核修改方案。要真正改片，请点击“应用修改”；要改方案，继续输入补充要求。</span>
+        </div>
+      ) : null}
       <form className="kv-chat-form" onSubmit={onSubmit}>
         <textarea
           disabled={isBusy}
