@@ -69,6 +69,11 @@ type MediaGenerationResponse = {
   completedSceneNumbers?: number[];
   failedSceneNumbers?: number[];
 };
+type InvalidRenderMedia = {
+  sceneNumber: number;
+  type: "visual" | "audio";
+  reason: string;
+};
 type StoryboardGenerationResponse = {
   status?: "pending" | "ready" | "failed";
   project?: Project;
@@ -230,6 +235,21 @@ function sceneNumberListLabel(sceneNumbers: number[]) {
   return sceneNumbers.length > 6 ? `${visible} 等 ${sceneNumbers.length} 个` : visible;
 }
 
+function uniqueSortedSceneNumbers(sceneNumbers: number[]) {
+  return Array.from(new Set(sceneNumbers)).sort((left, right) => left - right);
+}
+
+function invalidRenderMediaSummary(items: InvalidRenderMedia[]) {
+  const visual = uniqueSortedSceneNumbers(items.filter((item) => item.type === "visual").map((item) => item.sceneNumber));
+  const audio = uniqueSortedSceneNumbers(items.filter((item) => item.type === "audio").map((item) => item.sceneNumber));
+  return { visual, audio, all: uniqueSortedSceneNumbers([...visual, ...audio]) };
+}
+
+function withoutRepairedInvalidMedia(items: InvalidRenderMedia[], type: InvalidRenderMedia["type"], sceneNumbers?: number[]) {
+  const repaired = sceneNumbers ? new Set(sceneNumbers) : undefined;
+  return items.filter((item) => item.type !== type || (repaired && !repaired.has(item.sceneNumber)));
+}
+
 function mediaCompletenessLabel(item: { sceneCount: number; visualCount: number; audioCount: number }) {
   if (item.sceneCount <= 0) return "还没有分镜";
   const visualReady = item.visualCount >= item.sceneCount;
@@ -302,8 +322,10 @@ function exportActionLabel(input: {
   renderUrl?: string;
   missingVisualCount: number;
   missingAudioCount: number;
+  invalidMediaCount?: number;
 }) {
   if (input.exportProgress !== undefined) return `正在合成 MP4 ${input.exportProgress}%`;
+  if (input.invalidMediaCount && input.invalidMediaCount > 0) return `先修复 ${input.invalidMediaCount} 个异常素材`;
   if (input.missingVisualCount > 0 && input.missingAudioCount > 0) {
     return `缺 ${input.missingVisualCount} 个画面 · ${input.missingAudioCount} 段配音`;
   }
@@ -2180,6 +2202,7 @@ function StudioScreen({
   exportProgress,
   activeRenderJobId,
   renderJobs,
+  invalidRenderMedia,
   exportsOpen,
   exportsLoading,
   onToggleExports,
@@ -2234,6 +2257,7 @@ function StudioScreen({
   exportProgress?: number;
   activeRenderJobId?: string;
   renderJobs: RenderJob[];
+  invalidRenderMedia: InvalidRenderMedia[];
   exportsOpen: boolean;
   exportsLoading: boolean;
   onToggleExports: () => void;
@@ -2274,6 +2298,7 @@ function StudioScreen({
   const missingAudioSceneNumbers = project.currentVersion.scenes
     .filter((item) => !item.assets.some((asset) => asset.type === "audio" && asset.url))
     .map((item) => item.sceneNumber);
+  const invalidMedia = invalidRenderMediaSummary(invalidRenderMedia);
   const filmSettings = productionSettings(project);
   useEffect(() => {
     if (!toolMenuOpen) return;
@@ -2411,7 +2436,7 @@ function StudioScreen({
             </div>
             <button
               className="kv-primary"
-              disabled={isBusy || exportProgress !== undefined || missingSceneNumbers.length > 0 || missingAudioSceneNumbers.length > 0}
+              disabled={isBusy || exportProgress !== undefined || missingSceneNumbers.length > 0 || missingAudioSceneNumbers.length > 0 || invalidRenderMedia.length > 0}
               onClick={onExport}
               type="button"
             >
@@ -2420,7 +2445,8 @@ function StudioScreen({
                 exportProgress,
                 renderUrl: project.currentVersion.renderUrl,
                 missingVisualCount: missingSceneNumbers.length,
-                missingAudioCount: missingAudioSceneNumbers.length
+                missingAudioCount: missingAudioSceneNumbers.length,
+                invalidMediaCount: invalidRenderMedia.length
               })}
             </button>
             {exportProgress !== undefined && activeRenderJobId ? (
@@ -2451,6 +2477,33 @@ function StudioScreen({
                 <button disabled={isBusy} onClick={() => onRegenerateAudio(missingAudioSceneNumbers)} type="button">
                   {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Mic2 size={15} />}
                   补齐配音：场景 {sceneNumberListLabel(missingAudioSceneNumbers)}
+                </button>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+        {invalidRenderMedia.length > 0 ? (
+          <section className="kv-media-readiness kv-media-readiness-danger" role="status" aria-label="云端素材异常">
+            <div>
+              <AlertCircle size={18} />
+              <div>
+                <strong>导出前发现云端素材异常</strong>
+                <span>
+                  场景 {sceneNumberListLabel(invalidMedia.all)} 的文件可能已失效或格式异常。重做对应素材后再导出，避免黑屏、静音或导出失败。
+                </span>
+              </div>
+            </div>
+            <div className="kv-media-readiness-actions">
+              {invalidMedia.visual.length > 0 ? (
+                <button disabled={isBusy} onClick={() => onRegenerate(invalidMedia.visual)} type="button">
+                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <ImagePlus size={15} />}
+                  重做异常画面：场景 {sceneNumberListLabel(invalidMedia.visual)}
+                </button>
+              ) : null}
+              {invalidMedia.audio.length > 0 ? (
+                <button disabled={isBusy} onClick={() => onRegenerateAudio(invalidMedia.audio)} type="button">
+                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Mic2 size={15} />}
+                  重做异常配音：场景 {sceneNumberListLabel(invalidMedia.audio)}
                 </button>
               ) : null}
             </div>
@@ -2671,6 +2724,7 @@ export function WorkspaceClient({
   const [studioView, setStudioView] = useState<StudioView>("preview");
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [exportProgress, setExportProgress] = useState<number | undefined>();
+  const [invalidRenderMedia, setInvalidRenderMedia] = useState<InvalidRenderMedia[]>([]);
   const [versions, setVersions] = useState<ProjectVersionSummary[]>([]);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionsLoading, setVersionsLoading] = useState(false);
@@ -2833,6 +2887,7 @@ export function WorkspaceClient({
     setProjects([]);
     setVersions([]);
     setRenderJobs([]);
+    setInvalidRenderMedia([]);
     setVersionsOpen(false);
     setExportsOpen(false);
     setAssetsOpen(false);
@@ -3932,6 +3987,7 @@ export function WorkspaceClient({
       const data = await response.json() as MediaGenerationResponse;
       if (data.project) setProject(data.project);
       if (!response.ok || !data.project) throw new Error(data.error || "场景画面生成失败。");
+      setInvalidRenderMedia((current) => withoutRepairedInvalidMedia(current, "visual", sceneNumbers));
       pushMessage({
         role: "assistant",
         type: "text",
@@ -4011,6 +4067,7 @@ export function WorkspaceClient({
       const data = await response.json() as MediaGenerationResponse;
       if (data.project) setProject(data.project);
       if (!response.ok || !data.project) throw new Error(data.error || "场景配音生成失败。");
+      setInvalidRenderMedia((current) => withoutRepairedInvalidMedia(current, "audio", sceneNumbers));
       pushMessage({
         role: "assistant",
         type: "text",
@@ -4091,8 +4148,14 @@ export function WorkspaceClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ projectId: project.id, versionId: project.currentVersion.id })
       });
-      const data = await response.json() as { renderJob?: RenderJob; error?: string };
-      if (!response.ok || !data.renderJob) throw new Error(data.error || "MP4 渲染任务启动失败。");
+      const data = await response.json() as { renderJob?: RenderJob; error?: string; invalidMedia?: InvalidRenderMedia[] };
+      if (!response.ok || !data.renderJob) {
+        if (Array.isArray(data.invalidMedia) && data.invalidMedia.length > 0) {
+          setInvalidRenderMedia(data.invalidMedia);
+        }
+        throw new Error(data.error || "MP4 渲染任务启动失败。");
+      }
+      setInvalidRenderMedia([]);
       const startedJob = data.renderJob;
       requestedJobId = startedJob.id;
       cancelledRenderIdsRef.current.delete(startedJob.id);
@@ -4145,6 +4208,7 @@ export function WorkspaceClient({
     setPendingPlan(undefined);
     setChatInput("");
     setErrorMessage(undefined);
+    setInvalidRenderMedia([]);
     setVersionsOpen(false);
     setVersionPreview(undefined);
     setExportsOpen(false);
@@ -4191,6 +4255,7 @@ export function WorkspaceClient({
       setVersions([]);
       setVersionPreview(undefined);
       setRenderJobs([]);
+      setInvalidRenderMedia([]);
       setVersionsOpen(false);
       setExportsOpen(false);
       setAssetsOpen(false);
@@ -4327,6 +4392,7 @@ export function WorkspaceClient({
           exportProgress={exportProgress}
           activeRenderJobId={activeRenderJobId}
           renderJobs={renderJobs}
+          invalidRenderMedia={invalidRenderMedia}
           exportsOpen={exportsOpen}
           exportsLoading={exportsLoading}
           onToggleExports={toggleExports}

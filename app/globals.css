@@ -918,6 +918,12 @@ button:disabled {
   color: #7a4b08;
 }
 
+.kv-media-readiness-danger {
+  border-color: #f2a8a0;
+  background: #fff5f4;
+  color: #8f2d24;
+}
+
 .kv-media-readiness > div:first-child {
   display: inline-flex;
   align-items: flex-start;
@@ -934,6 +940,10 @@ button:disabled {
   color: #694008;
   font-size: 13px;
   line-height: 1.35;
+}
+
+.kv-media-readiness-danger strong {
+  color: #7d2119;
 }
 
 .kv-media-readiness span {
@@ -961,6 +971,11 @@ button:disabled {
   color: #744908;
   font-weight: 750;
   overflow-wrap: anywhere;
+}
+
+.kv-media-readiness-danger .kv-media-readiness-actions button {
+  border-color: #e8aca5;
+  color: #84251d;
 }
 
 .kv-actions button.active {
