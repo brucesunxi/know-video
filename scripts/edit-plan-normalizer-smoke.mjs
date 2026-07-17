@@ -173,6 +173,21 @@ const scoped = normalizeEditPlanAgainstScenes({
 assert.deepEqual(Array.from(scoped.affectedScenes), [2]);
 assert.equal(scoped.changes[0].after.title, "Only this scene changes");
 
+const globalWithExclusion = normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "把所有场景都改成浅色，但第 2 场保持不变",
+  affectedScenes: [1],
+  changes: [{
+    sceneNumber: 1,
+    status: "updated",
+    before: side,
+    after: { ...side, thumbnailTone: "light", visualPrompt: "Bright first scene" },
+    regenerate: []
+  }]
+}, [scene, secondScene]);
+assert.deepEqual(Array.from(globalWithExclusion.affectedScenes), [1]);
+assert.equal(globalWithExclusion.changes[0].sceneNumber, 1);
+
 const unsupportedTopology = normalizeEditPlanAgainstScenes({
   ...basePlan,
   changes: [{

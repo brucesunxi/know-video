@@ -22,6 +22,8 @@ assert.deepEqual(Array.from(extractRequestedSceneNumbers("调整第2章节", sce
 assert.deepEqual(Array.from(extractRequestedSceneNumbers("把第2到第4场景变亮", scenes)), [2, 3, 4]);
 assert.deepEqual(Array.from(extractRequestedSceneNumbers("把第2和第3场景都变亮", scenes)), [2, 3]);
 assert.deepEqual(Array.from(extractRequestedSceneNumbers("调整第1、3、5个镜头", scenes)), [1, 3, 5]);
+assert.deepEqual(Array.from(extractRequestedSceneNumbers("只修改第 2、4 场", scenes)), [2, 4]);
+assert.deepEqual(Array.from(extractRequestedSceneNumbers("第3场保持不变", scenes)), [3]);
 assert.deepEqual(Array.from(extractRequestedSceneNumbers("Update scene 2-4", scenes)), [2, 3, 4]);
 assert.deepEqual(Array.from(extractRequestedSceneNumbers("让前三个镜头节奏更快", scenes)), [1, 2, 3]);
 assert.deepEqual(Array.from(extractRequestedSceneNumbers("修改最后一个场景", scenes)), [6]);

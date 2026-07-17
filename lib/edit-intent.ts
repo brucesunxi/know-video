@@ -35,7 +35,7 @@ export function extractRequestedSceneNumbers(request: string, availableSceneNumb
   };
   const rangePatterns = [
     /(?:scene|shot|chapter)\s*#?\s*(\d+)\s*(?:-|–|—|to|through)\s*(?:scene|shot|chapter)?\s*#?\s*(\d+)/giu,
-    /(?:第|场景|镜头|章节)?\s*([0-9一二两三四五六七八九十]+)\s*(?:到|至|-|–|—)\s*(?:第|场景|镜头|章节)?\s*([0-9一二两三四五六七八九十]+)\s*(?:个)?(?:场景|镜头|章节|幕|段)/gu
+    /(?:第|场景|镜头|章节)?\s*([0-9一二两三四五六七八九十]+)\s*(?:到|至|-|–|—)\s*(?:第|场景|镜头|章节)?\s*([0-9一二两三四五六七八九十]+)\s*(?:个)?(?:场景|场|镜头|章节|幕|段)/gu
   ];
   for (const pattern of rangePatterns) {
     for (const match of request.matchAll(pattern)) {
@@ -46,8 +46,8 @@ export function extractRequestedSceneNumbers(request: string, availableSceneNumb
   }
 
   const orderedPatterns = [
-    /(?:前|first)\s*([0-9一二两三四五六七八九十]+)\s*(?:个)?(?:场景|镜头|章节|幕|段|scenes?|shots?|chapters?)/giu,
-    /(?:后|last)\s*([0-9一二两三四五六七八九十]+)\s*(?:个)?(?:场景|镜头|章节|幕|段|scenes?|shots?|chapters?)/giu
+    /(?:前|first)\s*([0-9一二两三四五六七八九十]+)\s*(?:个)?(?:场景|场|镜头|章节|幕|段|scenes?|shots?|chapters?)/giu,
+    /(?:后|last)\s*([0-9一二两三四五六七八九十]+)\s*(?:个)?(?:场景|场|镜头|章节|幕|段|scenes?|shots?|chapters?)/giu
   ];
   for (const [index, pattern] of orderedPatterns.entries()) {
     for (const match of request.matchAll(pattern)) {
@@ -59,12 +59,12 @@ export function extractRequestedSceneNumbers(request: string, availableSceneNumb
       selected.forEach((sceneNumber) => matches.add(sceneNumber));
     }
   }
-  if (/(?:最后|最终|结尾|片尾)(?:的)?(?:一个|1个)?(?:场景|镜头|章节|幕|段)|last\s+(?:scene|shot|chapter)/iu.test(request)) {
+  if (/(?:最后|最终|结尾|片尾)(?:的)?(?:一个|1个)?(?:场景|场|镜头|章节|幕|段)|last\s+(?:scene|shot|chapter)/iu.test(request)) {
     const last = availableSceneNumbers.at(-1);
     if (last) matches.add(last);
   }
 
-  const coordinatedPattern = /((?:(?:第\s*)?[0-9一二两三四五六七八九十]+\s*(?:、|，|,|和|与|及)\s*)+(?:第\s*)?[0-9一二两三四五六七八九十]+)\s*(?:个)?(?:场景|镜头|章节|幕|段)/gu;
+  const coordinatedPattern = /((?:(?:第\s*)?[0-9一二两三四五六七八九十]+\s*(?:、|，|,|和|与|及)\s*)+(?:第\s*)?[0-9一二两三四五六七八九十]+)\s*(?:个)?(?:场景|场|镜头|章节|幕|段)/gu;
   for (const match of request.matchAll(coordinatedPattern)) {
     for (const numberMatch of match[1].matchAll(/(?:第\s*)?([0-9一二两三四五六七八九十]+)/gu)) {
       const sceneNumber = parseSceneNumber(numberMatch[1]);
@@ -75,7 +75,7 @@ export function extractRequestedSceneNumbers(request: string, availableSceneNumb
   const patterns = [
     /(?:scene|shot|chapter)\s*#?\s*(\d+)/giu,
     /(?:场景|镜头|章节)\s*([0-9一二两三四五六七八九十]+)\s*/gu,
-    /第\s*([0-9一二两三四五六七八九十]+)\s*(?:个)?(?:场景|镜头|章节|幕|段)/gu
+    /第\s*([0-9一二两三四五六七八九十]+)\s*(?:个)?(?:场景|场|镜头|章节|幕|段)/gu
   ];
 
   for (const pattern of patterns) {

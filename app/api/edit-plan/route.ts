@@ -1,19 +1,23 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { demoProject } from "@/lib/mock-data";
-import { createEditPlan } from "@/lib/ai-video";
+import { createEditPlan, refineEditPlan } from "@/lib/ai-video";
 import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { CandidateImageError, generateSceneImageCandidate } from "@/lib/image-candidates";
-import { loadCurrentProjectForEdit, persistCandidateEditConversation, persistEditPlan } from "@/lib/project-mutations";
+import { loadCurrentProjectForEdit, loadProposedEditPlan, persistCandidateEditConversation, persistEditPlan } from "@/lib/project-mutations";
 import type { ChatMessage, ProjectVersion } from "@/lib/types";
 
 const requestSchema = z.object({
   request: z.string().trim().min(1).max(4000),
   projectId: z.string().optional(),
-  versionId: z.string().optional()
+  versionId: z.string().optional(),
+  editPlanId: z.string().min(1).max(200).optional()
 }).refine(
   (value) => Boolean(value.projectId) === Boolean(value.versionId),
   { message: "项目和版本信息必须同时提供。" }
+).refine(
+  (value) => !value.editPlanId || Boolean(value.projectId && value.versionId),
+  { message: "细化修改方案需要项目和版本信息。" }
 );
 
 function publicEngine(engine: string) {
@@ -41,10 +45,23 @@ export async function POST(request: Request) {
       { status: 409 }
     );
   }
+  const existingPlan = body.editPlanId && body.projectId && body.versionId
+    ? await loadProposedEditPlan({
+        projectId: body.projectId,
+        versionId: body.versionId,
+        editPlanId: body.editPlanId
+      })
+    : undefined;
+  if (body.editPlanId && !existingPlan) {
+    return NextResponse.json(
+      { error: "当前修改方案已经失效，请重新生成。" },
+      { status: 409 }
+    );
+  }
   const candidateIntent = currentProject
     ? candidateEditFromRequest(body.request, currentProject.currentVersion.scenes.map((scene) => scene.sceneNumber))
     : undefined;
-  if (currentProject && body.projectId && body.versionId && candidateIntent) {
+  if (!existingPlan && currentProject && body.projectId && body.versionId && candidateIntent) {
     try {
       const result = await generateSceneImageCandidate(currentProject, {
         sceneNumber: candidateIntent.sceneNumber,
@@ -93,11 +110,18 @@ export async function POST(request: Request) {
   let editPlan;
   let engine;
   try {
-    const result = await createEditPlan({
-      request: body.request,
-      version: workingVersion,
-      editNumber
-    });
+    const result = existingPlan
+      ? await refineEditPlan({
+          request: body.request,
+          version: workingVersion,
+          existingPlan,
+          editNumber
+        })
+      : await createEditPlan({
+          request: body.request,
+          version: workingVersion,
+          editNumber
+        });
     editPlan = result.editPlan;
     engine = result.engine;
   } catch (error) {

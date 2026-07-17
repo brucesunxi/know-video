@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import { analyzeEditIntent, requestsGeneratedClip } from "@/lib/edit-intent";
+import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import { requestsSceneStructureChange, sceneStructureFromRequest, sceneStructureSummary } from "@/lib/scene-structure-intent";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
@@ -161,16 +162,21 @@ function normalizeEditPayload(
   userRequest: string,
   globalChineseRewrite: boolean,
   globalScopeRequest: boolean,
-  preserveVisualAssetsOnLocalization: boolean
+  preserveVisualAssetsOnLocalization: boolean,
+  options?: {
+    resolvedSceneNumbers?: Set<number>;
+    preservePayloadScope?: boolean;
+  }
 ): EditPlanPayload {
   const sceneByNumber = new Map(version.scenes.map((scene) => [scene.sceneNumber, scene]));
   const intent = analyzeEditIntent(
     userRequest,
     version.scenes.map((scene) => scene.sceneNumber)
   );
-  const explicitlyAllowed = !globalScopeRequest && intent.explicitSceneNumbers.length > 0
-    ? new Set(intent.explicitSceneNumbers)
-    : undefined;
+  const explicitlyAllowed = options?.resolvedSceneNumbers
+    ?? (!globalScopeRequest && intent.explicitSceneNumbers.length > 0
+      ? new Set(intent.explicitSceneNumbers)
+      : undefined);
   const seen = new Set<number>();
   const changes = payload.changes.flatMap((change) => {
     const scene = sceneByNumber.get(change.sceneNumber);
@@ -209,15 +215,19 @@ function normalizeEditPayload(
   return globalChineseRewrite
     ? {
         ...payload,
-        summary: preserveVisualAssetsOnLocalization
-          ? `将全部 ${version.scenes.length} 个场景的标题、旁白、字幕和制作描述统一改为中文，并保留现有视觉素材。`
-          : `将全部 ${version.scenes.length} 个场景的标题、旁白、字幕和视觉方案统一改为中文。`,
-        affectedScenes: version.scenes.map((scene) => scene.sceneNumber),
+        summary: options?.preservePayloadScope
+          ? payload.summary
+          : preserveVisualAssetsOnLocalization
+            ? `将全部 ${version.scenes.length} 个场景的标题、旁白、字幕和制作描述统一改为中文，并保留现有视觉素材。`
+            : `将全部 ${version.scenes.length} 个场景的标题、旁白、字幕和视觉方案统一改为中文。`,
+        affectedScenes: options?.preservePayloadScope
+          ? changes.map((change) => change.sceneNumber)
+          : version.scenes.map((scene) => scene.sceneNumber),
         changes
       }
     : {
         ...payload,
-        affectedScenes: globalScopeRequest
+        affectedScenes: globalScopeRequest && !options?.preservePayloadScope
           ? version.scenes.map((scene) => scene.sceneNumber)
           : changes.map((change) => change.sceneNumber),
         changes
@@ -751,6 +761,106 @@ export async function createEditPlan(params: {
     }
     console.error("[ai-video] Falling back to heuristic edit plan:", error);
     return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
+  }
+}
+
+export async function refineEditPlan(params: {
+  request: string;
+  version: ProjectVersion;
+  existingPlan: EditPlan;
+  editNumber: number;
+}): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
+  if (params.existingPlan.baseVersionId !== params.version.id || params.existingPlan.status !== "proposed") {
+    throw new Error("当前修改方案已经失效，请重新生成。");
+  }
+
+  const deterministic = refineEditPlanScope(params);
+  if (deterministic) return { editPlan: deterministic, engine: "heuristic" };
+  if (params.existingPlan.sceneStructure) {
+    throw new Error("时间线结构方案暂不支持继续补充，请先取消，再用一句完整要求重新规划。");
+  }
+
+  const textModel = getTextModel();
+  if (!textModel) {
+    throw new Error("当前方案需要语义改写服务才能继续细化，请稍后重试。");
+  }
+
+  const available = new Set(params.version.scenes.map((scene) => scene.sceneNumber));
+  const combinedRequest = `${params.existingPlan.userRequest}\n补充要求：${params.request}`;
+  const combinedIntent = analyzeEditIntent(combinedRequest, Array.from(available));
+  try {
+    const completion = await textModel.client.chat.completions.create({
+      model: textModel.model,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You are a precise AI video edit-plan reviewer.",
+            "Revise the existing proposed plan according to the user's follow-up instruction; do not apply it.",
+            "The follow-up instruction has priority and may add, remove, or alter scene changes.",
+            "Return the complete revised plan, not only the delta from the previous plan.",
+            "Use only existing scene numbers and status updated. Preserve every unrelated field exactly.",
+            "If a scene should remain unchanged, omit it from changes and affectedScenes.",
+            "Keep all user-facing summary text in the user's language.",
+            "Return strict JSON only."
+          ].join(" ")
+        },
+        {
+          role: "user",
+          content: `Current scenes:\n${JSON.stringify(params.version.scenes, null, 2)}\n\nExisting proposed plan:\n${JSON.stringify(params.existingPlan, null, 2)}\n\nFollow-up instruction:\n${params.request}\n\nReturn JSON in this exact shape:\n{ "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
+        }
+      ],
+      temperature: 0.2
+    });
+    const payload = editPlanPayloadSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+    const seen = new Set<number>();
+    for (const change of payload.changes) {
+      if (!available.has(change.sceneNumber) || seen.has(change.sceneNumber) || change.status !== "updated") {
+        throw new Error("Refined edit plan contains invalid or repeated scenes");
+      }
+      seen.add(change.sceneNumber);
+    }
+    if (payload.changes.length === 0 && !params.existingPlan.productionSettings) {
+      throw new Error("Refined edit plan contains no changes");
+    }
+
+    const normalized = normalizeEditPayload(
+      payload,
+      params.version,
+      combinedRequest,
+      combinedIntent.globalChineseRewrite,
+      combinedIntent.global,
+      combinedIntent.preserveVisualAssetsOnLocalization,
+      {
+        resolvedSceneNumbers: new Set(payload.changes.map((change) => change.sceneNumber)),
+        preservePayloadScope: true
+      }
+    );
+    if (normalized.changes.length !== payload.changes.length) {
+      throw new Error("Refined edit plan could not be normalized safely");
+    }
+
+    return {
+      engine: textModel.engine,
+      editPlan: {
+        ...params.existingPlan,
+        id: crypto.randomUUID(),
+        editNumber: params.editNumber,
+        userRequest: combinedRequest,
+        summary: normalized.summary,
+        affectedScenes: normalized.affectedScenes,
+        changes: normalized.changes,
+        status: "proposed",
+        createdAt: new Date().toISOString()
+      }
+    };
+  } catch (error) {
+    console.error("[ai-video] Edit-plan refinement failed:", error);
+    if (isModelConnectionError(error)) {
+      throw new Error("方案细化服务连接超时，请稍后重试。", { cause: error });
+    }
+    throw new Error("没有可靠地理解这条补充要求，请说得更具体一些。", { cause: error });
   }
 }
 

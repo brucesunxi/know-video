@@ -79,6 +79,7 @@ type StoryboardGenerationResponse = {
 };
 type BusyAction =
   | "planning-edit"
+  | "refining-edit"
   | "applying-edit"
   | "generating-images"
   | "generating-candidate"
@@ -320,6 +321,8 @@ function busyActionLabel(action?: BusyAction) {
   switch (action) {
     case "planning-edit":
       return "正在理解要求并生成逐场景修改方案";
+    case "refining-edit":
+      return "正在根据补充要求细化当前修改方案";
     case "applying-edit":
       return "正在保存新版本并更新受影响素材";
     case "generating-images":
@@ -1836,7 +1839,7 @@ function ChatPanel({
             event.currentTarget.form?.requestSubmit();
           }}
           onChange={(event) => onInput(event.target.value)}
-          placeholder="例如：把第 2 场景改成浅色；让整体更电影感；缩短旁白…"
+          placeholder={pendingPlan ? "继续调整当前方案，输入补充要求…" : "描述你想修改的场景、旁白或整体风格…"}
           value={input}
         />
         <button disabled={isBusy || input.trim().length === 0} type="submit">
@@ -2755,11 +2758,13 @@ export function WorkspaceClient({
     setChatInput("");
     setCandidateToCompare(undefined);
     setIsBusy(true);
-    const candidateIntent = candidateEditFromRequest(
-      request,
-      project.currentVersion.scenes.map((scene) => scene.sceneNumber)
-    );
-    setBusyAction(candidateIntent ? "generating-candidate" : "planning-edit");
+    const candidateIntent = pendingPlan
+      ? undefined
+      : candidateEditFromRequest(
+          request,
+          project.currentVersion.scenes.map((scene) => scene.sceneNumber)
+        );
+    setBusyAction(pendingPlan ? "refining-edit" : candidateIntent ? "generating-candidate" : "planning-edit");
     setErrorMessage(undefined);
     pushMessage({ role: "user", type: "text", content: request });
 
@@ -2770,6 +2775,7 @@ export function WorkspaceClient({
         body: JSON.stringify({
           projectId: project.id,
           versionId: project.currentVersion.id,
+          editPlanId: pendingPlan?.id,
           request
         }),
         signal: AbortSignal.timeout(candidateIntent ? 125_000 : 45_000)

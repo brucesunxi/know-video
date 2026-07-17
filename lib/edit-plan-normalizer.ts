@@ -7,7 +7,7 @@ export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) 
   const preserveVisualAssets = intent.preserveVisualAssetsOnLocalization;
   const clipRequested = requestsGeneratedClip(plan.userRequest);
   const ambiguousClipRequest = clipRequested && intent.explicitSceneNumbers.length === 0 && !intent.global;
-  const explicitlyAllowed = intent.explicitSceneNumbers.length > 0
+  const explicitlyAllowed = !intent.global && intent.explicitSceneNumbers.length > 0
     ? new Set(intent.explicitSceneNumbers)
     : undefined;
   const seen = new Set<number>();
