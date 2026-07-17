@@ -253,8 +253,8 @@ function versionMediaSummary(version: ProjectVersion) {
 }
 
 function versionOutputLabel(version: ProjectVersion) {
-  if (version.status === "rendering" || version.renderJobId) return "成片合成中";
   if (version.renderUrl) return "已有 MP4 成片";
+  if (version.status === "rendering" || version.renderJobId) return "成片合成中";
   const summary = versionMediaSummary(version);
   return mediaCompletenessClass(summary) === "complete" ? "可重新导出 MP4" : "恢复后需补齐素材";
 }
@@ -492,10 +492,10 @@ function projectStatusBadges(project: Project, source: Source) {
       : version.assetStatus === "pending"
         ? { label: "素材生成中", tone: "working" }
         : { label: "素材待生成", tone: "attention" };
-  const output = version.status === "rendering" || version.renderJobId
-    ? { label: "成片合成中", tone: "working" }
-    : version.renderUrl
-      ? { label: "MP4 已就绪", tone: "ready" }
+  const output = version.renderUrl
+    ? { label: "MP4 已就绪", tone: "ready" }
+    : version.status === "rendering" || version.renderJobId
+      ? { label: "成片合成中", tone: "working" }
       : version.assetStatus === "ready"
         ? { label: "可导出 MP4", tone: "ready" }
         : { label: "暂不可导出", tone: "neutral" };
@@ -4117,7 +4117,7 @@ export function WorkspaceClient({
       setExportProgress(100);
       setProject((current) => ({
         ...current,
-        currentVersion: { ...current.currentVersion, renderUrl: completed.renderUrl, status: "ready" }
+        currentVersion: { ...current.currentVersion, renderJobId: undefined, renderUrl: completed.renderUrl, status: "ready" }
       }));
       const anchor = document.createElement("a");
       anchor.href = completed.renderUrl;

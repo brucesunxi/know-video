@@ -6,6 +6,7 @@ const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "
 
 assert.match(workspace, /function versionMediaSummary/);
 assert.match(workspace, /function versionOutputLabel/);
+assert.match(workspace, /function versionOutputLabel[\s\S]*if \(version\.renderUrl\) return "已有 MP4 成片";[\s\S]*if \(version\.status === "rendering" \|\| version\.renderJobId\) return "成片合成中";/);
 assert.match(workspace, /const selectedSummary = versionMediaSummary\(preview\.version\)/);
 assert.match(workspace, /const currentSummary = versionMediaSummary\(preview\.currentVersion\)/);
 assert.match(workspace, /mediaCompletenessLabel\(selectedSummary\)/);

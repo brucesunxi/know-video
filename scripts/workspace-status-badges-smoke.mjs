@@ -8,6 +8,8 @@ assert.match(workspace, /function projectStatusBadges/);
 assert.match(workspace, /version\.assetStatus === "ready"/);
 assert.match(workspace, /version\.status === "rendering" \|\| version\.renderJobId/);
 assert.match(workspace, /version\.renderUrl/);
+assert.match(workspace, /const output = version\.renderUrl[\s\S]*version\.status === "rendering" \|\| version\.renderJobId/);
+assert.match(workspace, /renderJobId: undefined, renderUrl: completed\.renderUrl, status: "ready"/);
 assert.match(workspace, /statusBadges\.map/);
 assert.doesNotMatch(workspace, /<span>智能分镜<\/span>/);
 assert.doesNotMatch(workspace, /<span>云端素材<\/span>/);
