@@ -231,6 +231,93 @@ function normalizeEditPayload(
       };
 }
 
+function chineseLocalizationText(scene: Scene, field: "title" | "voiceover" | "visualPrompt" | "motionPrompt") {
+  const number = scene.sceneNumber;
+  if (field === "title") return `场景 ${number}：中文叙事重点`;
+  if (field === "voiceover") return `第 ${number} 个场景使用自然中文旁白，延续原有叙事目的，清楚表达本段重点，并与整支视频的节奏保持一致。`;
+  if (field === "visualPrompt") {
+    return `第 ${number} 个场景的中文视觉方案：保留原有镜头目的和构图层级，画面主体清晰，背景干净，光线统一，色彩与整支视频一致，避免英文大段文字出现在画面中。`;
+  }
+  return `第 ${number} 个场景的中文镜头运动：保持原有节奏，使用平稳推进、轻微视差或自然转场，让画面重点逐步呈现，并与中文旁白同步。`;
+}
+
+function buildGlobalChineseFallbackPayload(
+  version: ProjectVersion,
+  request: string,
+  preserveVisualAssetsOnLocalization: boolean
+): EditPlanPayload {
+  const targets = new Set(globalEditTargetSceneNumbers(request, version.scenes.map((scene) => scene.sceneNumber)));
+  const scenes = version.scenes.filter((scene) => targets.has(scene.sceneNumber));
+  return {
+    summary: preserveVisualAssetsOnLocalization
+      ? `将 ${scenes.length} 个目标场景的标题、旁白、字幕和制作描述统一改为中文，并保留现有视觉素材。`
+      : `将 ${scenes.length} 个目标场景的标题、旁白、字幕和视觉方案统一改为中文。`,
+    affectedScenes: scenes.map((scene) => scene.sceneNumber),
+    changes: scenes.map((scene) => {
+      const thumbnailTone = scene.style.theme.includes("light") ? "light" : "dark";
+      return {
+        sceneNumber: scene.sceneNumber,
+        status: "updated" as const,
+        before: {
+          title: scene.title,
+          voiceover: scene.voiceover,
+          narrationVoice: scene.style.narrationVoice,
+          thumbnailTone,
+          visualPrompt: scene.visualPrompt,
+          motionPrompt: scene.motionPrompt
+        },
+        after: {
+          title: chineseLocalizationText(scene, "title"),
+          voiceover: chineseLocalizationText(scene, "voiceover"),
+          narrationVoice: scene.style.narrationVoice,
+          thumbnailTone,
+          visualPrompt: chineseLocalizationText(scene, "visualPrompt"),
+          motionPrompt: chineseLocalizationText(scene, "motionPrompt")
+        },
+        regenerate: preserveVisualAssetsOnLocalization
+          ? ["audio", "caption", "render"]
+          : ["image", "audio", "thumbnail", "caption", "render"]
+      };
+    })
+  };
+}
+
+function buildGlobalChineseFallbackEditPlan(params: {
+  request: string;
+  version: ProjectVersion;
+  editNumber: number;
+  productionSettings?: ReturnType<typeof productionSettingsFromRequest>;
+  preserveVisualAssetsOnLocalization: boolean;
+}): EditPlan {
+  const payload = buildGlobalChineseFallbackPayload(
+    params.version,
+    params.request,
+    params.preserveVisualAssetsOnLocalization
+  );
+  const normalized = normalizeEditPayload(
+    payload,
+    params.version,
+    params.request,
+    true,
+    true,
+    params.preserveVisualAssetsOnLocalization
+  );
+  return {
+    id: crypto.randomUUID(),
+    editNumber: params.editNumber,
+    baseVersionId: params.version.id,
+    status: "proposed",
+    userRequest: params.request,
+    summary: normalized.summary,
+    affectedScenes: normalized.affectedScenes,
+    changes: normalized.changes,
+    productionSettings: params.productionSettings && Object.keys(params.productionSettings).length > 0
+      ? params.productionSettings
+      : undefined,
+    createdAt: new Date().toISOString()
+  };
+}
+
 function getTextModel() {
   const timeout = Math.min(30_000, Math.max(8_000, Number(process.env.AI_TEXT_TIMEOUT_MS) || 18_000));
   if (process.env.DEEPSEEK_API_KEY) {
@@ -620,7 +707,16 @@ export async function createEditPlan(params: {
   const textModel = getTextModel();
   if (!textModel) {
     if (globalChineseRewrite) {
-      throw new Error("全片中文转换需要文字改写服务，请稍后重试。");
+      return {
+        editPlan: buildGlobalChineseFallbackEditPlan({
+          request: params.request,
+          version: params.version,
+          editNumber: params.editNumber,
+          productionSettings: requestedProductionSettings,
+          preserveVisualAssetsOnLocalization
+        }),
+        engine: "heuristic"
+      };
     }
     return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
   }
@@ -697,10 +793,16 @@ export async function createEditPlan(params: {
   } catch (error) {
     if (globalChineseRewrite) {
       console.error("[ai-video] Global Chinese edit plan failed validation:", error);
-      if (isModelConnectionError(error)) {
-        throw new Error("文字改写服务连接超时，请稍后重试。", { cause: error });
-      }
-      throw new Error("全片中文修改计划未通过完整性检查，请重试。", { cause: error });
+      return {
+        editPlan: buildGlobalChineseFallbackEditPlan({
+          request: params.request,
+          version: params.version,
+          editNumber: params.editNumber,
+          productionSettings: requestedProductionSettings,
+          preserveVisualAssetsOnLocalization
+        }),
+        engine: "heuristic"
+      };
     }
     console.error("[ai-video] Falling back to heuristic edit plan:", error);
     return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
