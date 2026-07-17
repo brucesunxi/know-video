@@ -393,6 +393,23 @@ function decimalSecondsLabel(value: unknown) {
   return `${seconds.toFixed(seconds >= 10 ? 1 : 2)} 秒`;
 }
 
+function audioAssetQualityItems(asset: SceneAsset) {
+  if (asset.type !== "audio") return [];
+  const actual = decimalSecondsLabel(asset.metadata?.actualDurationSeconds);
+  const target = decimalSecondsLabel(asset.metadata?.targetDurationSeconds);
+  const voice = typeof asset.metadata?.narrationVoice === "string"
+    ? narrationVoiceProfile(asset.metadata.narrationVoice as NarrationVoice).label
+    : typeof asset.metadata?.voice === "string"
+      ? asset.metadata.voice
+      : undefined;
+  const model = typeof asset.metadata?.model === "string" ? asset.metadata.model : undefined;
+  return [
+    actual && target ? `配音 ${actual} / 场景 ${target}` : actual ? `配音 ${actual}` : "",
+    voice ? `音色 ${voice}` : "",
+    model ? `来源 ${model}` : ""
+  ].filter(Boolean);
+}
+
 function renderJobQualityLabel(job: RenderJob) {
   if (job.status !== "ready") return undefined;
   return job.metadata?.quality === "passed" ? "成片质检通过" : "成片已生成";
@@ -1691,36 +1708,44 @@ function SceneAssetsPanel({
       <div className="kv-asset-list">
         {assets.length === 0 ? (
           <div className="kv-assets-empty"><ImagePlus size={20} />这个场景还没有可用素材</div>
-        ) : assets.map((asset) => (
-          <article key={asset.id}>
-            {asset.type === "image" || asset.type === "thumbnail" ? (
-              <span className="kv-asset-preview" style={{ backgroundImage: `url("${asset.url}")` }} />
-            ) : (
-              <span className="kv-asset-preview icon">
-                {asset.type === "clip" ? <FileVideo2 size={22} /> : <Music2 size={22} />}
-              </span>
-            )}
-            <div>
-              <strong>{String(asset.metadata?.name ?? (asset.type === "image" ? "当前画面" : asset.type === "thumbnail" ? "候选画面" : asset.type === "clip" ? "视频片段" : "场景配音"))}</strong>
-              <span>{asset.type === "image" ? "使用中" : asset.type === "thumbnail" ? "可对比采用" : asset.type === "clip" ? "视频" : "音频"} · {fileSizeLabel(asset.metadata?.size)}</span>
-            </div>
-            <div className="kv-asset-actions">
-              {asset.type === "thumbnail" && asset.metadata?.candidate === true ? (
-                <button className="compare" disabled={isBusy} onClick={() => setComparisonId(asset.id)} title="与当前画面大图对比" type="button">
-                  <Eye size={15} />对比
+        ) : assets.map((asset) => {
+          const audioQualityItems = audioAssetQualityItems(asset);
+          return (
+            <article key={asset.id}>
+              {asset.type === "image" || asset.type === "thumbnail" ? (
+                <span className="kv-asset-preview" style={{ backgroundImage: `url("${asset.url}")` }} />
+              ) : (
+                <span className="kv-asset-preview icon">
+                  {asset.type === "clip" ? <FileVideo2 size={22} /> : <Music2 size={22} />}
+                </span>
+              )}
+              <div>
+                <strong>{String(asset.metadata?.name ?? (asset.type === "image" ? "当前画面" : asset.type === "thumbnail" ? "候选画面" : asset.type === "clip" ? "视频片段" : "场景配音"))}</strong>
+                <span>{asset.type === "image" ? "使用中" : asset.type === "thumbnail" ? "可对比采用" : asset.type === "clip" ? "视频" : "音频"} · {fileSizeLabel(asset.metadata?.size)}</span>
+                {audioQualityItems.length > 0 ? (
+                  <div className="kv-asset-audio-quality" aria-label="配音质量信息">
+                    {audioQualityItems.map((item) => <small key={item}>{item}</small>)}
+                  </div>
+                ) : null}
+              </div>
+              <div className="kv-asset-actions">
+                {asset.type === "thumbnail" && asset.metadata?.candidate === true ? (
+                  <button className="compare" disabled={isBusy} onClick={() => setComparisonId(asset.id)} title="与当前画面大图对比" type="button">
+                    <Eye size={15} />对比
+                  </button>
+                ) : null}
+                {asset.type === "thumbnail" && asset.metadata?.candidate === true ? (
+                  <button className="adopt" disabled={isBusy} onClick={() => onAdoptCandidate(asset.id)} title="采用为当前画面并创建新版本" type="button">
+                    <Check size={15} />采用
+                  </button>
+                ) : null}
+                <button aria-label={`移除 ${String(asset.metadata?.name ?? asset.type)}`} className="remove" disabled={isBusy} onClick={() => onRemove(asset.id)} title="从当前版本移除" type="button">
+                  <Trash2 size={16} />
                 </button>
-              ) : null}
-              {asset.type === "thumbnail" && asset.metadata?.candidate === true ? (
-                <button className="adopt" disabled={isBusy} onClick={() => onAdoptCandidate(asset.id)} title="采用为当前画面并创建新版本" type="button">
-                  <Check size={15} />采用
-                </button>
-              ) : null}
-              <button aria-label={`移除 ${String(asset.metadata?.name ?? asset.type)}`} className="remove" disabled={isBusy} onClick={() => onRemove(asset.id)} title="从当前版本移除" type="button">
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </article>
-        ))}
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
     {comparisonId ? (
