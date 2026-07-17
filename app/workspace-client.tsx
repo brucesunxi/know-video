@@ -516,6 +516,30 @@ function sceneMediaStatusLabel(scene: Scene) {
   return missing.join(" · ");
 }
 
+function sceneMediaDiagnosticItems(scene: Scene) {
+  const state = sceneMediaState(scene);
+  return [
+    {
+      key: "visual",
+      label: "画面",
+      status: state.visualReady ? "ready" : "missing",
+      detail: state.visualReady ? "可用于预览和导出" : "缺少图片或视频片段"
+    },
+    {
+      key: "audio",
+      label: "配音",
+      status: state.audioReady ? "ready" : "missing",
+      detail: state.audioReady ? "旁白音频已就绪" : "导出会静音或缺旁白"
+    },
+    {
+      key: "motion",
+      label: "动态",
+      status: state.motionReady ? "ready" : state.visualReady ? "optional" : "blocked",
+      detail: state.motionReady ? "已有动态镜头" : state.visualReady ? "可基于画面生成" : "先生成画面"
+    }
+  ] as const;
+}
+
 function requestErrorMessage(error: unknown, fallback: string) {
   if (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name)) {
     return `${fallback}请求超时，请稍后重试。`;
@@ -1071,6 +1095,7 @@ function Storyboard({
 }) {
   const scene = scenes.find((item) => item.sceneNumber === selectedScene) ?? scenes[0];
   const selectedMediaState = scene ? sceneMediaState(scene) : undefined;
+  const selectedMediaDiagnostics = scene ? sceneMediaDiagnosticItems(scene) : [];
   const [duration, setDuration] = useState(scene?.durationSeconds ?? 5);
   const [transitionKind, setTransitionKind] = useState<SceneTransitionKind>(scene?.style.transition?.kind ?? "auto");
   const [transitionDuration, setTransitionDuration] = useState(scene?.style.transition?.durationSeconds ?? 0.5);
@@ -1163,6 +1188,15 @@ function Storyboard({
           <div>
             <strong>S{scene.sceneNumber} · {sceneMediaStatusLabel(scene)}</strong>
             <span>画面、配音齐全后才能稳定预览和导出；动态镜头可让关键场景更像真实视频。</span>
+            <div className="kv-scene-media-diagnostics" aria-label="本场景素材诊断">
+              {selectedMediaDiagnostics.map((item) => (
+                <span className={item.status} key={item.key}>
+                  {item.status === "ready" ? <Check size={13} /> : item.status === "optional" ? <Clapperboard size={13} /> : <AlertCircle size={13} />}
+                  <strong>{item.label}</strong>
+                  <small>{item.detail}</small>
+                </span>
+              ))}
+            </div>
           </div>
           <div>
             <button disabled={isBusy || selectedMediaState?.visualReady} onClick={() => onRegenerate([scene.sceneNumber])} type="button">
