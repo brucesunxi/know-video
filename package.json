@@ -27,6 +27,8 @@
     "image:candidates:smoke": "node scripts/image-candidates-smoke.mjs",
     "candidate:intent:smoke": "node scripts/candidate-edit-intent-smoke.mjs",
     "speech:timing:smoke": "node scripts/speech-timing-smoke.mjs",
+    "narration:timing:smoke": "node scripts/narration-timing-smoke.mjs",
+    "color:contrast:smoke": "node scripts/color-contrast-smoke.mjs",
     "audio:quality:smoke": "node scripts/audio-quality-smoke.mjs",
     "audio:mix:smoke": "node scripts/audio-mix-smoke.mjs",
     "voice:profiles:smoke": "node scripts/voice-profiles-smoke.mjs",

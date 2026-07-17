@@ -12,27 +12,13 @@ import {
 } from "remotion";
 import type { Project, Scene } from "@/lib/types";
 import { musicMixEnvelope, type NarrationFrameRange } from "@/lib/audio-mix";
+import { readableTextColor, sceneAccentColor } from "@/lib/color-contrast";
+import { activeNarrationCaption, narrationDurationInFrames } from "@/lib/narration-timing";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
 import { boundedTransitionFrames, resolvedSceneTransition, type ResolvedSceneTransitionKind } from "@/lib/scene-transitions";
 import { VIDEO_FPS } from "@/video/config";
 
 export type KnowVideoCompositionProps = { project: Project };
-
-function captionParts(text: string) {
-  const sentences = text.match(/[^，。！？；,.!?]+[，。！？；,.!?]?/g)
-    ?.map((part) => part.trim())
-    .filter(Boolean);
-  const parts = (sentences?.length ? sentences : [text]).flatMap((part) => {
-    const maxLength = hasCjk(part) ? 20 : 54;
-    if (part.length <= maxLength) return [part];
-    const chunks: string[] = [];
-    for (let index = 0; index < part.length; index += maxLength) {
-      chunks.push(part.slice(index, index + maxLength));
-    }
-    return chunks;
-  });
-  return parts.length ? parts : [text];
-}
 
 function hasCjk(text: string) {
   return /\p{Script=Han}/u.test(text);
@@ -51,29 +37,6 @@ function captionFontSize(caption: string) {
   if (weightedLength > 48) return 25;
   if (weightedLength > 36) return 28;
   return 31;
-}
-
-function activeCaption(text: string, frame: number, durationInFrames: number) {
-  const parts = captionParts(text);
-  const totalWeight = parts.reduce((sum, part) => sum + Math.max(1, part.length), 0);
-  const position = (frame / Math.max(1, durationInFrames - 1)) * totalWeight;
-  let cursor = 0;
-  for (const [index, part] of parts.entries()) {
-    const weight = Math.max(1, part.length);
-    const startPosition = cursor;
-    cursor += weight;
-    if (position <= cursor) {
-      const startFrame = Math.round((startPosition / totalWeight) * durationInFrames);
-      const endFrame = Math.round((cursor / totalWeight) * durationInFrames);
-      return { text: part, index, startFrame, endFrame };
-    }
-  }
-  return {
-    text: parts[parts.length - 1],
-    index: parts.length - 1,
-    startFrame: Math.max(0, durationInFrames - 1),
-    endFrame: durationInFrames
-  };
 }
 
 function motionValues(scene: Scene, frame: number, durationInFrames: number) {
@@ -187,13 +150,6 @@ function SceneFrame({
   const copyOpacity = copyFadeIn * copyFadeOut;
   const visualFrame = Math.min(frame, contentDurationInFrames - 1);
   const motion = motionValues(scene, visualFrame, contentDurationInFrames);
-  const caption = activeCaption(scene.voiceover, visualFrame, contentDurationInFrames);
-  const captionEntrance = interpolate(
-    visualFrame,
-    [caption.startFrame, Math.min(caption.endFrame, caption.startFrame + Math.round(VIDEO_FPS * 0.14))],
-    [0, 1],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-  );
   const titleHold = interpolate(
     visualFrame,
     [0, Math.round(contentDurationInFrames * 0.68), Math.round(contentDurationInFrames * 0.82)],
@@ -201,7 +157,8 @@ function SceneFrame({
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
   const transition = resolvedSceneTransition(scene).kind;
-  const accent = scene.style.palette.find((color) => /^#[0-9a-f]{6}$/i.test(color)) ?? "#22c7b8";
+  const accent = sceneAccentColor(scene.style.palette);
+  const accentText = readableTextColor(accent);
   const clipAsset = scene.assets.find((asset) => asset.type === "clip" && asset.url);
   const clip = clipAsset?.url;
   const declaredClipDuration = Number(clipAsset?.metadata?.duration);
@@ -210,6 +167,14 @@ function SceneFrame({
     : Math.max(0, contentDurationInFrames - 1);
   const image = scene.assets.find((asset) => asset.type === "image" && asset.url)?.url;
   const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url)?.url;
+  const narrationFrames = narrationDurationInFrames(scene, VIDEO_FPS, playbackRate, contentDurationInFrames);
+  const caption = activeNarrationCaption(scene.voiceover, visualFrame, narrationFrames);
+  const captionEntrance = caption ? interpolate(
+    visualFrame,
+    [caption.startFrame, Math.min(caption.endFrame, caption.startFrame + Math.round(VIDEO_FPS * 0.14))],
+    [0, 1],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  ) : 0;
 
   return (
     <AbsoluteFill
@@ -296,7 +261,7 @@ function SceneFrame({
           {scene.title}
         </div>
       </div>
-      {captionsEnabled ? <div
+      {captionsEnabled && caption ? <div
         style={{
           bottom: 102,
           left: "50%",
@@ -305,7 +270,7 @@ function SceneFrame({
           position: "absolute",
           borderRadius: captionStyle === "highlight" ? 2 : 8,
           background: captionStyle === "minimal" ? "transparent" : captionStyle === "highlight" ? accent : "rgba(2,8,18,.76)",
-          color: captionStyle === "highlight" ? "#06111f" : "#fff",
+          color: captionStyle === "highlight" ? accentText : "#fff",
           fontFamily: "Arial, PingFang SC, Microsoft YaHei, sans-serif",
           fontSize: captionFontSize(caption.text),
           fontWeight: captionStyle === "highlight" ? 800 : 600,
@@ -323,8 +288,8 @@ function SceneFrame({
         <div style={{ background: accent, height: "100%", width: `${(visualFrame / Math.max(1, contentDurationInFrames - 1)) * 100}%` }} />
       </div>
       {audio ? (
-        <Sequence durationInFrames={contentDurationInFrames}>
-          <Audio playbackRate={playbackRate} src={audio} volume={(audioFrame) => audioVolume(audioFrame, contentDurationInFrames)} />
+        <Sequence durationInFrames={narrationFrames}>
+          <Audio playbackRate={playbackRate} src={audio} volume={(audioFrame) => audioVolume(audioFrame, narrationFrames)} />
         </Sequence>
       ) : null}
     </AbsoluteFill>
@@ -363,8 +328,9 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
         const transitionOutFrames = transitionFrames[index + 1] ?? 0;
         const start = from;
         from += contentDurationInFrames;
-        if (scene.assets.some((asset) => asset.type === "audio" && asset.url)) {
-          narrationRanges.push({ startFrame: start, endFrame: start + contentDurationInFrames - 1 });
+        const narrationFrames = narrationDurationInFrames(scene, VIDEO_FPS, settings.playbackRate, contentDurationInFrames);
+        if (narrationFrames > 0) {
+          narrationRanges.push({ startFrame: start, endFrame: start + narrationFrames - 1 });
         }
         return (
           <Sequence
