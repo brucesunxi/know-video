@@ -101,6 +101,38 @@ function fitFallbackNarration(scene: Scene, durationSeconds: number, chinese: bo
   return `${words.slice(0, maxWords).join(" ")}.`;
 }
 
+function localizedFallbackDirection(scene: Scene, index: number, chinese: boolean): Scene {
+  if (!chinese) return scene;
+  const subject = scene.title.replace(/[：:]/g, "").trim();
+  const visualDirections = [
+    `微距特写，${subject}以一个真实、明确的核心物件作为视觉主体；前景保留细腻的金属或玻璃纹理，中景出现正在操作的手与关键动作，背景是具有纵深的专业工作室环境。侧逆光勾勒主体边缘，冷青与暖金配色形成克制对比，浅景深把注意力牢牢集中在变化发生的瞬间，画面不出现漂浮卡片或大段文字。`,
+    `俯拍广角镜头，围绕${subject}的真实素材在制作台上形成清晰的叙事路径；前景有铅笔、胶片和纸张的材质细节，中景双手正在整理顺序，背景工作室设备自然虚化。柔和顶光穿过半透明介质，青灰、炭黑和暖金色彩保持统一，鸟瞰构图让动作、空间与层次一眼可读。`,
+    `中等景别，一位创作者在沉浸式工作空间中推进${subject}；前景玻璃反射形成自然遮挡，中景人物与核心画面构成稳定对角线，背景沿灯带向远处延伸。轮廓光刻画织物、金属和磨砂玻璃材质，冷色环境中保留温暖肤色，真实摄影质感清晰呈现人物动作与情绪。`,
+    `宽幅远景，${subject}在一个完整、可信的制作环境中发生；前景设备边缘形成引导线，中景人物与关键物件产生明确互动，背景建筑结构和柔和灯光建立空间深度。广角透视保持自然，侧光与环境反射塑造混凝土、木材和玻璃质感，统一配色延续上一场但构图明显不同。`,
+    `近景特写，镜头聚焦${subject}带来的具体变化与人物反应；前景细小光点掠过镜头，中景面部、手势或核心物件保持锐利，背景工作室化为柔和散景。暖色主光与冷色轮廓光共同塑造层次，材质纹理真实可辨，构图保留适度负空间并避免任何通用仪表盘式表达。`,
+    `低机位远景，${subject}以完成后的真实成果成为画面中心；前景深色结构形成稳定基座，中景人物或成片载体清楚可见，背景开阔空间向上延伸。柔和顶光和屏幕反射照亮混凝土与织物材质，冷青、炭黑和暖金色彩自然收束，最终画面庄重、清晰且具有可交付的电影感。`
+  ];
+  const motionDirections = [
+    "摄影机从极近距离缓慢推近，主体动作由静止转为发生，前中后景产生细微视差；一束连续光轨沿画面方向移动，并自然牵引到下一场。",
+    "摄影机在桌面上方平稳横移，素材依次翻转、靠拢并形成顺序，人物双手完成最后一次调整；边缘光线扫过画面后衔接下一镜头。",
+    "摄影机围绕人物进行轻缓弧形运动，人物动作与环境画面同步推进，前景反射和背景灯带产生明显视差；核心画面逐渐铺满镜头完成转场。",
+    "摄影机从环境入口缓慢向前移动，人物与关键物件在不同景深层次中依次被揭示，环境光沿空间连续变化；运动方向保持统一并带入下一场。",
+    "镜头轻微推向人物反应与核心细节，主体完成一个清楚可见的动作，背景光斑随焦点转换而移动；最后以匹配动作或相同色彩切入下一镜头。",
+    "摄影机从低机位缓慢后移，最终成果稳定呈现，人物与环境只保留自然微动，光线逐步收束到核心主体；画面在完整构图中停留后结束。"
+  ];
+  const directionIndex = Math.min(index, visualDirections.length - 1);
+  return {
+    ...scene,
+    visualPrompt: visualDirections[directionIndex],
+    motionPrompt: motionDirections[directionIndex],
+    style: {
+      ...scene.style,
+      theme: "统一电影纪实风格",
+      mood: index === 0 ? "专注而充满期待" : index === visualDirections.length - 1 ? "从容而坚定" : "清晰而富有推进感"
+    }
+  };
+}
+
 function applyFallbackConstraints(
   scenes: Scene[],
   options?: GenerationOptions,
@@ -111,13 +143,13 @@ function applyFallbackConstraints(
     : Number(options.sceneCount);
   const targetDuration = Number(options?.duration ?? 30);
   const durations = distributeFallbackDurations(count, targetDuration);
-  return selectNarrativeScenes(scenes, count).map((scene, index) => ({
-    ...scene,
-    id: crypto.randomUUID(),
-    sceneNumber: index + 1,
-    durationSeconds: durations[index],
-    voiceover: fitFallbackNarration(scene, durations[index], chinese)
-  }));
+  return selectNarrativeScenes(scenes, count).map((scene, index) => localizedFallbackDirection({
+      ...scene,
+      id: crypto.randomUUID(),
+      sceneNumber: index + 1,
+      durationSeconds: durations[index],
+      voiceover: fitFallbackNarration(scene, durations[index], chinese)
+    }, index, chinese));
 }
 
 export function generateProjectFromPrompt(

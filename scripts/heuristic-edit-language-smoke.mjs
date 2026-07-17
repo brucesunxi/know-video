@@ -22,7 +22,7 @@ const localRequire = (name) => {
   throw new Error(`Unexpected import: ${name}`);
 };
 vm.runInNewContext(output, { module, exports: module.exports, require: localRequire, crypto: { randomUUID } });
-const { buildEditPlanFromRequest } = module.exports;
+const { buildEditPlanFromRequest, generateProjectFromPrompt } = module.exports;
 const version = {
   id: "version",
   label: "current",
@@ -57,5 +57,23 @@ assert.match(plan.summary, /场景 2/);
 assert.doesNotMatch(plan.summary, /I will update/);
 assert.match(plan.changes[0].after.visualPrompt, /修改要求/);
 assert.doesNotMatch(plan.changes[0].after.visualPrompt, /Revision request/);
+
+const fallbackProject = generateProjectFromPrompt(
+  "生成一支三十秒的智能视频创作平台介绍片",
+  undefined,
+  { language: "中文", style: "电影感", duration: "30", sceneCount: "5" }
+);
+assert.match(fallbackProject.title, /\p{Script=Han}/u);
+assert.equal(fallbackProject.currentVersion.scenes.length, 5);
+for (const fallbackScene of fallbackProject.currentVersion.scenes) {
+  assert.match(fallbackScene.title, /\p{Script=Han}/u);
+  assert.match(fallbackScene.voiceover, /\p{Script=Han}/u);
+  assert.match(fallbackScene.visualPrompt, /\p{Script=Han}/u);
+  assert.match(fallbackScene.motionPrompt, /\p{Script=Han}/u);
+  assert.match(fallbackScene.style.theme, /\p{Script=Han}/u);
+  assert.match(fallbackScene.style.mood, /\p{Script=Han}/u);
+  assert.ok(fallbackScene.visualPrompt.length >= 100);
+  assert.ok(fallbackScene.motionPrompt.length >= 50);
+}
 
 console.log("Heuristic edit language smoke checks passed.");

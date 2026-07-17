@@ -4,6 +4,7 @@ import { analyzeEditIntent, requestsGeneratedClip } from "@/lib/edit-intent";
 import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import { requestsSceneStructureChange, sceneStructureFromRequest, sceneStructureSummary } from "@/lib/scene-structure-intent";
+import { storyboardQualityIssues } from "@/lib/storyboard-quality";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
@@ -52,16 +53,6 @@ const treatmentSchema = z.object({
 });
 
 type Treatment = z.infer<typeof treatmentSchema>;
-
-const genericSceneNames = [
-  "customization",
-  "user interface",
-  "overview",
-  "features",
-  "benefits",
-  "conclusion",
-  "introduction"
-];
 
 const editPlanPayloadSchema = z.object({
   summary: z.string().min(1),
@@ -354,54 +345,6 @@ function normalizeStoryboard(
   }));
 }
 
-function storyboardQualityIssues(
-  scenes: Scene[],
-  options?: GenerationOptions,
-  projectTitle?: string
-) {
-  const issues: string[] = [];
-  const normalizedTitles = scenes.map((scene) => scene.title.toLowerCase().replace(/\s+/g, " "));
-
-  if (new Set(normalizedTitles).size !== normalizedTitles.length) issues.push("scene titles repeat");
-  if (storyboardLooksGeneric(scenes)) issues.push("scene structure is generic");
-  if (scenes.some((scene) => scene.visualPrompt.split("\n")[0].length < 100)) issues.push("visual direction lacks concrete detail");
-  if (scenes.some((scene) => scene.motionPrompt.split(" Camera language:")[0].length < 50)) issues.push("camera or motion direction lacks detail");
-  if (scenes.some((scene) => {
-    const hanCharacters = (scene.voiceover.match(/\p{Script=Han}/gu) ?? []).length;
-    const latinWords = (scene.voiceover.match(/[A-Za-z0-9]+/g) ?? []).length;
-    return hanCharacters > 0
-      ? hanCharacters < Math.max(4, Math.floor(scene.durationSeconds * 2.1))
-      : latinWords < Math.max(3, Math.floor(scene.durationSeconds * 1.15));
-  })) {
-    issues.push("voiceover is too short for the available scene duration");
-  }
-  if (scenes.some((scene) => {
-    const hanCharacters = (scene.voiceover.match(/\p{Script=Han}/gu) ?? []).length;
-    const latinWords = (scene.voiceover.match(/[A-Za-z0-9]+/g) ?? []).length;
-    const estimatedSeconds = hanCharacters / 4.15 + latinWords / 2.7;
-    return estimatedSeconds > Math.max(1, scene.durationSeconds - 0.25) * 1.12;
-  })) {
-    issues.push("voiceover does not fit comfortably inside its scene duration");
-  }
-  if (options?.language === "中文" && scenes.some((scene) => !hasChinese(scene.title) || !hasChinese(scene.voiceover))) {
-    issues.push("scene titles or narration are not fully localized in Chinese");
-  }
-  if (options?.language === "英文" && scenes.some((scene) => hasChinese(scene.title) || hasChinese(scene.voiceover))) {
-    issues.push("scene titles or narration are not fully localized in English");
-  }
-  if (
-    projectTitle
-    && (
-      (options?.language === "中文" && !hasChinese(projectTitle))
-      || (options?.language === "英文" && hasChinese(projectTitle))
-    )
-  ) {
-    issues.push("project title is not localized in the requested language");
-  }
-
-  return issues;
-}
-
 async function createTreatment(
   prompt: string,
   textModel: NonNullable<ReturnType<typeof getTextModel>>,
@@ -466,12 +409,14 @@ async function repairStoryboard(params: {
           "Rewrite the storyboard to resolve every listed issue while preserving the approved treatment.",
           "Return strict JSON only, using the exact same storyboard schema.",
           "Use concrete filmable imagery, distinct shot purposes, natural narration, and coherent visual continuity.",
+          "Across four or more scenes, use at least three clearly named shot scales or camera angles.",
+          "Do not reuse the same narration opening, composition, or visual event in multiple scenes.",
           "Do not explain the changes."
         ].join(" ")
       },
       {
         role: "user",
-        content: `Original request:\n${params.prompt}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. ${params.options ? `All titles and narration must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
+        content: `Original request:\n${params.prompt}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. ${params.options ? `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters. Across four or more scenes, explicitly use at least three different shot scales or camera angles. Give every scene a different narration opening, composition, and visual event.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
       }
     ],
     temperature: 0.35
@@ -482,19 +427,6 @@ async function repairStoryboard(params: {
     throw new Error(`Repaired storyboard returned ${repaired.scenes.length} scenes; expected ${params.treatment.beats.length}`);
   }
   return repaired;
-}
-
-function storyboardLooksGeneric(scenes: Array<{ title: string; visualPrompt: string }>) {
-  return scenes.some((scene) => {
-    const title = scene.title.toLowerCase().trim();
-    const visual = scene.visualPrompt.toLowerCase();
-    return genericSceneNames.includes(title) || (
-      genericSceneNames.some((name) => title.includes(name)) &&
-      !visual.includes("video") &&
-      !visual.includes("storyboard") &&
-      !visual.includes("生成")
-    );
-  });
 }
 
 export async function createStoryboardProject(
@@ -528,11 +460,13 @@ export async function createStoryboardProject(
               "The storyboard must play as a real short film, not a generic SaaS page outline or presentation.",
               "Never use generic section titles such as Customization, User Interface, Benefits, Features, Overview, or Conclusion.",
               "Every scene must have one unmistakable visual subject, a foreground action, an environment, depth, and a specific composition.",
+              "Across four or more scenes, explicitly use at least three different shot scales or camera angles, such as macro, close-up, medium, wide, overhead, or low angle.",
               "Maintain the treatment's recurring motif, palette, world, lighting, and camera language across every scene.",
               "Do not rely on readable text, fake logos, generic dashboards, grids of floating cards, or instructions shown inside the image.",
               "Describe visual prompts as finished cinematic frames that an image model can render, not as design notes.",
-              `Scene titles and narration must be short, concrete, and written in ${options?.language ?? treatment.language}.`,
+              `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must be written in ${options?.language ?? treatment.language}.`,
               "Voiceover must be natural finished narration, fit comfortably in its scene duration, and avoid repeating the title.",
+              "Every scene must begin its narration differently and depict a different visual event and composition.",
               "Motion prompts must specify camera movement, subject movement, depth behavior, and the handoff into the next shot."
             ].join(" ")
         },
