@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
 import { replacementAssetTypes } from "@/lib/asset-policy";
+import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { selectMotionCriticalScenes } from "@/lib/motion-scene-selection";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
 import { sceneSplitPreview, type SceneStructureMutation } from "@/lib/scene-structure";
@@ -1150,6 +1151,8 @@ function SceneAssetsPanel({
   uploadProgress,
   onGenerateCandidate,
   onAdoptCandidate,
+  openComparisonId,
+  onComparisonOpened,
   onUpload,
   onRemove
 }: {
@@ -1158,6 +1161,8 @@ function SceneAssetsPanel({
   uploadProgress?: number;
   onGenerateCandidate: (instruction?: string) => void;
   onAdoptCandidate: (assetId: string) => void;
+  openComparisonId?: string;
+  onComparisonOpened: () => void;
   onUpload: () => void;
   onRemove: (assetId: string) => void;
 }) {
@@ -1172,6 +1177,13 @@ function SceneAssetsPanel({
     setCandidateComposerOpen(false);
     setCandidateInstruction("");
   }, [scene.id]);
+  useEffect(() => {
+    if (!openComparisonId) return;
+    const available = assets.some((asset) => asset.id === openComparisonId && asset.type === "thumbnail" && asset.metadata?.candidate === true);
+    if (!available) return;
+    setComparisonId(openComparisonId);
+    onComparisonOpened();
+  }, [assets, onComparisonOpened, openComparisonId]);
   return (
     <>
     <section className="kv-assets-panel">
@@ -1839,6 +1851,8 @@ function StudioScreen({
   onToggleAssets,
   onRemoveAsset,
   onGenerateCandidate,
+  candidateToCompare,
+  onCandidateComparisonOpened,
   productionOpen,
   productionUploadType,
   onToggleProduction,
@@ -1890,6 +1904,8 @@ function StudioScreen({
   onToggleAssets: () => void;
   onRemoveAsset: (assetId: string) => void;
   onGenerateCandidate: (sceneNumber: number, instruction?: string) => void;
+  candidateToCompare?: { sceneNumber: number; assetId: string };
+  onCandidateComparisonOpened: () => void;
   productionOpen: boolean;
   productionUploadType?: "logo" | "music";
   onToggleProduction: () => void;
@@ -2153,9 +2169,11 @@ function StudioScreen({
           <SceneAssetsPanel
             isBusy={isBusy}
             onAdoptCandidate={(assetId) => onMutateScene({ operation: "set-visual", sceneNumber: scene.sceneNumber, assetId })}
+            onComparisonOpened={onCandidateComparisonOpened}
             onGenerateCandidate={(instruction) => onGenerateCandidate(scene.sceneNumber, instruction)}
             onRemove={onRemoveAsset}
             onUpload={onUpload}
+            openComparisonId={candidateToCompare?.sceneNumber === scene.sceneNumber ? candidateToCompare.assetId : undefined}
             scene={scene}
             uploadProgress={uploadProgress}
           />
@@ -2261,6 +2279,7 @@ export function WorkspaceClient({
   const [activeRenderJobId, setActiveRenderJobId] = useState<string | undefined>(initialProject.currentVersion.renderJobId);
   const [uploadProgress, setUploadProgress] = useState<number | undefined>();
   const [assetsOpen, setAssetsOpen] = useState(false);
+  const [candidateToCompare, setCandidateToCompare] = useState<{ sceneNumber: number; assetId: string }>();
   const [productionOpen, setProductionOpen] = useState(false);
   const [productionUploadType, setProductionUploadType] = useState<"logo" | "music">();
   const [generationOptions, setGenerationOptions] = useState<GenerationOptions>({
@@ -2281,6 +2300,10 @@ export function WorkspaceClient({
   const cancelledRenderIdsRef = useRef(new Set<string>());
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
+
+  useEffect(() => {
+    setCandidateToCompare(undefined);
+  }, [project.id, project.currentVersion.id]);
 
   useEffect(() => {
     const jobId = project.currentVersion.renderJobId;
@@ -2518,8 +2541,13 @@ export function WorkspaceClient({
     if (!request) return;
 
     setChatInput("");
+    setCandidateToCompare(undefined);
     setIsBusy(true);
-    setBusyAction("planning-edit");
+    const candidateIntent = candidateEditFromRequest(
+      request,
+      project.currentVersion.scenes.map((scene) => scene.sceneNumber)
+    );
+    setBusyAction(candidateIntent ? "generating-candidate" : "planning-edit");
     setErrorMessage(undefined);
     pushMessage({ role: "user", type: "text", content: request });
 
@@ -2532,16 +2560,37 @@ export function WorkspaceClient({
           versionId: project.currentVersion.id,
           request
         }),
-        signal: AbortSignal.timeout(45_000)
+        signal: AbortSignal.timeout(candidateIntent ? 125_000 : 45_000)
       });
       if (!response.ok) {
         const failure = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(failure.error || "修改计划生成失败，请重试。");
       }
       const data = await response.json() as {
-        editPlan: EditPlan;
+        action?: "visual-candidate";
+        editPlan?: EditPlan;
         messages: ChatMessage[];
+        project?: Project;
+        candidate?: SceneAsset;
+        candidateIntent?: { sceneNumber: number; instruction: string };
       };
+      if (data.action === "visual-candidate") {
+        if (!data.project || !data.candidate || !data.candidateIntent || !Array.isArray(data.messages)) {
+          throw new Error("候选画面返回格式异常，请重试。");
+        }
+        const assistantMessages = data.messages.filter((message) => message.role === "assistant");
+        setProject(data.project);
+        setPendingPlan(undefined);
+        setSelectedScene(data.candidateIntent.sceneNumber);
+        setStudioView("preview");
+        setVersionsOpen(false);
+        setExportsOpen(false);
+        setProductionOpen(false);
+        setAssetsOpen(true);
+        setCandidateToCompare({ sceneNumber: data.candidateIntent.sceneNumber, assetId: data.candidate.id });
+        setMessages((current) => [...current, ...assistantMessages]);
+        return;
+      }
       if (!data.editPlan || !Array.isArray(data.messages)) {
         throw new Error("修改计划返回格式异常，请重试。");
       }
@@ -3402,9 +3451,11 @@ export function WorkspaceClient({
         }),
         signal: AbortSignal.timeout(125_000)
       });
-      const data = await response.json() as { project?: Project; error?: string };
-      if (!response.ok || !data.project) throw new Error(data.error || "候选画面生成失败。");
+      const data = await response.json() as { project?: Project; candidate?: SceneAsset; error?: string };
+      if (!response.ok || !data.project || !data.candidate) throw new Error(data.error || "候选画面生成失败。");
       setProject(data.project);
+      setAssetsOpen(true);
+      setCandidateToCompare({ sceneNumber, assetId: data.candidate.id });
       pushMessage({
         role: "assistant",
         type: "text",
@@ -3585,6 +3636,9 @@ export function WorkspaceClient({
     setVersionsOpen(false);
     setVersionPreview(undefined);
     setExportsOpen(false);
+    setAssetsOpen(false);
+    setCandidateToCompare(undefined);
+    setProductionOpen(false);
   }
 
   async function openProjects() {
@@ -3628,6 +3682,7 @@ export function WorkspaceClient({
       setVersionsOpen(false);
       setExportsOpen(false);
       setAssetsOpen(false);
+      setCandidateToCompare(undefined);
       setProductionOpen(false);
       setActiveRenderJobId(data.project.currentVersion.renderJobId);
       setStage("studio");
@@ -3774,6 +3829,8 @@ export function WorkspaceClient({
           onRestoreVersion={restoreVersion}
           uploadProgress={uploadProgress}
           assetsOpen={assetsOpen}
+          candidateToCompare={candidateToCompare}
+          onCandidateComparisonOpened={() => setCandidateToCompare(undefined)}
           onToggleAssets={toggleAssets}
           onRemoveAsset={removeSceneAsset}
           onGenerateCandidate={(sceneNumber, instruction) => void generateImageCandidate(sceneNumber, instruction)}

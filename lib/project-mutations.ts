@@ -531,6 +531,66 @@ export async function persistAssistantMessage(params: {
   };
 }
 
+export async function persistCandidateEditConversation(params: {
+  projectId: string;
+  versionId: string;
+  request: string;
+  response: string;
+  sceneNumber: number;
+  candidateAssetId: string;
+}): Promise<ChatMessage[]> {
+  const userMessage: ChatMessage = {
+    id: crypto.randomUUID(),
+    role: "user",
+    type: "text",
+    content: params.request,
+    versionId: params.versionId
+  };
+  const assistantMessage: ChatMessage = {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    type: "text",
+    content: params.response,
+    versionId: params.versionId
+  };
+  if (!canPersist()) return [userMessage, assistantMessage];
+
+  const sql = getSql();
+  const results = await sql.transaction([
+    sql`
+      select id from projects
+      where id = ${params.projectId} and current_version_id = ${params.versionId}
+      for update
+    `,
+    sql`
+      update edit_plans set status = 'rejected'
+      where project_id = ${params.projectId}
+        and base_version_id = ${params.versionId}
+        and status = 'proposed'
+    `,
+    sql`
+      insert into chat_messages (id, project_id, version_id, role, message_type, content)
+      select ${userMessage.id}, ${params.projectId}, ${params.versionId}, 'user', 'text', ${params.request}
+      from projects
+      where id = ${params.projectId} and current_version_id = ${params.versionId}
+      returning id
+    `,
+    sql`
+      insert into chat_messages (id, project_id, version_id, role, message_type, content, metadata_json)
+      select
+        ${assistantMessage.id}, ${params.projectId}, ${params.versionId}, 'assistant', 'text', ${params.response},
+        ${JSON.stringify({ sceneNumber: params.sceneNumber, candidateAssetId: params.candidateAssetId })}
+      from projects
+      where id = ${params.projectId} and current_version_id = ${params.versionId}
+      returning id
+    `
+  ]);
+  if (!(results[2] as IdRow[])[0] || !(results[3] as IdRow[])[0]) {
+    throw new Error("视频版本已经发生变化，候选画面的对话记录未能保存。");
+  }
+  return [userMessage, assistantMessage];
+}
+
 export async function persistEditPlan(params: {
   projectId: string;
   request: string;

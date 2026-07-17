@@ -64,6 +64,14 @@ export function extractRequestedSceneNumbers(request: string, availableSceneNumb
     if (last) matches.add(last);
   }
 
+  const coordinatedPattern = /((?:(?:第\s*)?[0-9一二两三四五六七八九十]+\s*(?:、|，|,|和|与|及)\s*)+(?:第\s*)?[0-9一二两三四五六七八九十]+)\s*(?:个)?(?:场景|镜头|章节|幕|段)/gu;
+  for (const match of request.matchAll(coordinatedPattern)) {
+    for (const numberMatch of match[1].matchAll(/(?:第\s*)?([0-9一二两三四五六七八九十]+)/gu)) {
+      const sceneNumber = parseSceneNumber(numberMatch[1]);
+      if (sceneNumber && availableSceneNumbers.includes(sceneNumber)) matches.add(sceneNumber);
+    }
+  }
+
   const patterns = [
     /(?:scene|shot|chapter)\s*#?\s*(\d+)/giu,
     /(?:场景|镜头|章节)\s*([0-9一二两三四五六七八九十]+)\s*/gu,
