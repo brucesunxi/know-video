@@ -3396,6 +3396,53 @@ button:disabled {
   font-weight: 800;
 }
 
+.kv-plan-checklist {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kv-plan-checklist span {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 2px 6px;
+  border: 1px solid #d7ebe8;
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px;
+}
+
+.kv-plan-checklist svg {
+  grid-row: span 2;
+  margin-top: 1px;
+}
+
+.kv-plan-checklist span.ready svg {
+  color: #087568;
+}
+
+.kv-plan-checklist span.working svg {
+  color: #4565d8;
+}
+
+.kv-plan-checklist span.attention svg {
+  color: #b05d00;
+}
+
+.kv-plan-checklist strong {
+  overflow-wrap: anywhere;
+  color: #1f3442;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.kv-plan-checklist small {
+  color: #6b7a8c;
+  font-size: 9px;
+  font-weight: 800;
+}
+
 .kv-change-list {
   display: grid;
   gap: 10px;
@@ -4052,6 +4099,10 @@ button:disabled {
 
   .kv-chat-draft-actions button {
     flex: 1 1 0;
+  }
+
+  .kv-plan-checklist {
+    grid-template-columns: 1fr;
   }
 
   .kv-scene-readiness-card {

@@ -177,6 +177,26 @@ function planAssetWorkLabel(plan: EditPlan) {
     .join("、") || "只更新文字和版本记录";
 }
 
+function planApplyLabel(plan: EditPlan, visualPreview: { total: number; ready: number }) {
+  if (plan.sceneStructure) return "应用并调整时间线";
+  if (visualPreview.total > 0 && visualPreview.ready < visualPreview.total) return "应用并生成素材";
+  if (uniqueRegenerate(plan)) return "应用并重做素材";
+  return "应用并创建版本";
+}
+
+function planReviewChecklist(plan: EditPlan, visualPreview: { total: number; ready: number }) {
+  const missingPreview = Math.max(0, visualPreview.total - visualPreview.ready);
+  return [
+    { label: "版本保护", value: "创建可恢复新版本", tone: "ready" },
+    visualPreview.total === 0
+      ? { label: "画面预览", value: "无需重做画面", tone: "ready" }
+      : missingPreview === 0
+        ? { label: "画面预览", value: `${visualPreview.ready} 个真实预览已就绪`, tone: "ready" }
+        : { label: "画面预览", value: `${missingPreview} 个场景可先生成真实预览`, tone: "attention" },
+    { label: "执行任务", value: planAssetWorkLabel(plan), tone: uniqueRegenerate(plan) || plan.sceneStructure ? "working" : "ready" }
+  ] as Array<{ label: string; value: string; tone: "ready" | "working" | "attention" }>;
+}
+
 function productionSettingLabels(settings?: Partial<ProductionSettings>) {
   if (!settings) return [];
   return Object.entries(settings).map(([key, value]) => {
@@ -1969,6 +1989,9 @@ function ChatPanel({
   const planModificationCount = pendingPlan
     ? pendingPlan.changes.length + productionSettingLabels(pendingPlan.productionSettings).length + (pendingPlan.sceneStructure ? 1 : 0)
     : 0;
+  const visualPreviewState = { total: visualSceneNumbers.length, ready: previewedSceneNumbers.length };
+  const applyLabel = pendingPlan ? planApplyLabel(pendingPlan, visualPreviewState) : "应用修改";
+  const checklist = pendingPlan ? planReviewChecklist(pendingPlan, visualPreviewState) : [];
 
   useEffect(() => {
     const log = logRef.current;
@@ -2013,6 +2036,15 @@ function ChatPanel({
                 <span><strong>{planScopeLabel(pendingPlan, scenes.length)}</strong><small>作用范围</small></span>
                 <span><strong>{planAssetWorkLabel(pendingPlan)}</strong><small>确认后执行</small></span>
               </div>
+              <div className="kv-plan-checklist" aria-label="执行前检查">
+                {checklist.map((item) => (
+                  <span className={item.tone} key={item.label}>
+                    <Check size={13} />
+                    <strong>{item.value}</strong>
+                    <small>{item.label}</small>
+                  </span>
+                ))}
+              </div>
             </div>
             <p>{pendingPlan.summary}</p>
             {pendingPlan.sceneStructure ? (
@@ -2051,7 +2083,7 @@ function ChatPanel({
               ) : null}
               <button className="kv-primary" disabled={isBusy} onClick={onApply} type="button">
                 {isBusy ? <Loader2 className="kv-spin" size={16} /> : <Check size={16} />}
-                应用修改
+                {applyLabel}
               </button>
               <button onClick={onCancel} type="button">取消</button>
             </div>
@@ -2073,7 +2105,7 @@ function ChatPanel({
           <div className="kv-chat-draft-actions">
             <button className="kv-primary" disabled={isBusy} onClick={onApply} type="button">
               {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Check size={15} />}
-              应用修改
+              {applyLabel}
             </button>
             <button disabled={isBusy} onClick={onCancel} type="button">取消方案</button>
           </div>
