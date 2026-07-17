@@ -770,6 +770,35 @@ button:disabled {
   transition: width 0.3s ease;
 }
 
+.kv-generation-status-strip {
+  display: grid;
+  width: min(720px, 88vw);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kv-generation-status-strip span {
+  display: grid;
+  gap: 3px;
+  border: 1px solid #d7ebe8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 9px 10px;
+  text-align: center;
+}
+
+.kv-generation-status-strip strong {
+  color: #122033;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.kv-generation-status-strip small {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .kv-progress-steps {
   display: grid;
   width: min(760px, 92vw);
@@ -4256,6 +4285,7 @@ button:disabled {
   }
 
   .kv-progress-steps,
+  .kv-generation-status-strip,
   .kv-scene-editor,
   .kv-scene-grid,
   .kv-board {

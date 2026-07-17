@@ -133,6 +133,15 @@ function generationProgressSteps(motion: GenerationOptions["motion"]) {
     : baseProgressSteps;
 }
 
+function elapsedGenerationLabel(startedAt?: number, now = Date.now()) {
+  if (!startedAt || startedAt > now) return "刚刚开始";
+  const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${minutes} 分 ${String(rest).padStart(2, "0")} 秒`;
+}
+
 function durationLabel(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   const rest = seconds % 60;
@@ -883,9 +892,27 @@ function BriefScreen({
   );
 }
 
-function GeneratingScreen({ prompt, progress, status, motion }: { prompt: string; progress: number; status: string; motion: GenerationOptions["motion"] }) {
+function GeneratingScreen({
+  prompt,
+  progress,
+  status,
+  motion,
+  startedAt
+}: {
+  prompt: string;
+  progress: number;
+  status: string;
+  motion: GenerationOptions["motion"];
+  startedAt?: number;
+}) {
   const steps = generationProgressSteps(motion);
   const activeIndex = Math.min(steps.length - 1, Math.floor(progress / (100 / steps.length)));
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
     <div className="kv-generating">
@@ -900,6 +927,11 @@ function GeneratingScreen({ prompt, progress, status, motion }: { prompt: string
       </div>
       <div className="kv-progress">
         <div style={{ width: `${progress}%` }} />
+      </div>
+      <div className="kv-generation-status-strip" role="status">
+        <span><strong>{elapsedGenerationLabel(startedAt, now)}</strong><small>已用时间</small></span>
+        <span><strong>{Math.min(activeIndex + 1, steps.length)} / {steps.length}</strong><small>当前步骤</small></span>
+        <span><strong>自动恢复</strong><small>刷新后继续找回任务</small></span>
       </div>
       <div className="kv-progress-steps">
         {steps.map((step, index) => (
@@ -2809,6 +2841,7 @@ export function WorkspaceClient({
   const [busyAction, setBusyAction] = useState<BusyAction>();
   const [progress, setProgress] = useState(0);
   const [generationStatus, setGenerationStatus] = useState("正在理解视频需求");
+  const [generationStartedAt, setGenerationStartedAt] = useState<number>();
   const [studioView, setStudioView] = useState<StudioView>("preview");
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [exportProgress, setExportProgress] = useState<number | undefined>();
@@ -2918,6 +2951,7 @@ export function WorkspaceClient({
     recoveringGenerationRef.current = true;
     setBriefPrompt(pending.prompt);
     setGenerationOptions(pending.options);
+    setGenerationStartedAt(pending.startedAt);
     setIsBusy(true);
     setErrorMessage(undefined);
     setProgress(36);
@@ -3107,6 +3141,7 @@ export function WorkspaceClient({
     setPendingPlan(undefined);
     setStudioView("preview");
     setProgress(100);
+    setGenerationStartedAt(undefined);
     clearPendingGenerationSession();
     window.setTimeout(() => setStage("studio"), 350);
   }
@@ -3115,9 +3150,11 @@ export function WorkspaceClient({
     event.preventDefault();
     const prompt = generationPrompt;
     if (!prompt) return;
+    const startedAt = Date.now();
 
     setIsBusy(true);
     setErrorMessage(undefined);
+    setGenerationStartedAt(startedAt);
     setProgress(8);
     setGenerationStatus("正在理解视频需求");
     setStage("generating");
@@ -3130,7 +3167,7 @@ export function WorkspaceClient({
         requestId,
         prompt,
         options: generationOptions,
-        startedAt: Date.now()
+        startedAt
       };
       savePendingGenerationSession(pendingSession);
       let data: Required<Pick<StoryboardGenerationResponse, "project" | "messages" | "engine">> & StoryboardGenerationResponse;
@@ -3167,6 +3204,7 @@ export function WorkspaceClient({
     } catch (error) {
       console.error(error);
       setStage("brief");
+      setGenerationStartedAt(undefined);
       setErrorMessage(requestErrorMessage(error, "生成失败，请稍后重试。"));
       pushMessage({
         role: "assistant",
@@ -4466,7 +4504,13 @@ export function WorkspaceClient({
         />
       ) : null}
       {stage === "generating" ? (
-        <GeneratingScreen motion={generationOptions.motion} progress={progress} prompt={generationPrompt} status={generationStatus} />
+        <GeneratingScreen
+          motion={generationOptions.motion}
+          progress={progress}
+          prompt={generationPrompt}
+          startedAt={generationStartedAt}
+          status={generationStatus}
+        />
       ) : null}
       {stage === "projects" ? (
         <ProjectLibrary
