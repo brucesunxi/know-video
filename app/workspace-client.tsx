@@ -204,6 +204,14 @@ function planApplyLabel(plan: EditPlan, visualPreview: { total: number; ready: n
   return "应用并创建版本";
 }
 
+function planRenderImpactLabel(plan: EditPlan) {
+  const regenerate = new Set(plan.changes.flatMap((change) => change.regenerate));
+  const structureInvalidatesRender = Boolean(plan.sceneStructure);
+  if (regenerate.has("render") || structureInvalidatesRender) return "应用后需重新导出 MP4";
+  if (regenerate.size > 0) return "素材更新后建议检查导出";
+  return "现有成片不受影响";
+}
+
 function planReviewChecklist(plan: EditPlan, visualPreview: { total: number; ready: number }) {
   const missingPreview = Math.max(0, visualPreview.total - visualPreview.ready);
   return [
@@ -213,7 +221,8 @@ function planReviewChecklist(plan: EditPlan, visualPreview: { total: number; rea
       : missingPreview === 0
         ? { label: "画面预览", value: `${visualPreview.ready} 个真实预览已就绪`, tone: "ready" }
         : { label: "画面预览", value: `${missingPreview} 个场景可先生成真实预览`, tone: "attention" },
-    { label: "执行任务", value: planAssetWorkLabel(plan), tone: uniqueRegenerate(plan) || plan.sceneStructure ? "working" : "ready" }
+    { label: "执行任务", value: planAssetWorkLabel(plan), tone: uniqueRegenerate(plan) || plan.sceneStructure ? "working" : "ready" },
+    { label: "成片影响", value: planRenderImpactLabel(plan), tone: planRenderImpactLabel(plan).includes("重新导出") ? "attention" : "ready" }
   ] as Array<{ label: string; value: string; tone: "ready" | "working" | "attention" }>;
 }
 
