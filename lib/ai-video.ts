@@ -6,6 +6,7 @@ import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/pr
 import { requestsSceneStructureChange, sceneStructureFromRequest, sceneStructureSummary } from "@/lib/scene-structure-intent";
 import { storyboardQualityIssues } from "@/lib/storyboard-quality";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
+import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
 type AiEngine = "deepseek-flash" | "openai" | "heuristic";
@@ -84,10 +85,6 @@ const editPlanPayloadSchema = z.object({
 
 type EditPlanPayload = z.infer<typeof editPlanPayloadSchema>;
 
-function hasChinese(value?: string) {
-  return Boolean(value && /\p{Script=Han}/u.test(value));
-}
-
 function validGlobalChinesePayload(payload: EditPlanPayload, version: ProjectVersion, request: string) {
   const changes = new Map(payload.changes.map((change) => [change.sceneNumber, change]));
   const targets = new Set(globalEditTargetSceneNumbers(request, version.scenes.map((scene) => scene.sceneNumber)));
@@ -96,10 +93,10 @@ function validGlobalChinesePayload(payload: EditPlanPayload, version: ProjectVer
     const after = change?.after;
     return after
       && change.status === "updated"
-      && hasChinese(after.title)
-      && hasChinese(after.voiceover)
-      && hasChinese(after.visualPrompt)
-      && hasChinese(after.motionPrompt);
+      && looksSimplifiedChineseLocalized(after.title)
+      && looksSimplifiedChineseLocalized(after.voiceover)
+      && looksSimplifiedChineseLocalized(after.visualPrompt)
+      && looksSimplifiedChineseLocalized(after.motionPrompt);
   });
 }
 

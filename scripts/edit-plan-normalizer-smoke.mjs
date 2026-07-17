@@ -18,6 +18,12 @@ vm.runInNewContext(transpile(intentSource), {
   module: intentModule,
   exports: intentModule.exports
 });
+const languageQualityModule = { exports: {} };
+const languageQualitySource = fs.readFileSync(new URL("../lib/language-quality.ts", import.meta.url), "utf8");
+vm.runInNewContext(transpile(languageQualitySource), {
+  module: languageQualityModule,
+  exports: languageQualityModule.exports
+});
 
 const source = fs.readFileSync(new URL("../lib/edit-plan-normalizer.ts", import.meta.url), "utf8");
 const output = transpile(source);
@@ -25,7 +31,11 @@ const module = { exports: {} };
 vm.runInNewContext(output, {
   module,
   exports: module.exports,
-  require: (specifier) => specifier === "@/lib/edit-intent" ? intentModule.exports : {}
+  require: (specifier) => {
+    if (specifier === "@/lib/edit-intent") return intentModule.exports;
+    if (specifier === "@/lib/language-quality") return languageQualityModule.exports;
+    return {};
+  }
 });
 const { normalizeEditPlanAgainstScenes } = module.exports;
 
@@ -258,6 +268,45 @@ assert.throws(() => normalizeEditPlanAgainstScenes({
     regenerate: []
   }]
 }, [scene, secondScene]), /未完成的中文字段/);
+
+assert.throws(() => normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "把全片语言都改为中文",
+  affectedScenes: [1, 2],
+  changes: [{
+    sceneNumber: 1,
+    status: "updated",
+    before: side,
+    after: { ...side, title: "Customization 中文", voiceover: "中文旁白", visualPrompt: "中文画面", motionPrompt: "中文运镜" },
+    regenerate: []
+  }, {
+    sceneNumber: 2,
+    status: "updated",
+    before: secondSide,
+    after: { ...secondSide, title: "中文标题", voiceover: "Know Video 的 AI 中文旁白", visualPrompt: "保留 Know Video 产品名的中文画面", motionPrompt: "中文运镜" },
+    regenerate: []
+  }]
+}, [scene, secondScene]), /未完成的中文字段/);
+
+const localizedWithAllowedProductTerms = normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "把全片语言都改为中文",
+  affectedScenes: [1, 2],
+  changes: [{
+    sceneNumber: 1,
+    status: "updated",
+    before: side,
+    after: { ...side, title: "Know Video 中文开场", voiceover: "AI 创作流程进入中文旁白。", visualPrompt: "Know Video 工作台以中文界面展示分镜规划。", motionPrompt: "镜头沿着中文时间线缓慢推进。" },
+    regenerate: []
+  }, {
+    sceneNumber: 2,
+    status: "updated",
+    before: secondSide,
+    after: { ...secondSide, title: "中文第二幕", voiceover: "SaaS 团队看到清晰的中文版本。", visualPrompt: "中文仪表盘展示版本记录和 MP4 导出状态。", motionPrompt: "镜头从 UI 卡片平滑拉近。" },
+    regenerate: []
+  }]
+}, [scene, secondScene]);
+assert.deepEqual(Array.from(localizedWithAllowedProductTerms.affectedScenes), [1, 2]);
 
 const unsupportedTopology = normalizeEditPlanAgainstScenes({
   ...basePlan,

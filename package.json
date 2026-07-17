@@ -22,6 +22,7 @@
     "edit:refinement:smoke": "node scripts/edit-plan-refinement-smoke.mjs",
     "edit:preview:smoke": "node scripts/edit-plan-preview-smoke.mjs",
     "edit:language:smoke": "node scripts/heuristic-edit-language-smoke.mjs",
+    "language:quality:smoke": "node scripts/language-quality-smoke.mjs",
     "edit:schema:smoke": "node scripts/edit-plan-schema-smoke.mjs",
     "production:intent:smoke": "node scripts/production-edit-intent-smoke.mjs",
     "production:settings:smoke": "node scripts/production-settings-smoke.mjs",

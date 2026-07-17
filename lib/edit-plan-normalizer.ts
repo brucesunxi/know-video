@@ -1,5 +1,6 @@
 import type { AssetType, EditPlan, Scene } from "@/lib/types";
 import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip } from "@/lib/edit-intent";
+import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 
 export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) {
   const sceneByNumber = new Map(scenes.map((scene) => [scene.sceneNumber, scene]));
@@ -27,7 +28,7 @@ export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) 
         const after = changes.get(sceneNumber)?.after;
         return after
           && [after.title, after.voiceover, after.visualPrompt, after.motionPrompt]
-            .every((value) => Boolean(value && /\p{Script=Han}/u.test(value)));
+            .every((value) => looksSimplifiedChineseLocalized(value));
       });
       if (!completeChinese) throw new Error("全片中文修改方案存在未完成的中文字段，请重新生成方案。");
     }
