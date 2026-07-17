@@ -29,6 +29,7 @@ export type GenerationOptions = {
   sceneCount: "auto" | "3" | "5" | "6";
   language: "中文" | "英文";
   style: "电影质感" | "极简高级" | "明快有活力" | "温暖自然";
+  motion: "camera" | "key-scenes";
 };
 
 export type SceneAsset = {

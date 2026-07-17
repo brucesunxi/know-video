@@ -10,7 +10,8 @@ const requestSchema = z.object({
     duration: z.enum(["15", "30", "45", "60"]),
     sceneCount: z.enum(["auto", "3", "5", "6"]),
     language: z.enum(["中文", "英文"]),
-    style: z.enum(["电影质感", "极简高级", "明快有活力", "温暖自然"])
+    style: z.enum(["电影质感", "极简高级", "明快有活力", "温暖自然"]),
+    motion: z.enum(["camera", "key-scenes"])
   }).optional()
 });
 
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: "请用 4 到 4000 个字符描述要制作的视频，并检查时长、场景数、语言和风格选项。" },
+        { error: "请用 4 到 4000 个字符描述要制作的视频，并检查时长、场景数、语言、风格和动态方式。" },
         { status: 400 }
       );
     }

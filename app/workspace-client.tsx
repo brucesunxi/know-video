@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
 import { replacementAssetTypes } from "@/lib/asset-policy";
+import { selectMotionCriticalScenes } from "@/lib/motion-scene-selection";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
 import { sceneSplitPreview, type SceneStructureMutation } from "@/lib/scene-structure";
 import {
@@ -73,7 +74,7 @@ const promptExamples = [
   "制作一个教育产品宣传视频，展示老师如何用 AI 快速生成课程内容。"
 ];
 
-const progressSteps = [
+const baseProgressSteps = [
   "解析视频目标",
   "拆分场景和镜头",
   "撰写旁白与字幕",
@@ -82,6 +83,12 @@ const progressSteps = [
   "生成自然配音",
   "保存项目版本"
 ];
+
+function generationProgressSteps(motion: GenerationOptions["motion"]) {
+  return motion === "key-scenes"
+    ? [...baseProgressSteps.slice(0, -1), "生成关键动态镜头", baseProgressSteps.at(-1)!]
+    : baseProgressSteps;
+}
 
 function durationLabel(seconds: number) {
   const minutes = Math.floor(seconds / 60);
@@ -483,9 +490,18 @@ function BriefScreen({
                 <option value="温暖自然">温暖自然</option>
               </select>
             </label>
+            <label>
+              <span>动态方式</span>
+              <select onChange={(event) => onOptionsChange({ ...options, motion: event.target.value as GenerationOptions["motion"] })} value={options.motion}>
+                <option value="key-scenes">关键镜头动态</option>
+                <option value="camera">智能运镜</option>
+              </select>
+            </label>
           </div>
           <div className="kv-prompt-tools">
-            <span>参数会同时约束脚本、分镜、画面与配音。</span>
+            <span>{options.motion === "key-scenes"
+              ? `${Number(options.duration) >= 45 && options.sceneCount !== "3" ? "2" : "1"} 个动作最强的场景将生成动态视频，其余场景使用智能运镜。`
+              : "全部场景使用画面运镜，生成更快。"}</span>
             <button className="kv-primary" disabled={isBusy || prompt.trim().length < 4} type="submit">
               {isBusy ? <Loader2 className="kv-spin" size={18} /> : <Sparkles size={18} />}
               开始生成
@@ -540,8 +556,9 @@ function BriefScreen({
   );
 }
 
-function GeneratingScreen({ prompt, progress, status }: { prompt: string; progress: number; status: string }) {
-  const activeIndex = Math.min(progressSteps.length - 1, Math.floor(progress / (100 / progressSteps.length)));
+function GeneratingScreen({ prompt, progress, status, motion }: { prompt: string; progress: number; status: string; motion: GenerationOptions["motion"] }) {
+  const steps = generationProgressSteps(motion);
+  const activeIndex = Math.min(steps.length - 1, Math.floor(progress / (100 / steps.length)));
 
   return (
     <div className="kv-generating">
@@ -558,7 +575,7 @@ function GeneratingScreen({ prompt, progress, status }: { prompt: string; progre
         <div style={{ width: `${progress}%` }} />
       </div>
       <div className="kv-progress-steps">
-        {progressSteps.map((step, index) => (
+        {steps.map((step, index) => (
           <div className={index <= activeIndex ? "done" : ""} key={step}>
             {index < activeIndex ? <Check size={16} /> : index === activeIndex ? <Loader2 className="kv-spin" size={16} /> : <span />}
             <p>{step}</p>
@@ -1981,7 +1998,8 @@ export function WorkspaceClient({
     duration: "30",
     sceneCount: "auto",
     language: "中文",
-    style: "电影质感"
+    style: "电影质感",
+    motion: "key-scenes"
   });
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [projectQuery, setProjectQuery] = useState("");
@@ -2172,6 +2190,27 @@ export function WorkspaceClient({
         warnings.push(requestErrorMessage(error, "场景配音生成失败。"));
       }
 
+      if (generationOptions.motion === "key-scenes") {
+        const dynamicScenes = selectMotionCriticalScenes(
+          generatedProject.currentVersion.scenes,
+          generatedProject.currentVersion.durationSeconds
+        );
+        if (dynamicScenes.length === 0) {
+          warnings.push("没有可用于生成动态镜头的场景画面，请先在工作室补齐画面。");
+        } else {
+          for (const [index, sceneNumber] of dynamicScenes.entries()) {
+            setProgress(88 + Math.round((index / dynamicScenes.length) * 6));
+            setGenerationStatus(`正在生成场景 ${sceneNumber} 的动态视频镜头`);
+            try {
+              generatedProject = await requestVideoClips(generatedProject, [sceneNumber], "standard");
+              setProject(generatedProject);
+            } catch (error) {
+              warnings.push(requestErrorMessage(error, `场景 ${sceneNumber} 的动态镜头生成失败。`));
+            }
+          }
+        }
+      }
+
       setGenerationStatus("正在保存可继续编辑的项目");
       setProgress(96);
       if (warnings.length > 0) setErrorMessage(Array.from(new Set(warnings)).join(" "));
@@ -2181,7 +2220,9 @@ export function WorkspaceClient({
         type: "text",
         content: warnings.length > 0
           ? "脚本和分镜已经保存，部分媒体素材需要在工作室中重试。"
-          : "全部场景画面和配音已经完成，可以播放预览或继续通过对话修改。"
+          : generationOptions.motion === "key-scenes"
+            ? "场景画面、自然配音和关键动态镜头已经完成，可以播放预览或继续通过对话修改。"
+            : "全部场景画面和配音已经完成，可以播放预览或继续通过对话修改。"
       }]);
       setSelectedScene(1);
       setPendingPlan(undefined);
@@ -3374,7 +3415,7 @@ export function WorkspaceClient({
         />
       ) : null}
       {stage === "generating" ? (
-        <GeneratingScreen progress={progress} prompt={generationPrompt} status={generationStatus} />
+        <GeneratingScreen motion={generationOptions.motion} progress={progress} prompt={generationPrompt} status={generationStatus} />
       ) : null}
       {stage === "projects" ? (
         <ProjectLibrary
