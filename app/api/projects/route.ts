@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createStoryboardProject } from "@/lib/ai-video";
+import {
+  claimGenerationRequest,
+  completeGenerationRequest,
+  failGenerationRequest,
+  generationRequestFingerprint
+} from "@/lib/generation-requests";
 import { persistGeneratedProject } from "@/lib/project-mutations";
-import { listProjects } from "@/lib/project-store";
+import { getProjectSnapshot, listProjects } from "@/lib/project-store";
 
 const requestSchema = z.object({
   prompt: z.string().trim().min(4).max(4000),
+  requestId: z.string().uuid().optional(),
   options: z.object({
     duration: z.enum(["15", "30", "45", "60"]),
     sceneCount: z.enum(["auto", "3", "5", "6"]),
@@ -26,14 +33,44 @@ function publicEngine(engine: string) {
 }
 
 export async function POST(request: Request) {
+  let requestId: string | undefined;
   try {
     const body = requestSchema.parse(await request.json());
+    requestId = body.requestId;
+    if (requestId) {
+      const claim = await claimGenerationRequest({
+        id: requestId,
+        fingerprint: generationRequestFingerprint(body.prompt, body.options)
+      });
+      if (claim.conflict) {
+        return NextResponse.json({ error: "生成任务标识与当前需求不匹配，请重新提交。" }, { status: 409 });
+      }
+      if (!claim.claimed && claim.record?.status === "pending") {
+        return NextResponse.json({ status: "pending", requestId }, { status: 202 });
+      }
+      if (!claim.claimed && claim.record?.status === "failed") {
+        return NextResponse.json({ status: "failed", error: claim.record.error || "视频项目生成失败，请重试。" }, { status: 409 });
+      }
+      if (!claim.claimed && claim.record?.status === "ready" && claim.record.projectId) {
+        const snapshot = await getProjectSnapshot(claim.record.projectId);
+        if (!snapshot) throw new Error("生成任务已经完成，但项目读取失败。");
+        return NextResponse.json({
+          project: snapshot.project,
+          messages: snapshot.messages,
+          engine: publicEngine(claim.record.engine || "ai"),
+          recovered: true
+        });
+      }
+    }
     const { project, engine } = await createStoryboardProject(body.prompt, undefined, body.options);
     const persisted = await persistGeneratedProject({
       prompt: body.prompt,
       project,
       engine
     });
+    if (requestId) {
+      await completeGenerationRequest({ id: requestId, projectId: persisted.project.id, engine });
+    }
     return NextResponse.json({ ...persisted, engine: publicEngine(engine) });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -42,6 +79,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (requestId) await failGenerationRequest(requestId).catch(() => undefined);
     console.error("[projects] Unable to create video project:", error);
     return NextResponse.json(
       { error: "视频项目没有完整保存，请稍后重试。本次失败不会留下半成品项目。" },

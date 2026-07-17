@@ -98,9 +98,21 @@ create table if not exists render_jobs (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists generation_requests (
+  id uuid primary key,
+  request_fingerprint text not null,
+  status text not null check (status in ('pending', 'ready', 'failed')),
+  project_id uuid references projects(id) on delete set null,
+  engine text,
+  error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists project_versions_project_id_idx on project_versions(project_id);
 create index if not exists scenes_version_id_idx on scenes(version_id);
 create index if not exists chat_messages_project_id_idx on chat_messages(project_id);
 create index if not exists edit_plans_project_id_idx on edit_plans(project_id);
 create index if not exists render_jobs_version_id_idx on render_jobs(version_id);
 create index if not exists render_jobs_version_status_idx on render_jobs(version_id, status, created_at desc);
+create index if not exists generation_requests_status_updated_idx on generation_requests(status, updated_at desc);

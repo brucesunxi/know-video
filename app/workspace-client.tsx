@@ -67,6 +67,14 @@ type MediaGenerationResponse = {
   completedSceneNumbers?: number[];
   failedSceneNumbers?: number[];
 };
+type StoryboardGenerationResponse = {
+  status?: "pending" | "ready" | "failed";
+  project?: Project;
+  messages?: ChatMessage[];
+  engine?: Engine;
+  error?: string;
+  recovered?: boolean;
+};
 type BusyAction =
   | "planning-edit"
   | "applying-edit"
@@ -243,6 +251,43 @@ async function waitForRenderJob(
     if (current.status !== "queued" && current.status !== "running") return current;
   }
   return undefined;
+}
+
+async function waitForGenerationRequest(
+  requestId: string,
+  onWaiting: () => void
+): Promise<Required<Pick<StoryboardGenerationResponse, "project" | "messages" | "engine">> & StoryboardGenerationResponse> {
+  const startedAt = Date.now();
+  let consecutiveFailures = 0;
+  onWaiting();
+  while (Date.now() - startedAt < 4 * 60 * 1000) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    try {
+      const response = await fetch(
+        `/api/projects/generation?requestId=${encodeURIComponent(requestId)}`,
+        { cache: "no-store", signal: AbortSignal.timeout(12_000) }
+      );
+      const data = await response.json().catch(() => ({})) as StoryboardGenerationResponse;
+      if (response.status === 202 || data.status === "pending") {
+        consecutiveFailures = 0;
+        continue;
+      }
+      if (!response.ok || data.status === "failed") {
+        throw new Error(data.error || "视频脚本和分镜生成没有完成，请重试。");
+      }
+      if (!data.project || !Array.isArray(data.messages) || !data.engine) {
+        throw new Error("生成任务返回的数据不完整，请重试。");
+      }
+      return { ...data, project: data.project, messages: data.messages, engine: data.engine };
+    } catch (error) {
+      if (error instanceof Error && /没有完成|数据不完整/.test(error.message)) throw error;
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= 5) {
+        throw new Error("暂时无法读取后台生成进度。项目完成后仍会保存在项目列表中，请稍后查看。");
+      }
+    }
+  }
+  throw new Error("脚本和分镜生成时间较长。任务仍可能在后台完成，请稍后到项目列表查看。");
 }
 
 function busyActionLabel(action?: BusyAction) {
@@ -2460,21 +2505,37 @@ export function WorkspaceClient({
     try {
       setProgress(18);
       setGenerationStatus("正在规划脚本与分镜");
-      const response = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt, options: generationOptions }),
-        signal: AbortSignal.timeout(90_000)
-      });
-      if (!response.ok) {
-        const failure = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(failure.error || "视频项目创建失败。");
+      const requestId = crypto.randomUUID();
+      let data: Required<Pick<StoryboardGenerationResponse, "project" | "messages" | "engine">> & StoryboardGenerationResponse;
+      try {
+        const response = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prompt, options: generationOptions, requestId }),
+          signal: AbortSignal.timeout(90_000)
+        });
+        const result = await response.json().catch(() => ({})) as StoryboardGenerationResponse;
+        if (response.status === 202 || result.status === "pending") {
+          data = await waitForGenerationRequest(requestId, () => {
+            setProgress(36);
+            setGenerationStatus("脚本与分镜仍在后台生成，正在自动恢复");
+          });
+        } else {
+          if (!response.ok) throw new Error(result.error || "视频项目创建失败。");
+          if (!result.project || !Array.isArray(result.messages) || !result.engine) {
+            throw new Error("视频项目创建返回的数据不完整，请重试。");
+          }
+          data = { ...result, project: result.project, messages: result.messages, engine: result.engine };
+        }
+      } catch (error) {
+        const connectionInterrupted = error instanceof TypeError
+          || (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name));
+        if (!connectionInterrupted) throw error;
+        data = await waitForGenerationRequest(requestId, () => {
+          setProgress(36);
+          setGenerationStatus("连接超时，正在找回后台生成结果");
+        });
       }
-      const data = await response.json() as {
-        project: Project;
-        messages: ChatMessage[];
-        engine: Engine;
-      };
       let generatedProject = data.project;
       const warnings: string[] = [];
       setProject(generatedProject);
