@@ -575,6 +575,40 @@ button:disabled {
   color: #8a5a05;
 }
 
+.kv-project-card-body small.kv-output-status,
+.kv-version-list small.kv-output-status {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.kv-project-card-body small.kv-output-status.ready,
+.kv-version-list small.kv-output-status.ready {
+  border-color: #9bded6;
+  background: #e8faf6;
+  color: #087568;
+}
+
+.kv-project-card-body small.kv-output-status.working,
+.kv-version-list small.kv-output-status.working {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.kv-project-card-body small.kv-output-status.attention,
+.kv-version-list small.kv-output-status.attention {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
 .kv-project-card-actions,
 .kv-project-rename {
   display: flex;

@@ -135,6 +135,7 @@ export type ProjectListItem = {
   sceneCount: number;
   visualCount: number;
   audioCount: number;
+  renderUrl?: string;
   thumbnailUrl?: string;
 };
 

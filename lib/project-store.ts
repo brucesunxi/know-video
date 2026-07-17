@@ -14,6 +14,7 @@ type ProjectRow = {
 type ProjectListRow = ProjectRow & {
   updated_at: Date | string;
   status: ProjectVersion["status"] | null;
+  render_url: string | null;
   duration_seconds: number | null;
   scene_count: number;
   visual_count: number;
@@ -282,6 +283,7 @@ export async function listProjects(): Promise<ProjectListItem[]> {
       p.current_version_id,
       p.updated_at,
       pv.status,
+      pv.render_url,
       pv.duration_seconds,
       count(distinct s.id)::int as scene_count,
       count(distinct s.id) filter (
@@ -354,6 +356,7 @@ export async function listProjects(): Promise<ProjectListItem[]> {
       sceneCount: row.scene_count,
       visualCount: row.visual_count,
       audioCount: row.audio_count,
+      renderUrl: row.render_url ?? undefined,
       thumbnailUrl: row.thumbnail_r2_key
         ? assetUrlForKey(row.thumbnail_r2_key, row.thumbnail_public_url ?? undefined)
         : undefined

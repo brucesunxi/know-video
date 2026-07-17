@@ -341,6 +341,21 @@ function mediaCompletenessClass(item: { sceneCount: number; visualCount: number;
     : "partial";
 }
 
+function outputReadiness(item: {
+  sceneCount: number;
+  visualCount: number;
+  audioCount: number;
+  status?: ProjectVersion["status"];
+  renderUrl?: string;
+  renderJobId?: string;
+}) {
+  if (item.renderUrl) return { label: "MP4 已就绪", tone: "ready" };
+  if (item.status === "rendering" || item.renderJobId) return { label: "成片合成中", tone: "working" };
+  if (mediaCompletenessClass(item) === "complete") return { label: "可导出 MP4", tone: "ready" };
+  if (item.sceneCount <= 0) return { label: "等待分镜", tone: "attention" };
+  return { label: "需补齐素材", tone: "attention" };
+}
+
 function versionMediaSummary(version: ProjectVersion) {
   return {
     sceneCount: version.scenes.length,
@@ -350,10 +365,8 @@ function versionMediaSummary(version: ProjectVersion) {
 }
 
 function versionOutputLabel(version: ProjectVersion) {
-  if (version.renderUrl) return "已有 MP4 成片";
-  if (version.status === "rendering" || version.renderJobId) return "成片合成中";
   const summary = versionMediaSummary(version);
-  return mediaCompletenessClass(summary) === "complete" ? "可重新导出 MP4" : "恢复后需补齐素材";
+  return outputReadiness({ ...summary, status: version.status, renderUrl: version.renderUrl, renderJobId: version.renderJobId }).label;
 }
 
 function fileSizeLabel(value: unknown) {
@@ -591,13 +604,12 @@ function projectStatusBadges(project: Project, source: Source) {
       : version.assetStatus === "pending"
         ? { label: "素材生成中", tone: "working" }
         : { label: "素材待生成", tone: "attention" };
-  const output = version.renderUrl
-    ? { label: "MP4 已就绪", tone: "ready" }
-    : version.status === "rendering" || version.renderJobId
-      ? { label: "成片合成中", tone: "working" }
-      : version.assetStatus === "ready"
-        ? { label: "可导出 MP4", tone: "ready" }
-        : { label: "暂不可导出", tone: "neutral" };
+  const output = outputReadiness({
+    ...versionMediaSummary(version),
+    status: version.status,
+    renderUrl: version.renderUrl,
+    renderJobId: version.renderJobId
+  });
   return [saved, storyboard, media, output] as Array<{ label: string; tone: "ready" | "working" | "attention" | "neutral" }>;
 }
 
@@ -738,6 +750,9 @@ function ProjectLibrary({
                   <p>{item.sceneCount} 个场景 · {new Date(item.updatedAt).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}</p>
                   <small className={mediaCompletenessClass(item)}>
                     {mediaCompletenessLabel(item)}
+                  </small>
+                  <small className={`kv-output-status ${outputReadiness(item).tone}`}>
+                    {outputReadiness(item).label}
                   </small>
                 </div>
               </button>
@@ -2692,6 +2707,9 @@ function StudioScreen({
                     <p className="kv-version-change">{version.changeSummary?.description ?? "版本快照"}</p>
                     <p>{version.sceneCount} 个场景 · {durationLabel(version.durationSeconds)}</p>
                     <small className={mediaCompletenessClass(version)}>{mediaCompletenessLabel(version)}</small>
+                    <small className={`kv-output-status ${outputReadiness(version).tone}`}>
+                      {outputReadiness(version).label}
+                    </small>
                     <time>{new Date(version.createdAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
                     <button disabled={isBusy || versionPreviewLoading} onClick={() => onPreviewVersion(version.id)} type="button">
                       <Eye size={15} />预览比较

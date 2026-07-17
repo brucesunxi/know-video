@@ -13,8 +13,14 @@ assert.match(mutations, /audioCount: row\.audio_count/);
 assert.match(mutations, /visualCount: demoProject\.currentVersion\.scenes\.filter/);
 assert.match(workspace, /function mediaCompletenessLabel/);
 assert.match(workspace, /function mediaCompletenessClass/);
+assert.match(workspace, /function outputReadiness/);
 assert.match(workspace, /<small className=\{mediaCompletenessClass\(version\)\}>\{mediaCompletenessLabel\(version\)\}<\/small>/);
+assert.match(workspace, /className=\{`kv-output-status \$\{outputReadiness\(version\)\.tone\}`\}/);
+assert.match(workspace, /outputReadiness\(version\)\.label/);
 assert.match(styles, /\.kv-version-list small\.complete/);
 assert.match(styles, /\.kv-version-list small\.partial/);
+assert.match(styles, /\.kv-version-list small\.kv-output-status\.ready/);
+assert.match(styles, /\.kv-version-list small\.kv-output-status\.working/);
+assert.match(styles, /\.kv-version-list small\.kv-output-status\.attention/);
 
 console.log("Version library media smoke checks passed.");
