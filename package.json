@@ -27,6 +27,7 @@
     "scene:structure:intent:smoke": "node scripts/scene-structure-intent-smoke.mjs",
     "scene:transitions:smoke": "node scripts/scene-transitions-smoke.mjs",
     "image:continuity:smoke": "node scripts/image-continuity-smoke.mjs",
+    "image:quality:smoke": "node scripts/image-quality-smoke.mjs",
     "image:candidates:smoke": "node scripts/image-candidates-smoke.mjs",
     "candidate:intent:smoke": "node scripts/candidate-edit-intent-smoke.mjs",
     "speech:timing:smoke": "node scripts/speech-timing-smoke.mjs",

@@ -12,7 +12,7 @@ const output = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports });
-const { normalizeVisualRevisionInstruction, projectVisualIdentity, sceneImagePrompt, stableImageSeed } = module.exports;
+const { normalizeVisualRevisionInstruction, projectVisualIdentity, sceneImagePrompt, selectVisualAnchorScene, stableImageSeed, visualAnchorScore } = module.exports;
 
 const scene = {
   id: "scene-1",
@@ -51,6 +51,23 @@ assert.equal(stableImageSeed("project-stable:1"), stableImageSeed("project-stabl
 assert.notEqual(stableImageSeed("project-stable:1"), stableImageSeed("project-stable:2"));
 assert.match(projectVisualIdentity(project), /thin cyan light ribbon/);
 assert.match(projectVisualIdentity(project), /Locked palette: #07111d, #22c7b8, #f5c46b/);
+
+const abstractOpening = {
+  ...scene,
+  id: "scene-abstract",
+  sceneNumber: 1,
+  title: "Abstract particle opening",
+  visualPrompt: "Macro close-up of an abstract glowing particle on an empty surface."
+};
+const representativeScene = {
+  ...scene,
+  id: "scene-representative",
+  sceneNumber: 2,
+  title: "Creator workspace",
+  visualPrompt: "Wide establishing shot of the recurring creator using the product device inside the shared architectural studio environment."
+};
+assert.equal(selectVisualAnchorScene([abstractOpening, representativeScene]).id, "scene-representative");
+assert.ok(visualAnchorScore(representativeScene) > visualAnchorScore(abstractOpening));
 
 const prompt = sceneImagePrompt(scene, project, ["current", "anchor"]);
 assert.match(prompt, /current version of this exact scene/);

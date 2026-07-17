@@ -2,6 +2,23 @@ import type { Project, Scene } from "@/lib/types";
 
 export type ImageReferenceRole = "current" | "anchor";
 
+export function visualAnchorScore(scene: Scene) {
+  const description = `${scene.title} ${scene.visualPrompt}`.toLowerCase();
+  let score = Math.min(3, scene.visualPrompt.length / 180);
+  if (/(?:person|people|creator|founder|customer|teacher|student|人物|角色|创作者|用户|教师|学生)/iu.test(description)) score += 4;
+  if (/(?:product|device|workspace|studio|office|environment|architecture|产品|设备|工作台|工作室|办公室|环境|建筑|空间)/iu.test(description)) score += 3;
+  if (/(?:wide shot|medium shot|full body|establishing shot|广角|全景|中景|全身|建立镜头)/iu.test(description)) score += 2;
+  if (/(?:recurring|shared visual world|motif|连续|视觉世界|反复出现|核心意象)/iu.test(description)) score += 1;
+  if (/(?:macro|extreme close|close-up|abstract|particle|title card|logo|特写|微距|抽象|粒子|片头|标题|标志)/iu.test(description)) score -= 4;
+  return score;
+}
+
+export function selectVisualAnchorScene<T extends Scene>(scenes: T[]) {
+  return scenes.reduce<T | undefined>((best, scene) => (
+    !best || visualAnchorScore(scene) > visualAnchorScore(best) ? scene : best
+  ), undefined);
+}
+
 export function stableImageSeed(value: string) {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {

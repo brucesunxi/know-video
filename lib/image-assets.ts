@@ -5,9 +5,11 @@ import { getOptionalEnv } from "@/lib/env";
 import {
   projectVisualIdentity,
   sceneImagePrompt,
+  selectVisualAnchorScene,
   stableImageSeed,
   type ImageReferenceRole
 } from "@/lib/image-continuity";
+import { GeneratedImageQualityError, normalizeGeneratedImage } from "@/lib/image-quality";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 
@@ -108,42 +110,65 @@ async function generateSceneImage(
   visualInstruction?: string
 ): Promise<{ asset: SceneAsset; reference: ImageReference } | undefined> {
   const usableReferences = hasCloudflareAI() ? references : [];
-  const seed = stableImageSeed(`${project.id}:${scene.sceneNumber}:${variantKey}`);
+  const baseSeed = stableImageSeed(`${project.id}:${scene.sceneNumber}:${variantKey}`);
   let prompt = buildSceneImagePrompt(scene, project, usableReferences, visualInstruction);
-  let body: Buffer;
-  let model: string;
-  if (hasCloudflareAI()) {
-    let generated;
+  let body: Buffer | undefined;
+  let model = "";
+  let seed = baseSeed;
+  let qualityMetadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"] | undefined;
+  for (let qualityAttempt = 0; qualityAttempt < 2; qualityAttempt += 1) {
+    seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
+    const attemptPrompt = qualityAttempt === 0
+      ? prompt
+      : `${prompt}\nQuality correction: produce a fully resolved, information-rich cinematic frame with clear subject separation, detailed materials, and meaningful foreground, midground, and background. Avoid empty gradients or featureless surfaces.`;
+    let generatedBody: Buffer;
+    let generatedModel: string;
+    let effectivePrompt = attemptPrompt;
     try {
-      generated = await generateCloudflareImage(prompt, quality, {
-        seed,
-        references: usableReferences
-      });
+      if (hasCloudflareAI()) {
+        let generated;
+        try {
+          generated = await generateCloudflareImage(attemptPrompt, quality, {
+            seed,
+            references: usableReferences
+          });
+        } catch (error) {
+          if (!isSafetyFiltered(error)) throw error;
+          effectivePrompt = buildBrandSafeImagePrompt(scene, project);
+          generated = await generateCloudflareImage(effectivePrompt, quality, {
+            seed,
+            references: usableReferences.filter((reference) => reference.role === "anchor")
+          });
+        }
+        generatedBody = generated.body;
+        generatedModel = generated.model;
+      } else {
+        const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
+        const result = await client.images.generate({
+          model: imageModel(),
+          prompt: attemptPrompt,
+          size: "1536x1024",
+          quality: "medium",
+          n: 1
+        } as never);
+        const image = result.data?.[0];
+        const base64 = image ? (image as { b64_json?: string }).b64_json : undefined;
+        if (!base64) return undefined;
+        generatedBody = Buffer.from(base64, "base64");
+        generatedModel = imageModel();
+      }
+      const normalized = await normalizeGeneratedImage(generatedBody);
+      body = normalized.body;
+      qualityMetadata = normalized.metadata;
+      model = generatedModel;
+      prompt = effectivePrompt;
+      break;
     } catch (error) {
-      if (!isSafetyFiltered(error)) throw error;
-      prompt = buildBrandSafeImagePrompt(scene, project);
-      generated = await generateCloudflareImage(prompt, quality, {
-        seed,
-        references: usableReferences.filter((reference) => reference.role === "anchor")
-      });
+      if (!(error instanceof GeneratedImageQualityError) || qualityAttempt === 1) throw error;
+      console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation; retrying:`, error.message);
     }
-    body = generated.body;
-    model = generated.model;
-  } else {
-    const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
-    const result = await client.images.generate({
-      model: imageModel(),
-      prompt,
-      size: "1536x1024",
-      quality: "medium",
-      n: 1
-    } as never);
-    const image = result.data?.[0];
-    const base64 = image ? (image as { b64_json?: string }).b64_json : undefined;
-    if (!base64) return undefined;
-    body = Buffer.from(base64, "base64");
-    model = imageModel();
   }
+  if (!body || !qualityMetadata) return undefined;
 
   const key = `generated/${project.id}/${project.currentVersion.id}/scene-${scene.sceneNumber}-${crypto.randomUUID()}.png`;
   const uploaded = await uploadToR2({
@@ -163,6 +188,7 @@ async function generateSceneImage(
       quality,
       prompt,
       seed,
+      ...qualityMetadata,
       referenceKeys: usableReferences.map((reference) => reference.r2Key),
       candidateInstruction: visualInstruction || undefined,
       sceneNumber: scene.sceneNumber
@@ -212,14 +238,17 @@ export async function generateProjectSceneImages(
     .filter(({ scene }) => !selectedScenes || selectedScenes.has(scene.sceneNumber));
   if (selectedIndexes.length === 0) return project;
   const concurrency = Math.min(3, Math.max(1, Number(getOptionalEnv("IMAGE_GENERATION_CONCURRENCY")) || 2));
-  const firstExistingImage = scenes
-    .flatMap((scene) => scene.assets.filter((asset) => asset.type === "image" && asset.url))
-    .find(Boolean);
+  const existingAnchorScene = selectVisualAnchorScene(
+    scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image" && asset.url))
+  );
+  const firstExistingImage = existingAnchorScene?.assets.find((asset) => asset.type === "image" && asset.url);
   let projectAnchor = await loadImageReference(firstExistingImage, "anchor");
   const targets = [...selectedIndexes];
 
   if (!projectAnchor && targets.length > 0) {
-    const anchorTarget = targets.shift()!;
+    const preferredAnchor = selectVisualAnchorScene(targets.map((target) => target.scene));
+    const anchorIndex = Math.max(0, targets.findIndex((target) => target.scene.id === preferredAnchor?.id));
+    const [anchorTarget] = targets.splice(anchorIndex, 1);
     try {
       const currentReference = await loadImageReference(
         anchorTarget.scene.assets.find((asset) => asset.type === "image" && asset.url),
