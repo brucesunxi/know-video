@@ -10,7 +10,12 @@ assert.match(workspace, /planScopeLabel\(pendingPlan, scenes\.length\)/);
 assert.match(workspace, /planAssetWorkLabel\(pendingPlan\)/);
 assert.match(workspace, /function planApplyLabel/);
 assert.match(workspace, /function planReviewChecklist/);
+assert.match(workspace, /function planRequestTrail/);
+assert.match(workspace, /\.split\(\/\\n补充要求：\/g\)/);
 assert.match(workspace, /aria-label="执行前检查"/);
+assert.match(workspace, /aria-label="方案对话脉络"/);
+assert.match(workspace, /<span>原始需求<\/span>/);
+assert.match(workspace, /补充要求 \{index \+ 1\}/);
 assert.match(workspace, /className=\{item\.tone\}/);
 assert.match(workspace, /\{applyLabel\}/);
 assert.match(workspace, /点击应用才会真正改片/);
@@ -20,6 +25,9 @@ assert.match(workspace, /<button disabled=\{isBusy\} onClick=\{onCancel\} type="
 
 assert.match(styles, /\.kv-plan-state/);
 assert.match(styles, /\.kv-plan-state-grid/);
+assert.match(styles, /\.kv-plan-request-trail/);
+assert.match(styles, /\.kv-plan-request-trail li:first-child/);
+assert.match(styles, /\.kv-plan-request-trail p/);
 assert.match(styles, /\.kv-plan-checklist/);
 assert.match(styles, /\.kv-plan-checklist span\.attention svg/);
 assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.kv-plan-checklist/);

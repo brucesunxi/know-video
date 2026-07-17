@@ -217,6 +217,17 @@ function planReviewChecklist(plan: EditPlan, visualPreview: { total: number; rea
   ] as Array<{ label: string; value: string; tone: "ready" | "working" | "attention" }>;
 }
 
+function planRequestTrail(plan: EditPlan) {
+  const parts = plan.userRequest
+    .split(/\n补充要求：/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return {
+    original: parts[0] ?? plan.userRequest.trim(),
+    refinements: parts.slice(1)
+  };
+}
+
 function productionSettingLabels(settings?: Partial<ProductionSettings>) {
   if (!settings) return [];
   return Object.entries(settings).map(([key, value]) => {
@@ -2099,6 +2110,7 @@ function ChatPanel({
   const visualPreviewState = { total: visualSceneNumbers.length, ready: previewedSceneNumbers.length };
   const applyLabel = pendingPlan ? planApplyLabel(pendingPlan, visualPreviewState) : "应用修改";
   const checklist = pendingPlan ? planReviewChecklist(pendingPlan, visualPreviewState) : [];
+  const requestTrail = pendingPlan ? planRequestTrail(pendingPlan) : undefined;
 
   useEffect(() => {
     const log = logRef.current;
@@ -2153,6 +2165,23 @@ function ChatPanel({
                 ))}
               </div>
             </div>
+            {requestTrail ? (
+              <div className="kv-plan-request-trail" aria-label="方案对话脉络">
+                <div>
+                  <MessageSquareText size={15} />
+                  <strong>方案脉络</strong>
+                </div>
+                <ol>
+                  <li><span>原始需求</span><p>{requestTrail.original}</p></li>
+                  {requestTrail.refinements.map((refinement, index) => (
+                    <li key={`${index}-${refinement}`}>
+                      <span>补充要求 {index + 1}</span>
+                      <p>{refinement}</p>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
             <p>{pendingPlan.summary}</p>
             {pendingPlan.sceneStructure ? (
               <>
