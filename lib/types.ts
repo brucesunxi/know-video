@@ -19,6 +19,7 @@ export type ProductionSettings = {
 export type SceneStructureMutation =
   | { operation: "set-duration"; sceneNumber: number; durationSeconds: number }
   | { operation: "set-transition"; sceneNumber: number; kind: SceneTransitionKind; durationSeconds: number }
+  | { operation: "set-visual"; sceneNumber: number; assetId: string }
   | { operation: "move"; sceneNumber: number; direction: "earlier" | "later" }
   | { operation: "move-to"; sceneNumber: number; targetSceneNumber: number }
   | { operation: "split"; sceneNumber: number }

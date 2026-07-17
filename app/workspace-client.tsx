@@ -61,6 +61,7 @@ type BusyAction =
   | "planning-edit"
   | "applying-edit"
   | "generating-images"
+  | "generating-candidate"
   | "generating-video"
   | "generating-audio"
   | "saving-scene"
@@ -155,6 +156,7 @@ function sceneStructureLabel(mutation?: EditPlan["sceneStructure"]) {
     const label = transitionOptions.find((option) => option.value === mutation.kind)?.label ?? mutation.kind;
     return `场景 ${mutation.sceneNumber} 进入转场：${label}${mutation.kind === "cut" ? "" : ` · ${mutation.durationSeconds} 秒`}`;
   }
+  if (mutation.operation === "set-visual") return `场景 ${mutation.sceneNumber} 采用新的候选画面`;
   if (mutation.operation === "move") return `场景 ${mutation.sceneNumber} 向${mutation.direction === "earlier" ? "前" : "后"}移动一位`;
   if (mutation.operation === "move-to") return `场景 ${mutation.sceneNumber} 移动到第 ${mutation.targetSceneNumber} 位`;
   if (mutation.operation === "split") return `拆分场景 ${mutation.sceneNumber} 为两个镜头`;
@@ -240,6 +242,8 @@ function busyActionLabel(action?: BusyAction) {
       return "正在保存新版本并更新受影响素材";
     case "generating-images":
       return "正在生成场景画面，请保持页面打开";
+    case "generating-candidate":
+      return "正在生成候选画面，当前视频不会被替换";
     case "generating-video":
       return "正在生成动态视频镜头，请保持页面打开";
     case "generating-audio":
@@ -1039,16 +1043,21 @@ function SceneAssetsPanel({
   scene,
   isBusy,
   uploadProgress,
+  onGenerateCandidate,
+  onAdoptCandidate,
   onUpload,
   onRemove
 }: {
   scene: Scene;
   isBusy: boolean;
   uploadProgress?: number;
+  onGenerateCandidate: () => void;
+  onAdoptCandidate: (assetId: string) => void;
   onUpload: () => void;
   onRemove: (assetId: string) => void;
 }) {
-  const assets = scene.assets.filter((asset) => ["image", "clip", "audio"].includes(asset.type));
+  const assets = scene.assets.filter((asset) => ["image", "thumbnail", "clip", "audio"].includes(asset.type));
+  const candidateCount = assets.filter((asset) => asset.type === "thumbnail" && asset.metadata?.candidate === true).length;
   return (
     <section className="kv-assets-panel">
       <div className="kv-strip-heading">
@@ -1056,17 +1065,23 @@ function SceneAssetsPanel({
           <span className="kv-eyebrow">场景 {scene.sceneNumber} 素材</span>
           <h3>管理当前画面、视频片段和配音</h3>
         </div>
-        <button disabled={isBusy} onClick={onUpload} type="button">
-          {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <Upload size={16} />}
-          {uploadProgress !== undefined ? `上传 ${uploadProgress}%` : "添加或替换"}
-        </button>
+        <div className="kv-assets-actions">
+          <button disabled={isBusy || candidateCount >= 3} onClick={onGenerateCandidate} title={candidateCount >= 3 ? "请先移除一张候选画面" : "生成新画面但不替换当前版本"} type="button">
+            <Sparkles size={16} />
+            生成候选 · {candidateCount}/3
+          </button>
+          <button disabled={isBusy} onClick={onUpload} type="button">
+            {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <Upload size={16} />}
+            {uploadProgress !== undefined ? `上传 ${uploadProgress}%` : "添加或替换"}
+          </button>
+        </div>
       </div>
       <div className="kv-asset-list">
         {assets.length === 0 ? (
           <div className="kv-assets-empty"><ImagePlus size={20} />这个场景还没有可用素材</div>
         ) : assets.map((asset) => (
           <article key={asset.id}>
-            {asset.type === "image" ? (
+            {asset.type === "image" || asset.type === "thumbnail" ? (
               <span className="kv-asset-preview" style={{ backgroundImage: `url("${asset.url}")` }} />
             ) : (
               <span className="kv-asset-preview icon">
@@ -1074,12 +1089,19 @@ function SceneAssetsPanel({
               </span>
             )}
             <div>
-              <strong>{String(asset.metadata?.name ?? (asset.type === "image" ? "场景画面" : asset.type === "clip" ? "视频片段" : "场景配音"))}</strong>
-              <span>{asset.type === "image" ? "图片" : asset.type === "clip" ? "视频" : "音频"} · {fileSizeLabel(asset.metadata?.size)}</span>
+              <strong>{String(asset.metadata?.name ?? (asset.type === "image" ? "当前画面" : asset.type === "thumbnail" ? "候选画面" : asset.type === "clip" ? "视频片段" : "场景配音"))}</strong>
+              <span>{asset.type === "image" ? "使用中" : asset.type === "thumbnail" ? "可对比采用" : asset.type === "clip" ? "视频" : "音频"} · {fileSizeLabel(asset.metadata?.size)}</span>
             </div>
-            <button aria-label={`移除 ${String(asset.metadata?.name ?? asset.type)}`} disabled={isBusy} onClick={() => onRemove(asset.id)} title="从当前版本移除" type="button">
-              <Trash2 size={16} />
-            </button>
+            <div className="kv-asset-actions">
+              {asset.type === "thumbnail" && asset.metadata?.candidate === true ? (
+                <button className="adopt" disabled={isBusy} onClick={() => onAdoptCandidate(asset.id)} title="采用为当前画面并创建新版本" type="button">
+                  <Check size={15} />采用
+                </button>
+              ) : null}
+              <button aria-label={`移除 ${String(asset.metadata?.name ?? asset.type)}`} className="remove" disabled={isBusy} onClick={() => onRemove(asset.id)} title="从当前版本移除" type="button">
+                <Trash2 size={16} />
+              </button>
+            </div>
           </article>
         ))}
       </div>
@@ -1645,6 +1667,7 @@ function StudioScreen({
   assetsOpen,
   onToggleAssets,
   onRemoveAsset,
+  onGenerateCandidate,
   productionOpen,
   productionUploadType,
   onToggleProduction,
@@ -1695,6 +1718,7 @@ function StudioScreen({
   assetsOpen: boolean;
   onToggleAssets: () => void;
   onRemoveAsset: (assetId: string) => void;
+  onGenerateCandidate: (sceneNumber: number) => void;
   productionOpen: boolean;
   productionUploadType?: "logo" | "music";
   onToggleProduction: () => void;
@@ -1957,6 +1981,8 @@ function StudioScreen({
         {assetsOpen ? (
           <SceneAssetsPanel
             isBusy={isBusy}
+            onAdoptCandidate={(assetId) => onMutateScene({ operation: "set-visual", sceneNumber: scene.sceneNumber, assetId })}
+            onGenerateCandidate={() => onGenerateCandidate(scene.sceneNumber)}
             onRemove={onRemoveAsset}
             onUpload={onUpload}
             scene={scene}
@@ -2525,7 +2551,7 @@ export function WorkspaceClient({
       setVersions([]);
       setVersionsOpen(false);
       setExportsOpen(false);
-      setAssetsOpen(false);
+      setAssetsOpen(mutation.operation === "set-visual");
       setProductionOpen(false);
       setActiveRenderJobId(undefined);
 
@@ -3121,13 +3147,14 @@ export function WorkspaceClient({
           assetId
         })
       });
-      const data = await response.json() as { error?: string };
+      const data = await response.json() as { error?: string; preserveRender?: boolean };
       if (!response.ok) throw new Error(data.error || "无法移除素材。");
       setProject((current) => ({
         ...current,
         currentVersion: {
           ...current.currentVersion,
-          renderUrl: undefined,
+          renderUrl: data.preserveRender ? current.currentVersion.renderUrl : undefined,
+          renderJobId: data.preserveRender ? current.currentVersion.renderJobId : undefined,
           scenes: current.currentVersion.scenes.map((scene) => scene.sceneNumber === selectedScene
             ? { ...scene, assets: scene.assets.filter((asset) => asset.id !== assetId) }
             : scene)
@@ -3179,6 +3206,41 @@ export function WorkspaceClient({
       }, true);
     } catch (error) {
       const message = error instanceof Error ? error.message : "场景画面生成失败。";
+      setErrorMessage(message);
+      pushMessage({ role: "assistant", type: "text", content: message });
+    } finally {
+      setIsBusy(false);
+      setBusyAction(undefined);
+    }
+  }
+
+  async function generateImageCandidate(sceneNumber: number) {
+    setIsBusy(true);
+    setBusyAction("generating-candidate");
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch("/api/assets/image/candidates/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          versionId: project.currentVersion.id,
+          sceneNumber,
+          quality: "standard"
+        }),
+        signal: AbortSignal.timeout(125_000)
+      });
+      const data = await response.json() as { project?: Project; error?: string };
+      if (!response.ok || !data.project) throw new Error(data.error || "候选画面生成失败。");
+      setProject(data.project);
+      pushMessage({
+        role: "assistant",
+        type: "text",
+        content: `场景 ${sceneNumber} 新增了一张候选画面。当前视频保持不变，采用后才会创建新版本。`,
+        versionId: data.project.currentVersion.id
+      }, true);
+    } catch (error) {
+      const message = requestErrorMessage(error, "候选画面生成失败。");
       setErrorMessage(message);
       pushMessage({ role: "assistant", type: "text", content: message });
     } finally {
@@ -3540,6 +3602,7 @@ export function WorkspaceClient({
           assetsOpen={assetsOpen}
           onToggleAssets={toggleAssets}
           onRemoveAsset={removeSceneAsset}
+          onGenerateCandidate={(sceneNumber) => void generateImageCandidate(sceneNumber)}
           productionOpen={productionOpen}
           productionUploadType={productionUploadType}
           onToggleProduction={toggleProduction}

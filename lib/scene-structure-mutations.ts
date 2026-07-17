@@ -40,6 +40,8 @@ export async function persistSceneStructureMutation(input: {
     ? `将场景 ${input.mutation.sceneNumber} 调整为 ${input.mutation.durationSeconds} 秒`
     : input.mutation.operation === "set-transition"
       ? `调整场景 ${input.mutation.sceneNumber} 的进入转场`
+    : input.mutation.operation === "set-visual"
+      ? `采用场景 ${input.mutation.sceneNumber} 的候选画面`
     : input.mutation.operation === "move"
       ? `将场景 ${input.mutation.sceneNumber} 向${input.mutation.direction === "earlier" ? "前" : "后"}移动`
       : input.mutation.operation === "move-to"

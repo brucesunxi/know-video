@@ -346,6 +346,7 @@ export async function persistGeneratedSceneAssets(
     replaceClips?: boolean;
     sceneNumbers?: number[];
     updateStyles?: boolean;
+    invalidateRender?: boolean;
   } = {}
 ) {
   if (!canPersist()) return;
@@ -401,8 +402,8 @@ export async function persistGeneratedSceneAssets(
 
     for (const asset of scene.assets) {
       queries.push(sql`
-        insert into scene_assets (scene_id, asset_type, r2_key, public_url, metadata_json)
-        select ${sceneId}, ${asset.type}, ${asset.r2Key}, ${asset.url}, ${JSON.stringify(asset.metadata ?? {})}
+        insert into scene_assets (id, scene_id, asset_type, r2_key, public_url, metadata_json)
+        select ${asset.id}, ${sceneId}, ${asset.type}, ${asset.r2Key}, ${asset.url}, ${JSON.stringify(asset.metadata ?? {})}
         where not exists (
           select 1 from scene_assets where scene_id = ${sceneId} and r2_key = ${asset.r2Key}
         )
@@ -417,7 +418,7 @@ export async function persistGeneratedSceneAssets(
     results[index] as Array<{ r2_key: string }> | undefined
   )?.map((row) => row.r2_key) ?? []);
 
-  await invalidateVersionRender(versionId);
+  if (options.invalidateRender !== false) await invalidateVersionRender(versionId);
   const counts = await sql`
     select
       count(*)::int as scene_count,

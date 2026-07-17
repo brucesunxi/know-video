@@ -64,6 +64,23 @@ assert.deepEqual(plain(transitioned.project.currentVersion.scenes[1].style.trans
 assert.equal(transitioned.project.currentVersion.renderUrl, undefined);
 assert.deepEqual(plain(transitioned.regeneration), { imageSceneNumbers: [], audioSceneNumbers: [], clipSceneNumbers: [] });
 
+const candidateProject = plain(project);
+candidateProject.currentVersion.renderUrl = "https://example.com/render.mp4";
+candidateProject.currentVersion.renderJobId = "render-1";
+candidateProject.currentVersion.scenes[1].assets.push(
+  { id: "candidate-2", type: "thumbnail", r2Key: "candidate-2.png", url: "https://example.com/candidate-2.png", metadata: { candidate: true } },
+  { id: "clip-2", type: "clip", r2Key: "clip-2.mp4", url: "https://example.com/clip-2.mp4" }
+);
+const adopted = applySceneStructureMutation(candidateProject, { operation: "set-visual", sceneNumber: 2, assetId: "candidate-2" }, createId);
+const adoptedScene = adopted.project.currentVersion.scenes[1];
+assert.equal(adoptedScene.assets.find((asset) => asset.type === "image").id, "candidate-2");
+assert.equal(adoptedScene.assets.find((asset) => asset.id === "image-2").type, "thumbnail");
+assert.equal(adoptedScene.assets.some((asset) => asset.type === "clip"), false);
+assert.equal(adopted.project.currentVersion.renderUrl, undefined);
+assert.equal(adopted.project.currentVersion.renderJobId, undefined);
+assert.equal(candidateProject.currentVersion.scenes[1].assets.find((asset) => asset.id === "image-2").type, "image");
+assert.deepEqual(plain(adopted.regeneration), { imageSceneNumbers: [], audioSceneNumbers: [], clipSceneNumbers: [] });
+
 const movedTo = applySceneStructureMutation(project, { operation: "move-to", sceneNumber: 1, targetSceneNumber: 3 }, createId);
 assert.deepEqual(plain(movedTo.project.currentVersion.scenes.map((item) => item.title)), ["B", "C", "A"]);
 assert.equal(movedTo.selectedSceneNumber, 3);
@@ -105,6 +122,7 @@ assert.equal(deleted.project.currentVersion.scenes[0].assets.filter((asset) => [
 
 assert.throws(() => applySceneStructureMutation(project, { operation: "move", sceneNumber: 1, direction: "earlier" }, createId), /边界/);
 assert.throws(() => applySceneStructureMutation(project, { operation: "set-transition", sceneNumber: 1, kind: "wipe", durationSeconds: 0.5 }, createId), /首个场景/);
+assert.throws(() => applySceneStructureMutation(project, { operation: "set-visual", sceneNumber: 2, assetId: "missing" }, createId), /候选画面/);
 assert.throws(() => applySceneStructureMutation(project, { operation: "move-to", sceneNumber: 2, targetSceneNumber: 2 }, createId), /没有变化/);
 assert.throws(() => applySceneStructureMutation(project, { operation: "move-to", sceneNumber: 2, targetSceneNumber: 9 }, createId), /超出了/);
 assert.throws(() => applySceneStructureMutation(project, { operation: "split", sceneNumber: 2 }, createId), /无法拆分/);

@@ -90,6 +90,34 @@ export function applySceneStructureMutation(
       style: { ...scenes[index].style, transition: { kind: mutation.kind, durationSeconds } }
     };
     description = `场景 ${mutation.sceneNumber} 的进入转场已更新。`;
+  } else if (mutation.operation === "set-visual") {
+    const candidate = scenes[index].assets.find((asset) => (
+      asset.id === mutation.assetId && asset.type === "thumbnail" && asset.metadata?.candidate === true
+    ));
+    if (!candidate) throw new Error("没有找到要采用的候选画面。");
+    const previousImages = scenes[index].assets
+      .filter((asset) => asset.type === "image")
+      .map((asset) => ({
+        ...asset,
+        type: "thumbnail" as const,
+        metadata: { ...asset.metadata, candidate: true, replacedAt: new Date().toISOString() }
+      }));
+    const selectedImage: SceneAsset = {
+      ...candidate,
+      type: "image",
+      metadata: { ...candidate.metadata, candidate: false, adoptedAt: new Date().toISOString() }
+    };
+    scenes[index] = {
+      ...scenes[index],
+      assets: [
+        selectedImage,
+        ...scenes[index].assets.filter((asset) => (
+          asset.id !== candidate.id && asset.type !== "image" && asset.type !== "clip"
+        )),
+        ...previousImages
+      ]
+    };
+    description = `场景 ${mutation.sceneNumber} 已采用新的候选画面。`;
   } else if (mutation.operation === "move") {
     const target = mutation.direction === "earlier" ? index - 1 : index + 1;
     if (target < 0 || target >= scenes.length) throw new Error("该场景已经位于时间线边界。");

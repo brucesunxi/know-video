@@ -9,6 +9,7 @@ const sceneStructureSchema = z.discriminatedUnion("operation", [
     kind: z.enum(["auto", "cut", "dissolve", "push-left", "push-right", "zoom", "wipe"]),
     durationSeconds: z.number().min(0).max(1.2)
   }),
+  z.object({ operation: z.literal("set-visual"), sceneNumber: z.number().int().positive(), assetId: z.string().uuid() }),
   z.object({ operation: z.literal("move"), sceneNumber: z.number().int().positive(), direction: z.enum(["earlier", "later"]) }),
   z.object({ operation: z.literal("move-to"), sceneNumber: z.number().int().positive(), targetSceneNumber: z.number().int().positive() }),
   z.object({ operation: z.literal("split"), sceneNumber: z.number().int().positive() }),

@@ -102,9 +102,11 @@ async function generateSceneImage(
   scene: Scene,
   project: Project,
   quality: ImageQuality,
-  references: ImageReference[]
+  references: ImageReference[],
+  variantKey = "primary"
 ): Promise<{ asset: SceneAsset; reference: ImageReference } | undefined> {
   const usableReferences = hasCloudflareAI() ? references : [];
+  const seed = stableImageSeed(`${project.id}:${scene.sceneNumber}:${variantKey}`);
   let prompt = buildSceneImagePrompt(scene, project, usableReferences);
   let body: Buffer;
   let model: string;
@@ -112,14 +114,14 @@ async function generateSceneImage(
     let generated;
     try {
       generated = await generateCloudflareImage(prompt, quality, {
-        seed: stableImageSeed(`${project.id}:${scene.sceneNumber}`),
+        seed,
         references: usableReferences
       });
     } catch (error) {
       if (!isSafetyFiltered(error)) throw error;
       prompt = buildBrandSafeImagePrompt(scene, project);
       generated = await generateCloudflareImage(prompt, quality, {
-        seed: stableImageSeed(`${project.id}:${scene.sceneNumber}`),
+        seed,
         references: usableReferences.filter((reference) => reference.role === "anchor")
       });
     }
@@ -158,7 +160,7 @@ async function generateSceneImage(
       model,
       quality,
       prompt,
-      seed: stableImageSeed(`${project.id}:${scene.sceneNumber}`),
+      seed,
       referenceKeys: usableReferences.map((reference) => reference.r2Key),
       sceneNumber: scene.sceneNumber
     }
@@ -176,7 +178,13 @@ async function generateSceneImage(
 
 export async function generateProjectSceneImages(
   project: Project,
-  options: { replaceExistingImages?: boolean; sceneNumbers?: number[]; quality?: ImageQuality } = {}
+  options: {
+    replaceExistingImages?: boolean;
+    sceneNumbers?: number[];
+    quality?: ImageQuality;
+    candidate?: boolean;
+    variantKey?: string;
+  } = {}
 ) {
   const credentialIssue = imageCredentialIssue();
   if (credentialIssue) {
@@ -217,13 +225,22 @@ export async function generateProjectSceneImages(
         anchorTarget.scene,
         project,
         options.quality ?? "standard",
-        currentReference ? [currentReference] : []
+        currentReference ? [currentReference] : [],
+        options.variantKey
       );
       if (generated) {
+        const generatedAsset = options.candidate ? {
+          ...generated.asset,
+          type: "thumbnail" as const,
+          metadata: { ...generated.asset.metadata, candidate: true }
+        } : generated.asset;
         const existingAssets = options.replaceExistingImages
           ? anchorTarget.scene.assets.filter((asset) => !["image", "clip"].includes(asset.type))
           : anchorTarget.scene.assets;
-        scenes[anchorTarget.index] = { ...anchorTarget.scene, assets: [generated.asset, ...existingAssets] };
+        scenes[anchorTarget.index] = {
+          ...anchorTarget.scene,
+          assets: options.candidate ? [...existingAssets, generatedAsset] : [generatedAsset, ...existingAssets]
+        };
         projectAnchor = generated.reference;
       }
     } catch (error) {
@@ -242,14 +259,23 @@ export async function generateProjectSceneImages(
           currentReference,
           projectAnchor && projectAnchor.r2Key !== currentReference?.r2Key ? projectAnchor : undefined
         ].filter(Boolean) as ImageReference[];
-        const generated = await generateSceneImage(scene, project, options.quality ?? "standard", references);
+        const generated = await generateSceneImage(scene, project, options.quality ?? "standard", references, options.variantKey);
         if (!generated) return;
+
+        const generatedAsset = options.candidate ? {
+          ...generated.asset,
+          type: "thumbnail" as const,
+          metadata: { ...generated.asset.metadata, candidate: true }
+        } : generated.asset;
 
         const existingAssets = options.replaceExistingImages
           ? scene.assets.filter((asset) => !["image", "clip"].includes(asset.type))
           : scene.assets;
 
-        scenes[index] = { ...scene, assets: [generated.asset, ...existingAssets] };
+        scenes[index] = {
+          ...scene,
+          assets: options.candidate ? [...existingAssets, generatedAsset] : [generatedAsset, ...existingAssets]
+        };
       } catch (error) {
         failures.push(classifyImageError(error));
         console.error(`[image-assets] Scene ${scene.sceneNumber} image generation failed:`, error);
@@ -264,8 +290,9 @@ export async function generateProjectSceneImages(
     ...project,
     currentVersion: {
       ...project.currentVersion,
-      renderUrl: undefined,
-      status: "draft",
+      renderUrl: options.candidate ? project.currentVersion.renderUrl : undefined,
+      renderJobId: options.candidate ? project.currentVersion.renderJobId : undefined,
+      status: options.candidate ? project.currentVersion.status : "draft",
       assetStatus,
       assetErrorCode: failures[0],
       scenes

@@ -92,7 +92,7 @@ export async function detachSceneAsset(input: {
   sceneNumber: number;
   assetId: string;
 }) {
-  if (!hasDatabaseUrl()) return true;
+  if (!hasDatabaseUrl()) return { detached: true, preserveRender: false };
   const rows = await getSql()`
     delete from scene_assets sa
     using scenes s, project_versions pv
@@ -102,13 +102,14 @@ export async function detachSceneAsset(input: {
       and s.scene_number = ${input.sceneNumber}
       and pv.id = s.version_id
       and pv.project_id = ${input.projectId}
-    returning sa.id, sa.r2_key
-  ` as Array<{ id: string; r2_key: string }>;
-  if (rows[0]) await invalidateVersionRender(input.versionId);
+    returning sa.id, sa.r2_key, sa.asset_type, sa.metadata_json
+  ` as Array<{ id: string; r2_key: string; asset_type: string; metadata_json: Record<string, unknown> | null }>;
+  const preserveRender = rows[0]?.asset_type === "thumbnail" && rows[0]?.metadata_json?.candidate === true;
+  if (rows[0] && !preserveRender) await invalidateVersionRender(input.versionId);
   if (rows[0]) {
     await deleteUnreferencedStorageObjects([rows[0].r2_key]).catch((error) => {
       console.error("[scene-assets] Unable to clean detached object:", error);
     });
   }
-  return Boolean(rows[0]);
+  return { detached: Boolean(rows[0]), preserveRender };
 }

@@ -12,9 +12,9 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const body = schema.parse(await request.json());
-    const detached = await detachSceneAsset(body);
-    return detached
-      ? NextResponse.json({ ok: true })
+    const result = await detachSceneAsset(body);
+    return result.detached
+      ? NextResponse.json({ ok: true, preserveRender: result.preserveRender })
       : NextResponse.json({ error: "没有找到要移除的场景素材。" }, { status: 404 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "无法移除场景素材。";
