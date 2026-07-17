@@ -262,6 +262,19 @@ function planApplyLabel(plan: EditPlan, visualPreview: { total: number; ready: n
   return "应用并创建版本";
 }
 
+function planApplyBlocker(input: {
+  coverageState?: ReturnType<typeof planCoverageState>;
+  languageReview?: ReturnType<typeof planLanguageReview>;
+}) {
+  if (input.coverageState?.tone === "attention") {
+    return "方案范围和原始需求不一致，请继续输入补充要求修正范围。";
+  }
+  if (input.languageReview && !input.languageReview.ready) {
+    return "中文化字段还没有全部通过，请继续输入“把所有场景都完整改成中文”。";
+  }
+  return undefined;
+}
+
 function planRenderImpactLabel(plan: EditPlan) {
   const regenerate = new Set(plan.changes.flatMap((change) => change.regenerate));
   const structureInvalidatesRender = Boolean(plan.sceneStructure);
@@ -2677,6 +2690,8 @@ function ChatPanel({
   const requestTrail = pendingPlan ? planRequestTrail(pendingPlan) : undefined;
   const coverageState = pendingPlan ? planCoverageState(pendingPlan, scenes) : undefined;
   const languageReview = pendingPlan ? planLanguageReview(pendingPlan, scenes) : undefined;
+  const applyBlocker = pendingPlan ? planApplyBlocker({ coverageState, languageReview }) : undefined;
+  const applyDisabled = isBusy || Boolean(applyBlocker);
   const inputMode = chatInputMode({
     input,
     pendingPlan,
@@ -2722,7 +2737,7 @@ function ChatPanel({
                 <Clock3 size={16} />
                 <strong>方案待确认，当前视频还没有被改动</strong>
               </div>
-              <p>确认后才会创建新版本并生成受影响素材；继续输入会先调整这个方案。</p>
+              <p>{applyBlocker ?? "确认后才会创建新版本并生成受影响素材；继续输入会先调整这个方案。"}</p>
               <div className="kv-plan-state-grid">
                 <span><strong>{planScopeLabel(pendingPlan, scenes.length)}</strong><small>作用范围</small></span>
                 <span><strong>{planAssetWorkLabel(pendingPlan)}</strong><small>确认后执行</small></span>
@@ -2815,9 +2830,9 @@ function ChatPanel({
                     : `生成真实预览 · ${visualSceneNumbers.length - previewedSceneNumbers.length} 个场景`}
                 </button>
               ) : null}
-              <button className="kv-primary" disabled={isBusy} onClick={onApply} type="button">
+              <button className="kv-primary" disabled={applyDisabled} onClick={onApply} type="button">
                 {isBusy ? <Loader2 className="kv-spin" size={16} /> : <Check size={16} />}
-                {applyLabel}
+                {applyBlocker ? "先修正方案" : applyLabel}
               </button>
               <button onClick={onCancel} type="button">取消</button>
             </div>
@@ -2833,13 +2848,13 @@ function ChatPanel({
       {pendingPlan ? (
         <div className="kv-chat-draft-note" role="note">
           <div>
-            <Check size={15} />
-            <span>正在审核修改方案。输入补充要求会继续改方案；点击应用才会真正改片。</span>
+            {applyBlocker ? <AlertCircle size={15} /> : <Check size={15} />}
+            <span>{applyBlocker ?? "正在审核修改方案。输入补充要求会继续改方案；点击应用才会真正改片。"}</span>
           </div>
           <div className="kv-chat-draft-actions">
-            <button className="kv-primary" disabled={isBusy} onClick={onApply} type="button">
+            <button className="kv-primary" disabled={applyDisabled} onClick={onApply} type="button">
               {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Check size={15} />}
-              {applyLabel}
+              {applyBlocker ? "先修正方案" : applyLabel}
             </button>
             <button disabled={isBusy} onClick={onCancel} type="button">取消方案</button>
           </div>
