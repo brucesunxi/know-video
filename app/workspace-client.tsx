@@ -46,7 +46,7 @@ import { replacementAssetTypes } from "@/lib/asset-policy";
 import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { editPlanVisualSceneNumbers, planPreviewAsset, removeEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { parsePendingGenerationSession, PENDING_GENERATION_STORAGE_KEY, type PendingGenerationSession } from "@/lib/generation-session";
-import { missingMotionSceneNumbers, missingSceneAssetNumbers } from "@/lib/generation-resume";
+import { missingMotionSceneNumbers, missingSceneAssetNumbers, sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
 import { selectMotionCriticalScenes } from "@/lib/motion-scene-selection";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
 import { sceneSplitPreview, type SceneStructureMutation } from "@/lib/scene-structure";
@@ -253,6 +253,33 @@ function fileSizeLabel(value: unknown) {
 
 function sceneVisualAsset(scene: Scene) {
   return scene.assets.find((asset) => ["image", "clip"].includes(asset.type) && asset.url);
+}
+
+function sceneHasMotionAsset(scene: Scene) {
+  return scene.assets.some((asset) => asset.type === "clip" && Boolean(asset.url));
+}
+
+function sceneMediaState(scene: Scene) {
+  const visualReady = sceneHasVisualAsset(scene);
+  const audioReady = sceneHasAudioAsset(scene);
+  const motionReady = sceneHasMotionAsset(scene);
+  return {
+    visualReady,
+    audioReady,
+    motionReady,
+    ready: visualReady && audioReady
+  };
+}
+
+function sceneMediaStatusLabel(scene: Scene) {
+  const state = sceneMediaState(scene);
+  if (state.ready && state.motionReady) return "素材完整 · 已有动态镜头";
+  if (state.ready) return "素材完整 · 可预览导出";
+  const missing = [
+    state.visualReady ? "" : "缺画面",
+    state.audioReady ? "" : "缺配音"
+  ].filter(Boolean);
+  return missing.join(" · ");
 }
 
 function requestErrorMessage(error: unknown, fallback: string) {
@@ -741,15 +768,22 @@ function Storyboard({
   selectedScene,
   isBusy,
   onSelect,
-  onMutate
+  onMutate,
+  onRegenerate,
+  onRegenerateAudio,
+  onGenerateClip
 }: {
   scenes: Scene[];
   selectedScene: number;
   isBusy: boolean;
   onSelect: (scene: number) => void;
   onMutate: (mutation: SceneStructureMutation) => void;
+  onRegenerate: (sceneNumbers?: number[]) => void;
+  onRegenerateAudio: (sceneNumbers?: number[]) => void;
+  onGenerateClip: (sceneNumber: number) => void;
 }) {
   const scene = scenes.find((item) => item.sceneNumber === selectedScene) ?? scenes[0];
+  const selectedMediaState = scene ? sceneMediaState(scene) : undefined;
   const [duration, setDuration] = useState(scene?.durationSeconds ?? 5);
   const [transitionKind, setTransitionKind] = useState<SceneTransitionKind>(scene?.style.transition?.kind ?? "auto");
   const [transitionDuration, setTransitionDuration] = useState(scene?.style.transition?.durationSeconds ?? 0.5);
@@ -837,6 +871,27 @@ function Storyboard({
         <span>{scenes.length} 个场景</span>
       </div>
       {scene ? (
+        <>
+        <div className="kv-scene-readiness-card">
+          <div>
+            <strong>S{scene.sceneNumber} · {sceneMediaStatusLabel(scene)}</strong>
+            <span>画面、配音齐全后才能稳定预览和导出；动态镜头可让关键场景更像真实视频。</span>
+          </div>
+          <div>
+            <button disabled={isBusy || selectedMediaState?.visualReady} onClick={() => onRegenerate([scene.sceneNumber])} type="button">
+              {isBusy ? <Loader2 className="kv-spin" size={15} /> : <ImagePlus size={15} />}
+              {selectedMediaState?.visualReady ? "画面已就绪" : "生成本场景画面"}
+            </button>
+            <button disabled={isBusy || selectedMediaState?.audioReady} onClick={() => onRegenerateAudio([scene.sceneNumber])} type="button">
+              {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Mic2 size={15} />}
+              {selectedMediaState?.audioReady ? "配音已就绪" : "生成本场景配音"}
+            </button>
+            <button disabled={isBusy || !selectedMediaState?.visualReady} onClick={() => onGenerateClip(scene.sceneNumber)} type="button">
+              {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Clapperboard size={15} />}
+              {selectedMediaState?.motionReady ? "重做动态镜头" : "生成动态镜头"}
+            </button>
+          </div>
+        </div>
         <div className="kv-timeline-controls">
           <strong>S{scene.sceneNumber}</strong>
           <label>
@@ -954,13 +1009,17 @@ function Storyboard({
             <button aria-label="删除场景" className="danger" disabled={isBusy || scenes.length <= 1} onClick={() => setConfirmDelete(true)} title="删除场景" type="button"><Trash2 size={16} /></button>
           )}
         </div>
+        </>
       ) : null}
       <div className="kv-scene-strip">
-        {scenes.map((scene) => (
+        {scenes.map((scene) => {
+          const mediaState = sceneMediaState(scene);
+          return (
           <button
             aria-label={`场景 ${scene.sceneNumber} ${scene.title}，拖动可调整顺序`}
             className={[
               scene.sceneNumber === selectedScene ? "active" : "",
+              !mediaState.ready ? "needs-media" : "",
               scene.sceneNumber === draggedSceneNumber ? "dragging" : "",
               scene.sceneNumber === dropTargetSceneNumber && scene.sceneNumber !== draggedSceneNumber ? "drop-target" : ""
             ].filter(Boolean).join(" ")}
@@ -999,8 +1058,12 @@ function Storyboard({
             <span className="kv-scene-number">S{scene.sceneNumber}</span>
             <strong>{scene.title}</strong>
             <small>{scene.durationSeconds} 秒</small>
+            <span className={`kv-scene-media-status ${mediaState.ready ? "ready" : "partial"}`}>
+              {sceneMediaStatusLabel(scene)}
+            </span>
           </button>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
@@ -2427,7 +2490,10 @@ function StudioScreen({
             )}
             <Storyboard
               isBusy={isBusy || exportProgress !== undefined}
+              onGenerateClip={onGenerateClip}
               onMutate={onMutateScene}
+              onRegenerate={onRegenerate}
+              onRegenerateAudio={onRegenerateAudio}
               onSelect={selectScene}
               scenes={project.currentVersion.scenes}
               selectedScene={selectedScene}
