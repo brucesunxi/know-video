@@ -376,6 +376,88 @@ button:disabled {
   font-weight: 800;
 }
 
+.kv-generation-review {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+  border: 1px solid #d7e1ea;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 11px;
+}
+
+.kv-generation-review > strong {
+  color: #1d2939;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.kv-generation-review > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.kv-generation-review span {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 2px 7px;
+  border: 1px solid #dce5ef;
+  border-radius: 8px;
+  background: #fff;
+  padding: 9px;
+}
+
+.kv-generation-review svg {
+  grid-row: span 3;
+  margin-top: 1px;
+}
+
+.kv-generation-review span.ready svg,
+.kv-generation-review span.ready em {
+  color: #087568;
+}
+
+.kv-generation-review span.working svg,
+.kv-generation-review span.working em {
+  color: #255aa8;
+}
+
+.kv-generation-review span.attention {
+  border-color: #ffd6a8;
+  background: #fffaf2;
+}
+
+.kv-generation-review span.attention svg,
+.kv-generation-review span.attention em {
+  color: #a45809;
+}
+
+.kv-generation-review small {
+  color: #667085;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.kv-generation-review em {
+  overflow: hidden;
+  color: #1d2939;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv-generation-review b {
+  color: #526171;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .kv-example-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -148,6 +148,48 @@ function generationSpecItems(options: GenerationOptions) {
   ];
 }
 
+function plannedSceneCount(options: GenerationOptions) {
+  if (options.sceneCount !== "auto") return Number(options.sceneCount);
+  const duration = Number(options.duration);
+  if (duration <= 15) return 3;
+  if (duration <= 45) return 5;
+  return 6;
+}
+
+function generationReviewItems(prompt: string, options: GenerationOptions) {
+  const sceneCount = plannedSceneCount(options);
+  const secondsPerScene = Math.max(2, Math.round(Number(options.duration) / sceneCount));
+  const motionCount = options.motion === "key-scenes"
+    ? Number(options.duration) >= 45 && options.sceneCount !== "3" ? 2 : 1
+    : 0;
+  return [
+    {
+      label: "需求完整度",
+      value: prompt.trim().length >= 18 ? "可开始" : "建议补充",
+      detail: prompt.trim().length >= 18 ? "目标、对象或用途已足够明确" : "再补一句受众、卖点或画面风格会更稳",
+      tone: prompt.trim().length >= 18 ? "ready" : "attention"
+    },
+    {
+      label: "分镜节奏",
+      value: `${sceneCount} 幕 · 约 ${secondsPerScene} 秒/幕`,
+      detail: options.sceneCount === "auto" ? "系统按时长自动拆分" : "按指定场景数严格规划",
+      tone: "ready"
+    },
+    {
+      label: "动态成本",
+      value: motionCount > 0 ? `${motionCount} 个动态镜头` : "仅智能运镜",
+      detail: motionCount > 0 ? "优先给动作最强的场景生成视频片段" : "生成更快，后续可逐场景补动态",
+      tone: motionCount > 0 ? "working" : "ready"
+    },
+    {
+      label: "语言与风格",
+      value: `${options.language} · ${options.style}`,
+      detail: "脚本、旁白、画面提示词会按此规格统一",
+      tone: "ready"
+    }
+  ] as const;
+}
+
 function elapsedGenerationLabel(startedAt?: number, now = Date.now()) {
   if (!startedAt || startedAt > now) return "刚刚开始";
   const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
@@ -1185,6 +1227,7 @@ function BriefScreen({
   hasCurrentProject: boolean;
   errorMessage?: string;
 }) {
+  const reviewItems = generationReviewItems(prompt, options);
   return (
     <div className="kv-brief">
       <section className="kv-brief-main">
@@ -1251,6 +1294,19 @@ function BriefScreen({
             </button>
           </div>
           <GenerationSpecStrip options={options} />
+          <div className="kv-generation-review" aria-label="生成前审阅清单">
+            <strong>生成前审阅</strong>
+            <div>
+              {reviewItems.map((item) => (
+                <span className={item.tone} key={item.label}>
+                  {item.tone === "attention" ? <AlertCircle size={14} /> : item.tone === "working" ? <Clock3 size={14} /> : <Check size={14} />}
+                  <small>{item.label}</small>
+                  <em>{item.value}</em>
+                  <b>{item.detail}</b>
+                </span>
+              ))}
+            </div>
+          </div>
         </form>
         {errorMessage ? (
           <div className="kv-inline-error" role="alert">

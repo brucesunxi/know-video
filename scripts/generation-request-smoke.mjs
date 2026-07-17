@@ -4,6 +4,8 @@ import fs from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
 
+const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
+const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const source = fs.readFileSync(new URL("../lib/generation-requests.ts", import.meta.url), "utf8");
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
@@ -36,5 +38,21 @@ assert.match(first, /^[a-f0-9]{64}$/);
 assert.equal(first, second);
 assert.notEqual(first, changedPrompt);
 assert.notEqual(first, changedStyle);
+
+assert.match(workspace, /function plannedSceneCount/);
+assert.match(workspace, /function generationReviewItems/);
+assert.match(workspace, /const reviewItems = generationReviewItems\(prompt, options\)/);
+assert.match(workspace, /aria-label="生成前审阅清单"/);
+assert.match(workspace, /生成前审阅/);
+assert.match(workspace, /需求完整度/);
+assert.match(workspace, /分镜节奏/);
+assert.match(workspace, /动态成本/);
+assert.match(workspace, /语言与风格/);
+assert.match(workspace, /约 \$\{secondsPerScene\} 秒\/幕/);
+assert.match(workspace, /脚本、旁白、画面提示词会按此规格统一/);
+assert.match(styles, /\.kv-generation-review/);
+assert.match(styles, /\.kv-generation-review span\.attention/);
+assert.match(styles, /\.kv-generation-review span\.working/);
+assert.match(styles, /\.kv-generation-review b/);
 
 console.log("Generation request smoke checks passed.");
