@@ -47,6 +47,7 @@ import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { editPlanVisualSceneNumbers, planPreviewAsset, removeEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { analyzeEditIntent, globalEditTargetSceneNumbers } from "@/lib/edit-intent";
 import { parsePendingGenerationSession, PENDING_GENERATION_STORAGE_KEY, type PendingGenerationSession } from "@/lib/generation-session";
+import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 import { missingMotionSceneNumbers, missingSceneAssetNumbers, sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
 import { selectMotionCriticalScenes } from "@/lib/motion-scene-selection";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
@@ -336,6 +337,50 @@ function planCoverageState(plan: EditPlan, scenes: Scene[]) {
       ? `当前方案覆盖场景 ${covered.join("、")}；确认前可继续补充范围要求。`
       : "当前方案没有单独列出场景改动。"
   } as const;
+}
+
+function planLanguageReview(plan: EditPlan, scenes: Scene[]) {
+  const sceneNumbers = scenes.map((scene) => scene.sceneNumber);
+  const intent = analyzeEditIntent(plan.userRequest, sceneNumbers);
+  if (!intent.globalChineseRewrite) return undefined;
+
+  const targets = globalEditTargetSceneNumbers(plan.userRequest, sceneNumbers);
+  const changesByScene = new Map(plan.changes.map((change) => [change.sceneNumber, change]));
+  const fieldLabels = [
+    ["title", "标题"],
+    ["voiceover", "旁白"],
+    ["visualPrompt", "画面提示"],
+    ["motionPrompt", "镜头提示"]
+  ] as const;
+  const sceneChecks = targets.map((sceneNumber) => {
+    const change = changesByScene.get(sceneNumber);
+    const incompleteFields = change
+      ? fieldLabels
+          .filter(([field]) => !looksSimplifiedChineseLocalized(change.after[field]))
+          .map(([, label]) => label)
+      : fieldLabels.map(([, label]) => label);
+    return {
+      sceneNumber,
+      ready: Boolean(change) && incompleteFields.length === 0,
+      incompleteFields
+    };
+  });
+  const readyCount = sceneChecks.filter((check) => check.ready).length;
+  const missingScenes = sceneChecks.filter((check) => !changesByScene.has(check.sceneNumber)).map((check) => check.sceneNumber);
+  const incompleteScenes = sceneChecks.filter((check) => changesByScene.has(check.sceneNumber) && !check.ready);
+
+  return {
+    ready: readyCount === targets.length,
+    summary: readyCount === targets.length
+      ? `${readyCount}/${targets.length} 个目标场景已完成中文化`
+      : `${readyCount}/${targets.length} 个目标场景通过中文字段检查`,
+    detail: missingScenes.length > 0
+      ? `缺少场景 ${missingScenes.join("、")} 的中文化改动。`
+      : incompleteScenes.length > 0
+        ? `场景 ${incompleteScenes[0].sceneNumber} 仍需检查：${incompleteScenes[0].incompleteFields.join("、")}。`
+        : "标题、旁白、画面提示和镜头提示都已覆盖。",
+    sceneChecks
+  };
 }
 
 function planRequestTrail(plan: EditPlan) {
@@ -2631,6 +2676,7 @@ function ChatPanel({
   const checklist = pendingPlan ? planReviewChecklist(pendingPlan, visualPreviewState) : [];
   const requestTrail = pendingPlan ? planRequestTrail(pendingPlan) : undefined;
   const coverageState = pendingPlan ? planCoverageState(pendingPlan, scenes) : undefined;
+  const languageReview = pendingPlan ? planLanguageReview(pendingPlan, scenes) : undefined;
   const inputMode = chatInputMode({
     input,
     pendingPlan,
@@ -2696,6 +2742,23 @@ function ChatPanel({
                   <div>
                     <strong>{coverageState.title}</strong>
                     <span>{coverageState.detail}</span>
+                  </div>
+                </div>
+              ) : null}
+              {languageReview ? (
+                <div className={`kv-plan-language ${languageReview.ready ? "ready" : "attention"}`} aria-label="中文化字段校验">
+                  <div>
+                    {languageReview.ready ? <Check size={15} /> : <AlertCircle size={15} />}
+                    <strong>中文化审阅</strong>
+                    <span>{languageReview.summary}</span>
+                  </div>
+                  <p>{languageReview.detail}</p>
+                  <div>
+                    {languageReview.sceneChecks.map((check) => (
+                      <span className={check.ready ? "ready" : "attention"} key={check.sceneNumber}>
+                        场景 {check.sceneNumber}
+                      </span>
+                    ))}
                   </div>
                 </div>
               ) : null}
