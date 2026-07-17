@@ -57,6 +57,7 @@
     "workspace:review:smoke": "node scripts/workspace-review-state-smoke.mjs",
     "workspace:media:smoke": "node scripts/workspace-media-readiness-smoke.mjs",
     "workspace:scene-media:smoke": "node scripts/scene-media-status-smoke.mjs",
+    "workspace:status:smoke": "node scripts/workspace-status-badges-smoke.mjs",
     "project:library:smoke": "node scripts/project-library-media-smoke.mjs",
     "version:library:smoke": "node scripts/version-library-media-smoke.mjs",
     "db:init": "node --env-file=.env.local scripts/init-db.mjs",

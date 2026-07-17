@@ -445,6 +445,33 @@ function busyActionLabel(action?: BusyAction) {
   }
 }
 
+function projectStatusBadges(project: Project, source: Source) {
+  const version = project.currentVersion;
+  const saved = source === "database"
+    ? { label: "项目已保存", tone: "ready" }
+    : source === "empty"
+      ? { label: "尚未创建项目", tone: "attention" }
+      : { label: "本地预览", tone: "neutral" };
+  const storyboard = version.scenes.length > 0
+    ? { label: `${version.scenes.length} 个分镜`, tone: "ready" }
+    : { label: "等待分镜", tone: "attention" };
+  const media = version.assetStatus === "ready"
+    ? { label: "素材完整", tone: "ready" }
+    : version.assetStatus === "partial"
+      ? { label: "素材待补齐", tone: "attention" }
+      : version.assetStatus === "pending"
+        ? { label: "素材生成中", tone: "working" }
+        : { label: "素材待生成", tone: "attention" };
+  const output = version.status === "rendering" || version.renderJobId
+    ? { label: "成片合成中", tone: "working" }
+    : version.renderUrl
+      ? { label: "MP4 已就绪", tone: "ready" }
+      : version.assetStatus === "ready"
+        ? { label: "可导出 MP4", tone: "ready" }
+        : { label: "暂不可导出", tone: "neutral" };
+  return [saved, storyboard, media, output] as Array<{ label: string; tone: "ready" | "working" | "attention" | "neutral" }>;
+}
+
 function Shell({
   children,
   project,
@@ -467,6 +494,7 @@ function Shell({
     appRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [stage]);
+  const statusBadges = projectStatusBadges(project, source);
 
   return (
     <main className="kv-shell">
@@ -491,9 +519,9 @@ function Shell({
             <h1>{stage === "brief" ? "用一句需求，完成一支视频" : stage === "projects" ? "我的视频项目" : project.title}</h1>
           </div>
           <div className="kv-status-row">
-            <span>{source === "database" ? "项目已保存" : source === "empty" ? "尚未创建项目" : "本地预览"}</span>
-            <span>智能分镜</span>
-            <span>云端素材</span>
+            {statusBadges.map((badge) => (
+              <span className={badge.tone} key={`${badge.tone}-${badge.label}`}>{badge.label}</span>
+            ))}
           </div>
         </header>
         {children}

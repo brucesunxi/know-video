@@ -157,6 +157,24 @@ button:disabled {
   font-weight: 800;
 }
 
+.kv-status-row span.working {
+  border-color: #c7d7fe;
+  background: #eef4ff;
+  color: #3151a3;
+}
+
+.kv-status-row span.attention {
+  border-color: #ffd6a8;
+  background: #fff7ed;
+  color: #9a4a00;
+}
+
+.kv-status-row span.neutral {
+  border-color: #d7dde6;
+  background: #f6f8fb;
+  color: #475467;
+}
+
 .kv-primary {
   display: inline-flex;
   align-items: center;
@@ -4052,7 +4070,7 @@ button:disabled {
     gap: 6px;
   }
 
-  .kv-status-row span:nth-child(n + 3) {
+  .kv-status-row span:nth-child(n + 4) {
     display: none;
   }
 
