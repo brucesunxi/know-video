@@ -74,6 +74,12 @@ type InvalidRenderMedia = {
   type: "visual" | "audio";
   reason: string;
 };
+type GenerationIssueMedia = "visual" | "audio" | "clip";
+type GenerationMediaIssue = {
+  sceneNumber: number;
+  type: GenerationIssueMedia;
+  reason: string;
+};
 type StoryboardGenerationResponse = {
   status?: "pending" | "ready" | "failed";
   project?: Project;
@@ -266,6 +272,19 @@ function invalidRenderMediaSummary(items: InvalidRenderMedia[]) {
 }
 
 function withoutRepairedInvalidMedia(items: InvalidRenderMedia[], type: InvalidRenderMedia["type"], sceneNumbers?: number[]) {
+  const repaired = sceneNumbers ? new Set(sceneNumbers) : undefined;
+  return items.filter((item) => item.type !== type || (repaired && !repaired.has(item.sceneNumber)));
+}
+
+function generationIssueSummary(items: GenerationMediaIssue[]) {
+  return {
+    visual: uniqueSortedSceneNumbers(items.filter((item) => item.type === "visual").map((item) => item.sceneNumber)),
+    audio: uniqueSortedSceneNumbers(items.filter((item) => item.type === "audio").map((item) => item.sceneNumber)),
+    clip: uniqueSortedSceneNumbers(items.filter((item) => item.type === "clip").map((item) => item.sceneNumber))
+  };
+}
+
+function withoutRepairedGenerationIssues(items: GenerationMediaIssue[], type: GenerationIssueMedia, sceneNumbers?: number[]) {
   const repaired = sceneNumbers ? new Set(sceneNumbers) : undefined;
   return items.filter((item) => item.type !== type || (repaired && !repaired.has(item.sceneNumber)));
 }
@@ -2229,12 +2248,14 @@ function StudioScreen({
   onRegenerate,
   onEnhanceScene,
   onGenerateClip,
+  onGenerateClips,
   onRegenerateAudio,
   onExport,
   exportProgress,
   activeRenderJobId,
   renderJobs,
   invalidRenderMedia,
+  generationIssues,
   exportsOpen,
   exportsLoading,
   onToggleExports,
@@ -2284,12 +2305,14 @@ function StudioScreen({
   onRegenerate: (sceneNumbers?: number[]) => void;
   onEnhanceScene: (sceneNumber: number) => void;
   onGenerateClip: (sceneNumber: number) => void;
+  onGenerateClips: (sceneNumbers: number[]) => void;
   onRegenerateAudio: (sceneNumbers?: number[]) => void;
   onExport: () => void;
   exportProgress?: number;
   activeRenderJobId?: string;
   renderJobs: RenderJob[];
   invalidRenderMedia: InvalidRenderMedia[];
+  generationIssues: GenerationMediaIssue[];
   exportsOpen: boolean;
   exportsLoading: boolean;
   onToggleExports: () => void;
@@ -2331,6 +2354,8 @@ function StudioScreen({
     .filter((item) => !item.assets.some((asset) => asset.type === "audio" && asset.url))
     .map((item) => item.sceneNumber);
   const invalidMedia = invalidRenderMediaSummary(invalidRenderMedia);
+  const generationIssue = generationIssueSummary(generationIssues);
+  const generationIssueCount = generationIssues.length;
   const filmSettings = productionSettings(project);
   useEffect(() => {
     if (!toolMenuOpen) return;
@@ -2536,6 +2561,37 @@ function StudioScreen({
                 <button disabled={isBusy} onClick={() => onRegenerateAudio(invalidMedia.audio)} type="button">
                   {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Mic2 size={15} />}
                   重做异常配音：场景 {sceneNumberListLabel(invalidMedia.audio)}
+                </button>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+        {generationIssueCount > 0 ? (
+          <section className="kv-media-readiness kv-media-readiness-retry" role="status" aria-label="生成未完成素材">
+            <div>
+              <RefreshCcw size={18} />
+              <div>
+                <strong>刚才有 {generationIssueCount} 个素材没有生成完成</strong>
+                <span>可以只重试失败的场景，不需要重新规划脚本和分镜。</span>
+              </div>
+            </div>
+            <div className="kv-media-readiness-actions">
+              {generationIssue.visual.length > 0 ? (
+                <button disabled={isBusy} onClick={() => onRegenerate(generationIssue.visual)} type="button">
+                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <ImagePlus size={15} />}
+                  重试画面：场景 {sceneNumberListLabel(generationIssue.visual)}
+                </button>
+              ) : null}
+              {generationIssue.audio.length > 0 ? (
+                <button disabled={isBusy} onClick={() => onRegenerateAudio(generationIssue.audio)} type="button">
+                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Mic2 size={15} />}
+                  重试配音：场景 {sceneNumberListLabel(generationIssue.audio)}
+                </button>
+              ) : null}
+              {generationIssue.clip.length > 0 ? (
+                <button disabled={isBusy} onClick={() => onGenerateClips(generationIssue.clip)} type="button">
+                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <FileVideo2 size={15} />}
+                  重试动态镜头：场景 {sceneNumberListLabel(generationIssue.clip)}
                 </button>
               ) : null}
             </div>
@@ -2757,6 +2813,7 @@ export function WorkspaceClient({
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [exportProgress, setExportProgress] = useState<number | undefined>();
   const [invalidRenderMedia, setInvalidRenderMedia] = useState<InvalidRenderMedia[]>([]);
+  const [generationIssues, setGenerationIssues] = useState<GenerationMediaIssue[]>([]);
   const [versions, setVersions] = useState<ProjectVersionSummary[]>([]);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionsLoading, setVersionsLoading] = useState(false);
@@ -2914,12 +2971,14 @@ export function WorkspaceClient({
   ) {
     let generatedProject = data.project;
     const warnings: string[] = [];
+    const issues: GenerationMediaIssue[] = [];
     setProject(generatedProject);
     setProjectSource("database");
     setProjects([]);
     setVersions([]);
     setRenderJobs([]);
     setInvalidRenderMedia([]);
+    setGenerationIssues([]);
     setVersionsOpen(false);
     setExportsOpen(false);
     setAssetsOpen(false);
@@ -2958,9 +3017,15 @@ export function WorkspaceClient({
           generatedProject = imageData.project;
           setProject(generatedProject);
         }
-        if (!imageResponse.ok) warnings.push(imageData.error || "部分场景画面生成失败。");
+        if (!imageResponse.ok || (imageData.failedSceneNumbers?.length ?? 0) > 0) {
+          warnings.push(imageData.error || "部分场景画面生成失败。");
+          const failed = imageData.failedSceneNumbers?.length ? imageData.failedSceneNumbers : missingImageSceneNumbers;
+          issues.push(...failed.map((sceneNumber) => ({ sceneNumber, type: "visual" as const, reason: imageData.error || "场景画面生成失败" })));
+        }
       } catch (error) {
-        warnings.push(requestErrorMessage(error, "场景画面生成失败。"));
+        const reason = requestErrorMessage(error, "场景画面生成失败。");
+        warnings.push(reason);
+        issues.push(...missingImageSceneNumbers.map((sceneNumber) => ({ sceneNumber, type: "visual" as const, reason })));
       }
     }
 
@@ -2984,9 +3049,15 @@ export function WorkspaceClient({
           generatedProject = audioData.project;
           setProject(generatedProject);
         }
-        if (!audioResponse.ok) warnings.push(audioData.error || "部分场景配音生成失败。");
+        if (!audioResponse.ok || (audioData.failedSceneNumbers?.length ?? 0) > 0) {
+          warnings.push(audioData.error || "部分场景配音生成失败。");
+          const failed = audioData.failedSceneNumbers?.length ? audioData.failedSceneNumbers : missingAudioSceneNumbers;
+          issues.push(...failed.map((sceneNumber) => ({ sceneNumber, type: "audio" as const, reason: audioData.error || "场景配音生成失败" })));
+        }
       } catch (error) {
-        warnings.push(requestErrorMessage(error, "场景配音生成失败。"));
+        const reason = requestErrorMessage(error, "场景配音生成失败。");
+        warnings.push(reason);
+        issues.push(...missingAudioSceneNumbers.map((sceneNumber) => ({ sceneNumber, type: "audio" as const, reason })));
       }
     }
 
@@ -3008,7 +3079,9 @@ export function WorkspaceClient({
             generatedProject = await requestVideoClips(generatedProject, [sceneNumber], "standard");
             setProject(generatedProject);
           } catch (error) {
-            warnings.push(requestErrorMessage(error, `场景 ${sceneNumber} 的动态镜头生成失败。`));
+            const reason = requestErrorMessage(error, `场景 ${sceneNumber} 的动态镜头生成失败。`);
+            warnings.push(reason);
+            issues.push({ sceneNumber, type: "clip", reason });
           }
         }
       }
@@ -3016,6 +3089,7 @@ export function WorkspaceClient({
 
     setGenerationStatus("正在保存可继续编辑的项目");
     setProgress(96);
+    setGenerationIssues(issues);
     if (warnings.length > 0) setErrorMessage(Array.from(new Set(warnings)).join(" "));
     setMessages((current) => [...current, {
       id: crypto.randomUUID(),
@@ -4020,6 +4094,7 @@ export function WorkspaceClient({
       if (data.project) setProject(data.project);
       if (!response.ok || !data.project) throw new Error(data.error || "场景画面生成失败。");
       setInvalidRenderMedia((current) => withoutRepairedInvalidMedia(current, "visual", sceneNumbers));
+      setGenerationIssues((current) => withoutRepairedGenerationIssues(current, "visual", sceneNumbers));
       pushMessage({
         role: "assistant",
         type: "text",
@@ -4100,6 +4175,7 @@ export function WorkspaceClient({
       if (data.project) setProject(data.project);
       if (!response.ok || !data.project) throw new Error(data.error || "场景配音生成失败。");
       setInvalidRenderMedia((current) => withoutRepairedInvalidMedia(current, "audio", sceneNumbers));
+      setGenerationIssues((current) => withoutRepairedGenerationIssues(current, "audio", sceneNumbers));
       pushMessage({
         role: "assistant",
         type: "text",
@@ -4152,6 +4228,7 @@ export function WorkspaceClient({
     try {
       const updatedProject = await requestVideoClips(project, sceneNumbers, quality);
       setProject(updatedProject);
+      setGenerationIssues((current) => withoutRepairedGenerationIssues(current, "clip", sceneNumbers));
       pushMessage({
         role: "assistant",
         type: "text",
@@ -4241,6 +4318,7 @@ export function WorkspaceClient({
     setChatInput("");
     setErrorMessage(undefined);
     setInvalidRenderMedia([]);
+    setGenerationIssues([]);
     setVersionsOpen(false);
     setVersionPreview(undefined);
     setExportsOpen(false);
@@ -4288,6 +4366,7 @@ export function WorkspaceClient({
       setVersionPreview(undefined);
       setRenderJobs([]);
       setInvalidRenderMedia([]);
+      setGenerationIssues([]);
       setVersionsOpen(false);
       setExportsOpen(false);
       setAssetsOpen(false);
@@ -4419,12 +4498,14 @@ export function WorkspaceClient({
           onRegenerate={regenerateImages}
           onEnhanceScene={(sceneNumber) => regenerateImages([sceneNumber], "premium")}
           onGenerateClip={(sceneNumber) => void generateVideoClips([sceneNumber])}
+          onGenerateClips={(sceneNumbers) => void generateVideoClips(sceneNumbers)}
           onRegenerateAudio={regenerateAudio}
           onExport={exportVideo}
           exportProgress={exportProgress}
           activeRenderJobId={activeRenderJobId}
           renderJobs={renderJobs}
           invalidRenderMedia={invalidRenderMedia}
+          generationIssues={generationIssues}
           exportsOpen={exportsOpen}
           exportsLoading={exportsLoading}
           onToggleExports={toggleExports}

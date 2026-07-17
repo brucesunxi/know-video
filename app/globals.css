@@ -924,6 +924,12 @@ button:disabled {
   color: #8f2d24;
 }
 
+.kv-media-readiness-retry {
+  border-color: #b9ccf8;
+  background: #f4f7ff;
+  color: #334aa0;
+}
+
 .kv-media-readiness > div:first-child {
   display: inline-flex;
   align-items: flex-start;
@@ -944,6 +950,10 @@ button:disabled {
 
 .kv-media-readiness-danger strong {
   color: #7d2119;
+}
+
+.kv-media-readiness-retry strong {
+  color: #263b91;
 }
 
 .kv-media-readiness span {
@@ -976,6 +986,11 @@ button:disabled {
 .kv-media-readiness-danger .kv-media-readiness-actions button {
   border-color: #e8aca5;
   color: #84251d;
+}
+
+.kv-media-readiness-retry .kv-media-readiness-actions button {
+  border-color: #b9ccf8;
+  color: #2d4698;
 }
 
 .kv-actions button.active {
