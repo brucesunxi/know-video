@@ -1039,6 +1039,111 @@ function StoryboardBoard({ scenes }: { scenes: Scene[] }) {
   );
 }
 
+function VisualCandidateComparison({
+  scene,
+  initialCandidateId,
+  isBusy,
+  onClose,
+  onAdopt
+}: {
+  scene: Scene;
+  initialCandidateId: string;
+  isBusy: boolean;
+  onClose: () => void;
+  onAdopt: (assetId: string) => void;
+}) {
+  const candidates = scene.assets.filter((asset) => asset.type === "thumbnail" && asset.metadata?.candidate === true && asset.url);
+  const currentImage = scene.assets.find((asset) => asset.type === "image" && asset.url);
+  const initialIndex = Math.max(0, candidates.findIndex((asset) => asset.id === initialCandidateId));
+  const [selectedIndex, setSelectedIndex] = useState(initialIndex);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const selected = candidates[Math.min(selectedIndex, Math.max(0, candidates.length - 1))];
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (candidates.length > 0 && event.key === "ArrowLeft") setSelectedIndex((index) => (index - 1 + candidates.length) % candidates.length);
+      if (candidates.length > 0 && event.key === "ArrowRight") setSelectedIndex((index) => (index + 1) % candidates.length);
+      if (event.key === "Tab") {
+        const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, [candidates.length, onClose]);
+
+  if (!currentImage || !selected) return null;
+  const selectCandidate = (direction: -1 | 1) => {
+    setSelectedIndex((index) => (index + direction + candidates.length) % candidates.length);
+  };
+
+  return (
+    <div className="kv-modal-backdrop kv-visual-compare-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }} role="presentation">
+      <section aria-labelledby="visual-compare-title" aria-modal="true" className="kv-visual-compare" ref={dialogRef} role="dialog">
+        <header>
+          <div>
+            <span className="kv-eyebrow">场景 {scene.sceneNumber} · 视觉对比</span>
+            <h3 id="visual-compare-title">选择更合适的场景画面</h3>
+          </div>
+          <button aria-label="关闭画面对比" onClick={onClose} ref={closeRef} title="关闭" type="button"><X size={19} /></button>
+        </header>
+        <div className="kv-visual-compare-stage">
+          <figure>
+            <figcaption><span>当前画面</span><small>视频正在使用</small></figcaption>
+            <div style={{ backgroundImage: `url("${currentImage.url}")` }} />
+          </figure>
+          <ArrowRight aria-hidden="true" className="kv-visual-compare-arrow" size={22} />
+          <figure>
+            <figcaption><span>候选画面</span><small aria-live="polite">{selectedIndex + 1} / {candidates.length}</small></figcaption>
+            <div style={{ backgroundImage: `url("${selected.url}")` }} />
+          </figure>
+        </div>
+        <div className="kv-visual-compare-details">
+          <div>
+            <strong>{scene.title}</strong>
+            <p>{compactText(String(selected.metadata?.prompt ?? scene.visualPrompt), scene.visualPrompt, 190)}</p>
+          </div>
+          <div className="kv-visual-candidate-nav" aria-label="切换候选画面">
+            <button aria-label="上一张候选画面" disabled={candidates.length < 2} onClick={() => selectCandidate(-1)} title="上一张" type="button"><ArrowLeft size={17} /></button>
+            <div>{candidates.map((candidate, index) => (
+              <button aria-label={`查看候选画面 ${index + 1}`} className={index === selectedIndex ? "active" : ""} key={candidate.id} onClick={() => setSelectedIndex(index)} type="button" />
+            ))}</div>
+            <button aria-label="下一张候选画面" disabled={candidates.length < 2} onClick={() => selectCandidate(1)} title="下一张" type="button"><ArrowRight size={17} /></button>
+          </div>
+        </div>
+        <footer>
+          <p>采用后会创建可恢复的新版本，当前版本仍保留在历史记录中。</p>
+          <div>
+            <button disabled={isBusy} onClick={onClose} type="button">继续比较</button>
+            <button className="kv-primary" disabled={isBusy} onClick={() => onAdopt(selected.id)} type="button"><Check size={17} />采用这张画面</button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function SceneAssetsPanel({
   scene,
   isBusy,
@@ -1058,7 +1163,10 @@ function SceneAssetsPanel({
 }) {
   const assets = scene.assets.filter((asset) => ["image", "thumbnail", "clip", "audio"].includes(asset.type));
   const candidateCount = assets.filter((asset) => asset.type === "thumbnail" && asset.metadata?.candidate === true).length;
+  const [comparisonId, setComparisonId] = useState<string>();
+  useEffect(() => setComparisonId(undefined), [scene.id]);
   return (
+    <>
     <section className="kv-assets-panel">
       <div className="kv-strip-heading">
         <div>
@@ -1094,6 +1202,11 @@ function SceneAssetsPanel({
             </div>
             <div className="kv-asset-actions">
               {asset.type === "thumbnail" && asset.metadata?.candidate === true ? (
+                <button className="compare" disabled={isBusy} onClick={() => setComparisonId(asset.id)} title="与当前画面大图对比" type="button">
+                  <Eye size={15} />对比
+                </button>
+              ) : null}
+              {asset.type === "thumbnail" && asset.metadata?.candidate === true ? (
                 <button className="adopt" disabled={isBusy} onClick={() => onAdoptCandidate(asset.id)} title="采用为当前画面并创建新版本" type="button">
                   <Check size={15} />采用
                 </button>
@@ -1106,6 +1219,19 @@ function SceneAssetsPanel({
         ))}
       </div>
     </section>
+    {comparisonId ? (
+      <VisualCandidateComparison
+        initialCandidateId={comparisonId}
+        isBusy={isBusy}
+        onAdopt={(assetId) => {
+          setComparisonId(undefined);
+          onAdoptCandidate(assetId);
+        }}
+        onClose={() => setComparisonId(undefined)}
+        scene={scene}
+      />
+    ) : null}
+    </>
   );
 }
 
