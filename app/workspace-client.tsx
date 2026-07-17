@@ -2044,8 +2044,17 @@ function ChatPanel({
       </div>
       {pendingPlan ? (
         <div className="kv-chat-draft-note" role="note">
-          <Check size={15} />
-          <span>正在审核修改方案。要真正改片，请点击“应用修改”；要改方案，继续输入补充要求。</span>
+          <div>
+            <Check size={15} />
+            <span>正在审核修改方案。输入补充要求会继续改方案；点击应用才会真正改片。</span>
+          </div>
+          <div className="kv-chat-draft-actions">
+            <button className="kv-primary" disabled={isBusy} onClick={onApply} type="button">
+              {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Check size={15} />}
+              应用修改
+            </button>
+            <button disabled={isBusy} onClick={onCancel} type="button">取消方案</button>
+          </div>
         </div>
       ) : null}
       <form className="kv-chat-form" onSubmit={onSubmit}>

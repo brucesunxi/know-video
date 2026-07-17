@@ -3629,21 +3629,58 @@ button:disabled {
 
 .kv-chat-draft-note {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   border-top: 1px solid #d6eee9;
   background: #f6fbfa;
-  padding: 10px 14px 0;
+  padding: 10px 14px;
   color: #345460;
   font-size: 12px;
   font-weight: 750;
   line-height: 1.45;
 }
 
-.kv-chat-draft-note svg {
+.kv-chat-draft-note > div:first-child {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.kv-chat-draft-note > div:first-child svg {
   flex: 0 0 auto;
   margin-top: 1px;
   color: #0f766e;
+}
+
+.kv-chat-draft-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.kv-chat-draft-actions button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 9px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.kv-chat-draft-actions .kv-primary {
+  border-color: transparent;
+  background: var(--ink);
+  color: #fff;
 }
 
 .kv-chat-form {
@@ -3993,6 +4030,15 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
+  .kv-chat-draft-note {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kv-chat-draft-actions button {
+    flex: 1 1 0;
+  }
+
   .kv-scene-readiness-card {
     align-items: stretch;
     flex-direction: column;
