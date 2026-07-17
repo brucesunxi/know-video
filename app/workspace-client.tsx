@@ -1524,6 +1524,13 @@ function VisualCandidateComparison({
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const selected = candidates[Math.min(selectedIndex, Math.max(0, candidates.length - 1))];
+  const hasClip = scene.assets.some((asset) => asset.type === "clip" && asset.url);
+  const impactItems = [
+    "创建可恢复的新版本",
+    "替换当前场景画面",
+    hasClip ? "移除本场景动态镜头" : "",
+    "需要重新导出 MP4"
+  ].filter(Boolean);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -1598,8 +1605,10 @@ function VisualCandidateComparison({
           </div>
         </div>
         <footer>
-          <p>采用后会创建可恢复的新版本，当前版本仍保留在历史记录中。</p>
-          <div>
+          <div className="kv-visual-adopt-impact" aria-label="采用候选后的影响">
+            {impactItems.map((item) => <span key={item}><Check size={13} />{item}</span>)}
+          </div>
+          <div className="kv-visual-compare-actions">
             <button disabled={isBusy} onClick={onClose} type="button">继续比较</button>
             <button className="kv-primary" disabled={isBusy} onClick={() => onAdopt(selected.id)} type="button"><Check size={17} />采用这张画面</button>
           </div>

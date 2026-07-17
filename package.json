@@ -33,6 +33,7 @@
     "image:continuity:smoke": "node scripts/image-continuity-smoke.mjs",
     "image:quality:smoke": "node scripts/image-quality-smoke.mjs",
     "image:candidates:smoke": "node scripts/image-candidates-smoke.mjs",
+    "visual:candidate-ui:smoke": "node scripts/visual-candidate-ui-smoke.mjs",
     "candidate:intent:smoke": "node scripts/candidate-edit-intent-smoke.mjs",
     "speech:timing:smoke": "node scripts/speech-timing-smoke.mjs",
     "narration:timing:smoke": "node scripts/narration-timing-smoke.mjs",

@@ -1691,7 +1691,30 @@ button:disabled {
   line-height: 1.5;
 }
 
-.kv-visual-compare > footer > div {
+.kv-visual-adopt-impact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kv-visual-adopt-impact span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #cfe5e1;
+  border-radius: 999px;
+  background: #f1fbf8;
+  padding: 5px 8px;
+  color: #087568;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.kv-visual-adopt-impact svg {
+  flex: 0 0 auto;
+}
+
+.kv-visual-compare-actions {
   display: flex;
   flex: 0 0 auto;
   gap: 8px;
