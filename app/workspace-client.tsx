@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
 import { maxUploadBytes, replacementAssetTypes, uploadedAssetType } from "@/lib/asset-policy";
+import { referenceDescriptor } from "@/lib/attachment-context";
 import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { editPlanVisualSceneNumbers, planPreviewAsset, removeEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { analyzeEditIntent, globalEditTargetSceneNumbers } from "@/lib/edit-intent";
@@ -4757,6 +4758,13 @@ export function WorkspaceClient({
           scenes: current.currentVersion.scenes.map((scene) => scene.sceneNumber === selectedScene
             ? {
                 ...scene,
+                style: {
+                  ...scene.style,
+                  referenceAssets: [
+                    ...(scene.style.referenceAssets ?? []).filter((reference) => reference.key !== uploadedAsset.r2Key),
+                    referenceDescriptor(uploadedAsset)
+                  ]
+                },
                 assets: [
                   uploadedAsset,
                   ...scene.assets.filter((asset) => !replacementAssetTypes(uploadedAsset.type).includes(asset.type))
@@ -4988,7 +4996,19 @@ export function WorkspaceClient({
           renderUrl: data.preserveRender ? current.currentVersion.renderUrl : undefined,
           renderJobId: data.preserveRender ? current.currentVersion.renderJobId : undefined,
           scenes: current.currentVersion.scenes.map((scene) => scene.sceneNumber === selectedScene
-            ? { ...scene, assets: scene.assets.filter((asset) => asset.id !== assetId) }
+            ? (() => {
+                const removed = scene.assets.find((asset) => asset.id === assetId);
+                return {
+                  ...scene,
+                  style: removed?.metadata?.source === "user-upload"
+                    ? {
+                        ...scene.style,
+                        referenceAssets: (scene.style.referenceAssets ?? []).filter((reference) => reference.key !== removed.r2Key)
+                      }
+                    : scene.style,
+                  assets: scene.assets.filter((asset) => asset.id !== assetId)
+                };
+              })()
             : scene)
         }
       }));

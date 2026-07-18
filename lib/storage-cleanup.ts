@@ -18,6 +18,12 @@ export async function deleteUnreferencedStorageObjects(keys: string[]) {
     )
       and not exists (
         select 1
+        from scenes,
+          jsonb_array_elements(coalesce(scenes.style_json->'referenceAssets', '[]'::jsonb)) as ref
+        where ref->>'key' = candidate.key
+      )
+      and not exists (
+        select 1
         from render_jobs
         where render_jobs.output_r2_key = candidate.key
       )

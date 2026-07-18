@@ -14,6 +14,7 @@ const localRequire = (name) => {
     analyzeEditIntent: () => ({ explicitSceneNumbers: [2], global: false }),
     requestsGeneratedClip: () => false
   };
+  if (name === "@/lib/narration-fit") return { fitSceneNarration: (scene) => scene };
   if (name === "@/lib/voice-profiles") return { narrationVoiceFromRequest: () => undefined };
   if (name === "@/lib/production-edit-intent") return {
     isProductionOnlyRequest: () => false,

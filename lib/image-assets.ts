@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import sharp from "sharp";
 import { generateCloudflareImage, hasCloudflareAI } from "@/lib/cloudflare-ai";
+import { sceneReferenceAssets } from "@/lib/attachment-context";
 import { getOptionalEnv } from "@/lib/env";
 import {
   projectVisualIdentity,
@@ -83,6 +84,28 @@ async function loadImageReference(asset: SceneAsset | undefined, role: ImageRefe
     console.warn(`[image-assets] Could not prepare reference ${asset.r2Key}:`, error);
     return undefined;
   }
+}
+
+async function loadSceneImageReference(scene: Scene, role: ImageReference["role"]) {
+  const uploadedImage = sceneReferenceAssets(scene).find((reference) => reference.contentType.startsWith("image/"));
+  if (uploadedImage) {
+    return loadImageReference({
+      id: `reference:${uploadedImage.key}`,
+      type: "image",
+      r2Key: uploadedImage.key,
+      url: "",
+      metadata: {
+        source: "user-upload",
+        name: uploadedImage.name,
+        size: uploadedImage.size,
+        contentType: uploadedImage.contentType
+      }
+    }, role);
+  }
+  return loadImageReference(
+    scene.assets.find((asset) => asset.type === "image" && asset.url),
+    role
+  );
 }
 
 async function mapWithConcurrency<T>(
@@ -241,8 +264,9 @@ export async function generateProjectSceneImages(
   const existingAnchorScene = selectVisualAnchorScene(
     scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image" && asset.url))
   );
-  const firstExistingImage = existingAnchorScene?.assets.find((asset) => asset.type === "image" && asset.url);
-  let projectAnchor = await loadImageReference(firstExistingImage, "anchor");
+  let projectAnchor = existingAnchorScene
+    ? await loadSceneImageReference(existingAnchorScene, "anchor")
+    : undefined;
   const targets = [...selectedIndexes];
 
   if (!projectAnchor && targets.length > 0) {
@@ -250,10 +274,7 @@ export async function generateProjectSceneImages(
     const anchorIndex = Math.max(0, targets.findIndex((target) => target.scene.id === preferredAnchor?.id));
     const [anchorTarget] = targets.splice(anchorIndex, 1);
     try {
-      const currentReference = await loadImageReference(
-        anchorTarget.scene.assets.find((asset) => asset.type === "image" && asset.url),
-        "current"
-      );
+      const currentReference = await loadSceneImageReference(anchorTarget.scene, "current");
       const generated = await generateSceneImage(
         anchorTarget.scene,
         project,
@@ -285,10 +306,7 @@ export async function generateProjectSceneImages(
 
   await mapWithConcurrency(targets, concurrency, async ({ scene, index }) => {
       try {
-        const currentReference = await loadImageReference(
-          scene.assets.find((asset) => asset.type === "image" && asset.url),
-          "current"
-        );
+        const currentReference = await loadSceneImageReference(scene, "current");
         const references = [
           currentReference,
           projectAnchor && projectAnchor.r2Key !== currentReference?.r2Key ? projectAnchor : undefined

@@ -19,6 +19,7 @@ vm.runInNewContext(output, {
   module,
   exports: module.exports,
   require: (specifier) => {
+    if (specifier === "@/lib/attachment-context") return { referenceDescriptor: (asset) => ({ key: asset.r2Key }) };
     if (specifier === "@/lib/db") return { getSql: () => sql, hasDatabaseUrl: () => true };
     if (specifier === "@/lib/asset-policy") return { replacementAssetTypes: () => ["image", "clip"], uploadedAssetType: () => "image" };
     if (specifier === "@/lib/r2") return { assetUrlForKey: (key) => `/api/assets/${key}` };

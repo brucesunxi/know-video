@@ -51,6 +51,18 @@ export function attachGenerationReferenceAssets(project: Project, assets: SceneA
     cursors[family] += 1;
     scenes[index] = {
       ...scenes[index],
+      style: {
+        ...scenes[index].style,
+        referenceAssets: [
+          ...(scenes[index].style?.referenceAssets ?? []).filter((reference) => reference.key !== asset.r2Key),
+          {
+            key: asset.r2Key,
+            name: String(asset.metadata?.name ?? "source attachment"),
+            size: Number(asset.metadata?.size ?? 0),
+            contentType: String(asset.metadata?.contentType ?? "application/octet-stream")
+          }
+        ]
+      },
       assets: [
         { ...asset, metadata: { ...asset.metadata, role: "generation-reference", sceneNumber: scenes[index].sceneNumber } },
         ...scenes[index].assets

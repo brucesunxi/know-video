@@ -80,6 +80,26 @@ assert.match(versionContext, /only the scenes that actually need changes/);
 assert.doesNotMatch(versionContext, /Scene 3 user attachments/);
 assert.equal(attachments.versionAttachmentContext({ id: "empty", scenes: [{ ...scene, assets: [] }] }), "");
 
+const retainedReferenceScene = {
+  ...scene,
+  assets: [generatedImage],
+  style: {
+    ...scene.style,
+    referenceAssets: [{
+      key: uploadedImage.r2Key,
+      name: uploadedImage.metadata.name,
+      size: 4321,
+      contentType: uploadedImage.metadata.contentType
+    }]
+  }
+};
+assert.deepEqual(
+  Array.from(attachments.sceneReferenceAssets(retainedReferenceScene), (reference) => reference.key),
+  [uploadedImage.r2Key]
+);
+assert.match(attachments.sceneAttachmentSummary(retainedReferenceScene), /product-reference\.webp/);
+assert.match(attachments.sceneAttachmentSummary(retainedReferenceScene), /visual identity and composition reference/);
+
 const imageSource = fs.readFileSync(new URL("../lib/image-continuity.ts", import.meta.url), "utf8");
 const imageContinuity = loadTypeScript(imageSource, {
   "@/lib/attachment-context": attachments
@@ -97,5 +117,22 @@ const aiVideoSource = fs.readFileSync(new URL("../lib/ai-video.ts", import.meta.
 assert.match(aiVideoSource, /versionAttachmentContext\(params\.version\)/);
 assert.ok((aiVideoSource.match(/\$\{attachmentContext \?/g) ?? []).length >= 2);
 assert.match(aiVideoSource, /User-uploaded attachments are authoritative source material/);
+
+const imageAssetsSource = fs.readFileSync(new URL("../lib/image-assets.ts", import.meta.url), "utf8");
+assert.match(imageAssetsSource, /sceneReferenceAssets\(scene\)/);
+assert.match(imageAssetsSource, /loadSceneImageReference\(anchorTarget\.scene, "current"\)/);
+assert.match(imageAssetsSource, /loadSceneImageReference\(scene, "current"\)/);
+
+const generationReferencesSource = fs.readFileSync(new URL("../lib/generation-reference-assets.ts", import.meta.url), "utf8");
+assert.match(generationReferencesSource, /referenceAssets:/);
+assert.match(generationReferencesSource, /reference\.key !== asset\.r2Key/);
+
+const storageCleanupSource = fs.readFileSync(new URL("../lib/storage-cleanup.ts", import.meta.url), "utf8");
+assert.match(storageCleanupSource, /style_json->'referenceAssets'/);
+assert.match(storageCleanupSource, /ref->>'key' = candidate\.key/);
+
+const sceneAssetsSource = fs.readFileSync(new URL("../lib/scene-assets.ts", import.meta.url), "utf8");
+assert.match(sceneAssetsSource, /remembered_reference/);
+assert.match(sceneAssetsSource, /forgotten_reference/);
 
 console.log("Attachment context smoke checks passed.");

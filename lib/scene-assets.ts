@@ -1,4 +1,5 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
+import { referenceDescriptor } from "@/lib/attachment-context";
 import { replacementAssetTypes, uploadedAssetType } from "@/lib/asset-policy";
 import { assetUrlForKey } from "@/lib/r2";
 import { invalidateVersionRender } from "@/lib/render-jobs";
@@ -61,6 +62,7 @@ export async function attachUploadedAsset(input: {
   if (!sceneId) throw new Error("没有找到要绑定素材的场景。");
   const sql = getSql();
   const replacementTypes = replacementAssetTypes(input.asset.type);
+  const reference = referenceDescriptor(input.asset);
   const replaced = await sql`
     with replaced as (
       delete from scene_assets
@@ -79,6 +81,22 @@ export async function attachUploadedAsset(input: {
         ${JSON.stringify(input.asset.metadata ?? {})}
       )
       returning id
+    ),
+    remembered_reference as (
+      update scenes
+      set style_json = jsonb_set(
+        style_json,
+        '{referenceAssets}',
+        coalesce(style_json->'referenceAssets', '[]'::jsonb) || ${JSON.stringify([reference])}::jsonb,
+        true
+      )
+      where id = ${sceneId}
+        and not exists (
+          select 1
+          from jsonb_array_elements(coalesce(style_json->'referenceAssets', '[]'::jsonb)) as existing
+          where existing->>'key' = ${reference.key}
+        )
+      returning id
     )
     select r2_key from replaced
   ` as Array<{ r2_key: string }>;
@@ -96,17 +114,37 @@ export async function detachSceneAsset(input: {
 }) {
   if (!hasDatabaseUrl()) return { detached: true, preserveRender: false };
   const rows = await getSql()`
-    delete from scene_assets sa
-    using scenes s, project_versions pv, projects p
-    where sa.id = ${input.assetId}
-      and sa.scene_id = s.id
-      and s.version_id = ${input.versionId}
-      and s.scene_number = ${input.sceneNumber}
-      and pv.id = s.version_id
-      and pv.project_id = ${input.projectId}
-      and p.id = pv.project_id
-      and p.current_version_id = ${input.versionId}
-    returning sa.id, sa.r2_key, sa.asset_type, sa.metadata_json
+    with deleted as (
+      delete from scene_assets sa
+      using scenes s, project_versions pv, projects p
+      where sa.id = ${input.assetId}
+        and sa.scene_id = s.id
+        and s.version_id = ${input.versionId}
+        and s.scene_number = ${input.sceneNumber}
+        and pv.id = s.version_id
+        and pv.project_id = ${input.projectId}
+        and p.id = pv.project_id
+        and p.current_version_id = ${input.versionId}
+      returning sa.id, sa.scene_id, sa.r2_key, sa.asset_type, sa.metadata_json
+    ),
+    forgotten_reference as (
+      update scenes s
+      set style_json = jsonb_set(
+        s.style_json,
+        '{referenceAssets}',
+        coalesce((
+          select jsonb_agg(ref)
+          from jsonb_array_elements(coalesce(s.style_json->'referenceAssets', '[]'::jsonb)) as ref
+          where ref->>'key' <> deleted.r2_key
+        ), '[]'::jsonb),
+        true
+      )
+      from deleted
+      where s.id = deleted.scene_id
+        and deleted.metadata_json->>'source' = 'user-upload'
+      returning s.id
+    )
+    select id, r2_key, asset_type, metadata_json from deleted
   ` as Array<{ id: string; r2_key: string; asset_type: string; metadata_json: Record<string, unknown> | null }>;
   const preserveRender = rows[0]?.asset_type === "thumbnail" && rows[0]?.metadata_json?.candidate === true;
   if (rows[0] && !preserveRender) await invalidateVersionRender(input.versionId);

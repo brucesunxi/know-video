@@ -65,6 +65,7 @@ export type Scene = {
     narrationVoice?: NarrationVoice;
     production?: Partial<ProductionSettings>;
     transition?: { kind: SceneTransitionKind; durationSeconds: number };
+    referenceAssets?: GenerationReferenceAsset[];
   };
   assets: SceneAsset[];
 };
