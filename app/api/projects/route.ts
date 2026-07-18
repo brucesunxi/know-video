@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createStoryboardProject } from "@/lib/ai-video";
 import { matchesDeclaredAssetType, maxUploadBytes, uploadedAssetType } from "@/lib/asset-policy";
-import { analyzeCloudflareImage, hasCloudflareAI } from "@/lib/cloudflare-ai";
+import { analyzeCloudflareImage, hasCloudflareAI, transcribeCloudflareAudio } from "@/lib/cloudflare-ai";
 import {
   attachGenerationReferenceAssets,
   createGenerationReferenceAsset,
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
         });
       }
     }
-    const referenceAssets = await Promise.all(body.referenceAssets.map(async (reference) => {
+    const validatedReferences = await Promise.all(body.referenceAssets.map(async (reference) => {
       if (!requestId || !reference.key.startsWith(`uploads/generation/${requestId}/`)) {
         throw new Error("参考素材上传路径无效。");
       }
@@ -105,27 +105,38 @@ export async function POST(request: Request) {
       if (!matchesDeclaredAssetType(prefix, reference.contentType)) {
         throw new Error("参考素材内容与声明格式不一致。");
       }
-      return createGenerationReferenceAsset(reference);
+      return reference;
     }));
-    const visualDescriptions = Object.fromEntries((await Promise.all(
-      body.referenceAssets
-        .filter((reference) => reference.contentType.startsWith("image/"))
-        .slice(0, 3)
-        .map(async (reference) => {
-          if (!hasCloudflareAI()) return undefined;
-          try {
-            const stored = await getFromR2(reference.key);
-            if (!stored.body) return undefined;
-            const bytes = Buffer.from(await stored.body.transformToByteArray());
-            const analyzed = await analyzeCloudflareImage(bytes);
-            return [reference.key, analyzed.description] as const;
-          } catch (error) {
-            console.warn(`[projects] Unable to analyze reference image ${reference.key}:`, error);
-            return undefined;
-          }
-        })
-    )).filter(Boolean) as Array<readonly [string, string]>);
-    const referenceContext = generationReferenceContext(body.referenceAssets, visualDescriptions);
+    const analyzableReferences = [
+      ...validatedReferences.filter((reference) => reference.contentType.startsWith("image/")).slice(0, 3),
+      ...validatedReferences
+        .filter((reference) => reference.contentType.startsWith("audio/") && reference.size <= 15_000_000)
+        .slice(0, 2)
+    ];
+    const analyses = Object.fromEntries((await Promise.all(analyzableReferences.map(async (reference) => {
+      if (!hasCloudflareAI()) return undefined;
+      try {
+        const stored = await getFromR2(reference.key);
+        if (!stored.body) return undefined;
+        const bytes = Buffer.from(await stored.body.transformToByteArray());
+        if (reference.contentType.startsWith("image/")) {
+          const analyzed = await analyzeCloudflareImage(bytes);
+          return [reference.key, { text: analyzed.description, kind: "visual" as const }] as const;
+        }
+        const transcribed = await transcribeCloudflareAudio(bytes);
+        return [reference.key, { text: transcribed.transcript, kind: "transcript" as const }] as const;
+      } catch (error) {
+        console.warn(`[projects] Unable to analyze reference asset ${reference.key}:`, error);
+        return undefined;
+      }
+    }))).filter(Boolean) as Array<readonly [string, { text: string; kind: "visual" | "transcript" }]>);
+    const enrichedReferences = validatedReferences.map((reference) => ({
+      ...reference,
+      analysis: analyses[reference.key]?.text,
+      analysisKind: analyses[reference.key]?.kind
+    }));
+    const referenceAssets = enrichedReferences.map(createGenerationReferenceAsset);
+    const referenceContext = generationReferenceContext(enrichedReferences);
     const generated = await createStoryboardProject(body.prompt, undefined, body.options, referenceContext);
     const project = attachGenerationReferenceAssets(generated.project, referenceAssets);
     const { engine } = generated;

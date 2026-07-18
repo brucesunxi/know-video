@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { matchesDeclaredAssetType, maxUploadBytes, uploadedAssetType } from "@/lib/asset-policy";
-import { headR2Object, readR2Prefix } from "@/lib/r2";
+import { getFromR2, headR2Object, readR2Prefix } from "@/lib/r2";
 import {
   attachUploadedAsset,
   createUploadedAsset,
   deleteUnreferencedAssetObjects,
-  findOwnedScene
+  findOwnedSceneDetails
 } from "@/lib/scene-assets";
+import { inspectUploadedNarration } from "@/lib/uploaded-narration";
 
 const schema = z.object({
   projectId: z.string().uuid(),
@@ -18,6 +19,8 @@ const schema = z.object({
   size: z.number().int().positive().max(500_000_000),
   contentType: z.string().min(1).max(120)
 });
+
+export const maxDuration = 180;
 
 export async function POST(request: Request) {
   let uploadedKey: string | undefined;
@@ -42,7 +45,8 @@ export async function POST(request: Request) {
       await cleanupUpload();
       return NextResponse.json({ error: "素材文件超过该格式允许的大小。" }, { status: 413 });
     }
-    if (!await findOwnedScene(body)) {
+    const scene = await findOwnedSceneDetails(body);
+    if (!scene) {
       await cleanupUpload();
       return NextResponse.json({ error: "没有找到要绑定素材的场景。" }, { status: 404 });
     }
@@ -51,14 +55,32 @@ export async function POST(request: Request) {
       await cleanupUpload();
       return NextResponse.json({ error: "云端素材的大小或格式校验失败。" }, { status: 409 });
     }
-    const prefix = await readR2Prefix(body.key);
+    const storedBody = body.contentType.startsWith("audio/")
+      ? await getFromR2(body.key)
+      : undefined;
+    const audioBytes = storedBody?.body
+      ? Buffer.from(await storedBody.body.transformToByteArray())
+      : undefined;
+    if (body.contentType.startsWith("audio/") && !audioBytes?.length) {
+      throw new Error("无法读取上传的配音文件，请重新上传。");
+    }
+    const prefix = audioBytes ? audioBytes.subarray(0, 64) : await readR2Prefix(body.key);
     if (!matchesDeclaredAssetType(prefix, body.contentType)) {
       await cleanupUpload();
       return NextResponse.json({ error: "文件内容与声明的素材格式不一致。" }, { status: 415 });
     }
-    const asset = createUploadedAsset(body);
-    await attachUploadedAsset({ ...body, asset });
-    return NextResponse.json({ asset });
+    const narration = audioBytes
+      ? await inspectUploadedNarration(audioBytes, scene.durationSeconds)
+      : undefined;
+    const asset = createUploadedAsset({
+      ...body,
+      analysis: narration?.transcript,
+      analysisKind: narration ? "transcript" : undefined,
+      actualDurationSeconds: narration?.actualDurationSeconds,
+      transcriptionModel: narration?.transcriptionModel
+    });
+    await attachUploadedAsset({ ...body, asset, voiceover: narration?.transcript });
+    return NextResponse.json({ asset, voiceover: narration?.transcript });
   } catch (error) {
     await cleanupUpload();
     const invalidRequest = error instanceof z.ZodError;

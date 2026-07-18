@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { z } from "zod";
-import { versionAttachmentContext } from "@/lib/attachment-context";
+import { planningSceneSnapshot, versionAttachmentContext } from "@/lib/attachment-context";
 import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip } from "@/lib/edit-intent";
 import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
@@ -729,6 +729,7 @@ export async function createEditPlan(params: {
   }
   const activeTextModel = textModel;
   const attachmentContext = versionAttachmentContext(params.version);
+  const currentScenes = planningSceneSnapshot(params.version);
 
   const globalDirective = globalChineseRewrite
     ? `\n\nThis is a GLOBAL Simplified Chinese localization. The exact target scenes are ${globalEditTargetSceneNumbers(params.request, params.version.scenes.map((scene) => scene.sceneNumber)).join(", ")}. You MUST return one updated change for every target scene and no excluded scene. Every after.title, after.voiceover, after.visualPrompt, and after.motionPrompt must be written in Simplified Chinese. affectedScenes must exactly match the target scenes. ${preserveVisualAssetsOnLocalization ? "This is translation-only: preserve the existing visual meaning and assets; regenerate must include audio, caption, and render, but must not include image, clip, or thumbnail." : "The request also changes visual direction; regenerate must include image, audio, thumbnail, caption, and render."}`
@@ -751,7 +752,7 @@ export async function createEditPlan(params: {
         },
         {
           role: "user",
-          content: `Current version scenes:\n${JSON.stringify(params.version.scenes, null, 2)}${attachmentContext ? `\n\n${attachmentContext}` : ""}\n\nUser edit request:\n${params.request}${globalDirective}${generatedClipDirective}${retry ? "\n\nYour previous attempt was incomplete. Rebuild the entire plan and satisfy every requirement above." : ""}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
+          content: `Current version scenes:\n${JSON.stringify(currentScenes, null, 2)}${attachmentContext ? `\n\n${attachmentContext}` : ""}\n\nUser edit request:\n${params.request}${globalDirective}${generatedClipDirective}${retry ? "\n\nYour previous attempt was incomplete. Rebuild the entire plan and satisfy every requirement above." : ""}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
         }
       ],
       temperature: globalChineseRewrite ? 0.2 : 0.45
@@ -841,6 +842,7 @@ export async function refineEditPlan(params: {
 
   const available = new Set(params.version.scenes.map((scene) => scene.sceneNumber));
   const attachmentContext = versionAttachmentContext(params.version);
+  const currentScenes = planningSceneSnapshot(params.version);
   const combinedRequest = `${params.existingPlan.userRequest}\n补充要求：${params.request}`;
   const combinedIntent = analyzeEditIntent(combinedRequest, Array.from(available));
   const combinedTargets = globalEditTargetSceneNumbers(combinedRequest, Array.from(available));
@@ -871,7 +873,7 @@ export async function refineEditPlan(params: {
           },
           {
             role: "user",
-            content: `Current scenes:\n${JSON.stringify(params.version.scenes, null, 2)}${attachmentContext ? `\n\n${attachmentContext}` : ""}\n\nExisting proposed plan:\n${JSON.stringify(params.existingPlan, null, 2)}\n\nFollow-up instruction:\n${params.request}${refinementDirective}${retry ? "\n\nThe previous response failed scope or language validation. Rebuild the complete plan exactly as directed." : ""}\n\nReturn JSON in this exact shape:\n{ "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
+            content: `Current scenes:\n${JSON.stringify(currentScenes, null, 2)}${attachmentContext ? `\n\n${attachmentContext}` : ""}\n\nExisting proposed plan:\n${JSON.stringify(params.existingPlan, null, 2)}\n\nFollow-up instruction:\n${params.request}${refinementDirective}${retry ? "\n\nThe previous response failed scope or language validation. Rebuild the complete plan exactly as directed." : ""}\n\nReturn JSON in this exact shape:\n{ "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
           }
         ],
         temperature: 0.2

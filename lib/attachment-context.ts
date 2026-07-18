@@ -17,7 +17,11 @@ function referenceFromAsset(asset: SceneAsset): GenerationReferenceAsset | undef
     key: asset.r2Key,
     name: assetName(asset),
     size: Number.isFinite(size) && size > 0 ? size : 0,
-    contentType
+    contentType,
+    analysis: typeof asset.metadata?.analysis === "string" ? asset.metadata.analysis : undefined,
+    analysisKind: asset.metadata?.analysisKind === "visual" || asset.metadata?.analysisKind === "transcript"
+      ? asset.metadata.analysisKind
+      : undefined
   };
 }
 
@@ -26,7 +30,11 @@ export function referenceDescriptor(asset: SceneAsset): GenerationReferenceAsset
     key: asset.r2Key,
     name: assetName(asset),
     size: Number(asset.metadata?.size ?? 0),
-    contentType: String(asset.metadata?.contentType ?? "application/octet-stream")
+    contentType: String(asset.metadata?.contentType ?? "application/octet-stream"),
+    analysis: typeof asset.metadata?.analysis === "string" ? asset.metadata.analysis : undefined,
+    analysisKind: asset.metadata?.analysisKind === "visual" || asset.metadata?.analysisKind === "transcript"
+      ? asset.metadata.analysisKind
+      : undefined
   };
 }
 
@@ -57,7 +65,13 @@ export function sceneAttachmentSummary(scene: Scene) {
           : reference.contentType.startsWith("audio/")
             ? "source narration or audio reference"
             : "supporting reference";
-      return `- ${role} "${reference.name}", ${reference.contentType}.`;
+      const analysis = reference.analysis
+        ?.replace(/[\u0000-\u001f\u007f<>]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 1_600);
+      const analysisLabel = reference.analysisKind === "transcript" ? "Speech transcript" : "Visible-content analysis";
+      return `- ${role} "${reference.name}", ${reference.contentType}.${analysis ? `\n  ${analysisLabel}: ${analysis}` : ""}`;
     }),
     "Use these attachments as user-provided source material. Preserve visible product/person/style identity from uploaded visuals unless the user explicitly asks to replace it. Preserve uploaded narration or music intent unless the user asks to regenerate audio."
   ].join("\n");
@@ -71,4 +85,27 @@ export function versionAttachmentContext(version: ProjectVersion) {
     ...sceneSummaries,
     "When planning edits, mention only the scenes that actually need changes. If an attachment already satisfies the user's request, keep it and do not unnecessarily regenerate it."
   ].join("\n\n");
+}
+
+export function planningSceneSnapshot(version: ProjectVersion) {
+  return version.scenes.map((scene) => ({
+    sceneNumber: scene.sceneNumber,
+    title: scene.title,
+    voiceover: scene.voiceover,
+    visualPrompt: scene.visualPrompt,
+    motionPrompt: scene.motionPrompt,
+    durationSeconds: scene.durationSeconds,
+    style: {
+      theme: scene.style.theme,
+      palette: scene.style.palette,
+      mood: scene.style.mood,
+      narrationVoice: scene.style.narrationVoice,
+      production: scene.style.production,
+      transition: scene.style.transition
+    },
+    assets: scene.assets.map((asset) => ({
+      type: asset.type,
+      source: asset.metadata?.source
+    }))
+  }));
 }

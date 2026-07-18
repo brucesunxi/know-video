@@ -14,9 +14,17 @@ export async function findOwnedScene(input: {
   versionId: string;
   sceneNumber: number;
 }) {
+  return (await findOwnedSceneDetails(input))?.id;
+}
+
+export async function findOwnedSceneDetails(input: {
+  projectId: string;
+  versionId: string;
+  sceneNumber: number;
+}) {
   if (!hasDatabaseUrl()) return undefined;
   const rows = await getSql()`
-    select s.id
+    select s.id, s.duration_seconds
     from scenes s
     join project_versions pv on pv.id = s.version_id
     join projects p on p.id = pv.project_id
@@ -25,8 +33,9 @@ export async function findOwnedScene(input: {
       and pv.project_id = ${input.projectId}
       and p.current_version_id = ${input.versionId}
     limit 1
-  ` as Array<{ id: string }>;
-  return rows[0]?.id;
+  ` as Array<{ id: string; duration_seconds: number }>;
+  const row = rows[0];
+  return row ? { id: row.id, durationSeconds: row.duration_seconds } : undefined;
 }
 
 export function createUploadedAsset(input: {
@@ -34,6 +43,10 @@ export function createUploadedAsset(input: {
   name: string;
   size: number;
   contentType: string;
+  analysis?: string;
+  analysisKind?: "visual" | "transcript";
+  actualDurationSeconds?: number;
+  transcriptionModel?: string;
 }): SceneAsset {
   const type = uploadedAssetType(input.contentType);
   if (!type) throw new Error("Unsupported asset type");
@@ -46,7 +59,11 @@ export function createUploadedAsset(input: {
       name: input.name,
       size: input.size,
       contentType: input.contentType,
-      source: "user-upload"
+      source: "user-upload",
+      analysis: input.analysis,
+      analysisKind: input.analysisKind,
+      actualDurationSeconds: input.actualDurationSeconds,
+      transcriptionModel: input.transcriptionModel
     }
   };
 }
@@ -56,6 +73,7 @@ export async function attachUploadedAsset(input: {
   versionId: string;
   sceneNumber: number;
   asset: SceneAsset;
+  voiceover?: string;
 }) {
   if (!hasDatabaseUrl()) return;
   const sceneId = await findOwnedScene(input);
@@ -84,18 +102,22 @@ export async function attachUploadedAsset(input: {
     ),
     remembered_reference as (
       update scenes
-      set style_json = jsonb_set(
-        style_json,
-        '{referenceAssets}',
-        coalesce(style_json->'referenceAssets', '[]'::jsonb) || ${JSON.stringify([reference])}::jsonb,
-        true
-      )
-      where id = ${sceneId}
-        and not exists (
-          select 1
-          from jsonb_array_elements(coalesce(style_json->'referenceAssets', '[]'::jsonb)) as existing
-          where existing->>'key' = ${reference.key}
+      set
+        voiceover = coalesce(${input.voiceover ?? null}, voiceover),
+        style_json = jsonb_set(
+          style_json,
+          '{referenceAssets}',
+          case
+            when exists (
+              select 1
+              from jsonb_array_elements(coalesce(style_json->'referenceAssets', '[]'::jsonb)) as existing
+              where existing->>'key' = ${reference.key}
+            ) then coalesce(style_json->'referenceAssets', '[]'::jsonb)
+            else coalesce(style_json->'referenceAssets', '[]'::jsonb) || ${JSON.stringify([reference])}::jsonb
+          end,
+          true
         )
+      where id = ${sceneId}
       returning id
     )
     select r2_key from replaced

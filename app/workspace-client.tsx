@@ -4758,6 +4758,9 @@ export function WorkspaceClient({
           scenes: current.currentVersion.scenes.map((scene) => scene.sceneNumber === selectedScene
             ? {
                 ...scene,
+                voiceover: uploadedAsset.type === "audio" && typeof uploadedAsset.metadata?.analysis === "string"
+                  ? uploadedAsset.metadata.analysis
+                  : scene.voiceover,
                 style: {
                   ...scene.style,
                   referenceAssets: [

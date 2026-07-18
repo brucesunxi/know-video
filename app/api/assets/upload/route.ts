@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { matchesDeclaredAssetType, uploadedAssetType } from "@/lib/asset-policy";
 import { assetUrlForKey, deleteR2Objects, uploadToR2 } from "@/lib/r2";
-import { attachUploadedAsset, createUploadedAsset, findOwnedScene } from "@/lib/scene-assets";
+import { attachUploadedAsset, createUploadedAsset, findOwnedSceneDetails } from "@/lib/scene-assets";
+import { inspectUploadedNarration } from "@/lib/uploaded-narration";
 
 const MAX_UPLOAD_BYTES = 4_000_000;
 const fieldsSchema = z.object({
@@ -10,6 +11,8 @@ const fieldsSchema = z.object({
   versionId: z.string().uuid(),
   sceneNumber: z.coerce.number().int().positive()
 });
+
+export const maxDuration = 180;
 
 export async function POST(request: Request) {
   try {
@@ -29,13 +32,16 @@ export async function POST(request: Request) {
       versionId: form.get("versionId"),
       sceneNumber: form.get("sceneNumber")
     });
-    const sceneId = await findOwnedScene(fields);
-    if (!sceneId) return NextResponse.json({ error: "没有找到要绑定素材的场景。" }, { status: 404 });
+    const scene = await findOwnedSceneDetails(fields);
+    if (!scene) return NextResponse.json({ error: "没有找到要绑定素材的场景。" }, { status: 404 });
 
     const buffer = Buffer.from(await file.arrayBuffer());
     if (!matchesDeclaredAssetType(buffer, file.type)) {
       return NextResponse.json({ error: "文件内容与声明的素材格式不一致。" }, { status: 415 });
     }
+    const narration = type === "audio"
+      ? await inspectUploadedNarration(buffer, scene.durationSeconds)
+      : undefined;
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
     const key = `uploads/${fields.projectId}/${crypto.randomUUID()}-${safeName}`;
     const asset = await uploadToR2({ key, body: buffer, contentType: file.type });
@@ -43,17 +49,21 @@ export async function POST(request: Request) {
       key: asset.key,
       name: file.name,
       size: file.size,
-      contentType: file.type
+      contentType: file.type,
+      analysis: narration?.transcript,
+      analysisKind: narration ? "transcript" : undefined,
+      actualDurationSeconds: narration?.actualDurationSeconds,
+      transcriptionModel: narration?.transcriptionModel
     });
     uploadedAsset.url = assetUrlForKey(asset.key, asset.publicUrl);
     try {
-      await attachUploadedAsset({ ...fields, asset: uploadedAsset });
+      await attachUploadedAsset({ ...fields, asset: uploadedAsset, voiceover: narration?.transcript });
     } catch (error) {
       await deleteR2Objects([key]).catch(() => undefined);
       throw error;
     }
 
-    return NextResponse.json({ asset: uploadedAsset });
+    return NextResponse.json({ asset: uploadedAsset, voiceover: narration?.transcript });
   } catch (error) {
     const message = error instanceof z.ZodError
       ? "素材所属的项目或场景信息无效。"

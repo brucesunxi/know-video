@@ -1,6 +1,7 @@
 import { getOptionalEnv } from "@/lib/env";
 import { assertUsableSpeechAudio } from "@/lib/audio-quality";
 import { isMp4Buffer, parseCloudflareVideoUrl } from "@/lib/cloudflare-video-response";
+import { parseCloudflareTranscript, type CloudflareTranscriptionResult } from "@/lib/cloudflare-transcription";
 import sharp from "sharp";
 
 const STANDARD_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
@@ -8,6 +9,7 @@ const PREMIUM_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
 const DEFAULT_TTS_MODEL = "@cf/myshell-ai/melotts";
 const DEFAULT_VIDEO_MODEL = "alibaba/hh1.1-i2v";
 const DEFAULT_VISION_MODEL = "@cf/moondream/moondream3.1-9B-A2B";
+const DEFAULT_TRANSCRIPTION_MODEL = "@cf/openai/whisper-large-v3-turbo";
 
 type CloudflareEnvelope<T> = {
   success?: boolean;
@@ -175,6 +177,33 @@ export async function analyzeCloudflareImage(body: Buffer) {
   const description = result.answer || result.caption;
   if (!description?.trim()) throw new Error("AI vision service returned no description");
   return { description: description.trim().slice(0, 1600), model };
+}
+
+export async function transcribeCloudflareAudio(body: Buffer, language?: "zh" | "en") {
+  const model = getOptionalEnv("CLOUDFLARE_TRANSCRIPTION_MODEL") || DEFAULT_TRANSCRIPTION_MODEL;
+  const response = await fetch(endpoint(model), {
+    method: "POST",
+    headers: {
+      ...authorizationHeaders(),
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      audio: body.toString("base64"),
+      task: "transcribe",
+      language,
+      vad_filter: true,
+      condition_on_previous_text: true,
+      no_speech_threshold: 0.65,
+      hallucination_silence_threshold: 2
+    }),
+    signal: AbortSignal.timeout(120_000)
+  });
+  if (!response.ok) throw await responseError(response);
+  const payload = await response.json() as CloudflareEnvelope<CloudflareTranscriptionResult> | CloudflareTranscriptionResult;
+  const result = unwrapResult(payload);
+  const transcript = parseCloudflareTranscript(result);
+  if (!transcript) throw new Error("AI transcription service returned no speech text");
+  return { transcript, model };
 }
 
 function speechLanguage(text: string) {

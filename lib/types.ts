@@ -40,6 +40,8 @@ export type GenerationReferenceAsset = {
   name: string;
   size: number;
   contentType: string;
+  analysis?: string;
+  analysisKind?: "visual" | "transcript";
 };
 
 export type SceneAsset = {

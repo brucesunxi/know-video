@@ -100,6 +100,14 @@ assert.deepEqual(
 assert.match(attachments.sceneAttachmentSummary(retainedReferenceScene), /product-reference\.webp/);
 assert.match(attachments.sceneAttachmentSummary(retainedReferenceScene), /visual identity and composition reference/);
 
+const planningSnapshot = attachments.planningSceneSnapshot({
+  id: "version-planning",
+  scenes: [retainedReferenceScene]
+});
+assert.equal(planningSnapshot[0].style.referenceAssets, undefined);
+assert.equal(planningSnapshot[0].assets[0].r2Key, undefined);
+assert.equal(planningSnapshot[0].assets[0].type, "image");
+
 const imageSource = fs.readFileSync(new URL("../lib/image-continuity.ts", import.meta.url), "utf8");
 const imageContinuity = loadTypeScript(imageSource, {
   "@/lib/attachment-context": attachments
