@@ -8,7 +8,13 @@ const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
 const module = { exports: {} };
-vm.runInNewContext(output, { module, exports: module.exports });
+vm.runInNewContext(output, {
+  module,
+  exports: module.exports,
+  require: (specifier) => specifier === "@/lib/generation-resume"
+    ? { mediaAssetStatus: (scenes) => scenes.every((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type) && asset.url) && scene.assets.some((asset) => asset.type === "audio" && asset.url)) ? "ready" : "partial" }
+    : {}
+});
 const { applySceneStructureMutation } = module.exports;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 

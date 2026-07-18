@@ -1,4 +1,5 @@
 import type { ChatMessage, EditPlan, Project, ProjectListItem, Scene } from "@/lib/types";
+import { mediaAssetStatus } from "@/lib/generation-resume";
 
 type EphemeralProjectRecord = {
   project: Project;
@@ -44,7 +45,7 @@ export function updateEphemeralVersionScenes(versionId: string, scenes: Scene[])
       currentVersion: {
         ...record.project.currentVersion,
         status: visualCount === scenes.length && audioCount === scenes.length ? "ready" : "draft",
-        assetStatus: visualCount === scenes.length ? "ready" : visualCount > 0 ? "partial" : "failed",
+        assetStatus: mediaAssetStatus(scenes),
         renderUrl: undefined,
         scenes
       }

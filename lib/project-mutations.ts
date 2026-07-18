@@ -10,6 +10,7 @@ import {
   updateEphemeralVersionScenes
 } from "@/lib/ephemeral-project-store";
 import { attachEditPlanReferenceAssets } from "@/lib/generation-reference-assets";
+import { mediaAssetStatus } from "@/lib/generation-resume";
 import { demoProject } from "@/lib/mock-data";
 import { initialVersionStatus, materializeNewProject } from "@/lib/project-creation";
 import { productionSettingsFromScenes } from "@/lib/production-settings";
@@ -342,7 +343,7 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
     durationSeconds: version.duration_seconds,
     renderUrl: version.render_url ?? undefined,
     renderJobId: version.active_render_job_id ?? undefined,
-    assetStatus: visualCount === hydratedScenes.length ? "ready" : visualCount > 0 ? "partial" : "failed",
+    assetStatus: mediaAssetStatus(hydratedScenes),
     scenes: hydratedScenes
   };
 }
@@ -887,14 +888,13 @@ export async function applyPersistedEditPlan(params: {
       return true;
     })
   }));
-  const visualCount = scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
   const nextProject: Project = {
     ...changedProject,
     currentVersion: {
       ...changedProject.currentVersion,
       status: "draft",
       renderUrl: undefined,
-      assetStatus: visualCount === scenes.length ? "ready" : visualCount > 0 ? "partial" : "failed",
+      assetStatus: mediaAssetStatus(scenes),
       assetErrorCode: undefined,
       scenes
     }

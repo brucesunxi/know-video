@@ -21,9 +21,11 @@ assert.match(workspace, /const exportReady = missingSceneNumbers\.length === 0/)
 assert.match(workspace, /const exportReadiness = exportReady \? exportReadinessItems\(project, filmSettings\) : \[\]/);
 assert.match(workspace, /const exportBlockers = exportBlockingItems\(\{/);
 assert.match(workspace, /missingVisualSceneNumbers: missingSceneNumbers/);
-assert.match(workspace, /aria-label="MP4 导出阻塞清单"/);
-assert.match(workspace, /MP4 导出前需要处理 \{exportBlockers\.length\} 项问题/);
-assert.match(workspace, /导出按钮会在检查通过后自动启用/);
+assert.match(workspace, /aria-label="待处理素材清单"/);
+assert.match(workspace, /`还有 \$\{exportBlockers\.length\} 项必需素材待处理`/);
+assert.match(workspace, /补齐必需素材后即可导出/);
+assert.match(workspace, /可选动态镜头暂未完成/);
+assert.match(workspace, /已保留静态画面，不影响当前版本导出/);
 assert.match(workspace, /缺少画面素材/);
 assert.match(workspace, /缺少旁白配音/);
 assert.match(workspace, /画面文件异常/);

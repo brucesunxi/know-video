@@ -1,4 +1,5 @@
 import type { Project, Scene, SceneAsset, SceneStructureMutation } from "@/lib/types";
+import { mediaAssetStatus } from "@/lib/generation-resume";
 
 export type { SceneStructureMutation } from "@/lib/types";
 
@@ -16,7 +17,7 @@ function mediaStatus(scenes: Scene[]) {
   const audioCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio")).length;
   const ready = scenes.length > 0 && visualCount === scenes.length && audioCount === scenes.length;
   return {
-    assetStatus: visualCount === scenes.length ? "ready" as const : visualCount > 0 ? "partial" as const : "failed" as const,
+    assetStatus: mediaAssetStatus(scenes),
     status: ready ? "ready" as const : "draft" as const
   };
 }

@@ -30,6 +30,10 @@ const azure = fs.readFileSync(new URL("../lib/azure-speech.ts", import.meta.url)
 assert.match(azure, /timingRatio < 0\.82/);
 assert.match(azure, /nextRate !== rate/);
 
+const audioAssets = fs.readFileSync(new URL("../lib/audio-assets.ts", import.meta.url), "utf8");
+assert.match(audioAssets, /旁白内容过长/);
+assert.match(audioAssets, /scene\.durationSeconds \* 0\.86/);
+
 const rawAudio = Buffer.alloc(48_000 / 8 * 5);
 assert.ok(Math.abs(estimateCbrMp3Duration(rawAudio, 48) - 5) < 0.001);
 const id3Header = Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 20]);

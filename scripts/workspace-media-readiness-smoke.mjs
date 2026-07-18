@@ -24,16 +24,15 @@ assert.match(workspace, /invalidMediaCount: invalidRenderMedia\.length \+ qualit
 assert.match(workspace, /auditProjectMedia\(project\)/);
 assert.match(workspace, /aria-label="成片质量异常"/);
 assert.match(workspace, /替换停帧镜头：场景/);
-assert.match(workspace, /aria-label="生成未完成素材"/);
-assert.match(workspace, /刚才有 \{generationIssueCount\} 个素材没有生成完成/);
-assert.match(workspace, /重试画面：场景 \{sceneNumberListLabel\(generationIssue\.visual\)\}/);
-assert.match(workspace, /重试配音：场景 \{sceneNumberListLabel\(generationIssue\.audio\)\}/);
-assert.match(workspace, /重试动态镜头：场景 \{sceneNumberListLabel\(generationIssue\.clip\)\}/);
+assert.match(workspace, /aria-label="待处理素材清单"/);
+assert.match(workspace, /动态效果可稍后补充/);
+assert.match(workspace, /不会影响静态画面成片/);
+assert.doesNotMatch(workspace, /刚才有 \{generationIssueCount\} 个素材没有生成完成/);
 assert.doesNotMatch(workspace, /kv-media-warning/);
 
 assert.match(styles, /\.kv-media-readiness/);
 assert.match(styles, /\.kv-media-readiness-danger/);
-assert.match(styles, /\.kv-media-readiness-retry/);
+assert.match(styles, /\.kv-export-blocker-list span\.optional/);
 assert.match(styles, /\.kv-media-readiness-actions/);
 assert.match(styles, /\.kv-export-blocker-list button/);
 assert.doesNotMatch(styles, /\.kv-media-warning/);

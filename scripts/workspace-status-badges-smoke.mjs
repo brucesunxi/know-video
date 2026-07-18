@@ -5,10 +5,11 @@ const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.
 const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
 assert.match(workspace, /function projectStatusBadges/);
-assert.match(workspace, /version\.assetStatus === "ready"/);
-assert.match(workspace, /version\.status === "rendering" \|\| version\.renderJobId/);
-assert.match(workspace, /version\.renderUrl/);
-assert.match(workspace, /const output = version\.renderUrl[\s\S]*version\.status === "rendering" \|\| version\.renderJobId/);
+assert.match(workspace, /return \[saved, storyboard, output\]/);
+assert.match(workspace, /const output = outputReadiness\(\{/);
+assert.match(workspace, /status: version\.status/);
+assert.match(workspace, /renderUrl: version\.renderUrl/);
+assert.match(workspace, /renderJobId: version\.renderJobId/);
 assert.match(workspace, /renderJobId: undefined, renderUrl: completed\.renderUrl, status: "ready"/);
 assert.match(workspace, /statusBadges\.map/);
 assert.doesNotMatch(workspace, /<span>智能分镜<\/span>/);

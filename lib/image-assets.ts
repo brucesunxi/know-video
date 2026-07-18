@@ -11,6 +11,7 @@ import {
   type ImageReferenceRole
 } from "@/lib/image-continuity";
 import { GeneratedImageQualityError, normalizeGeneratedImage } from "@/lib/image-quality";
+import { mediaAssetStatus } from "@/lib/generation-resume";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 
@@ -344,9 +345,7 @@ export async function generateProjectSceneImages(
       }
   });
 
-  const visualCount = scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
-  const assetStatus: NonNullable<Project["currentVersion"]["assetStatus"]> =
-    visualCount === scenes.length ? "ready" : visualCount > 0 ? "partial" : "failed";
+  const assetStatus = mediaAssetStatus(scenes);
 
   return {
     ...project,

@@ -3,6 +3,7 @@ import { assertUsableSpeechAudio } from "@/lib/audio-quality";
 import { generateAzureChineseSpeech, hasAzureSpeech } from "@/lib/azure-speech";
 import { generateCloudflareSpeech, hasCloudflareAI } from "@/lib/cloudflare-ai";
 import { getOptionalEnv } from "@/lib/env";
+import { fitNarrationToDuration } from "@/lib/narration-fit";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
 import { DEFAULT_NARRATION_VOICE, narrationVoiceProfile } from "@/lib/voice-profiles";
 import type { NarrationVoice, Project, Scene, SceneAsset } from "@/lib/types";
@@ -145,11 +146,22 @@ export async function generateProjectVoices(
   const concurrency = Math.min(4, Math.max(1, Number(getOptionalEnv("TTS_GENERATION_CONCURRENCY")) || 3));
   await mapWithConcurrency(selectedIndexes, concurrency, async ({ scene, index }) => {
     try {
-      const voice = await generateSceneVoice(scene, project, narrationVoice);
+      let voiceScene = scene;
+      let voice: SceneAsset;
+      try {
+        voice = await generateSceneVoice(voiceScene, project, narrationVoice);
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.includes("旁白内容过长")) throw error;
+        const shortenedVoiceover = fitNarrationToDuration(scene.voiceover, Math.max(1.3, scene.durationSeconds * 0.86));
+        if (shortenedVoiceover === scene.voiceover) throw error;
+        voiceScene = { ...scene, voiceover: shortenedVoiceover };
+        console.warn(`[audio-assets] Scene ${scene.sceneNumber} narration was shortened after measured speech exceeded the scene duration.`);
+        voice = await generateSceneVoice(voiceScene, project, narrationVoice);
+      }
       scenes[index] = {
-        ...scene,
-        style: narrationVoice ? { ...scene.style, narrationVoice } : scene.style,
-        assets: [voice, ...scene.assets.filter((asset) => asset.type !== "audio")]
+        ...voiceScene,
+        style: narrationVoice ? { ...voiceScene.style, narrationVoice } : voiceScene.style,
+        assets: [voice, ...voiceScene.assets.filter((asset) => asset.type !== "audio")]
       };
     } catch (error) {
       console.error(`[audio-assets] Scene ${scene.sceneNumber} voice generation failed:`, error);

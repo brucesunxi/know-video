@@ -1091,20 +1091,13 @@ function projectStatusBadges(project: Project, source: Source) {
   const storyboard = version.scenes.length > 0
     ? { label: `${version.scenes.length} 个分镜`, tone: "ready" }
     : { label: "等待分镜", tone: "attention" };
-  const media = version.assetStatus === "ready"
-    ? { label: "素材完整", tone: "ready" }
-    : version.assetStatus === "partial"
-      ? { label: "素材待补齐", tone: "attention" }
-      : version.assetStatus === "pending"
-        ? { label: "素材生成中", tone: "working" }
-        : { label: "素材待生成", tone: "attention" };
   const output = outputReadiness({
     ...versionMediaSummary(version),
     status: version.status,
     renderUrl: version.renderUrl,
     renderJobId: version.renderJobId
   });
-  return [saved, storyboard, media, output] as Array<{ label: string; tone: "ready" | "working" | "attention" | "neutral" }>;
+  return [saved, storyboard, output] as Array<{ label: string; tone: "ready" | "working" | "attention" | "neutral" }>;
 }
 
 function Shell({
@@ -3182,7 +3175,6 @@ function StudioScreen({
     .map((item) => item.sceneNumber);
   const invalidMedia = invalidRenderMediaSummary(invalidRenderMedia);
   const generationIssue = generationIssueSummary(generationIssues);
-  const generationIssueCount = generationIssues.length;
   const filmSettings = productionSettings(project);
   const mediaAudit = auditProjectMedia(project);
   const qualityErrors = mediaAudit.errors.filter((issue) => !["missing-visual", "missing-audio"].includes(issue.code));
@@ -3374,13 +3366,13 @@ function StudioScreen({
             </div>
           </section>
         ) : null}
-        {exportBlockers.length > 0 ? (
-          <section className="kv-export-blockers" role="status" aria-label="MP4 导出阻塞清单">
+        {exportBlockers.length > 0 || generationIssue.clip.length > 0 ? (
+          <section className="kv-export-blockers" role="status" aria-label="待处理素材清单">
             <div>
-              <AlertCircle size={18} />
+              <Clock3 size={18} />
               <div>
-                <strong>MP4 导出前需要处理 {exportBlockers.length} 项问题</strong>
-                <span>先处理下列场景素材，导出按钮会在检查通过后自动启用。</span>
+                <strong>{exportBlockers.length > 0 ? `还有 ${exportBlockers.length} 项必需素材待处理` : "可选动态镜头暂未完成"}</strong>
+                <span>{exportBlockers.length > 0 ? "补齐必需素材后即可导出；动态镜头不会影响静态画面成片。" : "当前静态画面仍可正常预览和导出，也可以稍后重试动态效果。"}</span>
               </div>
             </div>
             <div className="kv-export-blocker-list">
@@ -3400,6 +3392,14 @@ function StudioScreen({
                   )}
                 </span>
               ))}
+              {generationIssue.clip.length > 0 ? (
+                <span className="optional" key="optional-clips">
+                  <Clapperboard size={14} />
+                  <strong>动态效果可稍后补充</strong>
+                  <small>场景 {sceneNumberListLabel(generationIssue.clip)} 已保留静态画面，不影响当前版本导出。</small>
+                  <button disabled={isBusy} onClick={() => onGenerateClips(generationIssue.clip)} type="button">重试动态镜头</button>
+                </span>
+              ) : null}
             </div>
           </section>
         ) : null}
@@ -3429,37 +3429,6 @@ function StudioScreen({
                 <button disabled={isBusy} onClick={() => onRegenerate(mediaAudit.repairClipSceneNumbers)} type="button">
                   {isBusy ? <Loader2 className="kv-spin" size={15} /> : <RefreshCcw size={15} />}
                   替换停帧镜头：场景 {sceneNumberListLabel(mediaAudit.repairClipSceneNumbers)}
-                </button>
-              ) : null}
-            </div>
-          </section>
-        ) : null}
-        {generationIssueCount > 0 ? (
-          <section className="kv-media-readiness kv-media-readiness-retry" role="status" aria-label="生成未完成素材">
-            <div>
-              <RefreshCcw size={18} />
-              <div>
-                <strong>刚才有 {generationIssueCount} 个素材没有生成完成</strong>
-                <span>可以只重试失败的场景，不需要重新规划脚本和分镜。</span>
-              </div>
-            </div>
-            <div className="kv-media-readiness-actions">
-              {generationIssue.visual.length > 0 ? (
-                <button disabled={isBusy} onClick={() => onRegenerate(generationIssue.visual)} type="button">
-                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <ImagePlus size={15} />}
-                  重试画面：场景 {sceneNumberListLabel(generationIssue.visual)}
-                </button>
-              ) : null}
-              {generationIssue.audio.length > 0 ? (
-                <button disabled={isBusy} onClick={() => onRegenerateAudio(generationIssue.audio)} type="button">
-                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Mic2 size={15} />}
-                  重试配音：场景 {sceneNumberListLabel(generationIssue.audio)}
-                </button>
-              ) : null}
-              {generationIssue.clip.length > 0 ? (
-                <button disabled={isBusy} onClick={() => onGenerateClips(generationIssue.clip)} type="button">
-                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <FileVideo2 size={15} />}
-                  重试动态镜头：场景 {sceneNumberListLabel(generationIssue.clip)}
                 </button>
               ) : null}
             </div>
@@ -3984,7 +3953,7 @@ export function WorkspaceClient({
     setGenerationStatus("正在保存可继续编辑的项目");
     setProgress(96);
     setGenerationIssues(issues);
-    if (warnings.length > 0) setErrorMessage(Array.from(new Set(warnings)).join(" "));
+    setErrorMessage(undefined);
     setMessages((current) => [...current, {
       id: crypto.randomUUID(),
       role: "assistant",
@@ -4470,7 +4439,6 @@ export function WorkspaceClient({
       content: completionMessage,
       versionId: updatedProject.currentVersion.id
     }, true);
-    if (warnings.length > 0) setErrorMessage(Array.from(new Set(warnings)).join(" "));
     setBusyAction("applying-edit");
     return updatedProject;
   }
@@ -4623,7 +4591,6 @@ export function WorkspaceClient({
             : "分镜结构、场景画面和配音已经全部更新。",
           versionId: updatedProject.currentVersion.id
         }, true);
-        if (uniqueWarnings.length > 0) setErrorMessage(uniqueWarnings.join(" "));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "时间线调整失败。";
