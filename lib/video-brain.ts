@@ -1,6 +1,6 @@
 import { analyzeEditIntent, requestsGeneratedClip } from "@/lib/edit-intent";
 import { fitSceneNarration } from "@/lib/narration-fit";
-import { narrationVoiceFromRequest } from "@/lib/voice-profiles";
+import { narrationVoiceForBrief, narrationVoiceFromRequest } from "@/lib/voice-profiles";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 
@@ -346,7 +346,11 @@ export function generateProjectFromPrompt(
       assets: []
     }
   ];
-  const scenes = applyFallbackConstraints(genericBlueprints, options, chinese);
+  const narrationVoice = narrationVoiceForBrief(prompt);
+  const scenes = applyFallbackConstraints(genericBlueprints, options, chinese).map((scene) => ({
+    ...scene,
+    style: { ...scene.style, narrationVoice }
+  }));
 
   return {
     ...(baseProject ?? {

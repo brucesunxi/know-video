@@ -7,6 +7,7 @@ import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/pr
 import { fitScenesNarration } from "@/lib/narration-fit";
 import { requestsSceneStructureChange, sceneStructureFromRequest, sceneStructureSummary } from "@/lib/scene-structure-intent";
 import { storyboardQualityIssues } from "@/lib/storyboard-quality";
+import { narrationVoiceForBrief } from "@/lib/voice-profiles";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
 import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
@@ -607,6 +608,11 @@ export async function createStoryboardProject(
       }
     }
 
+    const narrationVoice = narrationVoiceForBrief(prompt);
+    scenes = scenes.map((scene) => ({
+      ...scene,
+      style: { ...scene.style, narrationVoice }
+    }));
     return {
       engine: textModel.engine,
       project: {

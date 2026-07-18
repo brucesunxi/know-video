@@ -48,3 +48,15 @@ export function narrationVoiceFromRequest(request: string): NarrationVoice | und
   if (/男声|男性|男生|清晰|活力|male|man|clear|energetic/iu.test(request)) return "male-clear";
   return undefined;
 }
+
+export function narrationVoiceForBrief(request: string): NarrationVoice {
+  const explicit = narrationVoiceFromRequest(request);
+  if (explicit) return explicit;
+  if (/儿童|孩子|亲子|家庭|教育|课程|老师|生活方式|旅行|美妆|健康|温暖|亲和|自然|kids?|children|family|education|teacher|lifestyle|travel|beauty|wellness|warm|friendly/iu.test(request)) {
+    return "female-natural";
+  }
+  if (/金融|法律|治理|政务|企业级|工业|纪录片|历史|权威|严肃|稳重|finance|legal|governance|enterprise|industrial|documentary|history|authoritative|serious/iu.test(request)) {
+    return "male-deep";
+  }
+  return DEFAULT_NARRATION_VOICE;
+}
