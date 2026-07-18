@@ -1,3 +1,4 @@
+import { sceneAttachmentSummary } from "@/lib/attachment-context";
 import type { Project, Scene } from "@/lib/types";
 
 export type ImageReferenceRole = "current" | "anchor";
@@ -70,6 +71,7 @@ export function sceneImagePrompt(
   return [
     `Create a polished 16:9 key visual for a scene in a product video called "${project.title}".`,
     projectVisualIdentity(project),
+    sceneAttachmentSummary(scene) ?? "",
     referenceDirection,
     `Scene ${scene.sceneNumber}: ${scene.title}.`,
     `Visual direction: ${scene.visualPrompt}`,

@@ -10,8 +10,21 @@ const output = ts.transpileModule(source, {
     target: ts.ScriptTarget.ES2022
   }
 }).outputText;
+const attachmentSource = fs.readFileSync(new URL("../lib/attachment-context.ts", import.meta.url), "utf8");
+const attachmentOutput = ts.transpileModule(attachmentSource, {
+  compilerOptions: {
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022
+  }
+}).outputText;
+const attachmentModule = { exports: {} };
+vm.runInNewContext(attachmentOutput, { module: attachmentModule, exports: attachmentModule.exports });
 const module = { exports: {} };
-vm.runInNewContext(output, { module, exports: module.exports });
+vm.runInNewContext(output, {
+  module,
+  exports: module.exports,
+  require: (specifier) => specifier === "@/lib/attachment-context" ? attachmentModule.exports : {}
+});
 const { normalizeVisualRevisionInstruction, projectVisualIdentity, sceneImagePrompt, selectVisualAnchorScene, stableImageSeed, visualAnchorScore } = module.exports;
 
 const scene = {

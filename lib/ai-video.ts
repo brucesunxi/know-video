@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { z } from "zod";
+import { versionAttachmentContext } from "@/lib/attachment-context";
 import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip } from "@/lib/edit-intent";
 import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
@@ -723,6 +724,7 @@ export async function createEditPlan(params: {
     return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
   }
   const activeTextModel = textModel;
+  const attachmentContext = versionAttachmentContext(params.version);
 
   const globalDirective = globalChineseRewrite
     ? `\n\nThis is a GLOBAL Simplified Chinese localization. The exact target scenes are ${globalEditTargetSceneNumbers(params.request, params.version.scenes.map((scene) => scene.sceneNumber)).join(", ")}. You MUST return one updated change for every target scene and no excluded scene. Every after.title, after.voiceover, after.visualPrompt, and after.motionPrompt must be written in Simplified Chinese. affectedScenes must exactly match the target scenes. ${preserveVisualAssetsOnLocalization ? "This is translation-only: preserve the existing visual meaning and assets; regenerate must include audio, caption, and render, but must not include image, clip, or thumbnail." : "The request also changes visual direction; regenerate must include image, audio, thumbnail, caption, and render."}`
@@ -741,11 +743,11 @@ export async function createEditPlan(params: {
         {
           role: "system",
           content:
-            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. Never return changes for a scene outside an explicitly requested scene or range. Scene insertion and deletion are not supported in this editor, so every returned change must use status updated. A request without a specific scene target that changes language, narration, captions, style, palette, pacing, music, fonts, logos, watermarks, or voice applies to the full video. Supported narrationVoice values are male-clear for a clear energetic male voice, male-deep for a calm authoritative male voice, and female-natural for a warm natural female voice. Only change narrationVoice when the user asks for an audio voice or vocal character change. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. A request to generate or animate a video clip is a media operation: preserve unrelated scene text and visual direction, and regenerate clip plus render. Return strict JSON only."
+            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. Never return changes for a scene outside an explicitly requested scene or range. Scene insertion and deletion are not supported in this editor, so every returned change must use status updated. A request without a specific scene target that changes language, narration, captions, style, palette, pacing, music, fonts, logos, watermarks, or voice applies to the full video. Supported narrationVoice values are male-clear for a clear energetic male voice, male-deep for a calm authoritative male voice, and female-natural for a warm natural female voice. Only change narrationVoice when the user asks for an audio voice or vocal character change. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. A request to generate or animate a video clip is a media operation: preserve unrelated scene text and visual direction, and regenerate clip plus render. User-uploaded attachments are authoritative source material: preserve their product, person, brand, composition, narration, or music identity unless the user explicitly asks to replace that attachment. If a requested visual transformation requires regeneration, describe the attachment identity that must remain in after.visualPrompt. Return strict JSON only."
         },
         {
           role: "user",
-          content: `Current version scenes:\n${JSON.stringify(params.version.scenes, null, 2)}\n\nUser edit request:\n${params.request}${globalDirective}${generatedClipDirective}${retry ? "\n\nYour previous attempt was incomplete. Rebuild the entire plan and satisfy every requirement above." : ""}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
+          content: `Current version scenes:\n${JSON.stringify(params.version.scenes, null, 2)}${attachmentContext ? `\n\n${attachmentContext}` : ""}\n\nUser edit request:\n${params.request}${globalDirective}${generatedClipDirective}${retry ? "\n\nYour previous attempt was incomplete. Rebuild the entire plan and satisfy every requirement above." : ""}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
         }
       ],
       temperature: globalChineseRewrite ? 0.2 : 0.45
@@ -834,6 +836,7 @@ export async function refineEditPlan(params: {
   const activeTextModel = textModel;
 
   const available = new Set(params.version.scenes.map((scene) => scene.sceneNumber));
+  const attachmentContext = versionAttachmentContext(params.version);
   const combinedRequest = `${params.existingPlan.userRequest}\n补充要求：${params.request}`;
   const combinedIntent = analyzeEditIntent(combinedRequest, Array.from(available));
   const combinedTargets = globalEditTargetSceneNumbers(combinedRequest, Array.from(available));
@@ -856,6 +859,7 @@ export async function refineEditPlan(params: {
               "The follow-up instruction has priority and may add, remove, or alter scene changes.",
               "Return the complete revised plan, not only the delta from the previous plan.",
               "Use only existing scene numbers and status updated. Preserve every unrelated field exactly.",
+              "Treat user-uploaded attachments as authoritative source material. Preserve them unless the follow-up explicitly requests replacement; if regenerating a visual, carry the attachment identity into after.visualPrompt.",
               "If a scene should remain unchanged, omit it from changes and affectedScenes.",
               "Keep all user-facing summary text in the user's language.",
               "Return strict JSON only."
@@ -863,7 +867,7 @@ export async function refineEditPlan(params: {
           },
           {
             role: "user",
-            content: `Current scenes:\n${JSON.stringify(params.version.scenes, null, 2)}\n\nExisting proposed plan:\n${JSON.stringify(params.existingPlan, null, 2)}\n\nFollow-up instruction:\n${params.request}${refinementDirective}${retry ? "\n\nThe previous response failed scope or language validation. Rebuild the complete plan exactly as directed." : ""}\n\nReturn JSON in this exact shape:\n{ "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
+            content: `Current scenes:\n${JSON.stringify(params.version.scenes, null, 2)}${attachmentContext ? `\n\n${attachmentContext}` : ""}\n\nExisting proposed plan:\n${JSON.stringify(params.existingPlan, null, 2)}\n\nFollow-up instruction:\n${params.request}${refinementDirective}${retry ? "\n\nThe previous response failed scope or language validation. Rebuild the complete plan exactly as directed." : ""}\n\nReturn JSON in this exact shape:\n{ "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
           }
         ],
         temperature: 0.2
