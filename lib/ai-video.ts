@@ -3,6 +3,7 @@ import { z } from "zod";
 import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip } from "@/lib/edit-intent";
 import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
+import { fitScenesNarration } from "@/lib/narration-fit";
 import { requestsSceneStructureChange, sceneStructureFromRequest, sceneStructureSummary } from "@/lib/scene-structure-intent";
 import { storyboardQualityIssues } from "@/lib/storyboard-quality";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
@@ -422,7 +423,7 @@ function normalizeStoryboard(
   const durations = distributeDurations(parsed.scenes.map((scene) => scene.durationSeconds), targetDuration);
   const continuity = continuityDirection(treatment);
 
-  return parsed.scenes.map((scene, index): Scene => ({
+  const scenes = parsed.scenes.map((scene, index): Scene => ({
     id: crypto.randomUUID(),
     sceneNumber: index + 1,
     title: scene.title.trim(),
@@ -436,6 +437,7 @@ function normalizeStoryboard(
     },
     assets: []
   }));
+  return fitScenesNarration(scenes, targetDuration);
 }
 
 async function createTreatment(

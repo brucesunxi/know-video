@@ -1,4 +1,5 @@
 import { analyzeEditIntent, requestsGeneratedClip } from "@/lib/edit-intent";
+import { fitSceneNarration } from "@/lib/narration-fit";
 import { narrationVoiceFromRequest } from "@/lib/voice-profiles";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
@@ -455,7 +456,7 @@ export function applyEditPlan(project: Project, plan: EditPlan): Project {
     }
 
     const theme = change.after.thumbnailTone === "light" ? "premium light" : scene.style.theme;
-    return {
+    return fitSceneNarration({
       ...scene,
       title: change.after.title || scene.title,
       voiceover: change.after.voiceover || scene.voiceover,
@@ -470,7 +471,7 @@ export function applyEditPlan(project: Project, plan: EditPlan): Project {
           ? { ...scene.style.production, ...plan.productionSettings }
           : scene.style.production
       }
-    };
+    });
   });
 
   return {
