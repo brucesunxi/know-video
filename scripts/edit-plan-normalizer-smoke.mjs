@@ -94,6 +94,44 @@ const narration = normalizeEditPlanAgainstScenes({
 }, [scene]);
 assert.deepEqual(Array.from(narration.changes[0].regenerate), ["audio", "caption", "render"]);
 
+const directImageSource = normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "把这张图作为第 1 个场景的画面",
+  referenceAssets: [{
+    key: "source.png",
+    contentType: "image/png",
+    targetSceneNumber: 1,
+    referenceUsage: "source-media"
+  }],
+  changes: [{
+    sceneNumber: 1,
+    status: "updated",
+    before: side,
+    after: { ...side, visualPrompt: "Use the uploaded source image exactly" },
+    regenerate: ["image", "thumbnail", "render"]
+  }]
+}, [scene]);
+assert.deepEqual(Array.from(directImageSource.changes[0].regenerate), ["render"]);
+
+const directAudioSource = normalizeEditPlanAgainstScenes({
+  ...basePlan,
+  userRequest: "直接使用这段录音作为第 1 个场景的配音",
+  referenceAssets: [{
+    key: "source.wav",
+    contentType: "audio/wav",
+    targetSceneNumber: 1,
+    referenceUsage: "source-media"
+  }],
+  changes: [{
+    sceneNumber: 1,
+    status: "updated",
+    before: side,
+    after: { ...side, voiceover: "Uploaded recording transcript" },
+    regenerate: ["audio", "caption", "render"]
+  }]
+}, [scene]);
+assert.deepEqual(Array.from(directAudioSource.changes[0].regenerate), ["caption", "render"]);
+
 const unchanged = normalizeEditPlanAgainstScenes({
   ...basePlan,
   affectedScenes: [1, 99],

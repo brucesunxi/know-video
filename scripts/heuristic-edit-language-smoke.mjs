@@ -14,8 +14,15 @@ const localRequire = (name) => {
     analyzeEditIntent: () => ({ explicitSceneNumbers: [2], global: false }),
     requestsGeneratedClip: () => false
   };
-  if (name === "@/lib/narration-fit") return { fitSceneNarration: (scene) => scene };
-  if (name === "@/lib/voice-profiles") return { narrationVoiceFromRequest: () => undefined };
+  if (name === "@/lib/narration-fit") return {
+    fitSceneNarration: (scene) => scene.voiceover.includes("Uploaded recording")
+      ? { ...scene, voiceover: "TRIMMED" }
+      : scene
+  };
+  if (name === "@/lib/voice-profiles") return {
+    narrationVoiceForBrief: () => "male-clear",
+    narrationVoiceFromRequest: () => undefined
+  };
   if (name === "@/lib/production-edit-intent") return {
     isProductionOnlyRequest: () => false,
     productionSettingsFromRequest: () => ({})
@@ -23,7 +30,7 @@ const localRequire = (name) => {
   throw new Error(`Unexpected import: ${name}`);
 };
 vm.runInNewContext(output, { module, exports: module.exports, require: localRequire, crypto: { randomUUID } });
-const { buildEditPlanFromRequest, generateProjectFromPrompt } = module.exports;
+const { applyEditPlan, buildEditPlanFromRequest, generateProjectFromPrompt } = module.exports;
 const version = {
   id: "version",
   label: "current",
@@ -58,6 +65,29 @@ assert.match(plan.summary, /场景 2/);
 assert.doesNotMatch(plan.summary, /I will update/);
 assert.match(plan.changes[0].after.visualPrompt, /修改要求/);
 assert.doesNotMatch(plan.changes[0].after.visualPrompt, /Revision request/);
+
+const directAudioProject = applyEditPlan({
+  id: "project",
+  title: "Project",
+  engine: "Animation Engine",
+  credits: 0,
+  plan: "Free",
+  currentVersion: version
+}, {
+  ...plan,
+  referenceAssets: [{
+    key: "source.wav",
+    contentType: "audio/wav",
+    targetSceneNumber: 2,
+    referenceUsage: "source-media"
+  }],
+  changes: [{
+    ...plan.changes[0],
+    sceneNumber: 2,
+    after: { ...plan.changes[0].after, voiceover: "Uploaded recording transcript stays complete" }
+  }]
+});
+assert.equal(directAudioProject.currentVersion.scenes[1].voiceover, "Uploaded recording transcript stays complete");
 
 const fallbackProject = generateProjectFromPrompt(
   "生成一支三十秒的智能视频创作平台介绍片",

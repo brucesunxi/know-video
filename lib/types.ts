@@ -47,6 +47,7 @@ export type GenerationReferenceAsset = {
   actualDurationSeconds?: number;
   targetSceneNumber?: number;
   targetSceneNumbers?: number[];
+  referenceUsage?: "source-media";
 };
 
 export type SceneAsset = {

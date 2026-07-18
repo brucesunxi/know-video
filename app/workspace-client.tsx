@@ -52,6 +52,7 @@ import { parsePendingGenerationSession, PENDING_GENERATION_STORAGE_KEY, type Pen
 import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 import { missingMotionSceneNumbers, missingSceneAssetNumbers, sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
 import { selectMotionCriticalScenes } from "@/lib/motion-scene-selection";
+import { auditProjectMedia } from "@/lib/project-media-audit";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
 import { sceneSplitPreview, type SceneStructureMutation } from "@/lib/scene-structure";
 import {
@@ -3183,9 +3184,12 @@ function StudioScreen({
   const generationIssue = generationIssueSummary(generationIssues);
   const generationIssueCount = generationIssues.length;
   const filmSettings = productionSettings(project);
+  const mediaAudit = auditProjectMedia(project);
+  const qualityErrors = mediaAudit.errors.filter((issue) => !["missing-visual", "missing-audio"].includes(issue.code));
   const exportReady = missingSceneNumbers.length === 0
     && missingAudioSceneNumbers.length === 0
     && invalidRenderMedia.length === 0
+    && qualityErrors.length === 0
     && exportProgress === undefined;
   const exportReadiness = exportReady ? exportReadinessItems(project, filmSettings) : [];
   const exportBlockers = exportBlockingItems({
@@ -3329,7 +3333,7 @@ function StudioScreen({
             </div>
             <button
               className="kv-primary"
-              disabled={isBusy || exportProgress !== undefined || missingSceneNumbers.length > 0 || missingAudioSceneNumbers.length > 0 || invalidRenderMedia.length > 0}
+              disabled={isBusy || exportProgress !== undefined || missingSceneNumbers.length > 0 || missingAudioSceneNumbers.length > 0 || invalidRenderMedia.length > 0 || qualityErrors.length > 0}
               onClick={onExport}
               type="button"
             >
@@ -3339,7 +3343,7 @@ function StudioScreen({
                 renderUrl: project.currentVersion.renderUrl,
                 missingVisualCount: missingSceneNumbers.length,
                 missingAudioCount: missingAudioSceneNumbers.length,
-                invalidMediaCount: invalidRenderMedia.length
+                invalidMediaCount: invalidRenderMedia.length + qualityErrors.length
               })}
             </button>
             {exportProgress !== undefined && activeRenderJobId ? (
@@ -3385,59 +3389,46 @@ function StudioScreen({
                   {item.tone === "danger" ? <AlertCircle size={14} /> : <Clock3 size={14} />}
                   <strong>{item.title}</strong>
                   <small>{item.detail}</small>
-                  <em>{item.action}</em>
+                  {item.key === "missing-visual" ? (
+                    <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers)} type="button">{item.action}</button>
+                  ) : item.key === "missing-audio" ? (
+                    <button disabled={isBusy} onClick={() => onRegenerateAudio(missingAudioSceneNumbers)} type="button">{item.action}</button>
+                  ) : item.key === "invalid-visual" ? (
+                    <button disabled={isBusy} onClick={() => onRegenerate(invalidMedia.visual)} type="button">{item.action}</button>
+                  ) : (
+                    <button disabled={isBusy} onClick={() => onRegenerateAudio(invalidMedia.audio)} type="button">{item.action}</button>
+                  )}
                 </span>
               ))}
             </div>
           </section>
         ) : null}
-        {missingSceneNumbers.length > 0 || missingAudioSceneNumbers.length > 0 ? (
-          <section className="kv-media-readiness" role="status" aria-label="成片素材检查">
+        {qualityErrors.length > 0 ? (
+          <section className="kv-media-readiness kv-media-readiness-danger" role="status" aria-label="成片质量异常">
             <div>
               <AlertCircle size={18} />
               <div>
-                <strong>成片素材还没有补齐</strong>
-                <span>补齐后才能导出 MP4，避免画面缺失、静音或旁白不完整。</span>
+                <strong>发现 {qualityErrors.length} 项会影响成片的质量问题</strong>
+                <span>{qualityErrors.map((issue) => issue.message).join(" ")}</span>
               </div>
             </div>
             <div className="kv-media-readiness-actions">
-              {missingSceneNumbers.length > 0 ? (
-                <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers)} type="button">
+              {mediaAudit.repairVisualSceneNumbers.length > 0 ? (
+                <button disabled={isBusy} onClick={() => onRegenerate(mediaAudit.repairVisualSceneNumbers)} type="button">
                   {isBusy ? <Loader2 className="kv-spin" size={15} /> : <ImagePlus size={15} />}
-                  补齐画面：场景 {sceneNumberListLabel(missingSceneNumbers)}
+                  修复画面：场景 {sceneNumberListLabel(mediaAudit.repairVisualSceneNumbers)}
                 </button>
               ) : null}
-              {missingAudioSceneNumbers.length > 0 ? (
-                <button disabled={isBusy} onClick={() => onRegenerateAudio(missingAudioSceneNumbers)} type="button">
+              {mediaAudit.repairAudioSceneNumbers.length > 0 ? (
+                <button disabled={isBusy} onClick={() => onRegenerateAudio(mediaAudit.repairAudioSceneNumbers)} type="button">
                   {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Mic2 size={15} />}
-                  补齐配音：场景 {sceneNumberListLabel(missingAudioSceneNumbers)}
+                  修复配音：场景 {sceneNumberListLabel(mediaAudit.repairAudioSceneNumbers)}
                 </button>
               ) : null}
-            </div>
-          </section>
-        ) : null}
-        {invalidRenderMedia.length > 0 ? (
-          <section className="kv-media-readiness kv-media-readiness-danger" role="status" aria-label="云端素材异常">
-            <div>
-              <AlertCircle size={18} />
-              <div>
-                <strong>导出前发现云端素材异常</strong>
-                <span>
-                  场景 {sceneNumberListLabel(invalidMedia.all)} 的文件可能已失效或格式异常。重做对应素材后再导出，避免黑屏、静音或导出失败。
-                </span>
-              </div>
-            </div>
-            <div className="kv-media-readiness-actions">
-              {invalidMedia.visual.length > 0 ? (
-                <button disabled={isBusy} onClick={() => onRegenerate(invalidMedia.visual)} type="button">
-                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <ImagePlus size={15} />}
-                  重做异常画面：场景 {sceneNumberListLabel(invalidMedia.visual)}
-                </button>
-              ) : null}
-              {invalidMedia.audio.length > 0 ? (
-                <button disabled={isBusy} onClick={() => onRegenerateAudio(invalidMedia.audio)} type="button">
-                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Mic2 size={15} />}
-                  重做异常配音：场景 {sceneNumberListLabel(invalidMedia.audio)}
+              {mediaAudit.repairClipSceneNumbers.length > 0 ? (
+                <button disabled={isBusy} onClick={() => onRegenerate(mediaAudit.repairClipSceneNumbers)} type="button">
+                  {isBusy ? <Loader2 className="kv-spin" size={15} /> : <RefreshCcw size={15} />}
+                  替换停帧镜头：场景 {sceneNumberListLabel(mediaAudit.repairClipSceneNumbers)}
                 </button>
               ) : null}
             </div>

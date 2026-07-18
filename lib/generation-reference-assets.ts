@@ -115,6 +115,10 @@ export function attachEditPlanReferenceAssets(project: Project, plan: EditPlan):
       reference.targetSceneNumber === scene.sceneNumber || reference.targetSceneNumbers?.includes(scene.sceneNumber)
     ) ?? [];
     if (references.length === 0) return scene;
+    const sourceReference = references.find((reference) =>
+      reference.referenceUsage === "source-media" && reference.referenceRole !== "video-poster"
+    );
+    const sourceAsset = sourceReference ? createGenerationReferenceAsset(sourceReference) : undefined;
     return {
       ...scene,
       style: {
@@ -123,7 +127,22 @@ export function attachEditPlanReferenceAssets(project: Project, plan: EditPlan):
           ...references,
           ...(scene.style?.referenceAssets ?? []).filter((existing) => !references.some((reference) => reference.key === existing.key))
         ]
-      }
+      },
+      assets: sourceAsset
+        ? [
+            {
+              ...sourceAsset,
+              metadata: {
+                ...sourceAsset.metadata,
+                role: "edit-source",
+                sceneNumber: scene.sceneNumber
+              }
+            },
+            ...scene.assets.filter((asset) => sourceAsset.type === "audio"
+              ? asset.type !== "audio"
+              : !["image", "clip"].includes(asset.type))
+          ]
+        : scene.assets
     };
   });
   return { ...project, currentVersion: { ...project.currentVersion, scenes } };

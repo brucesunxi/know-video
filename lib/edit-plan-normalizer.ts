@@ -63,15 +63,23 @@ export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) 
     const audioChanged = voiceoverChanged || voiceChanged;
     const captionChanged = title !== scene.title || voiceoverChanged;
     const motionChanged = motionPrompt !== scene.motionPrompt;
+    const sourceReferences = plan.referenceAssets?.filter((reference) =>
+      reference.referenceUsage === "source-media"
+      && (reference.targetSceneNumber === scene.sceneNumber || reference.targetSceneNumbers?.includes(scene.sceneNumber))
+    ) ?? [];
+    const directVisualSource = sourceReferences.some((reference) =>
+      reference.contentType.startsWith("image/") || reference.contentType.startsWith("video/")
+    );
+    const directAudioSource = sourceReferences.some((reference) => reference.contentType.startsWith("audio/"));
     if (!visualChanged && !audioChanged && !captionChanged && !motionChanged && !clipRequested) return [];
     const regenerate = new Set<AssetType>();
-    if (visualChanged) {
+    if (visualChanged && !directVisualSource) {
       regenerate.add("image");
       regenerate.add("thumbnail");
     }
-    if (audioChanged) regenerate.add("audio");
+    if (audioChanged && !directAudioSource) regenerate.add("audio");
     if (captionChanged) regenerate.add("caption");
-    if (clipRequested || ((motionChanged || visualChanged) && scene.assets.some((asset) => asset.type === "clip"))) {
+    if (clipRequested || (!directVisualSource && (motionChanged || visualChanged) && scene.assets.some((asset) => asset.type === "clip"))) {
       regenerate.add("clip");
     }
     if (visualChanged || audioChanged || captionChanged || motionChanged || clipRequested) {

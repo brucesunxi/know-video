@@ -99,6 +99,13 @@ const globallyAttached = attachEditPlanReferenceAssets(project, {
 assert.equal(globallyAttached.currentVersion.scenes[0].style.referenceAssets[0].key, references[0].key);
 assert.equal(globallyAttached.currentVersion.scenes[1].style.referenceAssets[0].key, references[0].key);
 assert.equal(globallyAttached.currentVersion.scenes[2].style.referenceAssets[0].key, references[0].key);
+const directSourceAttached = attachEditPlanReferenceAssets(project, {
+  referenceAssets: [{ ...references[1], targetSceneNumber: 2, referenceUsage: "source-media" }]
+});
+assert.equal(directSourceAttached.currentVersion.scenes[1].assets[0].type, "clip");
+assert.equal(directSourceAttached.currentVersion.scenes[1].assets[0].r2Key, references[1].key);
+assert.equal(directSourceAttached.currentVersion.scenes[1].assets[0].metadata.role, "edit-source");
+assert.equal(directSourceAttached.currentVersion.scenes[0].assets.length, 0);
 const reprioritized = attachEditPlanReferenceAssets({
   ...editAttached,
   currentVersion: {
@@ -136,6 +143,7 @@ assert.match(editRoute, /validateAndAnalyzeReferenceAssets/);
 assert.match(editRoute, /bindReferenceAssetsToPlan/);
 assert.match(editRoute, /requestAttachmentContext/);
 assert.match(editReferences, /globalEditTargetSceneNumbers/);
+assert.match(editReferences, /referenceUsage: reference\.key === directVisualReference/);
 assert.match(editReferences, /useTranscriptAsNarration/);
 assert.match(editReferences, /analysisKind === "transcript"/);
 assert.match(editReferences, /"audio", "caption", "render"/);

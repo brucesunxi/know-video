@@ -16,8 +16,8 @@ export function resolvedClipPlaybackRate(input: {
 
   const durationRatio = duration / input.sceneDurationSeconds;
   const generated = input.asset.metadata?.source === "generated-video";
-  const closeUploadedMatch = durationRatio >= 0.78 && durationRatio <= 1.08;
-  if (!generated && !closeUploadedMatch) return productionRate;
+  const canFitUploadedClip = durationRatio >= 0.25 && durationRatio <= 2;
+  if (!generated && !canFitUploadedClip) return productionRate;
 
   return Math.max(0.1, Math.min(2, productionRate * durationRatio));
 }

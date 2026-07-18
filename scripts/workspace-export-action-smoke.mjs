@@ -16,7 +16,7 @@ assert.match(workspace, /missingVisualCount > 0 && input\.missingAudioCount > 0/
 assert.match(workspace, /缺 \$\{input\.missingVisualCount\} 个画面 · \$\{input\.missingAudioCount\} 段配音/);
 assert.match(workspace, /缺 \$\{input\.missingVisualCount\} 个画面/);
 assert.match(workspace, /缺 \$\{input\.missingAudioCount\} 段配音/);
-assert.match(workspace, /exportActionLabel\(\{\s*exportProgress,\s*renderUrl: project\.currentVersion\.renderUrl,\s*missingVisualCount: missingSceneNumbers\.length,\s*missingAudioCount: missingAudioSceneNumbers\.length,\s*invalidMediaCount: invalidRenderMedia\.length/s);
+assert.match(workspace, /exportActionLabel\(\{\s*exportProgress,\s*renderUrl: project\.currentVersion\.renderUrl,\s*missingVisualCount: missingSceneNumbers\.length,\s*missingAudioCount: missingAudioSceneNumbers\.length,\s*invalidMediaCount: invalidRenderMedia\.length \+ qualityErrors\.length/s);
 assert.match(workspace, /const exportReady = missingSceneNumbers\.length === 0/);
 assert.match(workspace, /const exportReadiness = exportReady \? exportReadinessItems\(project, filmSettings\) : \[\]/);
 assert.match(workspace, /const exportBlockers = exportBlockingItems\(\{/);
@@ -42,6 +42,7 @@ assert.match(styles, /\.kv-export-recovery/);
 assert.match(styles, /\.kv-export-blockers/);
 assert.match(styles, /\.kv-export-blocker-list/);
 assert.match(styles, /\.kv-export-blocker-list span\.danger/);
+assert.match(styles, /\.kv-export-blocker-list button/);
 assert.match(styles, /\.kv-export-readiness/);
 assert.match(styles, /\.kv-export-readiness-grid/);
 assert.match(styles, /button\.kv-export-retry/);

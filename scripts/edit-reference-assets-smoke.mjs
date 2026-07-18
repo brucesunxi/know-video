@@ -34,6 +34,7 @@ const version = {
   scenes: [1, 2, 3].map((sceneNumber) => ({
     id: `scene-${sceneNumber}`,
     sceneNumber,
+    durationSeconds: 6,
     ...side(sceneNumber),
     style: { narrationVoice: "male-clear", theme: "dark" }
   }))
@@ -117,5 +118,39 @@ const styleOnly = bindReferenceAssetsToPlan({
 });
 assert.equal(styleOnly.changes.length, 0);
 assert.equal(styleOnly.referenceAssets[0].targetSceneNumber, 2);
+
+const videoReference = {
+  key: "uploads/generation/request/source.mp4",
+  name: "source.mp4",
+  size: 24_000,
+  contentType: "video/mp4",
+  actualDurationSeconds: 4.8
+};
+const directVideo = bindReferenceAssetsToPlan({
+  plan: plan("把这段视频作为第 2 个场景的画面"),
+  references: [videoReference],
+  version,
+  selectedSceneNumber: 2
+});
+assert.deepEqual(Array.from(directVideo.changes[0].regenerate), ["render"]);
+assert.equal(directVideo.referenceAssets[0].referenceUsage, "source-media");
+assert.match(directVideo.summary, /直接用于场景 2/);
+
+const directAudio = bindReferenceAssetsToPlan({
+  plan: plan("直接使用这段录音作为第 2 个场景的配音"),
+  references: [{ ...audioReference, actualDurationSeconds: 4.2 }],
+  version,
+  selectedSceneNumber: 2
+});
+assert.equal(directAudio.changes[0].after.voiceover, audioReference.analysis);
+assert.deepEqual(Array.from(directAudio.changes[0].regenerate), ["caption", "render"]);
+assert.equal(directAudio.referenceAssets[0].referenceUsage, "source-media");
+
+assert.throws(() => bindReferenceAssetsToPlan({
+  plan: plan("直接使用这段录音作为第 2 个场景的配音"),
+  references: [{ ...audioReference, actualDurationSeconds: 12 }],
+  version,
+  selectedSceneNumber: 2
+}), /超过场景 2/);
 
 console.log("Edit reference asset smoke checks passed.");

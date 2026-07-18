@@ -12,7 +12,8 @@ const referenceAssetSchema = z.object({
   referenceRole: z.literal("video-poster").optional(),
   actualDurationSeconds: z.number().positive().max(21_600).optional(),
   targetSceneNumber: z.number().int().positive().optional(),
-  targetSceneNumbers: z.array(z.number().int().positive()).max(20).optional()
+  targetSceneNumbers: z.array(z.number().int().positive()).max(20).optional(),
+  referenceUsage: z.literal("source-media").optional()
 });
 const sceneStructureSchema = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("set-duration"), sceneNumber: z.number().int().positive(), durationSeconds: z.number().int().min(2).max(20) }),

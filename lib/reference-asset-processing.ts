@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inspectAudio } from "@/lib/audio-quality";
 import { matchesDeclaredAssetType, maxUploadBytes, uploadedAssetType } from "@/lib/asset-policy";
 import { analyzeCloudflareImage, hasCloudflareAI, transcribeCloudflareAudio } from "@/lib/cloudflare-ai";
 import { getFromR2, headR2Object, readR2Prefix } from "@/lib/r2";
@@ -72,26 +73,39 @@ export async function validateAndAnalyzeReferenceAssets(params: {
     validated.filter((reference) => reference.contentType.startsWith("audio/") && reference.size <= 15_000_000).slice(0, 2)
   );
   const analyses = Object.fromEntries((await Promise.all(analyzable.map(async (reference) => {
-    if (!hasCloudflareAI()) return undefined;
     try {
       const stored = await getFromR2(reference.key);
       if (!stored.body) return undefined;
       const bytes = Buffer.from(await stored.body.transformToByteArray());
       if (reference.contentType.startsWith("image/")) {
+        if (!hasCloudflareAI()) return undefined;
         const result = await analyzeCloudflareImage(bytes);
         return [reference.key, { text: result.description, kind: "visual" as const }] as const;
       }
+      const actualDurationSeconds = inspectAudio(bytes)?.durationSeconds;
+      if (!hasCloudflareAI()) {
+        return [reference.key, { actualDurationSeconds }] as const;
+      }
       const result = await transcribeCloudflareAudio(bytes);
-      return [reference.key, { text: result.transcript, kind: "transcript" as const }] as const;
+      return [reference.key, {
+        text: result.transcript,
+        kind: "transcript" as const,
+        actualDurationSeconds
+      }] as const;
     } catch (error) {
       console.warn(`[reference-assets] Unable to analyze ${reference.key}:`, error);
       return undefined;
     }
-  }))).filter(Boolean) as Array<readonly [string, { text: string; kind: "visual" | "transcript" }]>);
+  }))).filter(Boolean) as Array<readonly [string, {
+    text?: string;
+    kind?: "visual" | "transcript";
+    actualDurationSeconds?: number;
+  }]>);
 
   return validated.map((reference) => ({
     ...reference,
     analysis: analyses[reference.key]?.text,
-    analysisKind: analyses[reference.key]?.kind
+    analysisKind: analyses[reference.key]?.kind,
+    actualDurationSeconds: analyses[reference.key]?.actualDurationSeconds ?? reference.actualDurationSeconds
   }));
 }

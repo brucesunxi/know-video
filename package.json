@@ -75,6 +75,7 @@
     "workspace:export:smoke": "node scripts/workspace-export-action-smoke.mjs",
     "workspace:mobile:smoke": "node scripts/workspace-mobile-layout-smoke.mjs",
     "workspace:audio-asset:smoke": "node scripts/workspace-audio-asset-smoke.mjs",
+    "project:media-audit:smoke": "node scripts/project-media-audit-smoke.mjs",
     "project:library:smoke": "node scripts/project-library-media-smoke.mjs",
     "version:library:smoke": "node scripts/version-library-media-smoke.mjs",
     "db:init": "node --env-file=.env.local scripts/init-db.mjs",

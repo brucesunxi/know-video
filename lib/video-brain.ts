@@ -460,7 +460,7 @@ export function applyEditPlan(project: Project, plan: EditPlan): Project {
     }
 
     const theme = change.after.thumbnailTone === "light" ? "premium light" : scene.style.theme;
-    return fitSceneNarration({
+    const updatedScene = {
       ...scene,
       title: change.after.title || scene.title,
       voiceover: change.after.voiceover || scene.voiceover,
@@ -475,7 +475,13 @@ export function applyEditPlan(project: Project, plan: EditPlan): Project {
           ? { ...scene.style.production, ...plan.productionSettings }
           : scene.style.production
       }
-    });
+    };
+    const usesDirectAudioSource = plan.referenceAssets?.some((reference) =>
+      reference.referenceUsage === "source-media"
+      && reference.contentType.startsWith("audio/")
+      && (reference.targetSceneNumber === scene.sceneNumber || reference.targetSceneNumbers?.includes(scene.sceneNumber))
+    );
+    return usesDirectAudioSource ? updatedScene : fitSceneNarration(updatedScene);
   });
 
   return {

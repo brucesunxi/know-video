@@ -38,6 +38,11 @@ assert.equal(resolvedClipPlaybackRate({
   asset: { type: "clip", metadata: { source: "user-upload", actualDurationSeconds: 3 } },
   sceneDurationSeconds: 8,
   productionPlaybackRate: 1
+}), 0.375);
+assert.equal(resolvedClipPlaybackRate({
+  asset: { type: "clip", metadata: { source: "user-upload", actualDurationSeconds: 1 } },
+  sceneDurationSeconds: 8,
+  productionPlaybackRate: 1
 }), 1);
 
 const shortGenerated = { type: "clip", metadata: { source: "generated-video", duration: 2 } };
