@@ -11,6 +11,7 @@ export type ProjectMediaAuditIssue = {
     | "legacy-chinese-voice"
     | "voice-mismatch"
     | "audio-overrun"
+    | "audio-silent-tail"
     | "audio-duration-unknown"
     | "narration-crowded"
     | "clip-duration-unknown"
@@ -78,6 +79,13 @@ export function auditProjectMedia(project: Project) {
         issues.push({ code: "audio-overrun", sceneNumber: scene.sceneNumber, media: "audio", severity: "error", message: `场景 ${scene.sceneNumber} 的配音比镜头长 ${(actualDuration - scene.durationSeconds).toFixed(1)} 秒。` });
       } else if (!actualDuration && audio.metadata?.source === "ai-speech") {
         issues.push({ code: "audio-duration-unknown", sceneNumber: scene.sceneNumber, media: "audio", severity: "warning", message: `场景 ${scene.sceneNumber} 的配音缺少时长质检信息。` });
+      }
+      const trailingSilence = Number(audio.metadata?.trailingSilenceSeconds);
+      if (
+        Number.isFinite(trailingSilence)
+        && trailingSilence > Math.max(1.2, (actualDuration ?? scene.durationSeconds) * 0.45)
+      ) {
+        issues.push({ code: "audio-silent-tail", sceneNumber: scene.sceneNumber, media: "audio", severity: "error", message: `场景 ${scene.sceneNumber} 的配音后半段异常静音，需要重新生成。` });
       }
     }
 

@@ -54,6 +54,7 @@ export async function POST(request: Request) {
     targets.map((scene) => scene.sceneNumber),
     failed.map((scene) => scene.sceneNumber)
   );
+  console.info(`[audio-assets] Voice generation completed ${progress.completedSceneNumbers.length}/${progress.requestedSceneNumbers.length}; failed scenes: ${progress.failedSceneNumbers.join(",") || "none"}.`);
 
   if (failed.length > 0) {
     return NextResponse.json(

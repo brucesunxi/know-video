@@ -55,6 +55,14 @@ assert.equal(legacy.ready, false);
 assert.deepEqual(Array.from(legacy.errors, (issue) => issue.code), ["legacy-chinese-voice", "voice-mismatch", "audio-overrun"]);
 assert.deepEqual(Array.from(legacy.repairAudioSceneNumbers), [1]);
 
+const silentTail = auditProjectMedia(project([scene(1, {
+  assets: [
+    { id: "image", type: "image", r2Key: "image", url: "/image" },
+    { id: "audio", type: "audio", r2Key: "audio", url: "/audio", metadata: { source: "ai-speech", actualDurationSeconds: 5.2, trailingSilenceSeconds: 3.2, narrationVoice: "male-clear" } }
+  ]
+})]));
+assert.equal(silentTail.errors[0].code, "audio-silent-tail");
+
 const shortClip = auditProjectMedia(project([scene(2, {
   assets: [
     { id: "clip", type: "clip", r2Key: "clip", url: "/clip", metadata: { source: "user-upload", actualDurationSeconds: 1 } },

@@ -311,7 +311,13 @@ function SceneFrame({
       </div>
       {audio ? (
         <Sequence durationInFrames={narrationFrames}>
-          <Audio playbackRate={playbackRate} src={audio} volume={(audioFrame) => audioVolume(audioFrame, narrationFrames)} />
+          <Audio
+            pauseWhenBuffering
+            playbackRate={playbackRate}
+            preload="auto"
+            src={audio}
+            volume={(audioFrame) => audioVolume(audioFrame, narrationFrames)}
+          />
         </Sequence>
       ) : null}
     </AbsoluteFill>
@@ -359,7 +365,7 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
             durationInFrames={contentDurationInFrames + transitionOutFrames}
             from={start}
             key={scene.id}
-            premountFor={VIDEO_FPS}
+            premountFor={VIDEO_FPS * 3}
           >
             <SceneFrame
               captionsEnabled={settings.captionsEnabled}
@@ -377,6 +383,8 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
       {music ? (
         <Audio
           loop
+          pauseWhenBuffering
+          preload="auto"
           src={music.url}
           volume={(frame) => settings.musicVolume * musicMixEnvelope({
             frame,

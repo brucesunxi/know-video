@@ -5,6 +5,9 @@ export type AudioInspection = {
   channels: number;
   frameCount?: number;
   rms?: number;
+  audibleStartSeconds?: number;
+  audibleEndSeconds?: number;
+  trailingSilenceSeconds?: number;
 };
 
 const mpeg1Layer3Bitrates = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
@@ -113,7 +116,43 @@ function inspectWav(body: Buffer): AudioInspection | undefined {
     inspected += 1;
   }
   const rms = inspected > 0 ? Math.sqrt(squareSum / inspected) : 0;
-  return { format: "wav", durationSeconds, sampleRate, channels, rms };
+  const samplesPerWindow = Math.max(channels, Math.round(sampleRate * channels * 0.04));
+  const audibleThreshold = 0.0025;
+  let firstAudibleWindow = -1;
+  let lastAudibleWindow = -1;
+  let windowIndex = 0;
+  for (let start = 0; start < sampleCount; start += samplesPerWindow) {
+    const end = Math.min(sampleCount, start + samplesPerWindow);
+    let windowSquareSum = 0;
+    for (let index = start; index < end; index += 1) {
+      const value = body.readInt16LE(dataOffset + index * 2) / 32_768;
+      windowSquareSum += value * value;
+    }
+    const windowRms = Math.sqrt(windowSquareSum / Math.max(1, end - start));
+    if (windowRms >= audibleThreshold) {
+      if (firstAudibleWindow < 0) firstAudibleWindow = windowIndex;
+      lastAudibleWindow = windowIndex;
+    }
+    windowIndex += 1;
+  }
+  const windowSeconds = samplesPerWindow / (sampleRate * channels);
+  const audibleStartSeconds = firstAudibleWindow < 0 ? undefined : firstAudibleWindow * windowSeconds;
+  const audibleEndSeconds = lastAudibleWindow < 0
+    ? undefined
+    : Math.min(durationSeconds, (lastAudibleWindow + 1) * windowSeconds);
+  const trailingSilenceSeconds = audibleEndSeconds === undefined
+    ? durationSeconds
+    : Math.max(0, durationSeconds - audibleEndSeconds);
+  return {
+    format: "wav",
+    durationSeconds,
+    sampleRate,
+    channels,
+    rms,
+    audibleStartSeconds,
+    audibleEndSeconds,
+    trailingSilenceSeconds
+  };
 }
 
 export function inspectAudio(body: Buffer) {
@@ -129,6 +168,12 @@ export function assertUsableSpeechAudio(
   if (inspection.durationSeconds < 0.35) throw new Error("语音服务返回的音频过短。");
   if (inspection.format === "wav" && (inspection.rms ?? 0) < 0.0015) {
     throw new Error("语音服务返回的音频接近静音。");
+  }
+  if (
+    inspection.format === "wav"
+    && (inspection.trailingSilenceSeconds ?? 0) > Math.max(1.2, inspection.durationSeconds * 0.45)
+  ) {
+    throw new Error("语音服务返回的音频后半段异常静音。");
   }
   if (
     options.targetDurationSeconds

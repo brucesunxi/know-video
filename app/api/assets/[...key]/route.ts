@@ -9,19 +9,22 @@ export async function GET(
   const r2Key = key.join("/");
 
   try {
-    const range = request.headers.get("range") ?? undefined;
-    const asset = await getFromR2(r2Key, range);
+    const requestedRange = request.headers.get("range") ?? undefined;
+    const asset = await getFromR2(r2Key, requestedRange);
     if (!asset.body) {
       return NextResponse.json({ error: "Asset body is empty" }, { status: 404 });
     }
 
     const body = asset.body.transformToWebStream();
     return new NextResponse(body, {
-      status: range ? 206 : 200,
+      status: asset.contentRange ? 206 : 200,
       headers: {
         "accept-ranges": "bytes",
-        "cache-control": "public, max-age=31536000, immutable",
+        "cache-control": asset.contentRange
+          ? "private, no-store"
+          : "public, max-age=31536000, immutable",
         "content-type": asset.contentType,
+        vary: "range",
         ...(asset.contentLength ? { "content-length": String(asset.contentLength) } : {}),
         ...(asset.contentRange ? { "content-range": asset.contentRange } : {}),
         ...(asset.etag ? { etag: asset.etag } : {}),

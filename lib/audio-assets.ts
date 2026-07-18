@@ -111,6 +111,9 @@ async function generateSceneVoice(
       targetDurationSeconds: scene.durationSeconds,
       rate,
       actualDurationSeconds,
+      audibleStartSeconds: inspection.audibleStartSeconds,
+      audibleEndSeconds: inspection.audibleEndSeconds,
+      trailingSilenceSeconds: inspection.trailingSilenceSeconds,
       narrationVoice: selectedVoice
     }
   };

@@ -15,5 +15,7 @@ assert.match(source, /clipDurationInFrames/);
 assert.match(source, /resolvedClipPlaybackRate/);
 assert.match(source, /Img[\s\S]*style=\{visualLayerStyle\(\{ motion, nativeVideo: false \}\)\}/);
 assert.match(source, /height:\s*"106%"[\s\S]*transform:\s*`scale\(\$\{motion\.scale\}\)`/);
+assert.match(source, /<Audio[\s\S]*pauseWhenBuffering[\s\S]*preload="auto"[\s\S]*src=\{audio\}/);
+assert.match(source, /premountFor=\{VIDEO_FPS \* 3\}/);
 
 console.log("Composition video-layer smoke checks passed.");

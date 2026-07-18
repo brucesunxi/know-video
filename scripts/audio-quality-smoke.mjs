@@ -14,7 +14,7 @@ const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports, require: () => ({}) });
 const { assertUsableSpeechAudio, inspectAudio } = module.exports;
 
-function wav(durationSeconds, amplitude) {
+function wav(durationSeconds, amplitude, audibleSeconds = durationSeconds) {
   const sampleRate = 24_000;
   const sampleCount = Math.round(sampleRate * durationSeconds);
   const body = Buffer.alloc(44 + sampleCount * 2);
@@ -32,7 +32,7 @@ function wav(durationSeconds, amplitude) {
   body.write("data", 36);
   body.writeUInt32LE(sampleCount * 2, 40);
   for (let index = 0; index < sampleCount; index += 1) {
-    body.writeInt16LE(Math.round(Math.sin(index / 12) * amplitude), 44 + index * 2);
+    body.writeInt16LE(index < sampleRate * audibleSeconds ? Math.round(Math.sin(index / 12) * amplitude) : 0, 44 + index * 2);
   }
   return body;
 }
@@ -55,8 +55,10 @@ const inspected = inspectAudio(healthy);
 assert.equal(inspected.format, "wav");
 assert.ok(Math.abs(inspected.durationSeconds - 2) < 0.001);
 assert.ok(inspected.rms > 0.05);
+assert.ok(inspected.trailingSilenceSeconds < 0.05);
 assert.doesNotThrow(() => assertUsableSpeechAudio(healthy, { targetDurationSeconds: 2.1 }));
 assert.throws(() => assertUsableSpeechAudio(wav(2, 0)), /静音/);
+assert.throws(() => assertUsableSpeechAudio(wav(4, 5_000, 0.8)), /后半段异常静音/);
 assert.throws(() => assertUsableSpeechAudio(wav(0.1, 5_000)), /过短/);
 assert.throws(() => assertUsableSpeechAudio(healthy, { targetDurationSeconds: 1 }), /过长/);
 assert.throws(() => assertUsableSpeechAudio(Buffer.from("not audio")), /无法解码/);
