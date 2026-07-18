@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { getSql, hasDatabaseUrl } from "@/lib/db";
-import type { GenerationOptions } from "@/lib/types";
+import type { GenerationOptions, GenerationReferenceAsset } from "@/lib/types";
 
 export type GenerationRequestStatus = "pending" | "ready" | "failed";
 
@@ -65,9 +65,17 @@ function toRecord(row: GenerationRequestRow): GenerationRequestRecord {
   };
 }
 
-export function generationRequestFingerprint(prompt: string, options?: GenerationOptions) {
+export function generationRequestFingerprint(
+  prompt: string,
+  options?: GenerationOptions,
+  references: GenerationReferenceAsset[] = []
+) {
   return createHash("sha256")
-    .update(JSON.stringify({ prompt: prompt.trim(), options: options ?? null }))
+    .update(JSON.stringify({
+      prompt: prompt.trim(),
+      options: options ?? null,
+      references: references.map(({ key, name, size, contentType }) => ({ key, name, size, contentType }))
+    }))
     .digest("hex");
 }
 

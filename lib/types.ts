@@ -35,6 +35,13 @@ export type GenerationOptions = {
   motion: "camera" | "key-scenes";
 };
 
+export type GenerationReferenceAsset = {
+  key: string;
+  name: string;
+  size: number;
+  contentType: string;
+};
+
 export type SceneAsset = {
   id: string;
   type: AssetType;

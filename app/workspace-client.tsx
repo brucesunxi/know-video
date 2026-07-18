@@ -28,6 +28,7 @@ import {
   MoreHorizontal,
   Music2,
   PanelRightOpen,
+  Paperclip,
   Pencil,
   Plus,
   RefreshCcw,
@@ -42,7 +43,7 @@ import {
   X
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
-import { replacementAssetTypes } from "@/lib/asset-policy";
+import { maxUploadBytes, replacementAssetTypes, uploadedAssetType } from "@/lib/asset-policy";
 import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { editPlanVisualSceneNumbers, planPreviewAsset, removeEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { analyzeEditIntent, globalEditTargetSceneNumbers } from "@/lib/edit-intent";
@@ -58,7 +59,7 @@ import {
   narrationVoiceProfiles
 } from "@/lib/voice-profiles";
 import { VIDEO_FPS } from "@/video/config";
-import type { ChatMessage, EditChange, EditPlan, GenerationOptions, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, GenerationOptions, GenerationReferenceAsset, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
@@ -1304,10 +1305,13 @@ function ProjectLibrary({
 function BriefScreen({
   prompt,
   options,
+  attachments,
   isBusy,
   currentProject,
   onPromptChange,
   onOptionsChange,
+  onOpenAttachmentPicker,
+  onRemoveAttachment,
   onUseExample,
   onSubmit,
   onOpenStudio,
@@ -1316,10 +1320,13 @@ function BriefScreen({
 }: {
   prompt: string;
   options: GenerationOptions;
+  attachments: File[];
   isBusy: boolean;
   currentProject: Project;
   onPromptChange: (value: string) => void;
   onOptionsChange: (value: GenerationOptions) => void;
+  onOpenAttachmentPicker: () => void;
+  onRemoveAttachment: (index: number) => void;
   onUseExample: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onOpenStudio: () => void;
@@ -1382,6 +1389,28 @@ function BriefScreen({
                 <option value="camera">智能运镜</option>
               </select>
             </label>
+          </div>
+          <div className="kv-brief-attachments">
+            <div>
+              <button disabled={isBusy || attachments.length >= 6} onClick={onOpenAttachmentPicker} type="button">
+                <Paperclip size={16} />
+                参考素材
+              </button>
+              <span>{attachments.length > 0 ? `${attachments.length} / 6` : "图片 · 视频 · 音频"}</span>
+            </div>
+            {attachments.length > 0 ? (
+              <ul aria-label="已选择的参考素材">
+                {attachments.map((file, index) => (
+                  <li key={`${file.name}-${file.size}-${file.lastModified}`}>
+                    <span title={file.name}>{file.name}</span>
+                    <small>{file.type.startsWith("image/") ? "图片" : file.type.startsWith("video/") ? "视频" : "音频"}</small>
+                    <button aria-label={`移除 ${file.name}`} disabled={isBusy} onClick={() => onRemoveAttachment(index)} title="移除素材" type="button">
+                      <X size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
           <div className="kv-prompt-tools">
             <span>{options.motion === "key-scenes"
@@ -3634,6 +3663,7 @@ export function WorkspaceClient({
   const [projectSource, setProjectSource] = useState<Source>(source);
   const [stage, setStage] = useState<Stage>(initialPendingPlan ? "studio" : "brief");
   const [briefPrompt, setBriefPrompt] = useState("");
+  const [briefAttachments, setBriefAttachments] = useState<File[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [selectedScene, setSelectedScene] = useState(1);
@@ -3674,6 +3704,7 @@ export function WorkspaceClient({
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectActionBusy, setProjectActionBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const briefFileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
   const recoveringRenderRef = useRef<string>();
@@ -3832,7 +3863,7 @@ export function WorkspaceClient({
     ]);
 
     const missingImageSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "image");
-    if (!resumeMissingOnly || missingImageSceneNumbers.length > 0) {
+    if (missingImageSceneNumbers.length > 0) {
       setProgress(64);
       setGenerationStatus(resumeMissingOnly ? "正在补齐尚未完成的场景画面" : "正在生成统一风格的场景画面");
       try {
@@ -3842,7 +3873,7 @@ export function WorkspaceClient({
           body: JSON.stringify({
             projectId: generatedProject.id,
             versionId: generatedProject.currentVersion.id,
-            sceneNumbers: resumeMissingOnly ? missingImageSceneNumbers : undefined,
+            sceneNumbers: missingImageSceneNumbers,
             quality: "standard"
           }),
           signal: AbortSignal.timeout(125_000)
@@ -3865,7 +3896,7 @@ export function WorkspaceClient({
     }
 
     const missingAudioSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "audio");
-    if (!resumeMissingOnly || missingAudioSceneNumbers.length > 0) {
+    if (missingAudioSceneNumbers.length > 0) {
       setProgress(84);
       setGenerationStatus(resumeMissingOnly ? "正在补齐尚未完成的自然配音" : "正在生成自然配音");
       try {
@@ -3875,7 +3906,7 @@ export function WorkspaceClient({
           body: JSON.stringify({
             projectId: generatedProject.id,
             versionId: generatedProject.currentVersion.id,
-            sceneNumbers: resumeMissingOnly ? missingAudioSceneNumbers : undefined
+            sceneNumbers: missingAudioSceneNumbers
           }),
           signal: AbortSignal.timeout(125_000)
         });
@@ -3901,9 +3932,7 @@ export function WorkspaceClient({
         generatedProject.currentVersion.scenes,
         generatedProject.currentVersion.durationSeconds
       );
-      const dynamicScenes = resumeMissingOnly
-        ? missingMotionSceneNumbers(generatedProject.currentVersion.scenes, selectedDynamicScenes)
-        : selectedDynamicScenes;
+      const dynamicScenes = missingMotionSceneNumbers(generatedProject.currentVersion.scenes, selectedDynamicScenes);
       if (dynamicScenes.length === 0 && generatedProject.currentVersion.scenes.every((scene) => !sceneVisualAsset(scene))) {
         warnings.push("没有可用于生成动态镜头的场景画面，请先在工作室补齐画面。");
       } else {
@@ -3944,7 +3973,55 @@ export function WorkspaceClient({
     setProgress(100);
     setGenerationStartedAt(undefined);
     clearPendingGenerationSession();
+    setBriefAttachments([]);
     window.setTimeout(() => setStage("studio"), 350);
+  }
+
+  function selectBriefAttachments(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (files.length === 0) return;
+    const valid: File[] = [];
+    for (const file of files) {
+      if (!uploadedAssetType(file.type)) {
+        setErrorMessage(`“${file.name}”不是支持的图片、视频或音频格式。`);
+        continue;
+      }
+      if (file.size > maxUploadBytes(file.type)) {
+        setErrorMessage(`“${file.name}”超过该格式允许的大小。`);
+        continue;
+      }
+      valid.push(file);
+    }
+    setBriefAttachments((current) => {
+      const combined = [...current];
+      for (const file of valid) {
+        if (!combined.some((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified)) {
+          combined.push(file);
+        }
+      }
+      if (combined.length > 6) setErrorMessage("一次最多添加 6 个参考素材。");
+      return combined.slice(0, 6);
+    });
+  }
+
+  async function uploadGenerationReference(file: File, requestId: string): Promise<GenerationReferenceAsset> {
+    const response = await fetch("/api/generation-assets/upload-url", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ requestId, name: file.name, size: file.size, contentType: file.type })
+    });
+    const session = await response.json() as { key?: string; uploadUrl?: string; error?: string };
+    if (!response.ok || !session.key || !session.uploadUrl) {
+      throw new Error(session.error || `无法上传“${file.name}”。`);
+    }
+    const upload = await fetch(session.uploadUrl, {
+      method: "PUT",
+      headers: { "content-type": file.type },
+      body: file
+    });
+    if (!upload.ok) throw new Error(`云端存储拒绝了“${file.name}”（${upload.status}）。`);
+    return { key: session.key, name: file.name, size: file.size, contentType: file.type };
   }
 
   async function createVideo(event: FormEvent<HTMLFormElement>) {
@@ -3952,6 +4029,9 @@ export function WorkspaceClient({
     const prompt = generationPrompt;
     if (!prompt) return;
     const startedAt = Date.now();
+    const requestId = crypto.randomUUID();
+    const uploadedReferences: GenerationReferenceAsset[] = [];
+    let projectRequestStarted = false;
 
     setIsBusy(true);
     setErrorMessage(undefined);
@@ -3961,9 +4041,15 @@ export function WorkspaceClient({
     setStage("generating");
 
     try {
+      if (briefAttachments.length > 0) {
+        setProgress(12);
+        for (const [index, file] of briefAttachments.entries()) {
+          setGenerationStatus(`正在上传参考素材 ${index + 1} / ${briefAttachments.length}`);
+          uploadedReferences.push(await uploadGenerationReference(file, requestId));
+        }
+      }
       setProgress(18);
       setGenerationStatus("正在规划脚本与分镜");
-      const requestId = crypto.randomUUID();
       const pendingSession: PendingGenerationSession = {
         requestId,
         prompt,
@@ -3973,10 +4059,11 @@ export function WorkspaceClient({
       savePendingGenerationSession(pendingSession);
       let data: Required<Pick<StoryboardGenerationResponse, "project" | "messages" | "engine">> & StoryboardGenerationResponse;
       try {
+        projectRequestStarted = true;
         const response = await fetch("/api/projects", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ prompt, options: generationOptions, requestId }),
+          body: JSON.stringify({ prompt, options: generationOptions, requestId, referenceAssets: uploadedReferences }),
           signal: AbortSignal.timeout(90_000)
         });
         const result = await response.json().catch(() => ({})) as StoryboardGenerationResponse;
@@ -4004,6 +4091,13 @@ export function WorkspaceClient({
       await continueGeneratedProject(data, generationOptions, data.recovered === true);
     } catch (error) {
       console.error(error);
+      if (uploadedReferences.length > 0 && !projectRequestStarted) {
+        void fetch("/api/generation-assets/cleanup", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ requestId, keys: uploadedReferences.map((reference) => reference.key) })
+        }).catch(() => undefined);
+      }
       setStage("brief");
       setGenerationStartedAt(undefined);
       setErrorMessage(requestErrorMessage(error, "生成失败，请稍后重试。"));
@@ -5281,6 +5375,7 @@ export function WorkspaceClient({
       stage={stage}
     >
       <input accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav" hidden onChange={uploadAsset} ref={fileInputRef} type="file" />
+      <input accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav" hidden multiple onChange={selectBriefAttachments} ref={briefFileInputRef} type="file" />
       <input accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => void uploadProductionAsset("logo", event)} ref={logoInputRef} type="file" />
       <input accept="audio/mpeg,audio/wav" hidden onChange={(event) => void uploadProductionAsset("music", event)} ref={musicInputRef} type="file" />
       {stage === "studio" && errorMessage ? (
@@ -5292,11 +5387,14 @@ export function WorkspaceClient({
       ) : null}
       {stage === "brief" ? (
         <BriefScreen
+          attachments={briefAttachments}
           currentProject={project}
           isBusy={isBusy}
           onOpenStudio={() => setStage("studio")}
+          onOpenAttachmentPicker={() => briefFileInputRef.current?.click()}
           onOptionsChange={setGenerationOptions}
           onPromptChange={setBriefPrompt}
+          onRemoveAttachment={(index) => setBriefAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index))}
           onSubmit={createVideo}
           onUseExample={setBriefPrompt}
           prompt={briefPrompt}

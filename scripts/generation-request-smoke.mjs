@@ -33,11 +33,18 @@ const first = generationRequestFingerprint("  生成产品介绍视频  ", optio
 const second = generationRequestFingerprint("生成产品介绍视频", options);
 const changedPrompt = generationRequestFingerprint("生成教育产品介绍视频", options);
 const changedStyle = generationRequestFingerprint("生成产品介绍视频", { ...options, style: "极简高级" });
+const withReference = generationRequestFingerprint("生成产品介绍视频", options, [{
+  key: "uploads/generation/34df4d78/reference.png",
+  name: "reference.png",
+  size: 1234,
+  contentType: "image/png"
+}]);
 
 assert.match(first, /^[a-f0-9]{64}$/);
 assert.equal(first, second);
 assert.notEqual(first, changedPrompt);
 assert.notEqual(first, changedStyle);
+assert.notEqual(first, withReference);
 
 assert.match(workspace, /function plannedSceneCount/);
 assert.match(workspace, /function generationReviewItems/);

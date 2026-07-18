@@ -444,7 +444,8 @@ function normalizeStoryboard(
 async function createTreatment(
   prompt: string,
   textModel: NonNullable<ReturnType<typeof getTextModel>>,
-  options?: GenerationOptions
+  options?: GenerationOptions,
+  referenceContext = ""
 ) {
   const targetDuration = requestedDuration(prompt, options);
   const sceneCount = requestedSceneCount(prompt, targetDuration, options);
@@ -473,7 +474,7 @@ async function createTreatment(
       },
       {
         role: "user",
-        content: `Creative request:\n${prompt}\n\nTarget duration: ${targetDuration} seconds. Required beats: exactly ${sceneCount}.\n${languageDirection}\n${styleDirection}\n\nReturn JSON in this exact shape:\n{ "workingTitle": string, "language": string, "audience": string, "corePromise": string, "creativeConcept": string, "narrativeArc": string, "visualBible": { "world": string, "artDirection": string, "palette": string[3-6], "lighting": string, "cameraLanguage": string, "recurringMotif": string, "avoid": string[2-10] }, "beats": [{ "purpose": string, "emotionalBeat": string, "visualAnchor": string, "transition": string }] }`
+        content: `Creative request:\n${prompt}${referenceContext ? `\n\n${referenceContext}` : ""}\n\nTarget duration: ${targetDuration} seconds. Required beats: exactly ${sceneCount}.\n${languageDirection}\n${styleDirection}\n\nReturn JSON in this exact shape:\n{ "workingTitle": string, "language": string, "audience": string, "corePromise": string, "creativeConcept": string, "narrativeArc": string, "visualBible": { "world": string, "artDirection": string, "palette": string[3-6], "lighting": string, "cameraLanguage": string, "recurringMotif": string, "avoid": string[2-10] }, "beats": [{ "purpose": string, "emotionalBeat": string, "visualAnchor": string, "transition": string }] }`
       }
     ],
     temperature: 0.6
@@ -494,6 +495,7 @@ async function repairStoryboard(params: {
   targetDuration: number;
   textModel: NonNullable<ReturnType<typeof getTextModel>>;
   options?: GenerationOptions;
+  referenceContext?: string;
 }) {
   const completion = await params.textModel.client.chat.completions.create({
     model: params.textModel.model,
@@ -514,7 +516,7 @@ async function repairStoryboard(params: {
       },
       {
         role: "user",
-        content: `Original request:\n${params.prompt}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. ${params.options ? `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters. Across four or more scenes, explicitly use at least three different shot scales or camera angles. Give every scene a different narration opening, composition, and visual event. The last scene must resolve the film with a concrete completion, delivery, launch, export, share, or next-action moment.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
+        content: `Original request:\n${params.prompt}${params.referenceContext ? `\n\n${params.referenceContext}` : ""}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. ${params.options ? `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters. Across four or more scenes, explicitly use at least three different shot scales or camera angles. Give every scene a different narration opening, composition, and visual event. The last scene must resolve the film with a concrete completion, delivery, launch, export, share, or next-action moment.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
       }
     ],
     temperature: 0.35
@@ -530,7 +532,8 @@ async function repairStoryboard(params: {
 export async function createStoryboardProject(
   prompt: string,
   baseProject?: Project,
-  options?: GenerationOptions
+  options?: GenerationOptions,
+  referenceContext = ""
 ): Promise<{
   project: Project;
   engine: AiEngine;
@@ -542,7 +545,7 @@ export async function createStoryboardProject(
 
   try {
     const targetDuration = requestedDuration(prompt, options);
-    const treatment = await createTreatment(prompt, textModel, options);
+    const treatment = await createTreatment(prompt, textModel, options, referenceContext);
     const completion = await textModel.client.chat.completions.create({
       model: textModel.model,
       response_format: { type: "json_object" },
@@ -571,7 +574,7 @@ export async function createStoryboardProject(
         },
         {
           role: "user",
-          content: `Original request:\n${prompt}\n\nApproved director treatment:\n${JSON.stringify(treatment, null, 2)}\n\nReturn JSON in this exact shape:\n{ "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }\n\nFor each visualPrompt include: the central subject and action, location/environment, foreground-midground-background composition, lens or framing, lighting, material/color details, and the treatment beat's visual anchor. Keep visual continuity without making shots visually repetitive. The final scene must be a resolved delivery, launch, export, share, or next-action moment that can function as a strong ending.`
+          content: `Original request:\n${prompt}${referenceContext ? `\n\n${referenceContext}` : ""}\n\nApproved director treatment:\n${JSON.stringify(treatment, null, 2)}\n\nReturn JSON in this exact shape:\n{ "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }\n\nFor each visualPrompt include: the central subject and action, location/environment, foreground-midground-background composition, lens or framing, lighting, material/color details, and the treatment beat's visual anchor. Keep visual continuity without making shots visually repetitive. The final scene must be a resolved delivery, launch, export, share, or next-action moment that can function as a strong ending.`
         }
       ],
       temperature: 0.5
@@ -593,7 +596,8 @@ export async function createStoryboardProject(
         issues: qualityIssues,
         targetDuration,
         textModel,
-        options
+        options,
+        referenceContext
       });
       scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration);
       qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title);

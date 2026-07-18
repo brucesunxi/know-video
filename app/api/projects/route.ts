@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createStoryboardProject } from "@/lib/ai-video";
+import { matchesDeclaredAssetType, maxUploadBytes, uploadedAssetType } from "@/lib/asset-policy";
+import { analyzeCloudflareImage, hasCloudflareAI } from "@/lib/cloudflare-ai";
+import {
+  attachGenerationReferenceAssets,
+  createGenerationReferenceAsset,
+  generationReferenceContext
+} from "@/lib/generation-reference-assets";
 import {
   claimGenerationRequest,
   completeGenerationRequest,
@@ -9,6 +16,15 @@ import {
 } from "@/lib/generation-requests";
 import { persistGeneratedProject } from "@/lib/project-mutations";
 import { getProjectSnapshot, listProjects } from "@/lib/project-store";
+import { getFromR2, headR2Object, readR2Prefix } from "@/lib/r2";
+import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
+
+const referenceAssetSchema = z.object({
+  key: z.string().min(1).max(800),
+  name: z.string().min(1).max(240),
+  size: z.number().int().positive().max(500_000_000),
+  contentType: z.string().min(1).max(120)
+});
 
 const requestSchema = z.object({
   prompt: z.string().trim().min(4).max(4000),
@@ -19,7 +35,12 @@ const requestSchema = z.object({
     language: z.enum(["中文", "英文"]),
     style: z.enum(["电影质感", "极简高级", "明快有活力", "温暖自然"]),
     motion: z.enum(["camera", "key-scenes"])
-  }).optional()
+  }).optional(),
+  referenceAssets: z.array(referenceAssetSchema).max(6).default([])
+}).superRefine((value, context) => {
+  if (value.referenceAssets.length > 0 && !value.requestId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "上传参考素材时必须提供生成任务标识。" });
+  }
 });
 
 export const maxDuration = 300;
@@ -34,13 +55,19 @@ function publicEngine(engine: string) {
 
 export async function POST(request: Request) {
   let requestId: string | undefined;
+  let uploadedReferenceKeys: string[] = [];
   try {
     const body = requestSchema.parse(await request.json());
     requestId = body.requestId;
+    uploadedReferenceKeys = requestId
+      ? body.referenceAssets
+        .map((reference) => reference.key)
+        .filter((key) => key.startsWith(`uploads/generation/${requestId}/`))
+      : [];
     if (requestId) {
       const claim = await claimGenerationRequest({
         id: requestId,
-        fingerprint: generationRequestFingerprint(body.prompt, body.options)
+        fingerprint: generationRequestFingerprint(body.prompt, body.options, body.referenceAssets)
       });
       if (claim.conflict) {
         return NextResponse.json({ error: "生成任务标识与当前需求不匹配，请重新提交。" }, { status: 409 });
@@ -62,7 +89,46 @@ export async function POST(request: Request) {
         });
       }
     }
-    const { project, engine } = await createStoryboardProject(body.prompt, undefined, body.options);
+    const referenceAssets = await Promise.all(body.referenceAssets.map(async (reference) => {
+      if (!requestId || !reference.key.startsWith(`uploads/generation/${requestId}/`)) {
+        throw new Error("参考素材上传路径无效。");
+      }
+      const type = uploadedAssetType(reference.contentType);
+      if (!type || reference.size > maxUploadBytes(reference.contentType)) {
+        throw new Error("参考素材格式或大小无效。");
+      }
+      const stored = await headR2Object(reference.key);
+      if (stored.contentLength !== reference.size || stored.contentType !== reference.contentType) {
+        throw new Error("参考素材的大小或格式校验失败。");
+      }
+      const prefix = await readR2Prefix(reference.key);
+      if (!matchesDeclaredAssetType(prefix, reference.contentType)) {
+        throw new Error("参考素材内容与声明格式不一致。");
+      }
+      return createGenerationReferenceAsset(reference);
+    }));
+    const visualDescriptions = Object.fromEntries((await Promise.all(
+      body.referenceAssets
+        .filter((reference) => reference.contentType.startsWith("image/"))
+        .slice(0, 3)
+        .map(async (reference) => {
+          if (!hasCloudflareAI()) return undefined;
+          try {
+            const stored = await getFromR2(reference.key);
+            if (!stored.body) return undefined;
+            const bytes = Buffer.from(await stored.body.transformToByteArray());
+            const analyzed = await analyzeCloudflareImage(bytes);
+            return [reference.key, analyzed.description] as const;
+          } catch (error) {
+            console.warn(`[projects] Unable to analyze reference image ${reference.key}:`, error);
+            return undefined;
+          }
+        })
+    )).filter(Boolean) as Array<readonly [string, string]>);
+    const referenceContext = generationReferenceContext(body.referenceAssets, visualDescriptions);
+    const generated = await createStoryboardProject(body.prompt, undefined, body.options, referenceContext);
+    const project = attachGenerationReferenceAssets(generated.project, referenceAssets);
+    const { engine } = generated;
     const persisted = await persistGeneratedProject({
       prompt: body.prompt,
       project,
@@ -78,6 +144,11 @@ export async function POST(request: Request) {
         { error: "请用 4 到 4000 个字符描述要制作的视频，并检查时长、场景数、语言、风格和动态方式。" },
         { status: 400 }
       );
+    }
+    if (uploadedReferenceKeys.length > 0) {
+      await deleteUnreferencedStorageObjects(uploadedReferenceKeys).catch((cleanupError) => {
+        console.error("[projects] Unable to clean unused generation references:", cleanupError);
+      });
     }
     if (requestId) await failGenerationRequest(requestId).catch(() => undefined);
     console.error("[projects] Unable to create video project:", error);
