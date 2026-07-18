@@ -1,8 +1,11 @@
+import { productionAsset } from "@/lib/production-settings";
 import type { Project, SceneAsset } from "@/lib/types";
 
 export type RenderInputAsset = {
-  sceneNumber: number;
+  sceneNumber?: number;
   role: "visual" | "audio";
+  scope: "scene" | "production";
+  label: string;
   asset: SceneAsset;
 };
 
@@ -12,16 +15,27 @@ export function renderInputAssets(project: Project) {
     const image = scene.assets.find((asset) => asset.type === "image" && asset.url);
     const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
     return [
-      ...(clip || image ? [{ sceneNumber: scene.sceneNumber, role: "visual" as const, asset: (clip || image)! }] : []),
-      ...(audio ? [{ sceneNumber: scene.sceneNumber, role: "audio" as const, asset: audio }] : [])
+      ...(clip || image ? [{ sceneNumber: scene.sceneNumber, role: "visual" as const, scope: "scene" as const, label: `场景 ${scene.sceneNumber} 画面`, asset: (clip || image)! }] : []),
+      ...(audio ? [{ sceneNumber: scene.sceneNumber, role: "audio" as const, scope: "scene" as const, label: `场景 ${scene.sceneNumber} 配音`, asset: audio }] : [])
     ];
   });
 }
 
+export function renderProductionInputAssets(project: Project): RenderInputAsset[] {
+  const logo = productionAsset(project, "logo");
+  const music = productionAsset(project, "music");
+  return [
+    ...(logo ? [{ role: "visual" as const, scope: "production" as const, label: "品牌 Logo", asset: logo }] : []),
+    ...(music ? [{ role: "audio" as const, scope: "production" as const, label: "背景音乐", asset: music }] : [])
+  ] satisfies RenderInputAsset[];
+}
+
 export function renderInputReadiness(project: Project) {
-  const inputs = renderInputAssets(project);
-  const visualScenes = new Set(inputs.filter((input) => input.role === "visual").map((input) => input.sceneNumber));
-  const audioScenes = new Set(inputs.filter((input) => input.role === "audio").map((input) => input.sceneNumber));
+  const sceneInputs = renderInputAssets(project);
+  const productionInputs = renderProductionInputAssets(project);
+  const inputs = [...sceneInputs, ...productionInputs];
+  const visualScenes = new Set(inputs.filter((input) => input.scope === "scene" && input.role === "visual").map((input) => input.sceneNumber));
+  const audioScenes = new Set(inputs.filter((input) => input.scope === "scene" && input.role === "audio").map((input) => input.sceneNumber));
   const missingVisuals = project.currentVersion.scenes
     .filter((scene) => !visualScenes.has(scene.sceneNumber))
     .map((scene) => scene.sceneNumber);
@@ -55,6 +69,6 @@ export function renderInputMetadataIssue(
   const contentType = metadata.contentType?.toLowerCase() ?? "";
   if (input.role === "audio" && !contentType.startsWith("audio/")) return "不是有效音频";
   if (input.asset.type === "clip" && !contentType.startsWith("video/")) return "不是有效视频";
-  if (input.asset.type === "image" && !contentType.startsWith("image/")) return "不是有效图片";
+  if (input.role === "visual" && input.asset.type !== "clip" && !contentType.startsWith("image/")) return "不是有效图片";
   return undefined;
 }

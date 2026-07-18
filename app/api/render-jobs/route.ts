@@ -132,21 +132,33 @@ export async function POST(request: Request) {
   }
   const renderJob = acquired.renderJob;
   const invalidMedia: Array<{ sceneNumber: number; type: "visual" | "audio"; reason: string }> = [];
+  const invalidProductionMedia: Array<{ type: "logo" | "music"; label: string; reason: string }> = [];
   let transientStorageError = false;
+  const pushInvalidInput = (input: (typeof readiness.inputs)[number], reason: string) => {
+    if (input.scope === "production") {
+      invalidProductionMedia.push({
+        type: input.asset.type === "music" ? "music" : "logo",
+        label: input.label,
+        reason
+      });
+      return;
+    }
+    invalidMedia.push({ sceneNumber: input.sceneNumber!, type: input.role, reason });
+  };
   await Promise.all(readiness.inputs.map(async (input) => {
     if (!input.asset.r2Key) {
-      invalidMedia.push({ sceneNumber: input.sceneNumber, type: input.role, reason: "没有云端文件" });
+      pushInvalidInput(input, "没有云端文件");
       return;
     }
     try {
       const issue = renderInputMetadataIssue(input, await headR2Object(input.asset.r2Key));
-      if (issue) invalidMedia.push({ sceneNumber: input.sceneNumber, type: input.role, reason: issue });
+      if (issue) pushInvalidInput(input, issue);
     } catch (error) {
       if (isMissingRenderObject(error)) {
-        invalidMedia.push({ sceneNumber: input.sceneNumber, type: input.role, reason: "云端文件不存在" });
+        pushInvalidInput(input, "云端文件不存在");
       } else {
         transientStorageError = true;
-        console.error(`[render-jobs] Unable to verify scene ${input.sceneNumber} ${input.role}:`, error);
+        console.error(`[render-jobs] Unable to verify ${input.label}:`, error);
       }
     }
   }));
@@ -157,12 +169,18 @@ export async function POST(request: Request) {
       { status: 503 }
     );
   }
-  if (invalidMedia.length > 0) {
-    await updateRenderJob({ jobId: renderJob.id, status: "failed", progress: 0, error: "场景云端素材已经失效。" });
+  if (invalidMedia.length > 0 || invalidProductionMedia.length > 0) {
+    await updateRenderJob({ jobId: renderJob.id, status: "failed", progress: 0, error: "云端素材已经失效。" });
     const scenes = Array.from(new Set(invalidMedia.map((item) => item.sceneNumber))).sort((left, right) => left - right);
+    const productionLabels = invalidProductionMedia.map((item) => item.label);
+    const parts = [
+      scenes.length > 0 ? `场景 ${scenes.join("、")} 的云端素材已失效` : "",
+      productionLabels.length > 0 ? `${productionLabels.join("、")} 已失效` : ""
+    ].filter(Boolean).join("；");
     return NextResponse.json({
-      error: `场景 ${scenes.join("、")} 的云端素材已失效，请重新生成这些场景的画面或配音后再导出。`,
-      invalidMedia
+      error: `${parts}，请重新生成或重新上传后再导出。`,
+      invalidMedia,
+      invalidProductionMedia
     }, { status: 409 });
   }
   const running = await updateRenderJob({ jobId: renderJob.id, status: "running", progress: 5 });
