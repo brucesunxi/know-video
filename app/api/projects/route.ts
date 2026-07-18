@@ -25,7 +25,8 @@ const referenceAssetSchema = z.object({
   size: z.number().int().positive().max(500_000_000),
   contentType: z.string().min(1).max(120),
   derivedFrom: z.string().min(1).max(240).optional(),
-  referenceRole: z.literal("video-poster").optional()
+  referenceRole: z.literal("video-poster").optional(),
+  actualDurationSeconds: z.number().positive().max(21_600).optional()
 });
 
 const requestSchema = z.object({
@@ -47,6 +48,13 @@ const requestSchema = z.object({
     .filter((reference) => reference.contentType.startsWith("video/"))
     .map((reference) => reference.name));
   value.referenceAssets.forEach((reference, index) => {
+    if (reference.actualDurationSeconds && !reference.contentType.startsWith("video/")) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "只有视频附件可以声明视频时长。",
+        path: ["referenceAssets", index, "actualDurationSeconds"]
+      });
+    }
     if (reference.referenceRole === "video-poster") {
       if (!reference.contentType.startsWith("image/") || !reference.derivedFrom || !uploadedVideoNames.has(reference.derivedFrom)) {
         context.addIssue({

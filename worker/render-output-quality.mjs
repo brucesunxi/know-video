@@ -1,4 +1,7 @@
+import { File as NodeFile } from "node:buffer";
 import { parseMedia } from "@remotion/media-parser";
+
+if (typeof globalThis.File === "undefined") globalThis.File = NodeFile;
 
 const MIN_RENDER_BYTES = 50_000;
 

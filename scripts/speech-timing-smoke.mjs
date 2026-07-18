@@ -21,9 +21,14 @@ const {
 
 assert.ok(estimateNarrationSeconds("这是自然中文旁白。") > 1);
 assert.ok(speechRateForDuration("这是一段明显比较长的中文旁白，需要在很短的时间内读完。", 3) > 0);
-assert.equal(speechRateForDuration("短句。", 10), -10);
+assert.equal(speechRateForDuration("短句。", 10), -20);
 assert.equal(correctedSpeechRate(20, 6, 5), 44);
 assert.equal(correctedSpeechRate(40, 10, 2), 45);
+assert.equal(correctedSpeechRate(0, 4, 6), -20);
+
+const azure = fs.readFileSync(new URL("../lib/azure-speech.ts", import.meta.url), "utf8");
+assert.match(azure, /timingRatio < 0\.82/);
+assert.match(azure, /nextRate !== rate/);
 
 const rawAudio = Buffer.alloc(48_000 / 8 * 5);
 assert.ok(Math.abs(estimateCbrMp3Duration(rawAudio, 48) - 5) < 0.001);

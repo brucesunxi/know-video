@@ -4006,7 +4006,7 @@ export function WorkspaceClient({
     });
   }
 
-  async function extractVideoPoster(file: File) {
+  async function extractVideoPoster(file: File): Promise<{ poster: File; durationSeconds?: number }> {
     const objectUrl = URL.createObjectURL(file);
     const video = document.createElement("video");
     video.muted = true;
@@ -4054,10 +4054,13 @@ export function WorkspaceClient({
         "image/jpeg",
         0.86
       ));
-      return new File([blob], `${file.name}.poster.jpg`, {
-        type: "image/jpeg",
-        lastModified: file.lastModified
-      });
+      return {
+        poster: new File([blob], `${file.name}.poster.jpg`, {
+          type: "image/jpeg",
+          lastModified: file.lastModified
+        }),
+        durationSeconds: duration > 0 ? duration : undefined
+      };
     } finally {
       video.removeAttribute("src");
       video.load();
@@ -4068,7 +4071,7 @@ export function WorkspaceClient({
   async function uploadGenerationReference(
     file: File,
     requestId: string,
-    metadata: Pick<GenerationReferenceAsset, "derivedFrom" | "referenceRole"> = {}
+    metadata: Pick<GenerationReferenceAsset, "derivedFrom" | "referenceRole" | "actualDurationSeconds"> = {}
   ): Promise<GenerationReferenceAsset> {
     const response = await fetch("/api/generation-assets/upload-url", {
       method: "POST",
@@ -4109,17 +4112,26 @@ export function WorkspaceClient({
         setProgress(12);
         for (const [index, file] of briefAttachments.entries()) {
           setGenerationStatus(`正在上传参考素材 ${index + 1} / ${briefAttachments.length}`);
-          uploadedReferences.push(await uploadGenerationReference(file, requestId));
+          let extractedVideo: Awaited<ReturnType<typeof extractVideoPoster>> | undefined;
           if (file.type.startsWith("video/")) {
             try {
               setGenerationStatus(`正在提取“${file.name}”的视觉关键帧`);
-              const poster = await extractVideoPoster(file);
-              uploadedReferences.push(await uploadGenerationReference(poster, requestId, {
+              extractedVideo = await extractVideoPoster(file);
+            } catch (error) {
+              console.warn(`[generation] Unable to extract poster for ${file.name}:`, error);
+            }
+          }
+          uploadedReferences.push(await uploadGenerationReference(file, requestId, {
+            actualDurationSeconds: extractedVideo?.durationSeconds
+          }));
+          if (extractedVideo) {
+            try {
+              uploadedReferences.push(await uploadGenerationReference(extractedVideo.poster, requestId, {
                 derivedFrom: file.name,
                 referenceRole: "video-poster"
               }));
             } catch (error) {
-              console.warn(`[generation] Unable to extract poster for ${file.name}:`, error);
+              console.warn(`[generation] Unable to upload poster for ${file.name}:`, error);
             }
           }
         }
@@ -4810,6 +4822,12 @@ export function WorkspaceClient({
             : "500MB";
         throw new Error(`该类型的单个素材不能超过 ${limitLabel}。`);
       }
+      const videoMetadata = file.type.startsWith("video/")
+        ? await extractVideoPoster(file).catch((error) => {
+            console.warn(`[asset-upload] Unable to read duration for ${file.name}:`, error);
+            return undefined;
+          })
+        : undefined;
       let uploadedAsset: SceneAsset;
       if (file.size <= 4_000_000) {
         const form = new FormData();
@@ -4817,13 +4835,16 @@ export function WorkspaceClient({
         form.set("projectId", project.id);
         form.set("versionId", project.currentVersion.id);
         form.set("sceneNumber", String(selectedScene));
+        if (videoMetadata?.durationSeconds) {
+          form.set("actualDurationSeconds", String(videoMetadata.durationSeconds));
+        }
         const response = await fetch("/api/assets/upload", { method: "POST", body: form });
         const data = await response.json() as { asset?: SceneAsset; error?: string };
         if (!response.ok || !data.asset) throw new Error(data.error || "素材上传失败。");
         uploadedAsset = data.asset;
         setUploadProgress(100);
       } else {
-        uploadedAsset = await uploadDirectAsset(file);
+        uploadedAsset = await uploadDirectAsset(file, videoMetadata?.durationSeconds);
       }
       setProject((current) => ({
         ...current,
@@ -4871,14 +4892,15 @@ export function WorkspaceClient({
     }
   }
 
-  async function uploadDirectAsset(file: File): Promise<SceneAsset> {
+  async function uploadDirectAsset(file: File, actualDurationSeconds?: number): Promise<SceneAsset> {
     const descriptor = {
       projectId: project.id,
       versionId: project.currentVersion.id,
       sceneNumber: selectedScene,
       name: file.name,
       size: file.size,
-      contentType: file.type
+      contentType: file.type,
+      actualDurationSeconds
     };
     const initResponse = await fetch("/api/assets/upload-url", {
       method: "POST",

@@ -23,7 +23,10 @@ function referenceFromAsset(asset: SceneAsset): GenerationReferenceAsset | undef
       ? asset.metadata.analysisKind
       : undefined,
     derivedFrom: typeof asset.metadata?.derivedFrom === "string" ? asset.metadata.derivedFrom : undefined,
-    referenceRole: asset.metadata?.referenceRole === "video-poster" ? "video-poster" : undefined
+    referenceRole: asset.metadata?.referenceRole === "video-poster" ? "video-poster" : undefined,
+    actualDurationSeconds: Number.isFinite(Number(asset.metadata?.actualDurationSeconds))
+      ? Number(asset.metadata?.actualDurationSeconds)
+      : undefined
   };
 }
 
@@ -38,7 +41,10 @@ export function referenceDescriptor(asset: SceneAsset): GenerationReferenceAsset
       ? asset.metadata.analysisKind
       : undefined,
     derivedFrom: typeof asset.metadata?.derivedFrom === "string" ? asset.metadata.derivedFrom : undefined,
-    referenceRole: asset.metadata?.referenceRole === "video-poster" ? "video-poster" : undefined
+    referenceRole: asset.metadata?.referenceRole === "video-poster" ? "video-poster" : undefined,
+    actualDurationSeconds: Number.isFinite(Number(asset.metadata?.actualDurationSeconds))
+      ? Number(asset.metadata?.actualDurationSeconds)
+      : undefined
   };
 }
 

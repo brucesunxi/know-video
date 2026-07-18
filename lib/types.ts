@@ -44,6 +44,7 @@ export type GenerationReferenceAsset = {
   analysisKind?: "visual" | "transcript";
   derivedFrom?: string;
   referenceRole?: "video-poster";
+  actualDurationSeconds?: number;
 };
 
 export type SceneAsset = {

@@ -87,9 +87,12 @@ export async function generateAzureChineseSpeech(
   let body = await requestAzureSpeech({ key, region, voice, text, rate });
   let actualDurationSeconds = assertUsableSpeechAudio(body).durationSeconds;
   const targetSeconds = durationSeconds ? Math.max(1.3, durationSeconds - 0.18) : undefined;
-  if (targetSeconds && actualDurationSeconds > targetSeconds * 1.03 && rate < 45) {
+  const timingRatio = targetSeconds ? actualDurationSeconds / targetSeconds : 1;
+  const timingNeedsCorrection = timingRatio > 1.03 || timingRatio < 0.82;
+  const rateCanMove = timingRatio > 1 ? rate < 45 : rate > -20;
+  if (targetSeconds && timingNeedsCorrection && rateCanMove) {
     const nextRate = correctedSpeechRate(rate, actualDurationSeconds, targetSeconds);
-    if (nextRate > rate) {
+    if (nextRate !== rate) {
       rate = nextRate;
       body = await requestAzureSpeech({ key, region, voice, text, rate });
       actualDurationSeconds = assertUsableSpeechAudio(body).durationSeconds;

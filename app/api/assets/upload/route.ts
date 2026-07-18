@@ -9,7 +9,11 @@ const MAX_UPLOAD_BYTES = 4_000_000;
 const fieldsSchema = z.object({
   projectId: z.string().uuid(),
   versionId: z.string().uuid(),
-  sceneNumber: z.coerce.number().int().positive()
+  sceneNumber: z.coerce.number().int().positive(),
+  actualDurationSeconds: z.preprocess(
+    (value) => value === null || value === "" ? undefined : value,
+    z.coerce.number().positive().max(21_600).optional()
+  )
 });
 
 export const maxDuration = 180;
@@ -30,8 +34,12 @@ export async function POST(request: Request) {
     const fields = fieldsSchema.parse({
       projectId: form.get("projectId"),
       versionId: form.get("versionId"),
-      sceneNumber: form.get("sceneNumber")
+      sceneNumber: form.get("sceneNumber"),
+      actualDurationSeconds: form.get("actualDurationSeconds")
     });
+    if (fields.actualDurationSeconds && type !== "clip") {
+      return NextResponse.json({ error: "只有视频素材可以声明视频时长。" }, { status: 400 });
+    }
     const scene = await findOwnedSceneDetails(fields);
     if (!scene) return NextResponse.json({ error: "没有找到要绑定素材的场景。" }, { status: 404 });
 
@@ -52,7 +60,7 @@ export async function POST(request: Request) {
       contentType: file.type,
       analysis: narration?.transcript,
       analysisKind: narration ? "transcript" : undefined,
-      actualDurationSeconds: narration?.actualDurationSeconds,
+      actualDurationSeconds: narration?.actualDurationSeconds ?? fields.actualDurationSeconds,
       transcriptionModel: narration?.transcriptionModel
     });
     uploadedAsset.url = assetUrlForKey(asset.key, asset.publicUrl);

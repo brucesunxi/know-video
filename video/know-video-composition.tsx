@@ -12,6 +12,7 @@ import {
 } from "remotion";
 import type { Project, Scene } from "@/lib/types";
 import { musicMixEnvelope, type NarrationFrameRange } from "@/lib/audio-mix";
+import { clipDurationInFrames, resolvedClipPlaybackRate } from "@/lib/clip-timing";
 import { readableTextColor, sceneAccentColor } from "@/lib/color-contrast";
 import { activeNarrationCaption, narrationDurationInFrames } from "@/lib/narration-timing";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
@@ -191,9 +192,16 @@ function SceneFrame({
   const accentText = readableTextColor(accent);
   const clipAsset = scene.assets.find((asset) => asset.type === "clip" && asset.url);
   const clip = clipAsset?.url;
-  const declaredClipDuration = Number(clipAsset?.metadata?.duration);
-  const lastClipFrame = Number.isFinite(declaredClipDuration) && declaredClipDuration > 0
-    ? Math.max(0, Math.round((declaredClipDuration * VIDEO_FPS) / playbackRate) - 1)
+  const clipPlaybackRate = clipAsset ? resolvedClipPlaybackRate({
+    asset: clipAsset,
+    sceneDurationSeconds: scene.durationSeconds,
+    productionPlaybackRate: playbackRate
+  }) : playbackRate;
+  const declaredClipFrames = clipAsset
+    ? clipDurationInFrames(clipAsset, VIDEO_FPS, clipPlaybackRate)
+    : undefined;
+  const lastClipFrame = declaredClipFrames
+    ? Math.max(0, declaredClipFrames - 1)
     : Math.max(0, contentDurationInFrames - 1);
   const image = scene.assets.find((asset) => asset.type === "image" && asset.url)?.url;
   const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url)?.url;
@@ -219,7 +227,7 @@ function SceneFrame({
         <Freeze active={(currentFrame) => currentFrame > lastClipFrame} frame={lastClipFrame}>
           <OffthreadVideo
             muted
-            playbackRate={playbackRate}
+            playbackRate={clipPlaybackRate}
             src={clip}
             style={visualLayerStyle({ motion, nativeVideo: true })}
           />

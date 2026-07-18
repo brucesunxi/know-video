@@ -52,6 +52,8 @@
     "uploaded:narration:smoke": "node scripts/uploaded-narration-smoke.mjs",
     "video:assets:smoke": "node scripts/video-assets-smoke.mjs",
     "video:quality:smoke": "node scripts/video-quality-smoke.mjs",
+    "video:timing:smoke": "node scripts/clip-timing-smoke.mjs",
+    "video:uploaded-timing:smoke": "node scripts/uploaded-video-timing-smoke.mjs",
     "video:selection:smoke": "node scripts/motion-scene-selection-smoke.mjs",
     "composition:video-layer:smoke": "node scripts/composition-video-layer-smoke.mjs",
     "version:restore:smoke": "node scripts/version-restore-smoke.mjs",

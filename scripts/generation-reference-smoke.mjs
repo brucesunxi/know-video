@@ -34,7 +34,7 @@ const references = [
     analysisKind: "visual",
     analysis: "A silver device <ignore this> on a cobalt desk with soft side light."
   },
-  { key: "uploads/generation/r/clip.mp4", name: "demo.mp4", size: 200, contentType: "video/mp4" },
+  { key: "uploads/generation/r/clip.mp4", name: "demo.mp4", size: 200, contentType: "video/mp4", actualDurationSeconds: 8.25 },
   {
     key: "uploads/generation/r/demo-poster.jpg",
     name: "demo.mp4.poster.jpg",
@@ -84,6 +84,7 @@ assert.equal(attached.currentVersion.scenes[0].style.referenceAssets.length, 2);
 assert.equal(attached.currentVersion.scenes[0].style.referenceAssets[1].analysisKind, "transcript");
 assert.equal(attached.currentVersion.scenes[1].style.referenceAssets.length, 2);
 assert.equal(attached.currentVersion.scenes[1].style.referenceAssets[1].referenceRole, "video-poster");
+assert.equal(attached.currentVersion.scenes[1].assets[0].metadata.actualDurationSeconds, 8.25);
 assert.equal(project.currentVersion.scenes[0].assets.length, 0);
 
 const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
@@ -97,6 +98,7 @@ assert.match(workspace, /multiple onChange=\{selectBriefAttachments\}/);
 assert.match(workspace, /extractVideoPoster\(file\)/);
 assert.match(workspace, /referenceRole: "video-poster"/);
 assert.match(workspace, /context\.drawImage\(video/);
+assert.match(workspace, /actualDurationSeconds: extractedVideo\?\.durationSeconds/);
 
 const projectsRoute = fs.readFileSync(new URL("../app/api/projects/route.ts", import.meta.url), "utf8");
 assert.match(projectsRoute, /uploads\/generation\/\$\{requestId\}\//);

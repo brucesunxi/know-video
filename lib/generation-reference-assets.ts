@@ -46,7 +46,8 @@ export function createGenerationReferenceAsset(reference: GenerationReferenceAss
     analysis: reference.analysis,
     analysisKind: reference.analysisKind,
     derivedFrom: reference.derivedFrom,
-    referenceRole: reference.referenceRole
+    referenceRole: reference.referenceRole,
+    actualDurationSeconds: reference.actualDurationSeconds
   });
 }
 
@@ -81,7 +82,10 @@ export function attachGenerationReferenceAssets(project: Project, assets: SceneA
               ? asset.metadata.analysisKind
               : undefined,
             derivedFrom,
-            referenceRole: asset.metadata?.referenceRole === "video-poster" ? "video-poster" : undefined
+            referenceRole: asset.metadata?.referenceRole === "video-poster" ? "video-poster" : undefined,
+            actualDurationSeconds: Number.isFinite(Number(asset.metadata?.actualDurationSeconds))
+              ? Number(asset.metadata?.actualDurationSeconds)
+              : undefined
           }
         ]
       },

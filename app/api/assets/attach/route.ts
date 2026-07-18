@@ -17,8 +17,12 @@ const schema = z.object({
   key: z.string().min(1).max(800),
   name: z.string().min(1).max(240),
   size: z.number().int().positive().max(500_000_000),
-  contentType: z.string().min(1).max(120)
-});
+  contentType: z.string().min(1).max(120),
+  actualDurationSeconds: z.number().positive().max(21_600).optional()
+}).refine(
+  (value) => !value.actualDurationSeconds || value.contentType.startsWith("video/"),
+  { message: "只有视频素材可以声明视频时长。", path: ["actualDurationSeconds"] }
+);
 
 export const maxDuration = 180;
 
@@ -76,7 +80,7 @@ export async function POST(request: Request) {
       ...body,
       analysis: narration?.transcript,
       analysisKind: narration ? "transcript" : undefined,
-      actualDurationSeconds: narration?.actualDurationSeconds,
+      actualDurationSeconds: narration?.actualDurationSeconds ?? body.actualDurationSeconds,
       transcriptionModel: narration?.transcriptionModel
     });
     await attachUploadedAsset({ ...body, asset, voiceover: narration?.transcript });
