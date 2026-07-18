@@ -47,6 +47,8 @@ export function createUploadedAsset(input: {
   analysisKind?: "visual" | "transcript";
   actualDurationSeconds?: number;
   transcriptionModel?: string;
+  derivedFrom?: string;
+  referenceRole?: "video-poster";
 }): SceneAsset {
   const type = uploadedAssetType(input.contentType);
   if (!type) throw new Error("Unsupported asset type");
@@ -63,7 +65,9 @@ export function createUploadedAsset(input: {
       analysis: input.analysis,
       analysisKind: input.analysisKind,
       actualDurationSeconds: input.actualDurationSeconds,
-      transcriptionModel: input.transcriptionModel
+      transcriptionModel: input.transcriptionModel,
+      derivedFrom: input.derivedFrom,
+      referenceRole: input.referenceRole
     }
   };
 }

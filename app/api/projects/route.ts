@@ -23,7 +23,9 @@ const referenceAssetSchema = z.object({
   key: z.string().min(1).max(800),
   name: z.string().min(1).max(240),
   size: z.number().int().positive().max(500_000_000),
-  contentType: z.string().min(1).max(120)
+  contentType: z.string().min(1).max(120),
+  derivedFrom: z.string().min(1).max(240).optional(),
+  referenceRole: z.literal("video-poster").optional()
 });
 
 const requestSchema = z.object({
@@ -36,11 +38,31 @@ const requestSchema = z.object({
     style: z.enum(["电影质感", "极简高级", "明快有活力", "温暖自然"]),
     motion: z.enum(["camera", "key-scenes"])
   }).optional(),
-  referenceAssets: z.array(referenceAssetSchema).max(6).default([])
+  referenceAssets: z.array(referenceAssetSchema).max(12).default([])
 }).superRefine((value, context) => {
   if (value.referenceAssets.length > 0 && !value.requestId) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "上传参考素材时必须提供生成任务标识。" });
   }
+  const uploadedVideoNames = new Set(value.referenceAssets
+    .filter((reference) => reference.contentType.startsWith("video/"))
+    .map((reference) => reference.name));
+  value.referenceAssets.forEach((reference, index) => {
+    if (reference.referenceRole === "video-poster") {
+      if (!reference.contentType.startsWith("image/") || !reference.derivedFrom || !uploadedVideoNames.has(reference.derivedFrom)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "视频关键帧必须对应同一任务中上传的视频。",
+          path: ["referenceAssets", index]
+        });
+      }
+    } else if (reference.derivedFrom) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "只有视频关键帧可以声明来源视频。",
+        path: ["referenceAssets", index]
+      });
+    }
+  });
 });
 
 export const maxDuration = 300;
@@ -107,8 +129,13 @@ export async function POST(request: Request) {
       }
       return reference;
     }));
+    const visualReferences = validatedReferences.filter((reference) => reference.contentType.startsWith("image/"));
+    const prioritizedVisualReferences = [
+      ...visualReferences.filter((reference) => reference.referenceRole === "video-poster"),
+      ...visualReferences.filter((reference) => reference.referenceRole !== "video-poster")
+    ].slice(0, 3);
     const analyzableReferences = [
-      ...validatedReferences.filter((reference) => reference.contentType.startsWith("image/")).slice(0, 3),
+      ...prioritizedVisualReferences,
       ...validatedReferences
         .filter((reference) => reference.contentType.startsWith("audio/") && reference.size <= 15_000_000)
         .slice(0, 2)

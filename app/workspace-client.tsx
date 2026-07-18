@@ -4006,7 +4006,70 @@ export function WorkspaceClient({
     });
   }
 
-  async function uploadGenerationReference(file: File, requestId: string): Promise<GenerationReferenceAsset> {
+  async function extractVideoPoster(file: File) {
+    const objectUrl = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    const waitFor = (eventName: "loadeddata" | "seeked") => new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error("读取视频关键帧超时。")), 15_000);
+      const cleanup = () => {
+        window.clearTimeout(timeout);
+        video.removeEventListener(eventName, handleReady);
+        video.removeEventListener("error", handleError);
+      };
+      const handleReady = () => {
+        cleanup();
+        resolve();
+      };
+      const handleError = () => {
+        cleanup();
+        reject(new Error("无法读取视频关键帧。"));
+      };
+      video.addEventListener(eventName, handleReady, { once: true });
+      video.addEventListener("error", handleError, { once: true });
+    });
+    try {
+      const loaded = waitFor("loadeddata");
+      video.src = objectUrl;
+      await loaded;
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      const target = duration > 0.4 ? Math.min(2, Math.max(0.15, duration * 0.18)) : 0;
+      if (target > 0.05) {
+        const seeked = waitFor("seeked");
+        video.currentTime = target;
+        await seeked;
+      }
+      if (!video.videoWidth || !video.videoHeight) throw new Error("视频没有可读取的画面。");
+      const scale = Math.min(1, 1280 / video.videoWidth);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(2, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(2, Math.round(video.videoHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("浏览器无法提取视频关键帧。");
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(
+        (result) => result ? resolve(result) : reject(new Error("视频关键帧编码失败。")),
+        "image/jpeg",
+        0.86
+      ));
+      return new File([blob], `${file.name}.poster.jpg`, {
+        type: "image/jpeg",
+        lastModified: file.lastModified
+      });
+    } finally {
+      video.removeAttribute("src");
+      video.load();
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  async function uploadGenerationReference(
+    file: File,
+    requestId: string,
+    metadata: Pick<GenerationReferenceAsset, "derivedFrom" | "referenceRole"> = {}
+  ): Promise<GenerationReferenceAsset> {
     const response = await fetch("/api/generation-assets/upload-url", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -4022,7 +4085,7 @@ export function WorkspaceClient({
       body: file
     });
     if (!upload.ok) throw new Error(`云端存储拒绝了“${file.name}”（${upload.status}）。`);
-    return { key: session.key, name: file.name, size: file.size, contentType: file.type };
+    return { key: session.key, name: file.name, size: file.size, contentType: file.type, ...metadata };
   }
 
   async function createVideo(event: FormEvent<HTMLFormElement>) {
@@ -4047,6 +4110,18 @@ export function WorkspaceClient({
         for (const [index, file] of briefAttachments.entries()) {
           setGenerationStatus(`正在上传参考素材 ${index + 1} / ${briefAttachments.length}`);
           uploadedReferences.push(await uploadGenerationReference(file, requestId));
+          if (file.type.startsWith("video/")) {
+            try {
+              setGenerationStatus(`正在提取“${file.name}”的视觉关键帧`);
+              const poster = await extractVideoPoster(file);
+              uploadedReferences.push(await uploadGenerationReference(poster, requestId, {
+                derivedFrom: file.name,
+                referenceRole: "video-poster"
+              }));
+            } catch (error) {
+              console.warn(`[generation] Unable to extract poster for ${file.name}:`, error);
+            }
+          }
         }
       }
       setProgress(18);

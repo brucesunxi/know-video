@@ -130,6 +130,7 @@ const imageAssetsSource = fs.readFileSync(new URL("../lib/image-assets.ts", impo
 assert.match(imageAssetsSource, /sceneReferenceAssets\(scene\)/);
 assert.match(imageAssetsSource, /loadSceneImageReference\(anchorTarget\.scene, "current"\)/);
 assert.match(imageAssetsSource, /loadSceneImageReference\(scene, "current"\)/);
+assert.match(imageAssetsSource, /sceneReferenceAssets\(scene\)\.some/);
 
 const generationReferencesSource = fs.readFileSync(new URL("../lib/generation-reference-assets.ts", import.meta.url), "utf8");
 assert.match(generationReferencesSource, /referenceAssets:/);

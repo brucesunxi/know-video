@@ -21,7 +21,9 @@ function referenceFromAsset(asset: SceneAsset): GenerationReferenceAsset | undef
     analysis: typeof asset.metadata?.analysis === "string" ? asset.metadata.analysis : undefined,
     analysisKind: asset.metadata?.analysisKind === "visual" || asset.metadata?.analysisKind === "transcript"
       ? asset.metadata.analysisKind
-      : undefined
+      : undefined,
+    derivedFrom: typeof asset.metadata?.derivedFrom === "string" ? asset.metadata.derivedFrom : undefined,
+    referenceRole: asset.metadata?.referenceRole === "video-poster" ? "video-poster" : undefined
   };
 }
 
@@ -34,7 +36,9 @@ export function referenceDescriptor(asset: SceneAsset): GenerationReferenceAsset
     analysis: typeof asset.metadata?.analysis === "string" ? asset.metadata.analysis : undefined,
     analysisKind: asset.metadata?.analysisKind === "visual" || asset.metadata?.analysisKind === "transcript"
       ? asset.metadata.analysisKind
-      : undefined
+      : undefined,
+    derivedFrom: typeof asset.metadata?.derivedFrom === "string" ? asset.metadata.derivedFrom : undefined,
+    referenceRole: asset.metadata?.referenceRole === "video-poster" ? "video-poster" : undefined
   };
 }
 
@@ -58,7 +62,9 @@ export function sceneAttachmentSummary(scene: Scene) {
   return [
     `Scene ${scene.sceneNumber} user attachments:`,
     ...references.map((reference) => {
-      const role = reference.contentType.startsWith("image/")
+      const role = reference.referenceRole === "video-poster"
+        ? `keyframe extracted from video "${reference.derivedFrom ?? reference.name}"`
+        : reference.contentType.startsWith("image/")
         ? "visual identity and composition reference"
         : reference.contentType.startsWith("video/")
           ? "source footage and motion reference"

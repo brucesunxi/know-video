@@ -262,7 +262,10 @@ export async function generateProjectSceneImages(
   if (selectedIndexes.length === 0) return project;
   const concurrency = Math.min(3, Math.max(1, Number(getOptionalEnv("IMAGE_GENERATION_CONCURRENCY")) || 2));
   const existingAnchorScene = selectVisualAnchorScene(
-    scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image" && asset.url))
+    scenes.filter((scene) => (
+      scene.assets.some((asset) => asset.type === "image" && asset.url)
+      || sceneReferenceAssets(scene).some((reference) => reference.contentType.startsWith("image/"))
+    ))
   );
   let projectAnchor = existingAnchorScene
     ? await loadSceneImageReference(existingAnchorScene, "anchor")
