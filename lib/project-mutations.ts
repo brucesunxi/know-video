@@ -4,6 +4,7 @@ import { promoteEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { editPlanSchema } from "@/lib/edit-plan-schema";
 import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import { materializeEditProposal } from "@/lib/edit-proposal";
+import { attachEditPlanReferenceAssets } from "@/lib/generation-reference-assets";
 import { demoProject } from "@/lib/mock-data";
 import { initialVersionStatus, materializeNewProject } from "@/lib/project-creation";
 import { productionSettingsFromScenes } from "@/lib/production-settings";
@@ -520,7 +521,7 @@ export async function rejectPersistedEditPlan(params: {
           where id = ${params.projectId}
             and current_version_id = ${params.versionId}
         )
-      returning id
+      returning id, patch_json
     ), deleted_previews as (
       delete from scene_assets
       using scenes, rejected
@@ -544,7 +545,14 @@ export async function rejectPersistedEditPlan(params: {
     )
     select
       inserted_message.id,
-      coalesce((select json_agg(r2_key) from deleted_previews), '[]'::json) as deleted_keys
+      coalesce((select json_agg(key) from (
+        select r2_key as key from deleted_previews
+        union
+        select reference->>'key' as key
+        from rejected,
+          jsonb_array_elements(coalesce(rejected.patch_json->'referenceAssets', '[]'::jsonb)) as reference
+        where reference->>'key' is not null
+      ) cleanup_keys), '[]'::json) as deleted_keys
     from inserted_message
   ` as Array<IdRow & { deleted_keys: string[] }>;
   if (!rows[0]) throw new Error("修改方案已经失效，无需再次取消。");
@@ -825,7 +833,7 @@ export async function applyPersistedEditPlan(params: {
   if (normalizedChanges.length === 0 && !productionChanged) {
     throw new Error("修改方案没有产生实际变化，请换一种说法后重新生成。");
   }
-  const changedProject = applyEditPlan(params.project, normalizedPlan);
+  const changedProject = attachEditPlanReferenceAssets(applyEditPlan(params.project, normalizedPlan), normalizedPlan);
   const imageSceneNumbersRequested = normalizedChanges
     .filter((change) => change.regenerate.includes("image"))
     .map((change) => change.sceneNumber);

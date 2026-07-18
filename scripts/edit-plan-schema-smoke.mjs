@@ -43,6 +43,18 @@ const valid = {
 };
 
 assert.equal(editPlanSchema.safeParse(valid).success, true);
+assert.equal(editPlanSchema.safeParse({
+  ...valid,
+  referenceAssets: [{
+    key: "uploads/generation/request/reference.png",
+    name: "reference.png",
+    size: 1200,
+    contentType: "image/png",
+    analysis: "A cobalt product on a white table.",
+    analysisKind: "visual",
+    targetSceneNumber: 1
+  }]
+}).success, true);
 assert.equal(editPlanSchema.safeParse({ ...valid, changes: [] }).success, false);
 assert.equal(editPlanSchema.safeParse({
   ...valid,

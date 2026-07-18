@@ -4,7 +4,7 @@ import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 
 const schema = z.object({
   requestId: z.string().uuid(),
-  keys: z.array(z.string().min(1).max(800)).max(6)
+  keys: z.array(z.string().min(1).max(800)).max(12)
 });
 
 export async function POST(request: Request) {

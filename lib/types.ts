@@ -45,6 +45,7 @@ export type GenerationReferenceAsset = {
   derivedFrom?: string;
   referenceRole?: "video-poster";
   actualDurationSeconds?: number;
+  targetSceneNumber?: number;
 };
 
 export type SceneAsset = {
@@ -183,6 +184,7 @@ export type EditPlan = {
   summary: string;
   affectedScenes: number[];
   changes: EditChange[];
+  referenceAssets?: GenerationReferenceAsset[];
   productionSettings?: Partial<ProductionSettings>;
   sceneStructure?: SceneStructureMutation;
   createdAt: string;

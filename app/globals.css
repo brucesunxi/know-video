@@ -4872,7 +4872,7 @@ button:disabled {
 
 .kv-chat-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
   gap: 10px;
   padding: 10px 14px 14px;
 }
@@ -4887,7 +4887,7 @@ button:disabled {
   line-height: 1.45;
 }
 
-.kv-chat-form button {
+.kv-chat-form > button {
   display: grid;
   height: 44px;
   place-items: center;
@@ -4895,6 +4895,56 @@ button:disabled {
   border-radius: 12px;
   background: var(--accent-2);
   color: #fff;
+}
+
+.kv-chat-form .kv-chat-attach {
+  align-self: end;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.kv-chat-form .kv-chat-attach:hover:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.kv-chat-attachments {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 8px 14px 0;
+}
+
+.kv-chat-attachments > span {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 220px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #f8fafc;
+  padding: 6px 7px 6px 9px;
+  color: #334155;
+}
+
+.kv-chat-attachments strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv-chat-attachments button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 5px;
+  color: #64748b;
 }
 
 .kv-inline-error {
@@ -5716,7 +5766,7 @@ button:disabled {
   }
 
   .kv-chat-form {
-    grid-template-columns: minmax(0, 1fr) 46px;
+    grid-template-columns: 46px minmax(0, 1fr) 46px;
     padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
   }
 

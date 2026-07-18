@@ -1,5 +1,5 @@
 import { createUploadedAsset } from "@/lib/scene-assets";
-import type { GenerationReferenceAsset, Project, SceneAsset } from "@/lib/types";
+import type { EditPlan, GenerationReferenceAsset, Project, SceneAsset } from "@/lib/types";
 
 function referenceRole(contentType: string) {
   if (contentType.startsWith("image/")) return "visual identity and composition reference";
@@ -106,4 +106,23 @@ export function attachGenerationReferenceAssets(project: Project, assets: SceneA
       scenes
     }
   };
+}
+
+export function attachEditPlanReferenceAssets(project: Project, plan: EditPlan): Project {
+  if (!plan.referenceAssets?.length) return project;
+  const scenes = project.currentVersion.scenes.map((scene) => {
+    const references = plan.referenceAssets?.filter((reference) => reference.targetSceneNumber === scene.sceneNumber) ?? [];
+    if (references.length === 0) return scene;
+    return {
+      ...scene,
+      style: {
+        ...scene.style,
+        referenceAssets: [
+          ...(scene.style?.referenceAssets ?? []).filter((existing) => !references.some((reference) => reference.key === existing.key)),
+          ...references
+        ]
+      }
+    };
+  });
+  return { ...project, currentVersion: { ...project.currentVersion, scenes } };
 }

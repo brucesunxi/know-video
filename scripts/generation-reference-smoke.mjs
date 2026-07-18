@@ -24,7 +24,7 @@ vm.runInNewContext(output, {
     : {}
 });
 
-const { attachGenerationReferenceAssets, createGenerationReferenceAsset, generationReferenceContext } = module.exports;
+const { attachEditPlanReferenceAssets, attachGenerationReferenceAssets, createGenerationReferenceAsset, generationReferenceContext } = module.exports;
 const references = [
   {
     key: "uploads/generation/r/image.png",
@@ -87,6 +87,13 @@ assert.equal(attached.currentVersion.scenes[1].style.referenceAssets[1].referenc
 assert.equal(attached.currentVersion.scenes[1].assets[0].metadata.actualDurationSeconds, 8.25);
 assert.equal(project.currentVersion.scenes[0].assets.length, 0);
 
+const editAttached = attachEditPlanReferenceAssets(project, {
+  referenceAssets: [{ ...references[0], targetSceneNumber: 2 }]
+});
+assert.equal(editAttached.currentVersion.scenes[0].style, undefined);
+assert.equal(editAttached.currentVersion.scenes[1].style.referenceAssets[0].key, references[0].key);
+assert.equal(editAttached.currentVersion.scenes[1].assets.length, 0);
+
 const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
 assert.match(workspace, /referenceAssets: uploadedReferences/);
 assert.match(workspace, /sceneNumbers: missingImageSceneNumbers/);
@@ -99,6 +106,19 @@ assert.match(workspace, /extractVideoPoster\(file\)/);
 assert.match(workspace, /referenceRole: "video-poster"/);
 assert.match(workspace, /context\.drawImage\(video/);
 assert.match(workspace, /actualDurationSeconds: extractedVideo\?\.durationSeconds/);
+assert.match(workspace, /multiple onChange=\{selectChatAttachments\}/);
+assert.match(workspace, /requestId,\n\s+referenceAssets: uploadedReferences/);
+assert.match(workspace, /一次对话最多添加 4 个参考素材/);
+
+const editRoute = fs.readFileSync(new URL("../app/api/edit-plan/route.ts", import.meta.url), "utf8");
+assert.match(editRoute, /validateAndAnalyzeReferenceAssets/);
+assert.match(editRoute, /bindReferenceAssetsToPlan/);
+assert.match(editRoute, /targetSceneNumber/);
+assert.match(editRoute, /requestAttachmentContext/);
+
+const projectMutations = fs.readFileSync(new URL("../lib/project-mutations.ts", import.meta.url), "utf8");
+assert.match(projectMutations, /attachEditPlanReferenceAssets\(applyEditPlan/);
+assert.match(projectMutations, /patch_json->'referenceAssets'/);
 
 const projectsRoute = fs.readFileSync(new URL("../app/api/projects/route.ts", import.meta.url), "utf8");
 assert.match(projectsRoute, /uploads\/generation\/\$\{requestId\}\//);

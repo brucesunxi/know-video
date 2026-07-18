@@ -1,6 +1,18 @@
 import { z } from "zod";
 
 const narrationVoiceSchema = z.enum(["male-clear", "male-deep", "female-natural"]);
+const referenceAssetSchema = z.object({
+  key: z.string().min(1).max(800),
+  name: z.string().min(1).max(240),
+  size: z.number().int().positive().max(500_000_000),
+  contentType: z.string().min(1).max(120),
+  analysis: z.string().max(8000).optional(),
+  analysisKind: z.enum(["visual", "transcript"]).optional(),
+  derivedFrom: z.string().min(1).max(240).optional(),
+  referenceRole: z.literal("video-poster").optional(),
+  actualDurationSeconds: z.number().positive().max(21_600).optional(),
+  targetSceneNumber: z.number().int().positive().optional()
+});
 const sceneStructureSchema = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("set-duration"), sceneNumber: z.number().int().positive(), durationSeconds: z.number().int().min(2).max(20) }),
   z.object({
@@ -42,6 +54,7 @@ export const editPlanObjectSchema = z.object({
     after: editSideSchema,
     regenerate: z.array(z.enum(["image", "audio", "clip", "thumbnail", "caption", "render"]))
   })).max(20),
+  referenceAssets: z.array(referenceAssetSchema).max(12).optional(),
   productionSettings: z.object({
     captionsEnabled: z.boolean().optional(),
     captionStyle: z.enum(["minimal", "boxed", "highlight"]).optional(),

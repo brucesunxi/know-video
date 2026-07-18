@@ -637,6 +637,7 @@ export async function createEditPlan(params: {
   request: string;
   version: ProjectVersion;
   editNumber: number;
+  requestAttachmentContext?: string;
 }): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
   const requestedProductionSettings = productionSettingsFromRequest(params.request);
   const requestedStructure = sceneStructureFromRequest(
@@ -728,7 +729,9 @@ export async function createEditPlan(params: {
     return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
   }
   const activeTextModel = textModel;
-  const attachmentContext = versionAttachmentContext(params.version);
+  const attachmentContext = [versionAttachmentContext(params.version), params.requestAttachmentContext]
+    .filter(Boolean)
+    .join("\n\n");
   const currentScenes = planningSceneSnapshot(params.version);
 
   const globalDirective = globalChineseRewrite
@@ -823,6 +826,7 @@ export async function refineEditPlan(params: {
   version: ProjectVersion;
   existingPlan: EditPlan;
   editNumber: number;
+  requestAttachmentContext?: string;
 }): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
   if (params.existingPlan.baseVersionId !== params.version.id || params.existingPlan.status !== "proposed") {
     throw new Error("当前修改方案已经失效，请重新生成。");
@@ -841,7 +845,9 @@ export async function refineEditPlan(params: {
   const activeTextModel = textModel;
 
   const available = new Set(params.version.scenes.map((scene) => scene.sceneNumber));
-  const attachmentContext = versionAttachmentContext(params.version);
+  const attachmentContext = [versionAttachmentContext(params.version), params.requestAttachmentContext]
+    .filter(Boolean)
+    .join("\n\n");
   const currentScenes = planningSceneSnapshot(params.version);
   const combinedRequest = `${params.existingPlan.userRequest}\n补充要求：${params.request}`;
   const combinedIntent = analyzeEditIntent(combinedRequest, Array.from(available));

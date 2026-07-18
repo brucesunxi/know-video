@@ -2679,6 +2679,7 @@ function StructurePlanPreview({ plan, scenes }: { plan: EditPlan; scenes: Scene[
 }
 
 function ChatPanel({
+  attachments,
   messages,
   scenes,
   selectedScene,
@@ -2687,11 +2688,14 @@ function ChatPanel({
   isBusy,
   busyAction,
   onInput,
+  onOpenAttachmentPicker,
+  onRemoveAttachment,
   onSubmit,
   onPreview,
   onApply,
   onCancel
 }: {
+  attachments: File[];
   messages: ChatMessage[];
   scenes: Scene[];
   selectedScene: number;
@@ -2700,6 +2704,8 @@ function ChatPanel({
   isBusy: boolean;
   busyAction?: BusyAction;
   onInput: (value: string) => void;
+  onOpenAttachmentPicker: () => void;
+  onRemoveAttachment: (index: number) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onPreview: () => void;
   onApply: () => void;
@@ -2897,7 +2903,28 @@ function ChatPanel({
           <span>{inputMode.detail}</span>
         </div>
       </div>
+      {attachments.length > 0 ? (
+        <div className="kv-chat-attachments" aria-label="本次修改的参考素材">
+          {attachments.map((file, index) => (
+            <span key={`${file.name}-${file.size}-${file.lastModified}`}>
+              <Paperclip size={13} />
+              <strong title={file.name}>{file.name}</strong>
+              <button aria-label={`移除 ${file.name}`} disabled={isBusy} onClick={() => onRemoveAttachment(index)} type="button"><X size={13} /></button>
+            </span>
+          ))}
+        </div>
+      ) : null}
       <form className="kv-chat-form" onSubmit={onSubmit}>
+        <button
+          aria-label="添加参考图片、视频或音频"
+          className="kv-chat-attach"
+          disabled={isBusy || Boolean(pendingPlan)}
+          onClick={onOpenAttachmentPicker}
+          title={pendingPlan ? "请先应用或取消当前方案，再添加新的参考素材" : "添加参考素材"}
+          type="button"
+        >
+          <Paperclip size={18} />
+        </button>
         <textarea
           disabled={isBusy}
           onKeyDown={(event) => {
@@ -2909,7 +2936,7 @@ function ChatPanel({
           placeholder={pendingPlan ? "继续调整当前方案，输入补充要求…" : "描述你想修改的场景、旁白或整体风格…"}
           value={input}
         />
-        <button disabled={isBusy || input.trim().length === 0} type="submit">
+        <button className="kv-chat-send" disabled={isBusy || (input.trim().length === 0 && attachments.length === 0)} type="submit">
           {isBusy ? <Loader2 className="kv-spin" size={18} /> : <Send size={18} />}
         </button>
       </form>
@@ -3022,6 +3049,7 @@ function VersionComparison({ preview }: { preview: ProjectVersionPreview }) {
 }
 
 function StudioScreen({
+  chatAttachments,
   project,
   messages,
   pendingPlan,
@@ -3031,6 +3059,8 @@ function StudioScreen({
   isBusy,
   busyAction,
   onInput,
+  onOpenChatAttachmentPicker,
+  onRemoveChatAttachment,
   onSubmit,
   onPreviewPlan,
   onApply,
@@ -3079,6 +3109,7 @@ function StudioScreen({
   onSaveScene,
   onVoiceChange
 }: {
+  chatAttachments: File[];
   project: Project;
   messages: ChatMessage[];
   pendingPlan?: EditPlan;
@@ -3088,6 +3119,8 @@ function StudioScreen({
   isBusy: boolean;
   busyAction?: BusyAction;
   onInput: (value: string) => void;
+  onOpenChatAttachmentPicker: () => void;
+  onRemoveChatAttachment: (index: number) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onPreviewPlan: () => void;
   onApply: () => void;
@@ -3632,6 +3665,7 @@ function StudioScreen({
         )}
       </section>
       <ChatPanel
+        attachments={chatAttachments}
         busyAction={busyAction}
         input={input}
         isBusy={isBusy}
@@ -3639,6 +3673,8 @@ function StudioScreen({
         onApply={onApply}
         onCancel={onCancel}
         onInput={onInput}
+        onOpenAttachmentPicker={onOpenChatAttachmentPicker}
+        onRemoveAttachment={onRemoveChatAttachment}
         onPreview={onPreviewPlan}
         onSubmit={onSubmit}
         pendingPlan={pendingPlan}
@@ -3665,6 +3701,7 @@ export function WorkspaceClient({
   const [stage, setStage] = useState<Stage>(initialPendingPlan ? "studio" : "brief");
   const [briefPrompt, setBriefPrompt] = useState("");
   const [briefAttachments, setBriefAttachments] = useState<File[]>([]);
+  const [chatAttachments, setChatAttachments] = useState<File[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [selectedScene, setSelectedScene] = useState(1);
@@ -3706,6 +3743,7 @@ export function WorkspaceClient({
   const [projectActionBusy, setProjectActionBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const briefFileInputRef = useRef<HTMLInputElement>(null);
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
   const recoveringRenderRef = useRef<string>();
@@ -4006,6 +4044,33 @@ export function WorkspaceClient({
     });
   }
 
+  function selectChatAttachments(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (files.length === 0) return;
+    const valid = files.filter((file) => {
+      if (!uploadedAssetType(file.type)) {
+        setErrorMessage(`“${file.name}”不是支持的图片、视频或音频格式。`);
+        return false;
+      }
+      if (file.size > maxUploadBytes(file.type)) {
+        setErrorMessage(`“${file.name}”超过该格式允许的大小。`);
+        return false;
+      }
+      return true;
+    });
+    setChatAttachments((current) => {
+      const combined = [...current];
+      for (const file of valid) {
+        if (!combined.some((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified)) {
+          combined.push(file);
+        }
+      }
+      if (combined.length > 4) setErrorMessage("一次对话最多添加 4 个参考素材。");
+      return combined.slice(0, 4);
+    });
+  }
+
   async function extractVideoPoster(file: File): Promise<{ poster: File; durationSeconds?: number }> {
     const objectUrl = URL.createObjectURL(file);
     const video = document.createElement("video");
@@ -4201,13 +4266,18 @@ export function WorkspaceClient({
 
   async function submitChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const request = chatInput.trim();
+    const attachments = [...chatAttachments];
+    const request = chatInput.trim() || (attachments.length > 0 ? `请结合本次上传的参考素材，重新设计场景 ${selectedScene}。` : "");
     if (!request) return;
+    if (pendingPlan && attachments.length > 0) {
+      setErrorMessage("请先应用或取消当前修改方案，再添加新的参考素材。");
+      return;
+    }
 
     setChatInput("");
     setCandidateToCompare(undefined);
     setIsBusy(true);
-    const candidateIntent = pendingPlan
+    const candidateIntent = pendingPlan || attachments.length > 0
       ? undefined
       : candidateEditFromRequest(
           request,
@@ -4215,9 +4285,29 @@ export function WorkspaceClient({
         );
     setBusyAction(pendingPlan ? "refining-edit" : candidateIntent ? "generating-candidate" : "planning-edit");
     setErrorMessage(undefined);
-    pushMessage({ role: "user", type: "text", content: request });
+    pushMessage({
+      role: "user",
+      type: "text",
+      content: attachments.length > 0 ? `${request}\n已添加 ${attachments.length} 个参考素材。` : request
+    });
 
+    const requestId = attachments.length > 0 ? crypto.randomUUID() : undefined;
+    const uploadedReferences: GenerationReferenceAsset[] = [];
     try {
+      if (requestId) {
+        for (const file of attachments) {
+          const extractedVideo = file.type.startsWith("video/") ? await extractVideoPoster(file) : undefined;
+          uploadedReferences.push(await uploadGenerationReference(file, requestId, {
+            actualDurationSeconds: extractedVideo?.durationSeconds
+          }));
+          if (extractedVideo) {
+            uploadedReferences.push(await uploadGenerationReference(extractedVideo.poster, requestId, {
+              derivedFrom: file.name,
+              referenceRole: "video-poster"
+            }));
+          }
+        }
+      }
       const response = await fetch("/api/edit-plan", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -4226,9 +4316,11 @@ export function WorkspaceClient({
           versionId: project.currentVersion.id,
           editPlanId: pendingPlan?.id,
           selectedSceneNumber: selectedScene,
-          request
+          request,
+          requestId,
+          referenceAssets: uploadedReferences
         }),
-        signal: AbortSignal.timeout(candidateIntent ? 125_000 : 45_000)
+        signal: AbortSignal.timeout(candidateIntent || uploadedReferences.length > 0 ? 125_000 : 45_000)
       });
       if (!response.ok) {
         const failure = await response.json().catch(() => ({})) as { error?: string };
@@ -4265,8 +4357,16 @@ export function WorkspaceClient({
       const assistantMessages = data.messages.filter((message) => message.role === "assistant");
       setPendingPlan(data.editPlan);
       setMessages((current) => [...current, ...assistantMessages]);
+      setChatAttachments([]);
     } catch (error) {
       console.error(error);
+      if (requestId && uploadedReferences.length > 0) {
+        void fetch("/api/generation-assets/cleanup", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ requestId, keys: uploadedReferences.map((reference) => reference.key) })
+        }).catch(() => undefined);
+      }
       pushMessage({
         role: "assistant",
         type: "text",
@@ -5496,6 +5596,7 @@ export function WorkspaceClient({
     >
       <input accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav" hidden onChange={uploadAsset} ref={fileInputRef} type="file" />
       <input accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav" hidden multiple onChange={selectBriefAttachments} ref={briefFileInputRef} type="file" />
+      <input accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav" hidden multiple onChange={selectChatAttachments} ref={chatFileInputRef} type="file" />
       <input accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => void uploadProductionAsset("logo", event)} ref={logoInputRef} type="file" />
       <input accept="audio/mpeg,audio/wav" hidden onChange={(event) => void uploadProductionAsset("music", event)} ref={musicInputRef} type="file" />
       {stage === "studio" && errorMessage ? (
@@ -5549,6 +5650,7 @@ export function WorkspaceClient({
       ) : null}
       {stage === "studio" ? (
         <StudioScreen
+          chatAttachments={chatAttachments}
           busyAction={busyAction}
           input={chatInput}
           isBusy={isBusy}
@@ -5556,6 +5658,8 @@ export function WorkspaceClient({
           onApply={applyPlan}
           onCancel={cancelPlan}
           onInput={setChatInput}
+          onOpenChatAttachmentPicker={() => chatFileInputRef.current?.click()}
+          onRemoveChatAttachment={(index) => setChatAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index))}
           onPreviewPlan={previewPendingPlan}
           onSelectScene={setSelectedScene}
           onSubmit={submitChat}
