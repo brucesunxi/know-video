@@ -87,7 +87,10 @@ export async function POST(request: Request) {
   const readiness = renderInputReadiness(project);
   if (!readiness.ready) {
     return NextResponse.json(
-      { error: readiness.error ?? "视频素材尚未完整，请补齐画面和配音后再导出。" },
+      {
+        error: readiness.error ?? "视频尚未通过导出检查，请修复画面和配音后再导出。",
+        qualityIssues: readiness.qualityIssues
+      },
       { status: 409 }
     );
   }

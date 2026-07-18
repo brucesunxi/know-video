@@ -13,6 +13,11 @@ vm.runInNewContext(output, {
   module,
   exports: module.exports,
   require: (specifier) => {
+    if (specifier === "@/lib/project-media-audit") {
+      return {
+        auditProjectMedia: (project) => ({ errors: project.qualityErrors ?? [] })
+      };
+    }
     if (specifier === "@/lib/production-settings") {
       return {
         productionAsset: (project, type) => project.currentVersion.scenes
@@ -50,6 +55,7 @@ assert.equal(productionInputs[1].asset.type, "music");
 const readiness = renderInputReadiness(project);
 assert.equal(readiness.ready, true);
 assert.equal(readiness.inputs.length, 4);
+assert.deepEqual(Array.from(readiness.qualityIssues), []);
 assert.equal(renderInputMetadataIssue(inputs[0], { contentLength: 50_000, contentType: "video/mp4" }), undefined);
 assert.match(renderInputMetadataIssue(inputs[0], { contentLength: 50_000, contentType: "image/png" }), /视频/);
 assert.equal(renderInputMetadataIssue(inputs[1], { contentLength: 20_000, contentType: "audio/wav" }), undefined);
@@ -67,10 +73,18 @@ assert.deepEqual(Array.from(renderInputReadiness(missingAudio).missingAudio), [2
 assert.equal(renderInputReadiness(missingAudio).ready, false);
 assert.match(renderInputReadiness(missingAudio).error, /缺少配音的场景：2/);
 assert.match(renderInputReadiness({ currentVersion: { scenes: [] } }).error, /还没有可渲染的场景/);
+const qualityBlocked = renderInputReadiness({
+  ...project,
+  qualityErrors: [{ code: "audio-overrun", sceneNumber: 1, media: "audio", severity: "error", message: "场景 1 的配音超时。" }]
+});
+assert.equal(qualityBlocked.ready, false);
+assert.equal(qualityBlocked.qualityIssues[0].code, "audio-overrun");
+assert.match(qualityBlocked.error, /配音超时/);
 assert.match(route, /renderInputReadiness/);
 assert.match(route, /const readiness = renderInputReadiness\(project\)/);
 assert.match(route, /if \(!readiness\.ready\)/);
 assert.match(route, /readiness\.error/);
+assert.match(route, /qualityIssues: readiness\.qualityIssues/);
 assert.match(route, /readiness\.inputs\.map/);
 assert.match(route, /invalidProductionMedia/);
 assert.match(route, /pushInvalidInput/);

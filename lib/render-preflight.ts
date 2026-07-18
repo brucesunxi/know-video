@@ -1,4 +1,5 @@
 import { productionAsset } from "@/lib/production-settings";
+import { auditProjectMedia } from "@/lib/project-media-audit";
 import type { Project, SceneAsset } from "@/lib/types";
 
 export type RenderInputAsset = {
@@ -42,20 +43,28 @@ export function renderInputReadiness(project: Project) {
   const missingAudio = project.currentVersion.scenes
     .filter((scene) => !audioScenes.has(scene.sceneNumber))
     .map((scene) => scene.sceneNumber);
+  const qualityIssues = auditProjectMedia(project).errors.filter((issue) =>
+    !["missing-visual", "missing-audio"].includes(issue.code)
+  );
   const details = [
     missingVisuals.length > 0 ? `缺少画面的场景：${missingVisuals.join("、")}` : "",
-    missingAudio.length > 0 ? `缺少配音的场景：${missingAudio.join("、")}` : ""
+    missingAudio.length > 0 ? `缺少配音的场景：${missingAudio.join("、")}` : "",
+    qualityIssues.length > 0 ? qualityIssues.map((issue) => issue.message).join("；") : ""
   ].filter(Boolean).join("；");
 
   return {
     inputs,
     missingVisuals,
     missingAudio,
-    ready: project.currentVersion.scenes.length > 0 && missingVisuals.length === 0 && missingAudio.length === 0,
+    qualityIssues,
+    ready: project.currentVersion.scenes.length > 0
+      && missingVisuals.length === 0
+      && missingAudio.length === 0
+      && qualityIssues.length === 0,
     error: project.currentVersion.scenes.length === 0
       ? "视频还没有可渲染的场景。"
       : details
-        ? `视频素材尚未完整。${details}。`
+        ? `视频尚未通过导出检查。${details}。`
         : undefined
   };
 }
