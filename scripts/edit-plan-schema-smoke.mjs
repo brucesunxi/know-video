@@ -52,7 +52,8 @@ assert.equal(editPlanSchema.safeParse({
     contentType: "image/png",
     analysis: "A cobalt product on a white table.",
     analysisKind: "visual",
-    targetSceneNumber: 1
+    targetSceneNumber: 1,
+    targetSceneNumbers: [1, 2, 3]
   }]
 }).success, true);
 assert.equal(editPlanSchema.safeParse({ ...valid, changes: [] }).success, false);

@@ -93,6 +93,12 @@ const editAttached = attachEditPlanReferenceAssets(project, {
 assert.equal(editAttached.currentVersion.scenes[0].style, undefined);
 assert.equal(editAttached.currentVersion.scenes[1].style.referenceAssets[0].key, references[0].key);
 assert.equal(editAttached.currentVersion.scenes[1].assets.length, 0);
+const globallyAttached = attachEditPlanReferenceAssets(project, {
+  referenceAssets: [{ ...references[0], targetSceneNumber: 1, targetSceneNumbers: [1, 2, 3] }]
+});
+assert.equal(globallyAttached.currentVersion.scenes[0].style.referenceAssets[0].key, references[0].key);
+assert.equal(globallyAttached.currentVersion.scenes[1].style.referenceAssets[0].key, references[0].key);
+assert.equal(globallyAttached.currentVersion.scenes[2].style.referenceAssets[0].key, references[0].key);
 const reprioritized = attachEditPlanReferenceAssets({
   ...editAttached,
   currentVersion: {
@@ -125,13 +131,14 @@ assert.match(workspace, /requestId,\n\s+referenceAssets: uploadedReferences/);
 assert.match(workspace, /一次对话最多添加 4 个参考素材/);
 
 const editRoute = fs.readFileSync(new URL("../app/api/edit-plan/route.ts", import.meta.url), "utf8");
+const editReferences = fs.readFileSync(new URL("../lib/edit-reference-assets.ts", import.meta.url), "utf8");
 assert.match(editRoute, /validateAndAnalyzeReferenceAssets/);
 assert.match(editRoute, /bindReferenceAssetsToPlan/);
-assert.match(editRoute, /targetSceneNumber/);
 assert.match(editRoute, /requestAttachmentContext/);
-assert.match(editRoute, /useTranscriptAsNarration/);
-assert.match(editRoute, /analysisKind === "transcript"/);
-assert.match(editRoute, /"audio", "caption", "render"/);
+assert.match(editReferences, /globalEditTargetSceneNumbers/);
+assert.match(editReferences, /useTranscriptAsNarration/);
+assert.match(editReferences, /analysisKind === "transcript"/);
+assert.match(editReferences, /"audio", "caption", "render"/);
 
 const projectMutations = fs.readFileSync(new URL("../lib/project-mutations.ts", import.meta.url), "utf8");
 assert.match(projectMutations, /attachEditPlanReferenceAssets\(applyEditPlan/);

@@ -46,6 +46,7 @@ export type GenerationReferenceAsset = {
   referenceRole?: "video-poster";
   actualDurationSeconds?: number;
   targetSceneNumber?: number;
+  targetSceneNumbers?: number[];
 };
 
 export type SceneAsset = {

@@ -111,7 +111,9 @@ export function attachGenerationReferenceAssets(project: Project, assets: SceneA
 export function attachEditPlanReferenceAssets(project: Project, plan: EditPlan): Project {
   if (!plan.referenceAssets?.length) return project;
   const scenes = project.currentVersion.scenes.map((scene) => {
-    const references = plan.referenceAssets?.filter((reference) => reference.targetSceneNumber === scene.sceneNumber) ?? [];
+    const references = plan.referenceAssets?.filter((reference) =>
+      reference.targetSceneNumber === scene.sceneNumber || reference.targetSceneNumbers?.includes(scene.sceneNumber)
+    ) ?? [];
     if (references.length === 0) return scene;
     return {
       ...scene,

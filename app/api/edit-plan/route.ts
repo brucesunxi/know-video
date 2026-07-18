@@ -3,12 +3,13 @@ import { z } from "zod";
 import { demoProject } from "@/lib/mock-data";
 import { createEditPlan, refineEditPlan } from "@/lib/ai-video";
 import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
+import { bindReferenceAssetsToPlan } from "@/lib/edit-reference-assets";
 import { generationReferenceContext } from "@/lib/generation-reference-assets";
 import { CandidateImageError, generateSceneImageCandidate } from "@/lib/image-candidates";
 import { loadCurrentProjectForEdit, loadProposedEditPlan, persistCandidateEditConversation, persistEditPlan } from "@/lib/project-mutations";
 import { referenceAssetInputSchema, validateAndAnalyzeReferenceAssets, validateReferenceRelationships } from "@/lib/reference-asset-processing";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
-import type { AssetType, ChatMessage, EditChange, EditPlan, GenerationReferenceAsset, ProjectVersion } from "@/lib/types";
+import type { ChatMessage, ProjectVersion } from "@/lib/types";
 
 const requestSchema = z.object({
   request: z.string().trim().min(1).max(4000),
@@ -39,99 +40,6 @@ function publicEngine(engine: string) {
 }
 
 export const maxDuration = 120;
-
-function bindReferenceAssetsToPlan(params: {
-  plan: EditPlan;
-  references: GenerationReferenceAsset[];
-  version: ProjectVersion;
-  selectedSceneNumber?: number;
-}): EditPlan {
-  if (params.references.length === 0) return params.plan;
-  const available = new Set(params.version.scenes.map((scene) => scene.sceneNumber));
-  const targetSceneNumber = params.plan.affectedScenes.find((sceneNumber) => sceneNumber === params.selectedSceneNumber)
-    ?? params.plan.affectedScenes.find((sceneNumber) => available.has(sceneNumber))
-    ?? (params.selectedSceneNumber && available.has(params.selectedSceneNumber) ? params.selectedSceneNumber : params.version.scenes[0]?.sceneNumber);
-  if (!targetSceneNumber) return params.plan;
-  const visualReferences = params.references.filter((reference) =>
-    reference.contentType.startsWith("image/") || reference.contentType.startsWith("video/")
-  );
-  let changes = params.plan.changes;
-  const sourceScene = params.version.scenes.find((item) => item.sceneNumber === targetSceneNumber);
-  const currentSide = sourceScene ? {
-    title: sourceScene.title,
-    voiceover: sourceScene.voiceover,
-    narrationVoice: sourceScene.style.narrationVoice,
-    thumbnailTone: sourceScene.style.theme.includes("light") ? "light" : "dark",
-    visualPrompt: sourceScene.visualPrompt,
-    motionPrompt: sourceScene.motionPrompt
-  } : undefined;
-  if (visualReferences.length > 0) {
-    if (sourceScene && currentSide) {
-      const identity = visualReferences
-        .map((reference) => reference.analysis || `${reference.name} 中的主体、构图与视觉身份`)
-        .join("；")
-        .slice(0, 2400);
-      const existing = changes.find((change) => change.sceneNumber === targetSceneNumber);
-      const nextPrompt = `${existing?.after.visualPrompt ?? sourceScene.visualPrompt}\n\n必须以用户本次上传的参考素材为视觉依据，保留可辨识的主体、产品、人物、品牌和构图连续性：${identity}`;
-      const forced: EditChange = existing
-        ? {
-            ...existing,
-            after: { ...existing.after, visualPrompt: nextPrompt },
-            regenerate: Array.from(new Set([...existing.regenerate, "image", "thumbnail", "render"] as const))
-          }
-        : {
-            sceneNumber: targetSceneNumber,
-            status: "updated" as const,
-            before: currentSide,
-            after: {
-              ...currentSide,
-              visualPrompt: nextPrompt,
-            },
-            regenerate: ["image", "thumbnail", "render"] satisfies AssetType[]
-          };
-      changes = existing
-        ? changes.map((change) => change.sceneNumber === targetSceneNumber ? forced : change)
-        : [...changes, forced];
-    }
-  }
-  const transcriptReference = params.references.find((reference) =>
-    reference.analysisKind === "transcript" && reference.analysis?.trim()
-  );
-  const useTranscriptAsNarration = /(?:把|将|用|使用|采用).{0,12}(?:录音|音频).{0,12}(?:内容|台词|口播|旁白)|(?:录音|音频).{0,12}(?:作为|改成|变成).{0,8}(?:口播|旁白)|use.{0,20}(?:recording|audio).{0,20}(?:transcript|narration|voiceover)/iu.test(params.plan.userRequest);
-  if (transcriptReference?.analysis && useTranscriptAsNarration && currentSide) {
-    const transcript = transcriptReference.analysis
-      .replace(/[\u0000-\u001f\u007f<>]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 4000);
-    if (transcript) {
-      const existing = changes.find((change) => change.sceneNumber === targetSceneNumber);
-      const transcriptChange: EditChange = existing
-        ? {
-            ...existing,
-            after: { ...existing.after, voiceover: transcript },
-            regenerate: Array.from(new Set([...existing.regenerate, "audio", "caption", "render"] as const))
-          }
-        : {
-            sceneNumber: targetSceneNumber,
-            status: "updated",
-            before: currentSide,
-            after: { ...currentSide, voiceover: transcript },
-            regenerate: ["audio", "caption", "render"] satisfies AssetType[]
-          };
-      changes = existing
-        ? changes.map((change) => change.sceneNumber === targetSceneNumber ? transcriptChange : change)
-        : [...changes, transcriptChange];
-    }
-  }
-  return {
-    ...params.plan,
-    summary: `${params.plan.summary} 已把本次上传素材作为场景 ${targetSceneNumber} 的生成依据。`,
-    affectedScenes: Array.from(new Set([...params.plan.affectedScenes, targetSceneNumber])).sort((a, b) => a - b),
-    changes,
-    referenceAssets: params.references.map((reference) => ({ ...reference, targetSceneNumber }))
-  };
-}
 
 export async function POST(request: Request) {
   let body: z.infer<typeof requestSchema>;
