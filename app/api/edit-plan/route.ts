@@ -56,15 +56,23 @@ function bindReferenceAssetsToPlan(params: {
     reference.contentType.startsWith("image/") || reference.contentType.startsWith("video/")
   );
   let changes = params.plan.changes;
+  const sourceScene = params.version.scenes.find((item) => item.sceneNumber === targetSceneNumber);
+  const currentSide = sourceScene ? {
+    title: sourceScene.title,
+    voiceover: sourceScene.voiceover,
+    narrationVoice: sourceScene.style.narrationVoice,
+    thumbnailTone: sourceScene.style.theme.includes("light") ? "light" : "dark",
+    visualPrompt: sourceScene.visualPrompt,
+    motionPrompt: sourceScene.motionPrompt
+  } : undefined;
   if (visualReferences.length > 0) {
-    const scene = params.version.scenes.find((item) => item.sceneNumber === targetSceneNumber);
-    if (scene) {
+    if (sourceScene && currentSide) {
       const identity = visualReferences
         .map((reference) => reference.analysis || `${reference.name} 中的主体、构图与视觉身份`)
         .join("；")
         .slice(0, 2400);
       const existing = changes.find((change) => change.sceneNumber === targetSceneNumber);
-      const nextPrompt = `${existing?.after.visualPrompt ?? scene.visualPrompt}\n\n必须以用户本次上传的参考素材为视觉依据，保留可辨识的主体、产品、人物、品牌和构图连续性：${identity}`;
+      const nextPrompt = `${existing?.after.visualPrompt ?? sourceScene.visualPrompt}\n\n必须以用户本次上传的参考素材为视觉依据，保留可辨识的主体、产品、人物、品牌和构图连续性：${identity}`;
       const forced: EditChange = existing
         ? {
             ...existing,
@@ -74,27 +82,46 @@ function bindReferenceAssetsToPlan(params: {
         : {
             sceneNumber: targetSceneNumber,
             status: "updated" as const,
-            before: {
-              title: scene.title,
-              voiceover: scene.voiceover,
-              narrationVoice: scene.style.narrationVoice,
-              thumbnailTone: scene.style.theme.includes("light") ? "light" : "dark",
-              visualPrompt: scene.visualPrompt,
-              motionPrompt: scene.motionPrompt
-            },
+            before: currentSide,
             after: {
-              title: scene.title,
-              voiceover: scene.voiceover,
-              narrationVoice: scene.style.narrationVoice,
-              thumbnailTone: scene.style.theme.includes("light") ? "light" : "dark",
+              ...currentSide,
               visualPrompt: nextPrompt,
-              motionPrompt: scene.motionPrompt
             },
             regenerate: ["image", "thumbnail", "render"] satisfies AssetType[]
           };
       changes = existing
         ? changes.map((change) => change.sceneNumber === targetSceneNumber ? forced : change)
         : [...changes, forced];
+    }
+  }
+  const transcriptReference = params.references.find((reference) =>
+    reference.analysisKind === "transcript" && reference.analysis?.trim()
+  );
+  const useTranscriptAsNarration = /(?:把|将|用|使用|采用).{0,12}(?:录音|音频).{0,12}(?:内容|台词|口播|旁白)|(?:录音|音频).{0,12}(?:作为|改成|变成).{0,8}(?:口播|旁白)|use.{0,20}(?:recording|audio).{0,20}(?:transcript|narration|voiceover)/iu.test(params.plan.userRequest);
+  if (transcriptReference?.analysis && useTranscriptAsNarration && currentSide) {
+    const transcript = transcriptReference.analysis
+      .replace(/[\u0000-\u001f\u007f<>]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 4000);
+    if (transcript) {
+      const existing = changes.find((change) => change.sceneNumber === targetSceneNumber);
+      const transcriptChange: EditChange = existing
+        ? {
+            ...existing,
+            after: { ...existing.after, voiceover: transcript },
+            regenerate: Array.from(new Set([...existing.regenerate, "audio", "caption", "render"] as const))
+          }
+        : {
+            sceneNumber: targetSceneNumber,
+            status: "updated",
+            before: currentSide,
+            after: { ...currentSide, voiceover: transcript },
+            regenerate: ["audio", "caption", "render"] satisfies AssetType[]
+          };
+      changes = existing
+        ? changes.map((change) => change.sceneNumber === targetSceneNumber ? transcriptChange : change)
+        : [...changes, transcriptChange];
     }
   }
   return {

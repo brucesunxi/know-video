@@ -129,6 +129,9 @@ assert.match(editRoute, /validateAndAnalyzeReferenceAssets/);
 assert.match(editRoute, /bindReferenceAssetsToPlan/);
 assert.match(editRoute, /targetSceneNumber/);
 assert.match(editRoute, /requestAttachmentContext/);
+assert.match(editRoute, /useTranscriptAsNarration/);
+assert.match(editRoute, /analysisKind === "transcript"/);
+assert.match(editRoute, /"audio", "caption", "render"/);
 
 const projectMutations = fs.readFileSync(new URL("../lib/project-mutations.ts", import.meta.url), "utf8");
 assert.match(projectMutations, /attachEditPlanReferenceAssets\(applyEditPlan/);
