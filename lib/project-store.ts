@@ -1,6 +1,7 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { demoMessages, demoProject } from "@/lib/mock-data";
 import { editPlanSchema } from "@/lib/edit-plan-schema";
+import { getEphemeralProject, listEphemeralProjects } from "@/lib/ephemeral-project-store";
 import { mediaAssetStatus } from "@/lib/generation-resume";
 import { assetUrlForKey } from "@/lib/r2";
 import type { ChatMessage, EditPlan, Project, ProjectListItem, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
@@ -262,7 +263,7 @@ export async function listProjects(): Promise<ProjectListItem[]> {
     const firstImage = demoProject.currentVersion.scenes
       .flatMap((scene) => scene.assets)
       .find((asset) => asset.type === "image");
-    return [{
+    return [...listEphemeralProjects(), {
       id: demoProject.id,
       title: demoProject.title,
       updatedAt: demoProject.currentVersion.createdAt,
@@ -366,6 +367,8 @@ export async function listProjects(): Promise<ProjectListItem[]> {
 
 export async function getProjectSnapshot(projectId: string): Promise<ProjectSnapshot | undefined> {
   if (!hasDatabaseUrl()) {
+    const ephemeral = getEphemeralProject(projectId);
+    if (ephemeral) return { ...ephemeral, source: "mock" };
     return projectId === demoProject.id
       ? { project: demoProject, messages: demoMessages, source: "mock" }
       : undefined;
@@ -386,6 +389,11 @@ export async function getCurrentProjectSnapshot(): Promise<ProjectSnapshot> {
   if (!hasDatabaseUrl()) {
     if (process.env.NODE_ENV === "production") {
       throw new Error("生产环境数据库尚未配置。");
+    }
+    const ephemeral = listEphemeralProjects()[0];
+    if (ephemeral) {
+      const record = getEphemeralProject(ephemeral.id)!;
+      return { ...record, source: "mock" };
     }
     return { project: demoProject, messages: demoMessages, source: "mock" };
   }

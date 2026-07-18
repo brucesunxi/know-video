@@ -40,4 +40,13 @@ assert.equal(resolvedClipPlaybackRate({
   productionPlaybackRate: 1
 }), 1);
 
+const shortGenerated = { type: "clip", metadata: { source: "generated-video", duration: 2 } };
+const shortGeneratedRate = resolvedClipPlaybackRate({
+  asset: shortGenerated,
+  sceneDurationSeconds: 8,
+  productionPlaybackRate: 1
+});
+assert.equal(shortGeneratedRate, 0.25);
+assert.equal(clipDurationInFrames(shortGenerated, 30, shortGeneratedRate), 240);
+
 console.log("Clip timing smoke checks passed.");

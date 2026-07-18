@@ -62,6 +62,7 @@
     "project:create:smoke": "node scripts/project-creation-smoke.mjs",
     "generation:request:smoke": "node scripts/generation-request-smoke.mjs",
     "generation:reference:smoke": "node scripts/generation-reference-smoke.mjs",
+    "project:ephemeral:smoke": "node scripts/ephemeral-project-store-smoke.mjs",
     "generation:session:smoke": "node scripts/generation-session-smoke.mjs",
     "generation:resume:smoke": "node scripts/generation-resume-smoke.mjs",
     "generation:write-guard:smoke": "node scripts/generation-write-guard-smoke.mjs",

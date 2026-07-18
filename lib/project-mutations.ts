@@ -4,6 +4,11 @@ import { promoteEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { editPlanSchema } from "@/lib/edit-plan-schema";
 import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import { materializeEditProposal } from "@/lib/edit-proposal";
+import {
+  getEphemeralProject,
+  saveEphemeralProject,
+  updateEphemeralVersionScenes
+} from "@/lib/ephemeral-project-store";
 import { attachEditPlanReferenceAssets } from "@/lib/generation-reference-assets";
 import { demoProject } from "@/lib/mock-data";
 import { initialVersionStatus, materializeNewProject } from "@/lib/project-creation";
@@ -84,6 +89,7 @@ export async function persistGeneratedProject(params: {
         versionId: params.project.currentVersion.id
       }
     ];
+    saveEphemeralProject(params.project, { messages });
     return { project: params.project, messages };
   }
 
@@ -212,7 +218,7 @@ export async function persistGeneratedProject(params: {
 }
 
 export async function loadProjectForRender(projectId: string, versionId: string): Promise<Project | undefined> {
-  if (!canPersist()) return undefined;
+  if (!canPersist()) return getEphemeralProject(projectId, versionId)?.project;
   const sql = getSql();
   const rows = await sql`
     select p.title
@@ -236,6 +242,8 @@ export async function loadProjectForRender(projectId: string, versionId: string)
 
 export async function loadCurrentProjectForEdit(projectId: string, versionId: string) {
   if (!canPersist()) {
+    const ephemeral = getEphemeralProject(projectId, versionId);
+    if (ephemeral) return ephemeral.project;
     return projectId === demoProject.id && versionId === demoProject.currentVersion.id
       ? demoProject
       : undefined;
@@ -351,7 +359,10 @@ export async function persistGeneratedSceneAssets(
     invalidateRender?: boolean;
   } = {}
 ) {
-  if (!canPersist()) return;
+  if (!canPersist()) {
+    updateEphemeralVersionScenes(versionId, scenes);
+    return;
+  }
 
   const sql = getSql();
   const rows = await sql`
@@ -503,7 +514,13 @@ export async function rejectPersistedEditPlan(params: {
 }): Promise<ChatMessage> {
   const content = "已取消这份修改方案，当前视频版本保持不变。";
   if (!canPersist()) {
-    return { id: crypto.randomUUID(), role: "assistant", type: "text", content, versionId: params.versionId };
+    const message = { id: crypto.randomUUID(), role: "assistant" as const, type: "text" as const, content, versionId: params.versionId };
+    const current = getEphemeralProject(params.projectId, params.versionId);
+    if (current) saveEphemeralProject(current.project, {
+      messages: [...current.messages, message],
+      pendingPlan: null
+    });
+    return message;
   }
   const sql = getSql();
   const messageId = crypto.randomUUID();
@@ -671,12 +688,18 @@ export async function persistEditPlan(params: {
   engine: string;
 }): Promise<{ editPlan: EditPlan; messages: ChatMessage[] }> {
   if (!canPersist()) {
+    const messages: ChatMessage[] = [
+      { id: crypto.randomUUID(), role: "user", type: "text", content: params.request },
+      { id: crypto.randomUUID(), role: "assistant", type: "plan", content: params.editPlan.summary, editPlan: params.editPlan }
+    ];
+    const current = getEphemeralProject(params.projectId, params.versionId);
+    if (current) saveEphemeralProject(current.project, {
+      messages: [...current.messages, ...messages],
+      pendingPlan: params.editPlan
+    });
     return {
       editPlan: params.editPlan,
-      messages: [
-        { id: crypto.randomUUID(), role: "user", type: "text", content: params.request },
-        { id: crypto.randomUUID(), role: "assistant", type: "plan", content: params.editPlan.summary, editPlan: params.editPlan }
-      ]
+      messages
     };
   }
 
@@ -880,17 +903,23 @@ export async function applyPersistedEditPlan(params: {
   const pendingMedia = imageSceneNumbers.length > 0 || audioSceneNumbers.length > 0 || clipSceneNumbers.length > 0;
 
   if (!canPersist()) {
+    const message: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      type: "version",
+      content: pendingMedia
+        ? "修改已保存为可恢复的新版本，正在刷新受影响的画面和配音。"
+        : "修改已保存为可恢复的新版本，可以继续预览或导出。",
+      versionId: nextProject.currentVersion.id
+    };
+    const current = getEphemeralProject(params.project.id);
+    saveEphemeralProject(nextProject, {
+      messages: [...(current?.messages ?? []), message],
+      pendingPlan: null
+    });
     return {
       project: nextProject,
-      message: {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        type: "version",
-        content: pendingMedia
-          ? "修改已保存为可恢复的新版本，正在刷新受影响的画面和配音。"
-          : "修改已保存为可恢复的新版本，可以继续预览或导出。",
-        versionId: nextProject.currentVersion.id
-      },
+      message,
       regeneration
     };
   }

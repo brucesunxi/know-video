@@ -118,8 +118,8 @@ export function attachEditPlanReferenceAssets(project: Project, plan: EditPlan):
       style: {
         ...scene.style,
         referenceAssets: [
-          ...(scene.style?.referenceAssets ?? []).filter((existing) => !references.some((reference) => reference.key === existing.key)),
-          ...references
+          ...references,
+          ...(scene.style?.referenceAssets ?? []).filter((existing) => !references.some((reference) => reference.key === existing.key))
         ]
       }
     };

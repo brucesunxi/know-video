@@ -93,6 +93,20 @@ const editAttached = attachEditPlanReferenceAssets(project, {
 assert.equal(editAttached.currentVersion.scenes[0].style, undefined);
 assert.equal(editAttached.currentVersion.scenes[1].style.referenceAssets[0].key, references[0].key);
 assert.equal(editAttached.currentVersion.scenes[1].assets.length, 0);
+const reprioritized = attachEditPlanReferenceAssets({
+  ...editAttached,
+  currentVersion: {
+    ...editAttached.currentVersion,
+    scenes: editAttached.currentVersion.scenes.map((scene) => scene.sceneNumber === 2 ? {
+      ...scene,
+      style: { ...scene.style, referenceAssets: [{ ...references[2], targetSceneNumber: 2 }] }
+    } : scene)
+  }
+}, {
+  referenceAssets: [{ ...references[0], targetSceneNumber: 2 }]
+});
+assert.equal(reprioritized.currentVersion.scenes[1].style.referenceAssets[0].key, references[0].key);
+assert.equal(reprioritized.currentVersion.scenes[1].style.referenceAssets[1].key, references[2].key);
 
 const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
 assert.match(workspace, /referenceAssets: uploadedReferences/);

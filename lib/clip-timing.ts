@@ -19,7 +19,7 @@ export function resolvedClipPlaybackRate(input: {
   const closeUploadedMatch = durationRatio >= 0.78 && durationRatio <= 1.08;
   if (!generated && !closeUploadedMatch) return productionRate;
 
-  return Math.max(0.5, Math.min(2, productionRate * durationRatio));
+  return Math.max(0.1, Math.min(2, productionRate * durationRatio));
 }
 
 export function clipDurationInFrames(asset: SceneAsset, fps: number, playbackRate: number) {
