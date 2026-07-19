@@ -27,6 +27,11 @@ const localRequire = (name) => {
     isProductionOnlyRequest: () => false,
     productionSettingsFromRequest: () => ({})
   };
+  if (name === "@/lib/brief-semantics") return {
+    extractBriefFacts: (prompt) => prompt.split(/[。！？；\n]+/u).filter((part) => part.length >= 8),
+    extractBriefSubject: (prompt) => prompt.match(/\b[A-Z][A-Z0-9_-]{2,}\b/)?.[0] ?? "这项产品",
+    isVideoCreationProductBrief: (prompt) => /视频(?:生成|创作|制作)(?:平台|工具|软件|系统|工作室)/u.test(prompt)
+  };
   throw new Error(`Unexpected import: ${name}`);
 };
 vm.runInNewContext(output, { module, exports: module.exports, require: localRequire, crypto: { randomUUID } });
@@ -106,5 +111,14 @@ for (const fallbackScene of fallbackProject.currentVersion.scenes) {
   assert.ok(fallbackScene.visualPrompt.length >= 100);
   assert.ok(fallbackScene.motionPrompt.length >= 50);
 }
+
+const clientProductProject = generateProjectFromPrompt(
+  "请为 VYBEA 生成一支 30 秒企业介绍视频并规划 5 个分镜。VYBEA 是面向娱乐 IP 的项目级责任治理操作环境。它把风险信号转化为可审查的证据与可追溯的责任材料。",
+  undefined,
+  { language: "中文", style: "电影感", duration: "30", sceneCount: "5" }
+);
+assert.notEqual(clientProductProject.title, "Know Video 产品介绍");
+assert(clientProductProject.currentVersion.scenes.some((scene) => /VYBEA|责任治理/u.test(scene.voiceover)));
+assert(clientProductProject.currentVersion.scenes.every((scene) => !/(?:这|本|整)(?:支|个|段)?视频|镜头回到|视频呈现/u.test(scene.voiceover)));
 
 console.log("Heuristic edit language smoke checks passed.");

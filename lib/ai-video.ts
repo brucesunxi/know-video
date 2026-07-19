@@ -466,6 +466,8 @@ async function createTreatment(
           "You are a senior commercial film director and creative strategist.",
           "Develop one coherent, specific treatment for an AI-generated short video.",
           "Find a visual concept rooted in the user's actual subject, not a software feature list.",
+          "Separate production instructions (make a video, duration, format, style, scenes) from the company or product being promoted.",
+          "The spoken narrative must communicate the client's company, product, customer problem, differentiators, evidence, and outcome. It must never describe the act of making or watching this video unless video creation is itself the client's product.",
           "Each beat must advance one narrative arc and introduce a distinct visual event.",
           "The final beat must resolve into a concrete delivery, outcome, or call-to-action moment.",
           "Establish a reusable visual bible so separately generated shots still feel like one film.",
@@ -509,6 +511,7 @@ async function repairStoryboard(params: {
           "Rewrite the storyboard to resolve every listed issue while preserving the approved treatment.",
           "Return strict JSON only, using the exact same storyboard schema.",
           "Use concrete filmable imagery, distinct shot purposes, natural narration, and coherent visual continuity.",
+          "Narration must speak about the client's company or product, never about the video, scene, shot, camera, prompt, storyboard, or generation workflow unless that workflow is the actual product in the original request.",
           "Across four or more scenes, use at least three clearly named shot scales or camera angles.",
           "Do not reuse the same narration opening, composition, or visual event in multiple scenes.",
           "The final scene must clearly feel like completion, delivery, launch, export, share, or the next action.",
@@ -568,6 +571,8 @@ export async function createStoryboardProject(
               "Describe visual prompts as finished cinematic frames that an image model can render, not as design notes.",
               `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must be written in ${options?.language ?? treatment.language}.`,
               "Voiceover must be natural finished narration, fit comfortably in its scene duration, and avoid repeating the title.",
+              "Treat requests such as 'make a video', duration, style, format, and scene count only as production instructions, never as the subject of the narration.",
+              "Voiceover must sell or explain the client's actual company, product, customer problem, differentiators, evidence, and outcome. Never narrate what the video, scene, shot, camera, storyboard, viewer, or generation process is doing unless video creation is itself the client's product.",
               "Every scene must begin its narration differently and depict a different visual event and composition.",
               "The final scene must unmistakably resolve the promise with a deliverable outcome or clear next action, not just another feature beat.",
               "Motion prompts must specify camera movement, subject movement, depth behavior, and the handoff into the next shot."
@@ -587,7 +592,7 @@ export async function createStoryboardProject(
     }
     let acceptedStoryboard = parsed;
     let scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration);
-    let qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title);
+    let qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title, prompt);
     if (qualityIssues.length > 0) {
       console.warn(`[ai-video] Storyboard quality check requested a repair: ${qualityIssues.join(", ")}.`);
       acceptedStoryboard = await repairStoryboard({
@@ -601,7 +606,7 @@ export async function createStoryboardProject(
         referenceContext
       });
       scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration);
-      qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title);
+      qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title, prompt);
       if (qualityIssues.length > 0) {
         console.error(`[ai-video] Repaired storyboard still failed quality checks (${qualityIssues.join(", ")}), using focused fallback.`);
         return { project: generateProjectFromPrompt(prompt, baseProject, options), engine: "heuristic" };

@@ -1,4 +1,5 @@
 import type { GenerationOptions, Scene } from "@/lib/types";
+import { extractBriefSubject, hasMetaProductionNarration, isVideoCreationProductBrief } from "@/lib/brief-semantics";
 
 const genericSceneNames = [
   "customization",
@@ -116,7 +117,8 @@ export function storyboardLooksGeneric(scenes: Array<{ title: string; visualProm
 export function storyboardQualityIssues(
   scenes: Scene[],
   options?: GenerationOptions,
-  projectTitle?: string
+  projectTitle?: string,
+  brief?: string
 ) {
   const issues: string[] = [];
   const normalizedTitles = scenes.map((scene) => scene.title.toLowerCase().replace(/\s+/g, " "));
@@ -131,6 +133,17 @@ export function storyboardQualityIssues(
   if (visualPromptsRepeat(scenes)) issues.push("scene visuals are too repetitive");
   if (scenes.length >= 4 && detectedShotVariety(scenes) < 3) issues.push("shot scale and camera angle lack variety");
   if (repeatedNarrationOpenings(scenes)) issues.push("voiceover openings repeat mechanically");
+  if (brief && !isVideoCreationProductBrief(brief) && scenes.some((scene) => hasMetaProductionNarration(scene.voiceover))) {
+    issues.push("voiceover narrates the production instead of the client's company or product");
+  }
+  if (brief) {
+    const subject = extractBriefSubject(brief, options?.language !== "英文");
+    const isDistinctBrand = /^[A-Z][A-Z0-9_-]{2,}$/u.test(subject);
+    const narration = `${projectTitle ?? ""} ${scenes.map((scene) => scene.voiceover).join(" ")}`.toLowerCase();
+    if (isDistinctBrand && !narration.includes(subject.toLowerCase())) {
+      issues.push("voiceover loses the client's named company or product");
+    }
+  }
   const finalScene = scenes.at(-1);
   if (finalScene && !hasFinalResolve(finalScene)) issues.push("final scene lacks delivery or call-to-action resolve");
   if (scenes.some((scene) => {

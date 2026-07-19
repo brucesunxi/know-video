@@ -3,6 +3,7 @@ import { fitSceneNarration } from "@/lib/narration-fit";
 import { narrationVoiceForBrief, narrationVoiceFromRequest } from "@/lib/voice-profiles";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
+import { extractBriefFacts, extractBriefSubject, isVideoCreationProductBrief } from "@/lib/brief-semantics";
 
 const palettes = {
   dark: ["#07111d", "#143044", "#38d5e5", "#f8fafc"],
@@ -27,18 +28,6 @@ function titleFromPrompt(prompt: string) {
 
 function containsChinese(text: string) {
   return /\p{Script=Han}/u.test(text);
-}
-
-function isVideoGenerationPrompt(prompt: string) {
-  const lower = prompt.toLowerCase();
-  return (
-    lower.includes("video generation") ||
-    lower.includes("text-to-video") ||
-    lower.includes("ai video") ||
-    prompt.includes("视频生成") ||
-    prompt.includes("生成视频") ||
-    prompt.includes("分镜")
-  );
 }
 
 function distributeFallbackDurations(sceneCount: number, targetDuration: number) {
@@ -245,7 +234,7 @@ export function generateProjectFromPrompt(
       assets: []
     }
   ];
-  if (isVideoGenerationPrompt(prompt)) {
+  if (isVideoCreationProductBrief(prompt)) {
     const videoGenerationScenes = applyFallbackConstraints(videoGenerationBlueprints, options, chinese);
     return {
       ...(baseProject ?? {
@@ -266,14 +255,22 @@ export function generateProjectFromPrompt(
     };
   }
 
+  const briefSubject = extractBriefSubject(prompt, chinese);
+  const briefFacts = extractBriefFacts(prompt, chinese);
+  const fallbackTitle = briefSubject === "这项产品" || briefSubject === "This product"
+    ? title
+    : chinese ? `${briefSubject} 产品介绍` : `${briefSubject} Product Film`;
+  const fallbackFact = (index: number, chineseFallback: string, englishFallback: string) => {
+    const fact = briefFacts[index] ?? briefFacts[index % Math.max(1, briefFacts.length)];
+    if (fact) return fact;
+    return chinese ? chineseFallback : englishFallback;
+  };
   const genericBlueprints: Scene[] = [
     {
       id: crypto.randomUUID(),
       sceneNumber: 1,
       title: chinese ? "开场钩子" : "Opening Hook",
-      voiceover: chinese
-        ? `${title} 从一个清晰、有吸引力的核心承诺开场，让观众立即理解这支视频为什么值得继续看。`
-        : `${title} opens with the core promise in one clear sentence, giving viewers a reason to keep watching.`,
+      voiceover: fallbackFact(0, `${briefSubject}，让企业最重要的价值被清楚看见。`, `${briefSubject} makes the company's most important value clear.`),
       visualPrompt: `${tone} opening title card for ${prompt}, strong product signal, clean layout, readable headline.`,
       motionPrompt: "Camera pushes in slowly while the headline resolves and supporting UI details fade into place.",
       durationSeconds: 6,
@@ -284,9 +281,7 @@ export function generateProjectFromPrompt(
       id: crypto.randomUUID(),
       sceneNumber: 2,
       title: chinese ? "问题情境" : "Problem Context",
-      voiceover: chinese
-        ? "视频呈现目标受众正在经历的真实阻力，让解决这个问题的价值变得具体而紧迫。"
-        : "The video frames the current friction, showing why the audience needs a more structured answer.",
+      voiceover: fallbackFact(1, `面对复杂业务，${briefSubject}帮助团队更早识别问题并建立清晰共识。`, `In complex work, ${briefSubject} helps teams identify problems earlier and build shared clarity.`),
       visualPrompt: `${tone} problem scene with scattered cards, alerts, and timeline pressure around ${prompt}.`,
       motionPrompt: "Cards drift apart, warning states appear, then pause for emphasis.",
       durationSeconds: 7,
@@ -297,9 +292,7 @@ export function generateProjectFromPrompt(
       id: crypto.randomUUID(),
       sceneNumber: 3,
       title: chinese ? "解决路径" : "Solution Flow",
-      voiceover: chinese
-        ? "解决方案被拆成清晰的步骤，让复杂过程变得容易理解，也让行动路径触手可及。"
-        : "The solution is broken into a step-by-step flow that makes the system feel achievable.",
+      voiceover: fallbackFact(2, `${briefSubject}把关键流程连接起来，让每一步都有依据、责任与行动路径。`, `${briefSubject} connects the critical workflow so every step has evidence, ownership, and a path to action.`),
       visualPrompt: `${tone} workflow scene with three connected steps, interface panels, and visual hierarchy.`,
       motionPrompt: "Steps connect from left to right, then the active step expands.",
       durationSeconds: 8,
@@ -310,9 +303,7 @@ export function generateProjectFromPrompt(
       id: crypto.randomUUID(),
       sceneNumber: 4,
       title: chinese ? "效果证明" : "Proof Moment",
-      voiceover: chinese
-        ? "一个具体案例展示改变如何发生，把抽象价值转化为观众能够看见和相信的结果。"
-        : "A concrete example shows the transformation from scattered work into a cleaner operating rhythm.",
+      voiceover: fallbackFact(3, `从分散信息到可验证成果，${briefSubject}让改进过程清晰、可信并且可追溯。`, `From scattered information to verifiable outcomes, ${briefSubject} makes improvement clear, credible, and traceable.`),
       visualPrompt: `${tone} before-after comparison for ${prompt}, measurable improvement, dashboard-like clarity.`,
       motionPrompt: "Before state compresses, after state slides in with highlighted metrics.",
       durationSeconds: 7,
@@ -323,9 +314,7 @@ export function generateProjectFromPrompt(
       id: crypto.randomUUID(),
       sceneNumber: 5,
       title: chinese ? "价值升华" : "Human Outcome",
-      voiceover: chinese
-        ? "镜头回到使用者真正获得的改变，强化这套方案带来的长期价值和情绪回报。"
-        : "The story returns to the human outcome, reinforcing the lasting value and emotional payoff of the solution.",
+      voiceover: fallbackFact(4, `最终，团队获得的不只是效率，更是更稳定的判断、更顺畅的协作和更可靠的结果。`, `The result is more than efficiency: teams gain stronger decisions, smoother collaboration, and more reliable outcomes.`),
       visualPrompt: `${tone} closing brand card for ${prompt}, centered mark, concise takeaway, premium spacing.`,
       motionPrompt: "Logo and takeaway fade in, background elements settle, then hold.",
       durationSeconds: 6,
@@ -336,9 +325,7 @@ export function generateProjectFromPrompt(
       id: crypto.randomUUID(),
       sceneNumber: 6,
       title: chinese ? "成果收束" : "Final Resolve",
-      voiceover: chinese
-        ? "结尾再次聚焦最重要的成果，并用一个简洁、清晰、值得记住的画面结束整支视频。"
-        : "The closing scene reinforces the main outcome and leaves the audience with a memorable final frame.",
+      voiceover: fallbackFact(5, `${briefSubject}，让真正重要的工作持续向前。`, `${briefSubject} keeps the work that matters moving forward.`),
       visualPrompt: `${tone} closing cinematic frame for ${prompt}, one concrete hero subject, resolved environment, strong visual identity, premium spacing, no generic presentation layout.`,
       motionPrompt: "The final subject settles into a clean hero composition, environmental motion slows, and the camera holds for a confident finish.",
       durationSeconds: 6,
@@ -359,7 +346,7 @@ export function generateProjectFromPrompt(
       credits: 996,
       plan: "Free"
     }),
-    title,
+    title: fallbackTitle,
     currentVersion: {
       id: crypto.randomUUID(),
       label: "draft 1",

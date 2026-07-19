@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
 
-const source = fs.readFileSync(new URL("../lib/storyboard-quality.ts", import.meta.url), "utf8")
-  .replace(/^import type .*$/gm, "");
+const semanticsSource = fs.readFileSync(new URL("../lib/brief-semantics.ts", import.meta.url), "utf8");
+const qualitySource = fs.readFileSync(new URL("../lib/storyboard-quality.ts", import.meta.url), "utf8")
+  .replace(/^import type .*$/gm, "")
+  .replace(/^import .*brief-semantics.*$/gm, "");
+const source = `${semanticsSource}\n${qualitySource}`;
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 }
 }).outputText;
@@ -47,5 +50,23 @@ assert(storyboardQualityIssues(mutate(3, {
 }), { language: "中文" }).includes("final scene lacks delivery or call-to-action resolve"));
 assert(storyboardQualityIssues(mutate(1, { visualPrompt: "人物出现，内容空泛，没有可执行的画面细节。" }), { language: "中文" }).includes("visual direction lacks production-ready composition details"));
 assert(storyboardQualityIssues(mutate(2, { voiceover: "这是一段明显过长而且无法在六秒时间里自然说完的旁白内容，它会让配音变得非常急促，也破坏整支影片原本应有的呼吸和节奏。" }), { language: "中文" }).includes("voiceover does not fit comfortably inside its scene duration"));
+assert(storyboardQualityIssues(
+  mutate(1, { voiceover: "这支视频将展示团队如何解决复杂问题并继续向前。" }),
+  { language: "中文" },
+  "企业责任治理",
+  "请为 VYBEA 制作一支企业产品介绍片"
+).includes("voiceover narrates the production instead of the client's company or product"));
+assert(!storyboardQualityIssues(
+  mutate(1, { voiceover: "这支视频将展示平台如何自动完成分镜与画面生成。" }),
+  { language: "中文" },
+  "智能视频创作平台",
+  "制作一支 AI 视频生成平台的产品介绍片"
+).includes("voiceover narrates the production instead of the client's company or product"));
+assert(storyboardQualityIssues(
+  scenes,
+  { language: "中文" },
+  "企业责任治理",
+  "请为 VYBEA 制作一支企业产品介绍片"
+).includes("voiceover loses the client's named company or product"));
 
 console.log("Storyboard quality smoke passed.");
