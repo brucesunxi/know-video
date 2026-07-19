@@ -59,6 +59,9 @@ vm.runInNewContext(output, {
 });
 
 const { generateProjectSceneClips } = module.exports;
+const route = fs.readFileSync(new URL("../app/api/assets/video/generate/route.ts", import.meta.url), "utf8");
+assert.match(route, /VIDEO_PROVIDER_BALANCE_REQUIRED/);
+assert.match(route, /视频生成服务额度不足/);
 const project = {
   id: "project",
   title: "Product story",

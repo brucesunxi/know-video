@@ -97,12 +97,12 @@ function stronglyGlobal(request: string) {
 }
 
 function weaklyGlobal(request: string) {
-  return /全部|全都|统一|整体(?:风格|色调|节奏|画面|旁白|语言|配音|字幕)?|都(?:改|换|调整|变成|使用)/u.test(request);
+  return /全部|全都|统一|整体(?:风格|色调|节奏|画面|旁白|语言|配音|字幕)?|都(?:改|换|调整|变成|使用|去掉|移除|删除|清除)/u.test(request);
 }
 
 function broadUnscopedEdit(request: string) {
-  const subject = /语言|中文|英文|汉语|配音|旁白|字幕|标题|文案|风格|画风|色调|配色|颜色|主题|节奏|速度|音乐|字体|logo|水印|language|voice|narration|caption|subtitle|style|theme|palette|color|pace|speed|music|font|watermark/iu.test(request);
-  const action = /改|换|调整|变成|使用|统一|翻译|转换|本地化|加快|放慢|移除|删除|增加|添加|make|change|switch|translate|localize|adjust|use|remove|faster|slower/iu.test(request);
+  const subject = /语言|中文|英文|汉语|配音|旁白|字幕|标题|文字|文案|画面|背景图?|风格|画风|色调|配色|颜色|主题|节奏|速度|音乐|字体|logo|水印|language|voice|narration|caption|subtitle|text|image|background|style|theme|palette|color|pace|speed|music|font|watermark/iu.test(request);
+  const action = /改|换|调整|变成|使用|统一|翻译|转换|本地化|加快|放慢|去掉|清除|移除|删除|增加|添加|重新生成|重做|make|change|switch|translate|localize|adjust|use|remove|clear|regenerate|faster|slower/iu.test(request);
   return subject && action;
 }
 

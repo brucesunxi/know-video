@@ -84,7 +84,15 @@ type GenerationMediaIssue = {
   sceneNumber: number;
   type: GenerationIssueMedia;
   reason: string;
+  errorCode?: string;
 };
+
+class MediaRequestError extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+    this.name = "MediaRequestError";
+  }
+}
 type StoryboardGenerationResponse = {
   status?: "pending" | "ready" | "failed";
   project?: Project;
@@ -950,7 +958,12 @@ function sceneMediaDiagnosticItems(scene: Scene) {
 }
 
 function requestErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name)) {
+  const name = error instanceof Error ? error.name : "";
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (
+    ["AbortError", "TimeoutError"].includes(name)
+    || /signal timed out|timed out|aborted due to timeout|the operation was aborted/iu.test(message)
+  ) {
     return `${fallback}请求超时，请稍后重试。`;
   }
   return error instanceof Error ? error.message : fallback;
@@ -3175,6 +3188,9 @@ function StudioScreen({
     .map((item) => item.sceneNumber);
   const invalidMedia = invalidRenderMediaSummary(invalidRenderMedia);
   const generationIssue = generationIssueSummary(generationIssues);
+  const videoBalanceRequired = generationIssues.some(
+    (issue) => issue.type === "clip" && issue.errorCode === "VIDEO_PROVIDER_BALANCE_REQUIRED"
+  );
   const filmSettings = productionSettings(project);
   const mediaAudit = auditProjectMedia(project);
   const qualityErrors = mediaAudit.errors.filter((issue) => !["missing-visual", "missing-audio"].includes(issue.code));
@@ -3395,9 +3411,14 @@ function StudioScreen({
               {generationIssue.clip.length > 0 ? (
                 <span className="optional" key="optional-clips">
                   <Clapperboard size={14} />
-                  <strong>动态效果可稍后补充</strong>
-                  <small>场景 {sceneNumberListLabel(generationIssue.clip)} 已保留静态画面，不影响当前版本导出。</small>
-                  <button disabled={isBusy} onClick={() => onGenerateClips(generationIssue.clip)} type="button">重试动态镜头</button>
+                  <strong>{videoBalanceRequired ? "视频生成额度不足" : "动态效果可稍后补充"}</strong>
+                  <small>
+                    场景 {sceneNumberListLabel(generationIssue.clip)} 已保留静态画面，不影响当前版本导出。
+                    {videoBalanceRequired ? " 补充视频模型余额或配置 BYOK 后即可继续生成。" : ""}
+                  </small>
+                  <button disabled={isBusy} onClick={() => onGenerateClips(generationIssue.clip)} type="button">
+                    {videoBalanceRequired ? "配置后重试" : "重试动态镜头"}
+                  </button>
                 </span>
               ) : null}
             </div>
@@ -3944,7 +3965,12 @@ export function WorkspaceClient({
           } catch (error) {
             const reason = requestErrorMessage(error, `场景 ${sceneNumber} 的动态镜头生成失败。`);
             warnings.push(reason);
-            issues.push({ sceneNumber, type: "clip", reason });
+            issues.push({
+              sceneNumber,
+              type: "clip",
+              reason,
+              errorCode: error instanceof MediaRequestError ? error.code : undefined
+            });
           }
         }
       }
@@ -4241,7 +4267,8 @@ export function WorkspaceClient({
       ? undefined
       : candidateEditFromRequest(
           request,
-          project.currentVersion.scenes.map((scene) => scene.sceneNumber)
+          project.currentVersion.scenes.map((scene) => scene.sceneNumber),
+          selectedScene
         );
     setBusyAction(pendingPlan ? "refining-edit" : candidateIntent ? "generating-candidate" : "planning-edit");
     setErrorMessage(undefined);
@@ -4280,7 +4307,7 @@ export function WorkspaceClient({
           requestId,
           referenceAssets: uploadedReferences
         }),
-        signal: AbortSignal.timeout(candidateIntent || uploadedReferences.length > 0 ? 125_000 : 45_000)
+        signal: AbortSignal.timeout(115_000)
       });
       if (!response.ok) {
         const failure = await response.json().catch(() => ({})) as { error?: string };
@@ -4327,10 +4354,12 @@ export function WorkspaceClient({
           body: JSON.stringify({ requestId, keys: uploadedReferences.map((reference) => reference.key) })
         }).catch(() => undefined);
       }
+      const message = requestErrorMessage(error, "修改方案生成失败。");
+      if (/请求超时/.test(message)) setChatInput(request);
       pushMessage({
         role: "assistant",
         type: "text",
-        content: error instanceof Error ? error.message : "没有生成修改计划，请稍后重试。"
+        content: message
       });
     } finally {
       setIsBusy(false);
@@ -4523,6 +4552,7 @@ export function WorkspaceClient({
       let updatedProject = data.project;
       const warnings: string[] = [];
       setProject(updatedProject);
+      setGenerationIssues([]);
       setMessages((current) => [...current, data.message!]);
       setSelectedScene(data.selectedSceneNumber);
       setPendingPlan(undefined);
@@ -5326,9 +5356,11 @@ export function WorkspaceClient({
         }),
         signal: AbortSignal.timeout(295_000)
       });
-      const data = await response.json() as { project?: Project; error?: string };
+      const data = await response.json() as { project?: Project; error?: string; errorCode?: string };
       if (data.project) updatedProject = data.project;
-      if (!response.ok || !data.project) throw new Error(data.error || "动态镜头生成失败。");
+      if (!response.ok || !data.project) {
+        throw new MediaRequestError(data.error || "动态镜头生成失败。", data.errorCode);
+      }
     }
     return updatedProject;
   }
@@ -5351,7 +5383,11 @@ export function WorkspaceClient({
       }, true);
     } catch (error) {
       const message = requestErrorMessage(error, "动态镜头生成失败。");
-      setErrorMessage(message);
+      const errorCode = error instanceof MediaRequestError ? error.code : undefined;
+      setGenerationIssues((current) => [
+        ...withoutRepairedGenerationIssues(current, "clip", sceneNumbers),
+        ...sceneNumbers.map((sceneNumber) => ({ sceneNumber, type: "clip" as const, reason: message, errorCode }))
+      ]);
       pushMessage({ role: "assistant", type: "text", content: message });
     } finally {
       setIsBusy(false);

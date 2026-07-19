@@ -34,6 +34,8 @@ assert.deepEqual(Array.from(globalEditTargetSceneNumbers("把全片改成浅色"
 assert.deepEqual(Array.from(globalEditTargetSceneNumbers("把全片改成浅色，但第 2 场保持不变", scenes)), [1, 3, 4, 5, 6]);
 assert.deepEqual(Array.from(globalEditTargetSceneNumbers("Change every scene except scene 4", scenes)), [1, 2, 3, 5, 6]);
 assert.deepEqual(Array.from(globalEditTargetSceneNumbers("只修改第 3 场景", scenes)), [3]);
+assert.deepEqual(Array.from(globalEditTargetSceneNumbers("请把背景图的文字都去掉，然后重新生成视频", scenes)), scenes);
+assert.deepEqual(Array.from(globalEditTargetSceneNumbers("清除画面文字", scenes)), scenes);
 
 assert.deepEqual(
   JSON.parse(JSON.stringify(analyzeEditIntent("把语言都改为中文", scenes))),

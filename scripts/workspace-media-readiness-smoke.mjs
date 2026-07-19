@@ -27,6 +27,9 @@ assert.match(workspace, /替换停帧镜头：场景/);
 assert.match(workspace, /aria-label="待处理素材清单"/);
 assert.match(workspace, /动态效果可稍后补充/);
 assert.match(workspace, /不会影响静态画面成片/);
+assert.match(workspace, /VIDEO_PROVIDER_BALANCE_REQUIRED/);
+assert.match(workspace, /配置后重试/);
+assert.match(workspace, /setGenerationIssues\(\(current\) => \[/);
 assert.doesNotMatch(workspace, /刚才有 \{generationIssueCount\} 个素材没有生成完成/);
 assert.doesNotMatch(workspace, /kv-media-warning/);
 

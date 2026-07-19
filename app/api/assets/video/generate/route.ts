@@ -13,6 +13,16 @@ const requestSchema = z.object({
 
 export const maxDuration = 300;
 
+function videoFailureCode(failures: Array<{ error: unknown }>) {
+  const balanceRequired = failures.some(({ error }) => {
+    const failure = error as { status?: number; code?: string; message?: string };
+    return failure?.status === 402
+      || failure?.code === "2021"
+      || /insufficient balance|add money|byok/iu.test(failure?.message ?? "");
+  });
+  return balanceRequired ? "VIDEO_PROVIDER_BALANCE_REQUIRED" as const : undefined;
+}
+
 export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => undefined));
   if (!parsed.success) {
@@ -59,12 +69,16 @@ export async function POST(request: Request) {
     failed.map((scene) => scene.sceneNumber)
   );
   if (failed.length > 0) {
+    const errorCode = videoFailureCode(result.failures);
     return NextResponse.json({
-      error: mediaGenerationFailureMessage(
-        "动态镜头",
-        progress,
-        "请确认账户已开通视频生成能力，或稍后重试。"
-      ),
+      error: errorCode === "VIDEO_PROVIDER_BALANCE_REQUIRED"
+        ? "视频生成服务额度不足。请补充视频模型余额或配置可用的 BYOK 凭据后重试；当前静态画面和智能运镜仍可正常导出。"
+        : mediaGenerationFailureMessage(
+            "动态镜头",
+            progress,
+            "请确认账户已开通视频生成能力，或稍后重试。"
+          ),
+      errorCode,
       project: result.project,
       ...progress
     }, { status: 502 });
