@@ -6,6 +6,7 @@ const semanticsSource = fs.readFileSync(new URL("../lib/brief-semantics.ts", imp
 const qualitySource = fs.readFileSync(new URL("../lib/storyboard-quality.ts", import.meta.url), "utf8")
   .replace(/^import type .*$/gm, "")
   .replace(/^import .*brief-semantics.*$/gm, "");
+assert.doesNotMatch(qualitySource, /voiceover is too short for the available scene duration/);
 const source = `${semanticsSource}\n${qualitySource}`;
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 }

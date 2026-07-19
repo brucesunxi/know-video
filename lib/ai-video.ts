@@ -88,6 +88,9 @@ function treatmentNarrationIssues(treatment: Treatment, prompt: string, targetDu
     issues.push("narration describes video production instead of the client's business");
   }
   const estimatedTotal = lines.reduce((sum, line) => sum + estimateNarrationSeconds(line), 0);
+  if (estimatedTotal < Math.max(4, targetDuration * 0.58)) {
+    issues.push("locked narration is too sparse for the requested video duration");
+  }
   if (estimatedTotal > Math.max(3, targetDuration - treatment.beats.length * 0.28)) {
     issues.push("locked narration exceeds the total spoken-time budget");
   }
@@ -99,6 +102,9 @@ function treatmentNarrationIssues(treatment: Treatment, prompt: string, targetDu
     issues.push("locked narration cannot fit the requested integer scene durations without truncation");
   }
   const averageSceneSeconds = targetDuration / treatment.beats.length;
+  if (lines.some((line) => estimateNarrationSeconds(line) < Math.max(1.4, averageSceneSeconds * 0.42))) {
+    issues.push("one or more locked narration lines are too sparse to carry their scene");
+  }
   if (lines.some((line) => estimateNarrationSeconds(line) > Math.max(1.4, averageSceneSeconds * 1.12))) {
     issues.push("one or more locked narration lines exceed their scene-level spoken-time budget");
   }
