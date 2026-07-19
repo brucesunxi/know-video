@@ -2,7 +2,7 @@ import { generateCloudflareVideo, hasCloudflareAI } from "@/lib/cloudflare-ai";
 import { stableImageSeed } from "@/lib/image-continuity";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
-import { GeneratedVideoQualityError, inspectGeneratedVideo } from "@/lib/video-quality";
+import { inspectGeneratedVideo } from "@/lib/video-quality";
 
 function sceneVideoPrompt(scene: Scene, project: Project) {
   return [
@@ -29,32 +29,15 @@ async function generateSceneClip(input: {
   if (!image) throw new Error("Scene has no reference image for video generation");
   const prompt = sceneVideoPrompt(input.scene, input.project);
   const duration = Math.min(15, Math.max(3, Math.round(input.scene.durationSeconds)));
-  const baseSeed = stableImageSeed(`${input.project.id}:${input.scene.sceneNumber}:video`);
-  let generated: Awaited<ReturnType<typeof generateCloudflareVideo>> | undefined;
-  let videoMetadata: Awaited<ReturnType<typeof inspectGeneratedVideo>> | undefined;
-  let seed = baseSeed;
-  let effectivePrompt = prompt;
-  for (let qualityAttempt = 0; qualityAttempt < 2; qualityAttempt += 1) {
-    seed = (baseSeed + qualityAttempt * 130_363) % 2_147_483_647 || 1;
-    effectivePrompt = qualityAttempt === 0
-      ? prompt
-      : `${prompt}\nQuality correction: render a complete ${duration}-second continuous shot with stable subjects, resolved motion throughout the full duration, and no frozen or empty frames.`;
-    try {
-      generated = await generateCloudflareVideo({
-        imageUrl: absoluteAssetUrl(image.url, input.assetBaseUrl),
-        prompt: effectivePrompt,
-        duration,
-        resolution: input.quality === "premium" ? "1080P" : "720P",
-        seed
-      });
-      videoMetadata = await inspectGeneratedVideo(generated.body, duration);
-      break;
-    } catch (error) {
-      if (!(error instanceof GeneratedVideoQualityError) || qualityAttempt === 1) throw error;
-      console.warn(`[video-assets] Scene ${input.scene.sceneNumber} video failed quality validation; retrying:`, error.message);
-    }
-  }
-  if (!generated || !videoMetadata) throw new GeneratedVideoQualityError("动态镜头没有生成可用的视频文件。");
+  const seed = stableImageSeed(`${input.project.id}:${input.scene.sceneNumber}:video`);
+  const generated = await generateCloudflareVideo({
+    imageUrl: absoluteAssetUrl(image.url, input.assetBaseUrl),
+    prompt,
+    duration,
+    resolution: input.quality === "premium" ? "1080P" : "720P",
+    seed
+  });
+  const videoMetadata = await inspectGeneratedVideo(generated.body, duration);
   const key = `generated/${input.project.id}/${input.project.currentVersion.id}/scene-${input.scene.sceneNumber}-${crypto.randomUUID()}.mp4`;
   const uploaded = await uploadToR2({ key, body: generated.body, contentType: "video/mp4" });
   return {
@@ -68,7 +51,7 @@ async function generateSceneClip(input: {
       quality: input.quality,
       resolution: input.quality === "premium" ? "1080P" : "720P",
       ...videoMetadata,
-      prompt: effectivePrompt,
+      prompt,
       seed,
       referenceKey: image.r2Key,
       sceneNumber: input.scene.sceneNumber

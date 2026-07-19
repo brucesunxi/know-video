@@ -80,6 +80,15 @@ const project = {
   }
 };
 
+const failedResult = await generateProjectSceneClips(project, {
+  assetBaseUrl: "https://know-video.example",
+  sceneNumbers: [1],
+  quality: "standard"
+});
+assert.equal(failedResult.failures.length, 1);
+assert.equal(generationCalls.length, 1, "a paid video request must not retry invisibly after quality validation fails");
+assert.equal(uploads.length, 0);
+
 const result = await generateProjectSceneClips(project, {
   assetBaseUrl: "https://know-video.example",
   sceneNumbers: [1],
@@ -88,8 +97,7 @@ const result = await generateProjectSceneClips(project, {
 const clip = result.project.currentVersion.scenes[0].assets[0];
 assert.equal(result.failures.length, 0);
 assert.equal(generationCalls.length, 2);
-assert.notEqual(generationCalls[0].seed, generationCalls[1].seed);
-assert.match(generationCalls[1].prompt, /Quality correction/);
+assert.equal(generationCalls[0].seed, generationCalls[1].seed);
 assert.equal(uploads.length, 1);
 assert.equal(clip.type, "clip");
 assert.equal(clip.metadata.duration, 4.9);

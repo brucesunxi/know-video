@@ -193,7 +193,7 @@ function generationReviewItems(prompt: string, options: GenerationOptions) {
     {
       label: "动态成本",
       value: motionCount > 0 ? `${motionCount} 个动态镜头` : "仅智能运镜",
-      detail: motionCount > 0 ? "优先给动作最强的场景生成视频片段" : "生成更快，后续可逐场景补动态",
+      detail: motionCount > 0 ? "使用第三方视频模型，按次额外计费" : "低成本生成，后续可逐场景补动态",
       tone: motionCount > 0 ? "working" : "ready"
     },
     {
@@ -1409,8 +1409,8 @@ function BriefScreen({
             <label>
               <span>动态方式</span>
               <select onChange={(event) => onOptionsChange({ ...options, motion: event.target.value as GenerationOptions["motion"] })} value={options.motion}>
-                <option value="key-scenes">关键镜头动态</option>
-                <option value="camera">智能运镜</option>
+                <option value="camera">智能运镜（低成本）</option>
+                <option value="key-scenes">生成关键动态镜头（额外计费）</option>
               </select>
             </label>
           </div>
@@ -1438,8 +1438,8 @@ function BriefScreen({
           </div>
           <div className="kv-prompt-tools">
             <span>{options.motion === "key-scenes"
-              ? `${Number(options.duration) >= 45 && options.sceneCount !== "3" ? "2" : "1"} 个动作最强的场景将生成动态视频，其余场景使用智能运镜。`
-              : "全部场景使用画面运镜，生成更快。"}</span>
+              ? `${Number(options.duration) >= 45 && options.sceneCount !== "3" ? "2" : "1"} 个场景将调用第三方视频模型并产生额外费用。`
+              : "全部场景使用智能画面运镜，不调用高成本动态视频模型。"}</span>
             <button className="kv-primary" disabled={isBusy || prompt.trim().length < 4} type="submit">
               {isBusy ? <Loader2 className="kv-spin" size={18} /> : <Sparkles size={18} />}
               开始生成
@@ -3860,7 +3860,7 @@ export function WorkspaceClient({
     sceneCount: "auto",
     language: "中文",
     style: "电影质感",
-    motion: "key-scenes"
+    motion: "camera"
   });
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [projectQuery, setProjectQuery] = useState("");
