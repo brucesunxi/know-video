@@ -4,6 +4,7 @@ import vm from "node:vm";
 import ts from "typescript";
 
 const source = fs.readFileSync(new URL("../lib/edit-plan-refinement.ts", import.meta.url), "utf8");
+const aiVideo = fs.readFileSync(new URL("../lib/ai-video.ts", import.meta.url), "utf8");
 const compilerOptions = { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 };
 const output = ts.transpileModule(source, {
   compilerOptions
@@ -72,5 +73,7 @@ assert.equal(refineEditPlanScope({
   existingPlan,
   editNumber: 5
 }), undefined);
+
+assert.match(aiVideo, /const requestedProductionSettings = productionSettingsFromRequest\(params\.request\);[\s\S]*if \(isProductionOnlyRequest\(params\.request\)\)[\s\S]*productionSettings: \{[\s\S]*\.\.\.params\.existingPlan\.productionSettings,[\s\S]*\.\.\.requestedProductionSettings/);
 
 console.log("Edit plan refinement smoke checks passed.");

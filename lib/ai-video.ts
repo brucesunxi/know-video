@@ -1075,6 +1075,26 @@ export async function refineEditPlan(params: {
     throw new Error("当前修改方案已经失效，请重新生成。");
   }
 
+  const requestedProductionSettings = productionSettingsFromRequest(params.request);
+  if (isProductionOnlyRequest(params.request)) {
+    return {
+      engine: "heuristic",
+      editPlan: {
+        ...params.existingPlan,
+        id: crypto.randomUUID(),
+        editNumber: params.editNumber,
+        userRequest: `${params.existingPlan.userRequest}\n补充要求：${params.request}`,
+        summary: `保留当前修改方案，并补充更新全片播放与品牌设置：${params.request}`,
+        productionSettings: {
+          ...params.existingPlan.productionSettings,
+          ...requestedProductionSettings
+        },
+        status: "proposed",
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
+
   const deterministic = refineEditPlanScope(params);
   if (deterministic) return { editPlan: deterministic, engine: "heuristic" };
   if (params.existingPlan.sceneStructure) {

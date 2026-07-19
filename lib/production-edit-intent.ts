@@ -31,9 +31,9 @@ export function productionSettingsFromRequest(request: string): Partial<Producti
     settings.playbackRate = nearestPlaybackRate(Number(explicitRate[1]));
   } else if (/(?:恢复|改回|调整为).{0,6}(?:正常|原速|标准速度)|(?:正常|原速|标准速度).{0,6}(?:播放|速度)/iu.test(normalized)) {
     settings.playbackRate = 1;
-  } else if (/(?:节奏|速度|播放|语速|旁白速度|配音速度).{0,8}(?:更快|加快|快一点|提速)|(?:加快|提速).{0,8}(?:节奏|速度|播放|语速|旁白速度|配音速度|全片|视频)/iu.test(normalized)) {
+  } else if (/(?:节奏|速度|播放|语速|旁白速度|配音速度|旁白|配音).{0,8}(?:更快|加快|快一点|快一些|提速)|(?:加快|提速).{0,8}(?:节奏|速度|播放|语速|旁白速度|配音速度|旁白|配音|全片|视频)/iu.test(normalized)) {
     settings.playbackRate = /(?:很快|明显加快|大幅提速)/u.test(normalized) ? 1.5 : 1.25;
-  } else if (/(?:节奏|速度|播放|语速|旁白速度|配音速度).{0,8}(?:更慢|放慢|慢一点|降速)|(?:放慢|降速).{0,8}(?:节奏|速度|播放|语速|旁白速度|配音速度|全片|视频)/iu.test(normalized)) {
+  } else if (/(?:节奏|速度|播放|语速|旁白速度|配音速度|旁白|配音).{0,8}(?:更慢|放慢|慢一点|慢一些|降速)|(?:放慢|降速).{0,8}(?:节奏|速度|播放|语速|旁白速度|配音速度|旁白|配音|全片|视频)/iu.test(normalized)) {
     settings.playbackRate = 0.75;
   }
 
@@ -77,7 +77,7 @@ export function isProductionOnlyRequest(request: string) {
   if (Object.keys(settings).length === 0) return false;
   if (
     settings.playbackRate
-    && /(?:语速|旁白速度|配音速度|播放速度|速度|节奏).{0,8}(?:更快|加快|快一点|提速|更慢|放慢|慢一点|降速)|(?:加快|提速|放慢|降速).{0,8}(?:语速|旁白速度|配音速度|播放速度|速度|节奏|全片|视频)/iu.test(request)
+    && /(?:语速|旁白速度|配音速度|播放速度|速度|节奏|旁白|配音).{0,8}(?:更快|加快|快一点|快一些|提速|更慢|放慢|慢一点|慢一些|降速)|(?:加快|提速|放慢|降速).{0,8}(?:语速|旁白速度|配音速度|播放速度|速度|节奏|旁白|配音|全片|视频)/iu.test(request)
     && !/(?:第\s*[0-9一二三四五六七八九十]+|场景|镜头|章节|画面|视觉|标题|文案|语言|中文|英文|人物|角色|背景|构图|风格|画风|色调|配色|主题)/iu.test(request)
   ) {
     return true;
