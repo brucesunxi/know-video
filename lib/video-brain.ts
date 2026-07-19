@@ -50,9 +50,52 @@ function selectNarrativeScenes<T>(scenes: T[], count: number) {
   return indexes.map((index) => scenes[index]);
 }
 
+function compactChineseNarration(text: string, maxCharacters: number) {
+  const normalized = text.replace(/\s+/g, "").trim();
+  if (normalized.replace(/[，。！？；、]/g, "").length <= maxCharacters) return normalized;
+
+  const sentenceParts = normalized.match(/[^。！？；]+[。！？；]?/gu)?.map((part) => part.trim()).filter(Boolean) ?? [normalized];
+  let candidate = "";
+  for (const part of sentenceParts) {
+    const next = `${candidate}${part}`;
+    if (next.replace(/[，。！？；、]/g, "").length > maxCharacters) break;
+    candidate = next;
+  }
+  if (candidate.replace(/[，。！？；、]/g, "").length >= Math.floor(maxCharacters * 0.68)) {
+    return /[。！？；]$/u.test(candidate) ? candidate : `${candidate}。`;
+  }
+
+  const clauses = normalized.split(/[，。！？；]/u).map((part) => part.trim()).filter(Boolean);
+  const bestClause = clauses.find((part) => part.length >= Math.floor(maxCharacters * 0.48) && part.length <= maxCharacters);
+  if (bestClause) return `${bestClause}。`;
+
+  return `${normalized.replace(/[，。！？；、]/g, "").slice(0, maxCharacters)}。`;
+}
+
+function compactEnglishNarration(text: string, maxWords: number) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const words = normalized.replace(/[,.!?;:]/g, "").split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return normalized;
+
+  const sentences = normalized.match(/[^.!?;]+[.!?;]?/g)?.map((part) => part.trim()).filter(Boolean) ?? [normalized];
+  const kept: string[] = [];
+  let wordCount = 0;
+  for (const sentence of sentences) {
+    const sentenceWords = sentence.replace(/[,.!?;:]/g, "").split(/\s+/).filter(Boolean);
+    if (wordCount + sentenceWords.length > maxWords) break;
+    kept.push(sentence);
+    wordCount += sentenceWords.length;
+  }
+  if (wordCount >= Math.floor(maxWords * 0.62)) {
+    const joined = kept.join(" ");
+    return /[.!?]$/.test(joined) ? joined : `${joined}.`;
+  }
+  return `${words.slice(0, maxWords).join(" ")}.`;
+}
+
 function fitFallbackNarration(scene: Scene, durationSeconds: number, chinese: boolean) {
   if (chinese) {
-    const maxCharacters = Math.max(4, Math.floor((durationSeconds - 0.35) * 4));
+    const maxCharacters = Math.max(12, Math.floor((durationSeconds - 0.25) * 5.1));
     const microNarration: Record<string, string> = {
       输入制作请求: "一句话，说清创意。",
       智能规划脚本: "自动规划每个镜头。",
@@ -68,14 +111,10 @@ function fitFallbackNarration(scene: Scene, durationSeconds: number, chinese: bo
       成果收束: "让价值被记住。"
     };
     if (durationSeconds <= 3.2 && microNarration[scene.title]) return microNarration[scene.title];
-    const compactVoiceover = scene.voiceover.replace(/\s+/g, "").trim();
-    if (compactVoiceover.replace(/[，。！？；]/g, "").length <= maxCharacters) return compactVoiceover;
-    const firstClause = scene.voiceover.split(/[，。！？；]/)[0]?.trim();
-    if (firstClause && firstClause.length <= maxCharacters) return `${firstClause}。`;
-    return `${scene.voiceover.replace(/[，。！？；\s]/g, "").slice(0, maxCharacters)}。`;
+    return compactChineseNarration(scene.voiceover, maxCharacters);
   }
 
-  const maxWords = Math.max(3, Math.floor((durationSeconds - 0.35) * 2.45));
+  const maxWords = Math.max(8, Math.floor((durationSeconds - 0.25) * 3.15));
   const microNarration: Record<string, string> = {
     "Describe the idea": "Start with one clear idea.",
     "Plan the story": "Every shot is planned.",
@@ -91,9 +130,56 @@ function fitFallbackNarration(scene: Scene, durationSeconds: number, chinese: bo
     "Final Resolve": "End on lasting value."
   };
   if (durationSeconds <= 3.2 && microNarration[scene.title]) return microNarration[scene.title];
-  const words = scene.voiceover.replace(/[,.!?]/g, "").trim().split(/\s+/);
-  if (words.length <= maxWords) return scene.voiceover;
-  return `${words.slice(0, maxWords).join(" ")}.`;
+  return compactEnglishNarration(scene.voiceover, maxWords);
+}
+
+function businessFallbackNarrations(
+  subject: string,
+  facts: string[],
+  concepts: string[],
+  chinese: boolean
+) {
+  const concept = (pattern: RegExp, chineseFallback: string, englishFallback: string) => {
+    const found = concepts.find((item) => pattern.test(item));
+    return found ?? (chinese ? chineseFallback : englishFallback);
+  };
+  const factHint = (index: number) => facts[index]?.replace(/\s+/g, chinese ? "" : " ").trim();
+
+  if (!chinese) {
+    const gates = concept(/gate|checkpoint/i, "多道 Gate 检查点", "gated checkpoints");
+    const evidence = concept(/evidence|audit/i, "可审查证据包", "reviewable evidence packets");
+    const record = concept(/trace|record/i, "可追溯记录链", "traceable record trails");
+    const responsibility = concept(/accountability|responsibility|ownership/i, "责任链路", "accountability chains");
+    const risk = concept(/risk|signal/i, "风险信号地图", "risk signal maps");
+    return [
+      `${subject} turns scattered project pressure into a clear operating view, so teams can see what needs attention first.`,
+      `Instead of relying on memory, ${gates} connect approvals, ownership, and key decisions into one visible path.`,
+      `${evidence} move through ${record}, giving every important judgment a source, owner, and next step.`,
+      `When ${risk} change, the team can follow ${responsibility} to locate issues and recover context quickly.`,
+      `The result is steadier execution: ${subject} helps projects move forward with evidence, alignment, and confidence.`,
+      `${subject} closes the loop by making the next action clear, reviewable, and ready for delivery.`
+    ].map((line, index) => factHint(index) && factHint(index)!.length < 120 ? `${line} ${factHint(index)}` : line);
+  }
+
+  const hasGate = concepts.some((item) => /Gate|检查点|gate/i.test(item));
+  const hasEvidence = concepts.some((item) => /证据|evidence|audit/i.test(item));
+  const hasRecord = concepts.some((item) => /追溯|记录|trace/i.test(item));
+  const hasResponsibility = concepts.some((item) => /责任|accountability|ownership/i.test(item));
+  const hasRisk = concepts.some((item) => /风险|信号|risk/i.test(item));
+  const gates = hasGate ? "多道Gate" : "关键节点";
+  const evidence = hasEvidence ? "证据包" : "业务材料";
+  const record = hasRecord ? "记录链" : "工作链路";
+  const responsibility = hasResponsibility ? "责任链" : "协作链";
+  const risk = hasRisk ? "风险变化" : "项目变化";
+  const lines = [
+    `${subject}把项目压力整理成清晰视图，让团队先看见风险。`,
+    `${gates}串起授权和${responsibility}，每个关键判断都有依据。`,
+    `${evidence}沿${record}沉淀，材料、预算和阵容变化都可追溯。`,
+    `当${risk}出现时，团队顺着${responsibility}快速定位问题。`,
+    `最终，${subject}让项目推进更稳，协作更顺，复盘和交付也更可信。`,
+    `${subject}把下一步行动留在同一条记录里，让重要工作持续向前。`
+  ];
+  return lines;
 }
 
 function localizedFallbackDirection(scene: Scene, index: number, chinese: boolean): Scene {
@@ -270,15 +356,15 @@ export function generateProjectFromPrompt(
 
   const briefSubject = extractBriefSubject(prompt, chinese);
   const briefFacts = extractBriefFacts(prompt, chinese);
+  const briefConcepts = extractBriefVisualConcepts(prompt, chinese);
   const conceptSuffix = visualConceptSuffix(prompt, chinese);
   const fallbackTitle = briefSubject === "这项产品" || briefSubject === "This product"
     ? title
     : chinese ? `${briefSubject} 产品介绍` : `${briefSubject} Product Film`;
-  const fallbackFact = (index: number, chineseFallback: string, englishFallback: string) => {
-    const fact = briefFacts[index];
-    if (fact) return fact;
-    return chinese ? chineseFallback : englishFallback;
-  };
+  const businessNarrations = businessFallbackNarrations(briefSubject, briefFacts, briefConcepts, chinese);
+  const fallbackFact = (index: number, chineseFallback: string, englishFallback: string) => (
+    businessNarrations[index] ?? (chinese ? chineseFallback : englishFallback)
+  );
   const genericBlueprints: Scene[] = [
     {
       id: crypto.randomUUID(),

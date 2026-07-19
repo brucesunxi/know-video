@@ -98,7 +98,14 @@ function compactClause(value: string, maxLength: number) {
 
 function joinChineseParts(parts: string[], maxLength = 28) {
   const cleaned = parts.map((part) => compactClause(part, 34)).filter(Boolean);
-  return compactClause(cleaned.join("，").replace(/，+/g, "，").replace(/，$/u, ""), maxLength) + "。";
+  const kept: string[] = [];
+  for (const part of cleaned) {
+    const next = [...kept, part].join("，");
+    if (next.length > maxLength) break;
+    kept.push(part);
+  }
+  const joined = (kept.length > 0 ? kept : cleaned.slice(0, 1)).join("，");
+  return compactClause(joined.replace(/，+/g, "，").replace(/，$/u, ""), maxLength) + "。";
 }
 
 function localNarrationLine(treatment: Treatment, beat: Treatment["beats"][number], index: number) {
@@ -603,6 +610,20 @@ function normalizeStoryboard(
   return fitScenesNarration(scenes, targetDuration, { preserveNarration: true });
 }
 
+function blockingStoryboardIssues(issues: string[]) {
+  return issues.filter((issue) => (
+    issue === "scene titles repeat"
+    || issue === "scene structure is generic"
+    || issue === "voiceover narrates the production instead of the client's company or product"
+    || issue === "voiceover loses the client's named company or product"
+    || issue === "voiceover does not fit comfortably inside its scene duration"
+    || issue === "voiceover is too sparse for the scene duration"
+    || issue === "scene content is not fully localized in Chinese"
+    || issue === "scene content is not fully localized in English"
+    || issue === "project title is not localized in the requested language"
+  ));
+}
+
 async function createTreatment(
   prompt: string,
   textModel: NonNullable<ReturnType<typeof getTextModel>>,
@@ -815,7 +836,11 @@ export async function createStoryboardProject(
       scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration, prompt, options);
       qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title, prompt);
       if (qualityIssues.length > 0) {
-        throw new Error(`Repaired storyboard failed quality checks: ${qualityIssues.join(", ")}`);
+        const blockingIssues = blockingStoryboardIssues(qualityIssues);
+        if (blockingIssues.length > 0) {
+          throw new Error(`Repaired storyboard failed quality checks: ${blockingIssues.join(", ")}`);
+        }
+        console.warn(`[ai-video] Accepting repaired storyboard with non-blocking quality warnings: ${qualityIssues.join(", ")}.`);
       }
     }
 

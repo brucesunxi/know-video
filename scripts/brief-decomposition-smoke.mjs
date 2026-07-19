@@ -57,6 +57,10 @@ assert.match(aiVideo, /one or more locked narration lines are too sparse to carr
 assert.match(aiVideo, /preserveNarration: true/);
 assert.match(aiVideo, /cannot fit the requested integer scene durations without truncation/);
 assert.match(aiVideo, /Using local storyboard fallback after generation failure/);
+assert.match(aiVideo, /blockingStoryboardIssues/);
+assert.match(aiVideo, /Accepting repaired storyboard with non-blocking quality warnings/);
+assert.match(videoBrain, /businessFallbackNarrations/);
+assert.doesNotMatch(videoBrain, /const firstClause = scene\.voiceover\.split/);
 assert.doesNotMatch(videoBrain, /briefFacts\[index %/);
 
 console.log("Commercial brief decomposition smoke checks passed.");
