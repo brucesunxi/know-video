@@ -45,6 +45,7 @@
     "audio:quality:smoke": "node scripts/audio-quality-smoke.mjs",
     "audio:mix:smoke": "node scripts/audio-mix-smoke.mjs",
     "voice:profiles:smoke": "node scripts/voice-profiles-smoke.mjs",
+    "voice:preview:smoke": "node scripts/voice-preview-smoke.mjs",
     "asset:policy:smoke": "node scripts/asset-policy-smoke.mjs",
     "asset:ownership:smoke": "node scripts/asset-ownership-smoke.mjs",
     "media:generation:smoke": "node scripts/media-generation-result-smoke.mjs",

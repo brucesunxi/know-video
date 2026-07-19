@@ -28,9 +28,11 @@ async function requestAzureSpeech(input: {
   voice: string;
   text: string;
   rate: number;
+  pitch: number;
 }) {
   const ssmlRate = `${input.rate >= 0 ? "+" : ""}${input.rate}%`;
-  const ssml = `<speak version="1.0" xml:lang="zh-CN"><voice name="${escapeXml(input.voice)}"><prosody rate="${ssmlRate}">${escapeXml(input.text)}</prosody></voice></speak>`;
+  const ssmlPitch = `${input.pitch >= 0 ? "+" : ""}${input.pitch}%`;
+  const ssml = `<speak version="1.0" xml:lang="zh-CN"><voice name="${escapeXml(input.voice)}"><prosody rate="${ssmlRate}" pitch="${ssmlPitch}">${escapeXml(input.text)}</prosody></voice></speak>`;
   let body: Buffer | undefined;
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -83,8 +85,9 @@ export async function generateAzureChineseSpeech(
   const voice = narrationVoice
     ? narrationVoiceProfile(narrationVoice).azureVoice
     : getOptionalEnv("AZURE_SPEECH_CHINESE_VOICE") || DEFAULT_CHINESE_VOICE;
-  let rate = speechRateForDuration(text, durationSeconds);
-  let body = await requestAzureSpeech({ key, region, voice, text, rate });
+  const profile = narrationVoiceProfile(narrationVoice);
+  let rate = Math.max(-20, Math.min(45, speechRateForDuration(text, durationSeconds) + profile.rateOffset));
+  let body = await requestAzureSpeech({ key, region, voice, text, rate, pitch: profile.pitch });
   let actualDurationSeconds = assertUsableSpeechAudio(body).durationSeconds;
   const targetSeconds = durationSeconds ? Math.max(1.3, durationSeconds - 0.18) : undefined;
   const timingRatio = targetSeconds ? actualDurationSeconds / targetSeconds : 1;
@@ -94,7 +97,7 @@ export async function generateAzureChineseSpeech(
     const nextRate = correctedSpeechRate(rate, actualDurationSeconds, targetSeconds);
     if (nextRate !== rate) {
       rate = nextRate;
-      body = await requestAzureSpeech({ key, region, voice, text, rate });
+      body = await requestAzureSpeech({ key, region, voice, text, rate, pitch: profile.pitch });
       actualDurationSeconds = assertUsableSpeechAudio(body).durationSeconds;
     }
   }

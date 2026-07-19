@@ -29,7 +29,9 @@ import {
   Music2,
   PanelRightOpen,
   Paperclip,
+  Pause,
   Pencil,
+  Play,
   Plus,
   RefreshCcw,
   RotateCcw,
@@ -40,6 +42,7 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  Volume2,
   X
 } from "lucide-react";
 import { KnowVideoPlayer } from "@/app/video-player";
@@ -1875,18 +1878,27 @@ type SceneTextEdits = Pick<Scene, "title" | "voiceover" | "visualPrompt" | "moti
 
 function ScenePanel({
   scene,
+  scenes,
   isBusy,
   onSave,
   onVoiceChange
 }: {
   scene?: Scene;
+  scenes: Scene[];
   isBusy: boolean;
   onSave: (sceneNumber: number, edits: SceneTextEdits) => void;
-  onVoiceChange: (sceneNumber: number, voice: NarrationVoice) => void;
+  onVoiceChange: (sceneNumbers: number[], voice: NarrationVoice) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<SceneTextEdits>({ title: "", voiceover: "", visualPrompt: "", motionPrompt: "" });
   const [selectedVoice, setSelectedVoice] = useState<NarrationVoice>(DEFAULT_NARRATION_VOICE);
+  const [voiceScope, setVoiceScope] = useState<"scene" | "all">("all");
+  const [previewingVoice, setPreviewingVoice] = useState<NarrationVoice>();
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string>();
+  const previewAudioRef = useRef<HTMLAudioElement>();
+  const previewAbortRef = useRef<AbortController>();
+  const previewUrlsRef = useRef(new Map<NarrationVoice, string>());
   const imageMetadata = scene?.assets.find((asset) => asset.type === "image")?.metadata;
   const qualityLabel = imageMetadata?.quality === "premium"
     || String(imageMetadata?.model ?? "").includes("klein-9b")
@@ -1903,7 +1915,21 @@ function ScenePanel({
     });
     setSelectedVoice(scene.style.narrationVoice ?? DEFAULT_NARRATION_VOICE);
     setEditing(false);
+    previewAudioRef.current?.pause();
+    previewAudioRef.current = undefined;
+    previewAbortRef.current?.abort();
+    previewAbortRef.current = undefined;
+    setPreviewingVoice(undefined);
+    setPreviewLoading(false);
+    setPreviewError(undefined);
   }, [scene?.id]);
+
+  useEffect(() => () => {
+    previewAbortRef.current?.abort();
+    previewAudioRef.current?.pause();
+    previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrlsRef.current.clear();
+  }, []);
 
   const changed = Boolean(scene) && (
     draft.title.trim() !== scene?.title
@@ -1911,8 +1937,75 @@ function ScenePanel({
     || draft.visualPrompt.trim() !== scene?.visualPrompt
     || draft.motionPrompt.trim() !== scene?.motionPrompt
   );
-  const voiceChanged = Boolean(scene) && selectedVoice !== (scene?.style.narrationVoice ?? DEFAULT_NARRATION_VOICE);
+  const voiceChanged = voiceScope === "all"
+    ? scenes.some((item) => selectedVoice !== (item.style.narrationVoice ?? DEFAULT_NARRATION_VOICE))
+    : Boolean(scene) && selectedVoice !== (scene?.style.narrationVoice ?? DEFAULT_NARRATION_VOICE);
   const voiceProfile = narrationVoiceProfile(selectedVoice);
+  const targetSceneNumbers = voiceScope === "all"
+    ? scenes.map((item) => item.sceneNumber)
+    : scene ? [scene.sceneNumber] : [];
+
+  async function toggleVoicePreview(voice: NarrationVoice) {
+    if (previewingVoice === voice) {
+      previewAbortRef.current?.abort();
+      previewAbortRef.current = undefined;
+      previewAudioRef.current?.pause();
+      if (previewAudioRef.current) previewAudioRef.current.currentTime = 0;
+      previewAudioRef.current = undefined;
+      setPreviewingVoice(undefined);
+      setPreviewLoading(false);
+      return;
+    }
+    previewAbortRef.current?.abort();
+    previewAudioRef.current?.pause();
+    previewAudioRef.current = undefined;
+    setPreviewError(undefined);
+    setPreviewingVoice(voice);
+    setPreviewLoading(true);
+    const controller = new AbortController();
+    previewAbortRef.current = controller;
+    try {
+      let url = previewUrlsRef.current.get(voice);
+      if (!url) {
+        const response = await fetch("/api/assets/audio/preview", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ voice }),
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(65_000)])
+        });
+        if (!response.ok) {
+          const detail = await response.json().catch(() => undefined) as { error?: string } | undefined;
+          throw new Error(detail?.error || "试听加载失败。请稍后重试。");
+        }
+        url = URL.createObjectURL(await response.blob());
+        previewUrlsRef.current.set(voice, url);
+      }
+      const audio = new Audio(url);
+      if (controller.signal.aborted) return;
+      previewAbortRef.current = undefined;
+      previewAudioRef.current = audio;
+      audio.onended = () => {
+        previewAudioRef.current = undefined;
+        setPreviewingVoice(undefined);
+        setPreviewLoading(false);
+      };
+      audio.onerror = () => {
+        previewAudioRef.current = undefined;
+        setPreviewingVoice(undefined);
+        setPreviewLoading(false);
+        setPreviewError("试听音频无法播放，请稍后重试。");
+      };
+      await audio.play();
+      setPreviewLoading(false);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      previewAbortRef.current = undefined;
+      previewAudioRef.current = undefined;
+      setPreviewingVoice(undefined);
+      setPreviewLoading(false);
+      setPreviewError(error instanceof Error ? error.message : "试听加载失败。请稍后重试。");
+    }
+  }
 
   return (
     <section className="kv-scene-panel" id="kv-scene-panel">
@@ -1923,28 +2016,6 @@ function ScenePanel({
         </div>
         {scene ? (
           <div className="kv-scene-panel-actions">
-            <label className="kv-voice-picker">
-              <span>配音音色</span>
-              <select
-                aria-label="当前场景配音音色"
-                disabled={isBusy}
-                onChange={(event) => setSelectedVoice(event.target.value as NarrationVoice)}
-                value={selectedVoice}
-              >
-                {narrationVoiceProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>{profile.label}</option>
-                ))}
-              </select>
-            </label>
-            <button
-              disabled={isBusy || !voiceChanged}
-              onClick={() => onVoiceChange(scene.sceneNumber, selectedVoice)}
-              title={voiceProfile.description}
-              type="button"
-            >
-              {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Mic2 size={15} />}
-              应用音色
-            </button>
             <button disabled={isBusy} onClick={() => setEditing((current) => !current)} type="button">
               {editing ? <RotateCcw size={15} /> : <Pencil size={15} />}
               {editing ? "取消编辑" : "直接编辑"}
@@ -1952,6 +2023,65 @@ function ScenePanel({
           </div>
         ) : null}
       </div>
+      {scene ? (
+        <section aria-label="企业配音设置" className="kv-voice-studio">
+          <div className="kv-voice-studio-heading">
+            <div>
+              <span><Volume2 size={15} /> 企业配音</span>
+              <p>试听后可应用到当前场景或整片；应用时会重新生成配音。</p>
+            </div>
+            <div aria-label="配音应用范围" className="kv-voice-scope" role="group">
+              <button aria-pressed={voiceScope === "scene"} className={voiceScope === "scene" ? "active" : ""} onClick={() => setVoiceScope("scene")} type="button">当前场景</button>
+              <button aria-pressed={voiceScope === "all"} className={voiceScope === "all" ? "active" : ""} onClick={() => setVoiceScope("all")} type="button">整片</button>
+            </div>
+          </div>
+          <div className="kv-voice-options">
+            {narrationVoiceProfiles.map((profile) => {
+              const active = selectedVoice === profile.id;
+              const playing = previewingVoice === profile.id;
+              return (
+                <article className={active ? "active" : ""} key={profile.id}>
+                  <button
+                    aria-pressed={active}
+                    className="kv-voice-select"
+                    disabled={isBusy}
+                    onClick={() => setSelectedVoice(profile.id)}
+                    type="button"
+                  >
+                    <i aria-hidden="true"><Mic2 size={16} /></i>
+                    <span><strong>{profile.label}</strong><small>{profile.description}</small></span>
+                    <em>{profile.useCase}</em>
+                  </button>
+                  <button
+                    aria-label={`${playing ? "停止" : "试听"}${profile.label}`}
+                    className="kv-voice-preview"
+                    disabled={isBusy || Boolean(previewingVoice && !playing)}
+                    onClick={() => void toggleVoicePreview(profile.id)}
+                    title={`${playing ? "停止" : "试听"}${profile.label}`}
+                    type="button"
+                  >
+                    {playing && previewLoading ? <Loader2 className="kv-spin" size={15} /> : playing ? <Pause size={15} /> : <Play size={15} />}
+                    {playing && previewLoading ? "取消" : playing ? "停止" : "试听"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+          <div className="kv-voice-apply-row">
+            <p aria-live="polite">{previewError ?? `${voiceProfile.shortLabel} · ${voiceProfile.useCase}`}</p>
+            <button
+              className="kv-primary"
+              disabled={isBusy || !voiceChanged || targetSceneNumbers.length === 0}
+              onClick={() => onVoiceChange(targetSceneNumbers, selectedVoice)}
+              title={voiceProfile.description}
+              type="button"
+            >
+              {isBusy ? <Loader2 className="kv-spin" size={16} /> : <Check size={16} />}
+              {voiceScope === "all" ? "应用到整片" : `应用到场景 ${scene.sceneNumber}`}
+            </button>
+          </div>
+        </section>
+      ) : null}
       {editing && scene ? (
         <div className="kv-scene-editor">
           <label className="wide">
@@ -3174,7 +3304,7 @@ function StudioScreen({
   onRemoveProduction: (type: "logo" | "music") => void;
   onMutateScene: (mutation: SceneStructureMutation) => void;
   onSaveScene: (sceneNumber: number, edits: SceneTextEdits) => void;
-  onVoiceChange: (sceneNumber: number, voice: NarrationVoice) => void;
+  onVoiceChange: (sceneNumbers: number[], voice: NarrationVoice) => void;
 }) {
   const playerRef = useRef<PlayerRef>(null);
   const toolMenuRef = useRef<HTMLDivElement>(null);
@@ -3639,6 +3769,7 @@ function StudioScreen({
               onSave={onSaveScene}
               onVoiceChange={onVoiceChange}
               scene={scene}
+              scenes={project.currentVersion.scenes}
             />
           </>
         ) : (
@@ -5697,7 +5828,7 @@ export function WorkspaceClient({
           onRemoveProduction={(type) => void removeProductionAsset(type)}
           onMutateScene={(mutation) => void mutateSceneStructure(mutation)}
           onSaveScene={saveSceneEdits}
-          onVoiceChange={(sceneNumber, voice) => void regenerateAudio([sceneNumber], voice)}
+          onVoiceChange={(sceneNumbers, voice) => void regenerateAudio(sceneNumbers, voice)}
           onViewChange={setStudioView}
           pendingPlan={pendingPlan}
           project={project}

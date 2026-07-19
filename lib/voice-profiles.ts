@@ -5,30 +5,50 @@ export const DEFAULT_NARRATION_VOICE: NarrationVoice = "male-clear";
 export const narrationVoiceProfiles: Array<{
   id: NarrationVoice;
   label: string;
+  shortLabel: string;
   description: string;
+  useCase: string;
+  sampleText: string;
   azureVoice: string;
+  pitch: number;
+  rateOffset: number;
   direction: string;
 }> = [
   {
     id: "male-clear",
-    label: "清晰男声",
-    description: "清楚、有活力，适合产品介绍",
+    label: "专业产品男声",
+    shortLabel: "产品男声",
+    description: "清晰利落、节奏明快，不使用独白腔",
+    useCase: "产品介绍 · 科技发布 · 功能演示",
+    sampleText: "让复杂流程自动运行，让团队把时间留给更重要的创造。Know Video，帮助企业高效呈现产品价值。",
     azureVoice: "zh-CN-YunxiNeural",
-    direction: "Clear Mandarin male narration with an energetic, polished product-film delivery."
+    pitch: -1,
+    rateOffset: 2,
+    direction: "Professional Mandarin male corporate explainer. Clear, concise and confident, with a polished product-demo cadence. Avoid dramatic monologue, audiobook, radio-host or sales-hype delivery."
   },
   {
     id: "male-deep",
-    label: "沉稳男声",
-    description: "稳重、可信，适合品牌与商业叙事",
+    label: "沉稳品牌男声",
+    shortLabel: "品牌男声",
+    description: "稳重可信、克制有分量，强调企业价值",
+    useCase: "公司介绍 · 企业服务 · 品牌叙事",
+    sampleText: "从战略到执行，我们用可靠的自动化能力连接每一个业务环节，让增长更清晰，让决策更从容。",
     azureVoice: "zh-CN-YunyangNeural",
-    direction: "Grounded Mandarin male narration with a calm, authoritative commercial documentary delivery."
+    pitch: -3,
+    rateOffset: -2,
+    direction: "Grounded Mandarin male corporate brand narration. Calm, credible and restrained, with clear emphasis on business value. Avoid dramatic monologue, documentary gravitas and exaggerated advertising tone."
   },
   {
     id: "female-natural",
-    label: "自然女声",
-    description: "自然、亲和，适合教育与生活方式内容",
+    label: "专业商务女声",
+    shortLabel: "商务女声",
+    description: "专业亲和、表达清楚，适合现代企业内容",
+    useCase: "服务介绍 · 客户案例 · 品牌沟通",
+    sampleText: "更简单的协作，更智能的流程，让每一次客户沟通都准确、自然，并且值得信赖。",
     azureVoice: "zh-CN-XiaoxiaoNeural",
-    direction: "Natural Mandarin female narration with warm, articulate, premium storytelling."
+    pitch: 0,
+    rateOffset: 0,
+    direction: "Professional Mandarin female business explainer. Warm, articulate and composed, with a modern corporate presentation cadence. Avoid intimate monologue, audiobook and overly cheerful customer-service delivery."
   }
 ];
 
