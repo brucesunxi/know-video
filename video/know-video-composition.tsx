@@ -14,7 +14,7 @@ import type { Project, Scene } from "@/lib/types";
 import { musicMixEnvelope, type NarrationFrameRange } from "@/lib/audio-mix";
 import { clipDurationInFrames, resolvedClipPlaybackRate } from "@/lib/clip-timing";
 import { readableTextColor, sceneAccentColor } from "@/lib/color-contrast";
-import { activeNarrationCaption, narrationDurationInFrames } from "@/lib/narration-timing";
+import { activeNarrationCaption, narrationAudioPlaybackRate, narrationDurationInFrames } from "@/lib/narration-timing";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
 import { boundedTransitionFrames, resolvedSceneTransition, type ResolvedSceneTransitionKind } from "@/lib/scene-transitions";
 import { VIDEO_FPS } from "@/video/config";
@@ -205,6 +205,7 @@ function SceneFrame({
     : Math.max(0, contentDurationInFrames - 1);
   const image = scene.assets.find((asset) => asset.type === "image" && asset.url)?.url;
   const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url)?.url;
+  const narrationPlaybackRate = narrationAudioPlaybackRate(scene, playbackRate, contentDurationInFrames, VIDEO_FPS);
   const narrationFrames = narrationDurationInFrames(scene, VIDEO_FPS, playbackRate, contentDurationInFrames);
   const caption = activeNarrationCaption(scene.voiceover, visualFrame, narrationFrames);
   const captionEntrance = caption ? interpolate(
@@ -313,7 +314,7 @@ function SceneFrame({
         <Sequence durationInFrames={narrationFrames}>
           <Audio
             pauseWhenBuffering
-            playbackRate={playbackRate}
+            playbackRate={narrationPlaybackRate}
             preload="auto"
             src={audio}
             volume={(audioFrame) => audioVolume(audioFrame, narrationFrames)}

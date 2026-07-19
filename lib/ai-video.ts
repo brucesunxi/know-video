@@ -137,14 +137,14 @@ function localNarrationLine(treatment: Treatment, beat: Treatment["beats"][numbe
 function shouldLocallyRepairNarrationLine(line: string, averageSceneSeconds: number) {
   const estimated = estimateNarrationSeconds(line);
   return hasMetaProductionNarration(line)
-    || estimated < Math.max(1.4, averageSceneSeconds * 0.42)
+    || estimated < Math.max(1.8, averageSceneSeconds * 0.62)
     || estimated > Math.max(1.4, averageSceneSeconds * 1.12);
 }
 
 function locallyRepairTreatmentNarration(treatment: Treatment, targetDuration: number) {
   const averageSceneSeconds = targetDuration / treatment.beats.length;
   const totalSeconds = treatment.beats.reduce((sum, beat) => sum + estimateNarrationSeconds(beat.narrationLine), 0);
-  const repairAll = totalSeconds < Math.max(4, targetDuration * 0.58)
+  const repairAll = totalSeconds < Math.max(5, targetDuration * 0.7)
     || totalSeconds > Math.max(3, targetDuration - treatment.beats.length * 0.28);
   return {
     ...treatment,
@@ -168,7 +168,7 @@ function treatmentNarrationIssues(treatment: Treatment, targetDuration: number) 
     issues.push("narration describes video production instead of the client's business");
   }
   const estimatedTotal = lines.reduce((sum, line) => sum + estimateNarrationSeconds(line), 0);
-  if (estimatedTotal < Math.max(4, targetDuration * 0.58)) {
+  if (estimatedTotal < Math.max(5, targetDuration * 0.7)) {
     issues.push("locked narration is too sparse for the requested video duration");
   }
   if (estimatedTotal > Math.max(3, targetDuration - treatment.beats.length * 0.28)) {
@@ -182,7 +182,7 @@ function treatmentNarrationIssues(treatment: Treatment, targetDuration: number) 
     issues.push("locked narration cannot fit the requested integer scene durations without truncation");
   }
   const averageSceneSeconds = targetDuration / treatment.beats.length;
-  if (lines.some((line) => estimateNarrationSeconds(line) < Math.max(1.4, averageSceneSeconds * 0.42))) {
+  if (lines.some((line) => estimateNarrationSeconds(line) < Math.max(1.8, averageSceneSeconds * 0.62))) {
     issues.push("one or more locked narration lines are too sparse to carry their scene");
   }
   if (lines.some((line) => estimateNarrationSeconds(line) > Math.max(1.4, averageSceneSeconds * 1.12))) {
@@ -620,7 +620,7 @@ async function createTreatment(
   const averageSceneSeconds = targetDuration / sceneCount;
   const narrationBudgetDirection = options?.language === "英文"
     ? `Each narrationLine is final spoken copy: approximately ${Math.max(3, Math.floor(averageSceneSeconds * 1.15))}-${Math.max(4, Math.floor(averageSceneSeconds * 2.2))} English words.`
-    : `Each narrationLine is final spoken copy: approximately ${Math.max(5, Math.floor(averageSceneSeconds * 2.1))}-${Math.max(8, Math.floor(averageSceneSeconds * 3.65))} Chinese characters, excluding punctuation.`;
+    : `Each narrationLine is final spoken copy: approximately ${Math.max(8, Math.floor(averageSceneSeconds * 2.9))}-${Math.max(12, Math.floor(averageSceneSeconds * 4.25))} Chinese characters, excluding punctuation.`;
   const conceptDirection = briefVisualConceptDirection(prompt, options);
   const completion = await textModel.client.chat.completions.create({
     model: textModel.model,

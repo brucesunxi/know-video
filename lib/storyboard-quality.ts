@@ -189,6 +189,14 @@ export function storyboardQualityIssues(
   })) {
     issues.push("voiceover does not fit comfortably inside its scene duration");
   }
+  if (scenes.some((scene) => {
+    const hanCharacters = (scene.voiceover.match(/\p{Script=Han}/gu) ?? []).length;
+    const latinWords = (scene.voiceover.match(/[A-Za-z0-9]+/g) ?? []).length;
+    const estimatedSeconds = hanCharacters / 4.15 + latinWords / 2.7;
+    return estimatedSeconds < Math.max(1.8, scene.durationSeconds * 0.56);
+  })) {
+    issues.push("voiceover is too sparse for the scene duration");
+  }
 
   const localizedFields = (scene: Scene) => [
     scene.title,

@@ -78,14 +78,33 @@ export function narrationDurationInFrames(
   contentDurationInFrames: number
 ) {
   const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
+  const effectivePlaybackRate = narrationAudioPlaybackRate(scene, playbackRate, contentDurationInFrames, fps);
   const actualDurationSeconds = Number(audio?.metadata?.actualDurationSeconds);
   if (!audio || !Number.isFinite(actualDurationSeconds) || actualDurationSeconds <= 0) {
     return audio ? contentDurationInFrames : 0;
   }
   return Math.min(
     contentDurationInFrames,
-    Math.max(1, Math.round((actualDurationSeconds * fps) / Math.max(0.1, playbackRate)))
+    Math.max(1, Math.round((actualDurationSeconds * fps) / Math.max(0.1, effectivePlaybackRate)))
   );
+}
+
+export function narrationAudioPlaybackRate(
+  scene: Pick<Scene, "assets">,
+  productionPlaybackRate: number,
+  contentDurationInFrames: number,
+  fps: number
+) {
+  const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
+  const actualDurationSeconds = Number(audio?.metadata?.actualDurationSeconds);
+  if (!audio || !Number.isFinite(actualDurationSeconds) || actualDurationSeconds <= 0) {
+    return productionPlaybackRate;
+  }
+  const sceneSeconds = contentDurationInFrames / fps;
+  const targetNarrationSeconds = Math.min(sceneSeconds, Math.max(sceneSeconds * 0.74, sceneSeconds - 0.65));
+  if (actualDurationSeconds >= targetNarrationSeconds * productionPlaybackRate) return productionPlaybackRate;
+  const stretchedRate = actualDurationSeconds / Math.max(0.1, targetNarrationSeconds);
+  return Math.max(0.72, Math.min(productionPlaybackRate, stretchedRate));
 }
 
 export function activeNarrationCaption(text: string, frame: number, narrationDurationInFrames: number) {
