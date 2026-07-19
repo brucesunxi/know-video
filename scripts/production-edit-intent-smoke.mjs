@@ -33,11 +33,26 @@ assert.deepEqual(
   { musicDucking: "strong" }
 );
 assert.deepEqual(
+  plain(productionSettingsFromRequest("配音速度加快一些")),
+  { playbackRate: 1.25 }
+);
+assert.deepEqual(
+  plain(productionSettingsFromRequest("语速明显加快")),
+  { playbackRate: 1.5 }
+);
+assert.deepEqual(
+  plain(productionSettingsFromRequest("旁白速度放慢一点")),
+  { playbackRate: 0.75 }
+);
+assert.deepEqual(
   plain(productionSettingsFromRequest("关闭音乐避让")),
   { musicDucking: "off" }
 );
 assert.equal(isProductionOnlyRequest("关闭字幕，全片改成 1.25 倍速"), true);
 assert.equal(isProductionOnlyRequest("旁白时强力压低音乐"), true);
+assert.equal(isProductionOnlyRequest("配音速度加快一些"), true);
+assert.equal(isProductionOnlyRequest("语速明显加快"), true);
+assert.equal(isProductionOnlyRequest("旁白速度放慢一点"), true);
 assert.equal(isProductionOnlyRequest("关闭字幕，再把第 2 场景改成浅色"), false);
 assert.deepEqual(plain(productionSettingsFromRequest("把所有旁白改成中文")), {});
 

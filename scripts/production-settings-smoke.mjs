@@ -42,6 +42,7 @@ assert.equal(productionDurationInFrames({ durationSeconds: 30, scenes: [{ style:
 
 assert.match(workspace, /function productionSummaryItems/);
 assert.match(workspace, /function productionImpactChecks/);
+assert.match(workspace, /covered\.length === 0 && productionSettingLabels\(plan\.productionSettings\)\.length > 0[\s\S]*if \(intent\.global\)/);
 assert.match(workspace, /aria-label="成片输出摘要"/);
 assert.match(workspace, /aria-label="成片设置导出影响"/);
 assert.match(workspace, /导出影响预览/);

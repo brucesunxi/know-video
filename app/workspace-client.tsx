@@ -321,6 +321,14 @@ function planCoverageState(plan: EditPlan, scenes: Scene[]) {
   const affected = Array.from(new Set(plan.affectedScenes)).sort((left, right) => left - right);
   const covered = changes.length > 0 ? changes : affected;
 
+  if (covered.length === 0 && productionSettingLabels(plan.productionSettings).length > 0) {
+    return {
+      tone: "ready",
+      title: "只调整全片设置",
+      detail: "本方案不改动单个场景内容，只更新音乐、字幕、Logo 或播放参数。"
+    } as const;
+  }
+
   if (intent.global) {
     const targets = globalEditTargetSceneNumbers(plan.userRequest, sceneNumbers);
     const targetSet = new Set(targets);
@@ -349,14 +357,6 @@ function planCoverageState(plan: EditPlan, scenes: Scene[]) {
       tone: "ready",
       title: "按指定场景执行",
       detail: `识别到明确目标：场景 ${intent.explicitSceneNumbers.join("、")}；未列出的场景保持不变。`
-    } as const;
-  }
-
-  if (covered.length === 0 && productionSettingLabels(plan.productionSettings).length > 0) {
-    return {
-      tone: "ready",
-      title: "只调整全片设置",
-      detail: "本方案不改动单个场景内容，只更新音乐、字幕、Logo 或播放参数。"
     } as const;
   }
 
