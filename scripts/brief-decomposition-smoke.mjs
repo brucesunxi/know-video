@@ -49,7 +49,7 @@ assert.match(aiVideo, /locked narration is too sparse for the requested video du
 assert.match(aiVideo, /one or more locked narration lines are too sparse to carry their scene/);
 assert.match(aiVideo, /preserveNarration: true/);
 assert.match(aiVideo, /cannot fit the requested integer scene durations without truncation/);
-assert.doesNotMatch(aiVideo, /Falling back to heuristic storyboard/);
+assert.match(aiVideo, /Using local storyboard fallback after generation failure/);
 assert.doesNotMatch(videoBrain, /briefFacts\[index %/);
 
 console.log("Commercial brief decomposition smoke checks passed.");

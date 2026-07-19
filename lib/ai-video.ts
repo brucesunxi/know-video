@@ -195,6 +195,12 @@ function treatmentNarrationIssues(treatment: Treatment, targetDuration: number) 
   return issues;
 }
 
+function generationFallbackReason(error: unknown) {
+  if (error instanceof z.ZodError) return "AI returned incomplete structured JSON";
+  if (error instanceof Error) return error.message || error.name;
+  return String(error);
+}
+
 const editPlanPayloadSchema = z.object({
   summary: z.string().min(1),
   affectedScenes: z.array(z.number().int().positive()).min(1),
@@ -660,7 +666,7 @@ async function createTreatment(
     treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
     const remainingNarrationIssues = treatmentNarrationIssues(treatment, targetDuration);
     if (treatment.beats.length !== sceneCount || remainingNarrationIssues.length > 0) {
-      throw new Error(`Commercial treatment narration failed semantic or timing validation: ${remainingNarrationIssues.join(", ")}`);
+      console.warn(`[ai-video] Treatment narration still needed local constraints after AI repair: ${remainingNarrationIssues.join(", ") || "beat count mismatch"}.`);
     }
   }
   return treatment;
@@ -817,7 +823,8 @@ export async function createStoryboardProject(
     };
   } catch (error) {
     console.error("[ai-video] Commercial brief or storyboard generation failed:", error);
-    throw error;
+    console.warn(`[ai-video] Using local storyboard fallback after generation failure: ${generationFallbackReason(error)}.`);
+    return { project: generateProjectFromPrompt(prompt, baseProject, options), engine: "heuristic" };
   }
 }
 

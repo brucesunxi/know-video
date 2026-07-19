@@ -132,12 +132,13 @@ export async function completeGenerationRequest(input: {
   `;
 }
 
-export async function failGenerationRequest(id: string) {
+export async function failGenerationRequest(id: string, error = "视频脚本和分镜生成没有完成，请重试。") {
   if (!hasDatabaseUrl()) return;
   await ensureGenerationRequestsSchema();
+  const safeError = error.replace(/\s+/g, " ").trim().slice(0, 500) || "视频脚本和分镜生成没有完成，请重试。";
   await getSql()`
     update generation_requests
-    set status = 'failed', error = '视频脚本和分镜生成没有完成，请重试。', updated_at = now()
+    set status = 'failed', error = ${safeError}, updated_at = now()
     where id = ${id} and status = 'pending'
   `;
 }

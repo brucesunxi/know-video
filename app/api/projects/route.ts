@@ -84,6 +84,19 @@ function publicEngine(engine: string) {
   return engine === "heuristic" ? "heuristic" : "ai";
 }
 
+function publicGenerationError(error: unknown) {
+  if (error instanceof Error) {
+    if (/timeout|timed out|connection|fetch failed|econn|etimedout|network/i.test(error.message)) {
+      return "脚本服务连接超时，请稍后重试。";
+    }
+    if (/json|schema|structured/i.test(error.message)) {
+      return "脚本服务返回结构不完整，已停止保存半成品，请重试。";
+    }
+    return error.message.slice(0, 240) || "视频脚本和分镜生成没有完成，请重试。";
+  }
+  return "视频脚本和分镜生成没有完成，请重试。";
+}
+
 export async function POST(request: Request) {
   let requestId: string | undefined;
   let uploadedReferenceKeys: string[] = [];
@@ -197,10 +210,10 @@ export async function POST(request: Request) {
         console.error("[projects] Unable to clean unused generation references:", cleanupError);
       });
     }
-    if (requestId) await failGenerationRequest(requestId).catch(() => undefined);
+    if (requestId) await failGenerationRequest(requestId, publicGenerationError(error)).catch(() => undefined);
     console.error("[projects] Unable to create video project:", error);
     return NextResponse.json(
-      { error: "视频项目没有完整保存，请稍后重试。本次失败不会留下半成品项目。" },
+      { error: publicGenerationError(error) },
       { status: 502 }
     );
   }

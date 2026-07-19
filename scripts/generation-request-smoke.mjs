@@ -22,6 +22,8 @@ vm.runInNewContext(output, {
 });
 
 const { generationRequestFingerprint } = module.exports;
+assert.match(source, /failGenerationRequest\(id: string, error =/);
+assert.match(source, /safeError/);
 const options = {
   duration: "30",
   sceneCount: "5",
