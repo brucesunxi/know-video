@@ -5,11 +5,13 @@ import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip 
 import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import { fitScenesNarration } from "@/lib/narration-fit";
+import { hasMetaProductionNarration, isProductionInstructionClause, isVideoCreationProductBrief } from "@/lib/brief-semantics";
 import { requestsSceneStructureChange, sceneStructureFromRequest, sceneStructureSummary } from "@/lib/scene-structure-intent";
 import { storyboardQualityIssues } from "@/lib/storyboard-quality";
 import { narrationVoiceForBrief } from "@/lib/voice-profiles";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
 import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
+import { estimateNarrationSeconds } from "@/lib/speech-timing";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
 type AiEngine = "deepseek-flash" | "openai" | "heuristic";
@@ -37,6 +39,17 @@ const treatmentSchema = z.object({
   language: z.string().min(1),
   audience: z.string().min(1),
   corePromise: z.string().min(1),
+  commercialBrief: z.object({
+    subject: z.string().min(1),
+    category: z.string().min(1),
+    audience: z.string().min(1),
+    customerProblem: z.string().min(1),
+    offering: z.string().min(1),
+    differentiators: z.array(z.string().min(1)).min(1).max(5),
+    proofPoints: z.array(z.string().min(1)).max(4),
+    outcomes: z.array(z.string().min(1)).min(1).max(4),
+    callToAction: z.string().min(1)
+  }),
   creativeConcept: z.string().min(1),
   narrativeArc: z.string().min(1),
   visualBible: z.object({
@@ -50,6 +63,8 @@ const treatmentSchema = z.object({
   }),
   beats: z.array(z.object({
     purpose: z.string().min(1),
+    sourceFact: z.string().min(1),
+    narrationLine: z.string().min(1),
     emotionalBeat: z.string().min(1),
     visualAnchor: z.string().min(1),
     transition: z.string().min(1)
@@ -57,6 +72,46 @@ const treatmentSchema = z.object({
 });
 
 type Treatment = z.infer<typeof treatmentSchema>;
+
+function normalizedNarrationOpening(value: string) {
+  const han = (value.match(/\p{Script=Han}/gu) ?? []).slice(0, 8).join("");
+  if (han.length >= 6) return han;
+  return (value.toLowerCase().match(/[a-z0-9]+/g) ?? []).slice(0, 4).join(" ");
+}
+
+function treatmentNarrationIssues(treatment: Treatment, prompt: string, targetDuration: number) {
+  const lines = treatment.beats.map((beat) => beat.narrationLine.trim());
+  const issues: string[] = [];
+  const openings = lines.map(normalizedNarrationOpening).filter((value) => value.length >= 6);
+  if (new Set(openings).size !== openings.length) issues.push("narration openings repeat mechanically");
+  if (!isVideoCreationProductBrief(prompt) && lines.some(hasMetaProductionNarration)) {
+    issues.push("narration describes video production instead of the client's business");
+  }
+  const estimatedTotal = lines.reduce((sum, line) => sum + estimateNarrationSeconds(line), 0);
+  if (estimatedTotal > Math.max(3, targetDuration - treatment.beats.length * 0.28)) {
+    issues.push("locked narration exceeds the total spoken-time budget");
+  }
+  const requiredIntegerDuration = lines.reduce(
+    (sum, line) => sum + Math.max(2, Math.ceil(estimateNarrationSeconds(line) + 0.45)),
+    0
+  );
+  if (requiredIntegerDuration > targetDuration) {
+    issues.push("locked narration cannot fit the requested integer scene durations without truncation");
+  }
+  const averageSceneSeconds = targetDuration / treatment.beats.length;
+  if (lines.some((line) => estimateNarrationSeconds(line) > Math.max(1.4, averageSceneSeconds * 1.12))) {
+    issues.push("one or more locked narration lines exceed their scene-level spoken-time budget");
+  }
+  const subject = treatment.commercialBrief.subject.trim().toLowerCase();
+  if (isProductionInstructionClause(treatment.commercialBrief.subject)) {
+    issues.push("commercial brief subject is a production instruction rather than the promoted company or product");
+  }
+  const narration = `${treatment.workingTitle} ${lines.join(" ")}`.toLowerCase();
+  if (subject.length >= 2 && !narration.includes(subject)) {
+    issues.push("locked narration loses the client's named company or product");
+  }
+  return issues;
+}
 
 const editPlanPayloadSchema = z.object({
   summary: z.string().min(1),
@@ -429,7 +484,8 @@ function normalizeStoryboard(
     id: crypto.randomUUID(),
     sceneNumber: index + 1,
     title: scene.title.trim(),
-    voiceover: scene.voiceover.trim(),
+    // The strategist owns the spoken story. The storyboard pass only designs how to film it.
+    voiceover: treatment.beats[index]?.narrationLine.trim() || scene.voiceover.trim(),
     visualPrompt: `${scene.visualPrompt.trim()}\n${continuity}`,
     motionPrompt: `${scene.motionPrompt.trim()} Camera language: ${treatment.visualBible.cameraLanguage}. Transition: ${treatment.beats[index]?.transition ?? "motivated visual match cut"}.`,
     durationSeconds: durations[index],
@@ -439,7 +495,7 @@ function normalizeStoryboard(
     },
     assets: []
   }));
-  return fitScenesNarration(scenes, targetDuration);
+  return fitScenesNarration(scenes, targetDuration, { preserveNarration: true });
 }
 
 async function createTreatment(
@@ -456,6 +512,10 @@ async function createTreatment(
   const styleDirection = options
     ? `Required overall visual style: ${options.style}. Translate that style into a concrete visual bible rather than merely naming it.`
     : "Infer an appropriate visual style from the user's request.";
+  const averageSceneSeconds = targetDuration / sceneCount;
+  const narrationBudgetDirection = options?.language === "英文"
+    ? `Each narrationLine is final spoken copy: approximately ${Math.max(3, Math.floor(averageSceneSeconds * 1.15))}-${Math.max(4, Math.floor(averageSceneSeconds * 2.2))} English words.`
+    : `Each narrationLine is final spoken copy: approximately ${Math.max(5, Math.floor(averageSceneSeconds * 2.1))}-${Math.max(8, Math.floor(averageSceneSeconds * 3.65))} Chinese characters, excluding punctuation.`;
   const completion = await textModel.client.chat.completions.create({
     model: textModel.model,
     response_format: { type: "json_object" },
@@ -465,10 +525,13 @@ async function createTreatment(
         content: [
           "You are a senior commercial film director and creative strategist.",
           "Develop one coherent, specific treatment for an AI-generated short video.",
+          "First extract a commercialBrief from the client input. Identify the promoted subject, category, audience, customer problem, offering, differentiators, supplied proof, desired outcomes, and call to action.",
+          "Treat only facts stated or clearly implied by the client as facts. Never invent customers, metrics, awards, market claims, or product capabilities. Use an empty proofPoints array when no proof is supplied.",
           "Find a visual concept rooted in the user's actual subject, not a software feature list.",
           "Separate production instructions (make a video, duration, format, style, scenes) from the company or product being promoted.",
           "The spoken narrative must communicate the client's company, product, customer problem, differentiators, evidence, and outcome. It must never describe the act of making or watching this video unless video creation is itself the client's product.",
           "Each beat must advance one narrative arc and introduce a distinct visual event.",
+          "Each beat must cite one sourceFact from commercialBrief and contain one narrationLine that is final, audience-facing spoken copy. It must not contain camera, scene, storyboard, generation, or production instructions.",
           "The final beat must resolve into a concrete delivery, outcome, or call-to-action moment.",
           "Establish a reusable visual bible so separately generated shots still feel like one film.",
           "Prefer observable actions, environments, objects, transformations, and human stakes over dashboards or floating UI cards.",
@@ -477,15 +540,43 @@ async function createTreatment(
       },
       {
         role: "user",
-        content: `Creative request:\n${prompt}${referenceContext ? `\n\n${referenceContext}` : ""}\n\nTarget duration: ${targetDuration} seconds. Required beats: exactly ${sceneCount}.\n${languageDirection}\n${styleDirection}\n\nReturn JSON in this exact shape:\n{ "workingTitle": string, "language": string, "audience": string, "corePromise": string, "creativeConcept": string, "narrativeArc": string, "visualBible": { "world": string, "artDirection": string, "palette": string[3-6], "lighting": string, "cameraLanguage": string, "recurringMotif": string, "avoid": string[2-10] }, "beats": [{ "purpose": string, "emotionalBeat": string, "visualAnchor": string, "transition": string }] }`
+        content: `Creative request:\n${prompt}${referenceContext ? `\n\n${referenceContext}` : ""}\n\nTarget duration: ${targetDuration} seconds. Required beats: exactly ${sceneCount}.\n${languageDirection}\n${styleDirection}\n${narrationBudgetDirection}\n\nReturn JSON in this exact shape:\n{ "workingTitle": string, "language": string, "audience": string, "corePromise": string, "commercialBrief": { "subject": string, "category": string, "audience": string, "customerProblem": string, "offering": string, "differentiators": string[1-5], "proofPoints": string[0-4], "outcomes": string[1-4], "callToAction": string }, "creativeConcept": string, "narrativeArc": string, "visualBible": { "world": string, "artDirection": string, "palette": string[3-6], "lighting": string, "cameraLanguage": string, "recurringMotif": string, "avoid": string[2-10] }, "beats": [{ "purpose": string, "sourceFact": string, "narrationLine": string, "emotionalBeat": string, "visualAnchor": string, "transition": string }] }`
       }
     ],
     temperature: 0.6
   });
 
-  const treatment = treatmentSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+  let treatment = treatmentSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
   if (treatment.beats.length !== sceneCount) {
     throw new Error(`Director treatment returned ${treatment.beats.length} beats; expected ${sceneCount}`);
+  }
+  const narrationIssues = treatmentNarrationIssues(treatment, prompt, targetDuration);
+  if (narrationIssues.length > 0) {
+    const repair = await textModel.client.chat.completions.create({
+      model: textModel.model,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You are the commercial brief and narration quality editor.",
+            "Repair the treatment while preserving every verified client fact and the required beat count.",
+            "Separate production instructions from promoted-company content.",
+            "Rewrite every narrationLine as concise, natural, audience-facing commercial narration grounded in its sourceFact.",
+            "Do not invent proof, metrics, customers, awards, or capabilities. Return strict JSON only."
+          ].join(" ")
+        },
+        {
+          role: "user",
+          content: `Original client request:\n${prompt}${referenceContext ? `\n\n${referenceContext}` : ""}\n\nRejected treatment:\n${JSON.stringify(treatment, null, 2)}\n\nNarration issues:\n- ${narrationIssues.join("\n- ")}\n\nTarget duration: ${targetDuration} seconds. Required beats: exactly ${sceneCount}. ${languageDirection} ${narrationBudgetDirection}\n\nReturn the complete treatment with this exact shape:\n{ "workingTitle": string, "language": string, "audience": string, "corePromise": string, "commercialBrief": { "subject": string, "category": string, "audience": string, "customerProblem": string, "offering": string, "differentiators": string[1-5], "proofPoints": string[0-4], "outcomes": string[1-4], "callToAction": string }, "creativeConcept": string, "narrativeArc": string, "visualBible": { "world": string, "artDirection": string, "palette": string[3-6], "lighting": string, "cameraLanguage": string, "recurringMotif": string, "avoid": string[2-10] }, "beats": [{ "purpose": string, "sourceFact": string, "narrationLine": string, "emotionalBeat": string, "visualAnchor": string, "transition": string }] }`
+        }
+      ],
+      temperature: 0.25
+    });
+    treatment = treatmentSchema.parse(extractJson(repair.choices[0]?.message.content ?? "{}"));
+    if (treatment.beats.length !== sceneCount || treatmentNarrationIssues(treatment, prompt, targetDuration).length > 0) {
+      throw new Error("Commercial treatment narration failed semantic or timing validation");
+    }
   }
   return treatment;
 }
@@ -511,6 +602,7 @@ async function repairStoryboard(params: {
           "Rewrite the storyboard to resolve every listed issue while preserving the approved treatment.",
           "Return strict JSON only, using the exact same storyboard schema.",
           "Use concrete filmable imagery, distinct shot purposes, natural narration, and coherent visual continuity.",
+          "The approved treatment owns the spoken story. For scene N, copy treatment.beats[N-1].narrationLine into voiceover exactly; do not paraphrase, expand, or replace it.",
           "Narration must speak about the client's company or product, never about the video, scene, shot, camera, prompt, storyboard, or generation workflow unless that workflow is the actual product in the original request.",
           "Across four or more scenes, use at least three clearly named shot scales or camera angles.",
           "Do not reuse the same narration opening, composition, or visual event in multiple scenes.",
@@ -520,7 +612,7 @@ async function repairStoryboard(params: {
       },
       {
         role: "user",
-        content: `Original request:\n${params.prompt}${params.referenceContext ? `\n\n${params.referenceContext}` : ""}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. ${params.options ? `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters. Across four or more scenes, explicitly use at least three different shot scales or camera angles. Give every scene a different narration opening, composition, and visual event. The last scene must resolve the film with a concrete completion, delivery, launch, export, share, or next-action moment.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
+        content: `Original request:\n${params.prompt}${params.referenceContext ? `\n\n${params.referenceContext}` : ""}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. Copy each treatment beat's narrationLine into the matching scene voiceover exactly. ${params.options ? `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters. Across four or more scenes, explicitly use at least three different shot scales or camera angles. Give every scene a different composition and visual event. The last scene must resolve the film with a concrete completion, delivery, launch, export, share, or next-action moment.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
       }
     ],
     temperature: 0.35
@@ -571,6 +663,7 @@ export async function createStoryboardProject(
               "Describe visual prompts as finished cinematic frames that an image model can render, not as design notes.",
               `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must be written in ${options?.language ?? treatment.language}.`,
               "Voiceover must be natural finished narration, fit comfortably in its scene duration, and avoid repeating the title.",
+              "The approved treatment owns the spoken story. For scene N, copy treatment.beats[N-1].narrationLine into voiceover exactly; do not paraphrase, expand, or replace it.",
               "Treat requests such as 'make a video', duration, style, format, and scene count only as production instructions, never as the subject of the narration.",
               "Voiceover must sell or explain the client's actual company, product, customer problem, differentiators, evidence, and outcome. Never narrate what the video, scene, shot, camera, storyboard, viewer, or generation process is doing unless video creation is itself the client's product.",
               "Every scene must begin its narration differently and depict a different visual event and composition.",
@@ -608,8 +701,7 @@ export async function createStoryboardProject(
       scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration);
       qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title, prompt);
       if (qualityIssues.length > 0) {
-        console.error(`[ai-video] Repaired storyboard still failed quality checks (${qualityIssues.join(", ")}), using focused fallback.`);
-        return { project: generateProjectFromPrompt(prompt, baseProject, options), engine: "heuristic" };
+        throw new Error(`Repaired storyboard failed quality checks: ${qualityIssues.join(", ")}`);
       }
     }
 
@@ -639,8 +731,8 @@ export async function createStoryboardProject(
       }
     };
   } catch (error) {
-    console.error("[ai-video] Falling back to heuristic storyboard:", error);
-    return { project: generateProjectFromPrompt(prompt, baseProject, options), engine: "heuristic" };
+    console.error("[ai-video] Commercial brief or storyboard generation failed:", error);
+    throw error;
   }
 }
 

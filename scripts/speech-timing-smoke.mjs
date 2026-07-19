@@ -31,8 +31,13 @@ assert.match(azure, /timingRatio < 0\.82/);
 assert.match(azure, /nextRate !== rate/);
 
 const audioAssets = fs.readFileSync(new URL("../lib/audio-assets.ts", import.meta.url), "utf8");
-assert.match(audioAssets, /旁白内容过长/);
-assert.match(audioAssets, /scene\.durationSeconds \* 0\.86/);
+assert.doesNotMatch(audioAssets, /scene\.durationSeconds \* 0\.86/);
+assert.doesNotMatch(audioAssets, /narration was shortened/);
+assert.match(audioAssets, /TTS_GENERATION_CONCURRENCY"\)\) \|\| 2/);
+
+const narrationFit = fs.readFileSync(new URL("../lib/narration-fit.ts", import.meta.url), "utf8");
+assert.match(narrationFit, /options\.preserveNarration/);
+assert.match(narrationFit, /Locked narration cannot fit the requested video duration/);
 
 const rawAudio = Buffer.alloc(48_000 / 8 * 5);
 assert.ok(Math.abs(estimateCbrMp3Duration(rawAudio, 48) - 5) < 0.001);

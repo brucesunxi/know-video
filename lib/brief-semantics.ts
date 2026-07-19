@@ -6,6 +6,8 @@ const videoCreationProductPatterns = [
 ];
 
 const productionInstructionPattern = /(?:生成|制作|创建|做|剪辑|输出|导出|改造|调整).{0,18}(?:视频|短片|宣传片|介绍片|分镜)|(?:时长|横屏|竖屏|画幅|配音|旁白|字幕|风格|节奏|镜头|分镜|秒钟?|minutes?|seconds?|aspect ratio)/iu;
+const directProductionCommandPattern = /^(?:请|请帮|帮我|给我|需要|我想|想要|生成|制作|创建|做|剪辑|输出|导出|make|create|generate|produce|export)\s*.{0,24}(?:视频|短片|宣传片|介绍片|分镜|video|film|storyboard)/iu;
+const productionSettingPattern = /^(?:视频)?(?:时长|长度|比例|画幅|横屏|竖屏|分辨率|格式|风格|节奏|语速|配音|旁白|字幕|场景数|镜头数|分镜数|duration|aspect ratio|resolution|format|style|pace|voice|captions?|scenes?|shots?)\s*(?:为|是|要|需要|:|：|=)?/iu;
 
 const metaNarrationPatterns = [
   /(?:这|本|整)(?:支|个|段)?(?:视频|短片|影片).{0,16}(?:展示|呈现|介绍|讲述|带来|开始|结束|值得)/u,
@@ -27,6 +29,15 @@ export function hasMetaProductionNarration(value: string) {
   return metaNarrationPatterns.some((pattern) => pattern.test(value));
 }
 
+export function isProductionInstructionClause(value: string) {
+  const normalized = value.replace(/^[\s,，:：;；-]+|[\s,，:：;；-]+$/g, "").trim();
+  if (!normalized) return true;
+  if (directProductionCommandPattern.test(normalized) || productionSettingPattern.test(normalized)) return true;
+  const hasFormatConstraint = /(?:\d{1,3}\s*(?:秒|秒钟|分钟|seconds?|minutes?)|16\s*:\s*9|9\s*:\s*16|横屏|竖屏|官网首屏|片长)/iu.test(normalized);
+  const hasProductionNoun = /(?:视频|短片|宣传片|介绍片|分镜|镜头|video|film|storyboard|shot)/iu.test(normalized);
+  return hasFormatConstraint || (productionInstructionPattern.test(normalized) && hasProductionNoun);
+}
+
 export function extractBriefSubject(prompt: string, chinese = true) {
   const latinCandidates = prompt.match(/\b[A-Z][A-Z0-9_-]{2,}\b/g) ?? [];
   const brand = latinCandidates.find((candidate) => !ignoredBrandTokens.has(candidate));
@@ -45,12 +56,17 @@ export function extractBriefSubject(prompt: string, chinese = true) {
 }
 
 export function extractBriefFacts(prompt: string, chinese = true) {
-  const parts = prompt
+  const sentenceParts = prompt
     .replace(/\r/g, "")
     .split(/[。！？；\n]+/u)
     .map((part) => part.replace(/^[\s,，:：-]+|[\s,，:：-]+$/g, "").trim())
-    .filter((part) => part.length >= (chinese ? 8 : 24))
-    .filter((part) => !(productionInstructionPattern.test(part) && part.length < (chinese ? 45 : 100)));
+    .filter(Boolean);
+  const parts = sentenceParts.flatMap((part) => {
+    if (!isProductionInstructionClause(part)) return [part];
+    return part.split(/[,，:：、]+/u).map((clause) => clause.trim()).filter(Boolean);
+  }).filter((part) => part.length >= (chinese ? 6 : 16))
+    .filter((part) => !isProductionInstructionClause(part))
+    .filter((part) => !(productionInstructionPattern.test(part) && part.length < (chinese ? 28 : 72)));
 
   const unique: string[] = [];
   for (const part of parts) {

@@ -80,8 +80,26 @@ export function fitSceneNarration(scene: Scene): Scene {
   return fitted === scene.voiceover ? scene : { ...scene, voiceover: fitted };
 }
 
-export function fitScenesNarration(scenes: Scene[], targetDuration: number) {
+export function fitScenesNarration(
+  scenes: Scene[],
+  targetDuration: number,
+  options: { preserveNarration?: boolean } = {}
+) {
   if (scenes.length === 0) return scenes;
+  if (options.preserveNarration) {
+    const durations = scenes.map((scene) => Math.max(2, Math.ceil(estimateNarrationSeconds(scene.voiceover) + 0.45)));
+    let remaining = targetDuration - durations.reduce((sum, value) => sum + value, 0);
+    if (remaining < 0) {
+      throw new Error("Locked narration cannot fit the requested video duration");
+    }
+    let cursor = 0;
+    while (remaining > 0) {
+      durations[cursor % durations.length] += 1;
+      remaining -= 1;
+      cursor += 1;
+    }
+    return scenes.map((scene, index) => ({ ...scene, durationSeconds: durations[index] }));
+  }
   const desired = scenes.map((scene) => {
     const estimated = estimateNarrationSeconds(scene.voiceover);
     return Math.max(2, Math.min(20, Math.round(Math.max(scene.durationSeconds, estimated + 0.65))));

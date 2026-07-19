@@ -33,6 +33,7 @@
     "scene:structure:intent:smoke": "node scripts/scene-structure-intent-smoke.mjs",
     "scene:transitions:smoke": "node scripts/scene-transitions-smoke.mjs",
     "storyboard:quality:smoke": "node scripts/storyboard-quality-smoke.mjs",
+    "brief:decomposition:smoke": "node scripts/brief-decomposition-smoke.mjs",
     "image:continuity:smoke": "node scripts/image-continuity-smoke.mjs",
     "image:quality:smoke": "node scripts/image-quality-smoke.mjs",
     "image:candidates:smoke": "node scripts/image-candidates-smoke.mjs",

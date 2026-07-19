@@ -261,7 +261,7 @@ export function generateProjectFromPrompt(
     ? title
     : chinese ? `${briefSubject} 产品介绍` : `${briefSubject} Product Film`;
   const fallbackFact = (index: number, chineseFallback: string, englishFallback: string) => {
-    const fact = briefFacts[index] ?? briefFacts[index % Math.max(1, briefFacts.length)];
+    const fact = briefFacts[index];
     if (fact) return fact;
     return chinese ? chineseFallback : englishFallback;
   };
