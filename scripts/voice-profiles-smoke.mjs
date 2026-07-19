@@ -35,10 +35,12 @@ assert.equal(isNarrationVoice("male-deep"), true);
 assert.equal(isNarrationVoice("unknown"), false);
 assert.equal(narrationVoiceFromRequest("把第 2 场景改成自然女声"), "female-natural");
 assert.equal(narrationVoiceFromRequest("全片换成沉稳、权威一点的男声"), "male-deep");
+assert.equal(narrationVoiceFromRequest("全片换成品牌男声"), "male-deep");
 assert.equal(narrationVoiceFromRequest("使用清晰有活力的男声"), "male-clear");
 assert.equal(narrationVoiceFromRequest("把画面改成浅色"), undefined);
 assert.equal(narrationVoiceForBrief("面向年轻家庭的温暖智能投影仪短片"), "female-natural");
 assert.equal(narrationVoiceForBrief("企业治理与金融风控纪录片"), "male-deep");
+assert.equal(narrationVoiceForBrief("为一家自动化公司制作企业介绍片"), "male-deep");
 assert.equal(narrationVoiceForBrief("节奏明快的科技产品发布短片"), "male-clear");
 assert.equal(narrationVoiceForBrief("儿童课程，但明确使用沉稳男声"), "male-deep");
 

@@ -64,7 +64,7 @@ export function isNarrationVoice(value: unknown): value is NarrationVoice {
 export function narrationVoiceFromRequest(request: string): NarrationVoice | undefined {
   if (!/音色|声音|男声|女声|配音|voice|narrat/iu.test(request)) return undefined;
   if (/女声|女性|女生|female|woman/iu.test(request)) return "female-natural";
-  if (/沉稳|稳重|成熟|低沉|权威|deep|authoritative|mature/iu.test(request)) return "male-deep";
+  if (/沉稳|稳重|成熟|低沉|权威|品牌男声|商务男声|deep|authoritative|mature|brand voice|business voice/iu.test(request)) return "male-deep";
   if (/男声|男性|男生|清晰|活力|male|man|clear|energetic/iu.test(request)) return "male-clear";
   return undefined;
 }
@@ -75,7 +75,7 @@ export function narrationVoiceForBrief(request: string): NarrationVoice {
   if (/儿童|孩子|亲子|家庭|教育|课程|老师|生活方式|旅行|美妆|健康|温暖|亲和|自然|kids?|children|family|education|teacher|lifestyle|travel|beauty|wellness|warm|friendly/iu.test(request)) {
     return "female-natural";
   }
-  if (/金融|法律|治理|政务|企业级|工业|纪录片|历史|权威|严肃|稳重|finance|legal|governance|enterprise|industrial|documentary|history|authoritative|serious/iu.test(request)) {
+  if (/金融|法律|治理|政务|企业级|工业|纪录片|历史|权威|严肃|稳重|公司介绍|企业介绍|品牌介绍|企业服务|自动化公司|finance|legal|governance|enterprise|industrial|documentary|history|authoritative|serious|company profile|corporate profile|brand story/iu.test(request)) {
     return "male-deep";
   }
   return DEFAULT_NARRATION_VOICE;
