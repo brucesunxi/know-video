@@ -5,7 +5,7 @@ import ts from "typescript";
 const semanticsSource = fs.readFileSync(new URL("../lib/brief-semantics.ts", import.meta.url), "utf8");
 const qualitySource = fs.readFileSync(new URL("../lib/storyboard-quality.ts", import.meta.url), "utf8")
   .replace(/^import type .*$/gm, "")
-  .replace(/^import .*brief-semantics.*$/gm, "");
+  .replace(/import\s*\{[\s\S]*?\}\s*from\s*"@\/lib\/brief-semantics";\n?/m, "");
 assert.doesNotMatch(qualitySource, /voiceover is too short for the available scene duration/);
 const source = `${semanticsSource}\n${qualitySource}`;
 const compiled = ts.transpileModule(source, {
@@ -69,5 +69,23 @@ assert(storyboardQualityIssues(
   "企业责任治理",
   "请为 VYBEA 制作一支企业产品介绍片"
 ).includes("voiceover loses the client's named company or product"));
+
+const vybeaBrief = "请为 VYBEA 制作企业产品介绍片。VYBEA 是面向娱乐 IP 的项目级责任治理平台，保留 Gate 记录、授权责任链、可审查证据包和风险信号。";
+const vybeaScenes = scenes.map((scene, index) => ({
+  ...scene,
+  voiceover: [
+    "VYBEA 把娱乐 IP 项目的风险信号提前变清楚。",
+    "平台用多道 Gate 检查点串起授权责任链。",
+    "每个关键判断都会沉淀为可审查证据包。",
+    "团队最终获得可追溯记录链和更稳的复盘依据。"
+  ][index],
+  visualPrompt: `${scene.visualPrompt}\n业务视觉锚点：${index === 0 ? "风险信号地图在控制室墙面亮起" : index === 1 ? "三道 Gate 检查点以箭头路径连接授权责任链" : index === 2 ? "透明证据包沿记录链逐层归档" : "可追溯记录链汇入最终治理控制台"}。`
+}));
+const vybeaIssues = storyboardQualityIssues(vybeaScenes, { language: "中文" }, "VYBEA 产品介绍", vybeaBrief);
+assert(!vybeaIssues.includes("visual direction misses brief-specific business concepts"), `VYBEA visual anchors should pass: ${vybeaIssues.join(", ")}`);
+assert(storyboardQualityIssues(scenes.map((scene) => ({
+  ...scene,
+  voiceover: `VYBEA ${scene.voiceover}`
+})), { language: "中文" }, "VYBEA 产品介绍", vybeaBrief).includes("visual direction misses brief-specific business concepts"));
 
 console.log("Storyboard quality smoke passed.");

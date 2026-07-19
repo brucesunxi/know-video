@@ -12,6 +12,7 @@ vm.runInNewContext(semanticsOutput, { module, exports: module.exports });
 const {
   extractBriefFacts,
   extractBriefSubject,
+  extractBriefVisualConcepts,
   isProductionInstructionClause
 } = module.exports;
 
@@ -21,6 +22,12 @@ assert.equal(extractBriefSubject(mixedBrief, true), "VYBEA");
 assert.equal(facts.some((fact) => /30\s*秒|官网首屏|风格高级/u.test(fact)), false);
 assert.equal(facts.some((fact) => fact.includes("项目级责任治理平台")), true);
 assert.equal(facts.some((fact) => fact.includes("可审查证据")), true);
+const concepts = extractBriefVisualConcepts(`${mixedBrief} 它保留 Gate 记录、授权责任链和风险信号。`, true);
+assert(concepts.includes("VYBEA"));
+assert(concepts.includes("多道 Gate 检查点"));
+assert(concepts.includes("可审查证据包"));
+assert(concepts.includes("责任链路"));
+assert(concepts.includes("风险信号地图"));
 
 const commaBrief = "生成一个30秒横屏介绍片，风格高级，VYBEA 是项目治理平台，帮助娱乐团队追踪授权和风险";
 const commaFacts = Array.from(extractBriefFacts(commaBrief, true));

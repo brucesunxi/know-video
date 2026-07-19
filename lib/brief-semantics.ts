@@ -75,3 +75,30 @@ export function extractBriefFacts(prompt: string, chinese = true) {
   }
   return unique.slice(0, 8);
 }
+
+const visualConceptPatterns: Array<[RegExp, string, string]> = [
+  [/\bGates?\b|Gate\s*记录|闸门|关卡|阶段门/iu, "Gate checkpoints", "多道 Gate 检查点"],
+  [/证据包|证据|evidence|audit/iu, "evidence packets", "可审查证据包"],
+  [/可追溯|追溯|traceable|traceability|记录/iu, "traceable record trail", "可追溯记录链"],
+  [/责任|accountability|ownership|owner/iu, "accountability chain", "责任链路"],
+  [/风险|risk|signal|信号/iu, "risk signal map", "风险信号地图"],
+  [/授权|approval|approve|permission/iu, "approval gates", "授权节点"],
+  [/治理|governance/iu, "governance control room", "治理控制室"],
+  [/预算|budget|cost/iu, "budget boundary", "预算边界"],
+  [/阵容|候选|casting|talent/iu, "candidate lineup board", "候选阵容板"],
+  [/沙盘|推演|simulation/iu, "scenario simulation table", "沙盘推演桌"],
+  [/反馈|舆情|audience|sentiment/iu, "audience feedback radar", "受众反馈雷达"],
+  [/上线|发布|launch|release/iu, "launch readiness gate", "上线准备门"]
+];
+
+export function extractBriefVisualConcepts(prompt: string, chinese = true) {
+  const concepts: string[] = [];
+  for (const [pattern, english, localized] of visualConceptPatterns) {
+    if (pattern.test(prompt)) concepts.push(chinese ? localized : english);
+  }
+  const latinTerms = prompt.match(/\b[A-Z][A-Za-z0-9_-]{2,}\b/g) ?? [];
+  for (const term of latinTerms) {
+    if (!ignoredBrandTokens.has(term.toUpperCase()) && !concepts.includes(term)) concepts.unshift(term);
+  }
+  return concepts.filter((concept, index, values) => values.indexOf(concept) === index).slice(0, 8);
+}

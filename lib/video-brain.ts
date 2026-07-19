@@ -3,7 +3,12 @@ import { fitSceneNarration } from "@/lib/narration-fit";
 import { narrationVoiceForBrief, narrationVoiceFromRequest } from "@/lib/voice-profiles";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
-import { extractBriefFacts, extractBriefSubject, isVideoCreationProductBrief } from "@/lib/brief-semantics";
+import {
+  extractBriefFacts,
+  extractBriefSubject,
+  extractBriefVisualConcepts,
+  isVideoCreationProductBrief
+} from "@/lib/brief-semantics";
 
 const palettes = {
   dark: ["#07111d", "#143044", "#38d5e5", "#f8fafc"],
@@ -142,6 +147,14 @@ function applyFallbackConstraints(
     }, index, chinese));
 }
 
+function visualConceptSuffix(prompt: string, chinese: boolean) {
+  const concepts = extractBriefVisualConcepts(prompt, chinese);
+  if (concepts.length === 0) return "";
+  return chinese
+    ? ` 业务视觉锚点：${concepts.join("、")}；将这些概念转化为真实可见的空间结构、箭头路径、检查点、证据包、责任链或风险地图，避免只做抽象科技背景。`
+    : ` Brief visual anchors: ${concepts.join(", ")}; translate them into visible spatial structures, arrow paths, checkpoints, evidence packets, responsibility chains, or risk maps rather than generic tech imagery.`;
+}
+
 export function generateProjectFromPrompt(
   prompt: string,
   baseProject?: Project,
@@ -257,6 +270,7 @@ export function generateProjectFromPrompt(
 
   const briefSubject = extractBriefSubject(prompt, chinese);
   const briefFacts = extractBriefFacts(prompt, chinese);
+  const conceptSuffix = visualConceptSuffix(prompt, chinese);
   const fallbackTitle = briefSubject === "这项产品" || briefSubject === "This product"
     ? title
     : chinese ? `${briefSubject} 产品介绍` : `${briefSubject} Product Film`;
@@ -271,7 +285,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 1,
       title: chinese ? "开场钩子" : "Opening Hook",
       voiceover: fallbackFact(0, `${briefSubject}，让企业最重要的价值被清楚看见。`, `${briefSubject} makes the company's most important value clear.`),
-      visualPrompt: `${tone} opening title card for ${prompt}, strong product signal, clean layout, readable headline.`,
+      visualPrompt: `${tone} opening cinematic frame for ${briefSubject}, strong product signal, real environment, one clear hero subject.${conceptSuffix}`,
       motionPrompt: "Camera pushes in slowly while the headline resolves and supporting UI details fade into place.",
       durationSeconds: 6,
       style: { theme: tone, palette, mood: "clear" },
@@ -282,7 +296,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 2,
       title: chinese ? "问题情境" : "Problem Context",
       voiceover: fallbackFact(1, `面对复杂业务，${briefSubject}帮助团队更早识别问题并建立清晰共识。`, `In complex work, ${briefSubject} helps teams identify problems earlier and build shared clarity.`),
-      visualPrompt: `${tone} problem scene with scattered cards, alerts, and timeline pressure around ${prompt}.`,
+      visualPrompt: `${tone} problem scene for ${briefSubject}: scattered risk signals, unresolved approvals, and workflow pressure arranged as concrete objects in a control-room environment.${conceptSuffix}`,
       motionPrompt: "Cards drift apart, warning states appear, then pause for emphasis.",
       durationSeconds: 7,
       style: { theme: tone, palette, mood: "focused" },
@@ -293,7 +307,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 3,
       title: chinese ? "解决路径" : "Solution Flow",
       voiceover: fallbackFact(2, `${briefSubject}把关键流程连接起来，让每一步都有依据、责任与行动路径。`, `${briefSubject} connects the critical workflow so every step has evidence, ownership, and a path to action.`),
-      visualPrompt: `${tone} workflow scene with three connected steps, interface panels, and visual hierarchy.`,
+      visualPrompt: `${tone} workflow scene for ${briefSubject}: three connected checkpoints or gates linked by arrows, ownership handoffs, and evidence packets moving through the system.${conceptSuffix}`,
       motionPrompt: "Steps connect from left to right, then the active step expands.",
       durationSeconds: 8,
       style: { theme: tone, palette, mood: "systematic" },
@@ -304,7 +318,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 4,
       title: chinese ? "效果证明" : "Proof Moment",
       voiceover: fallbackFact(3, `从分散信息到可验证成果，${briefSubject}让改进过程清晰、可信并且可追溯。`, `From scattered information to verifiable outcomes, ${briefSubject} makes improvement clear, credible, and traceable.`),
-      visualPrompt: `${tone} before-after comparison for ${prompt}, measurable improvement, dashboard-like clarity.`,
+      visualPrompt: `${tone} proof scene for ${briefSubject}: evidence packets lock into a traceable record trail, risk signals resolve, and accountability links become clear.${conceptSuffix}`,
       motionPrompt: "Before state compresses, after state slides in with highlighted metrics.",
       durationSeconds: 7,
       style: { theme: tone, palette, mood: "confident" },
@@ -315,7 +329,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 5,
       title: chinese ? "价值升华" : "Human Outcome",
       voiceover: fallbackFact(4, `最终，团队获得的不只是效率，更是更稳定的判断、更顺畅的协作和更可靠的结果。`, `The result is more than efficiency: teams gain stronger decisions, smoother collaboration, and more reliable outcomes.`),
-      visualPrompt: `${tone} closing brand card for ${prompt}, centered mark, concise takeaway, premium spacing.`,
+      visualPrompt: `${tone} closing outcome scene for ${briefSubject}: the finished governance path is visible as a calm sequence of gates, records, and approvals reaching a clear decision point.${conceptSuffix}`,
       motionPrompt: "Logo and takeaway fade in, background elements settle, then hold.",
       durationSeconds: 6,
       style: { theme: tone, palette, mood: "polished" },
@@ -326,7 +340,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 6,
       title: chinese ? "成果收束" : "Final Resolve",
       voiceover: fallbackFact(5, `${briefSubject}，让真正重要的工作持续向前。`, `${briefSubject} keeps the work that matters moving forward.`),
-      visualPrompt: `${tone} closing cinematic frame for ${prompt}, one concrete hero subject, resolved environment, strong visual identity, premium spacing, no generic presentation layout.`,
+      visualPrompt: `${tone} closing cinematic frame for ${briefSubject}, one concrete hero subject, resolved environment, strong visual identity, premium spacing, no generic presentation layout.${conceptSuffix}`,
       motionPrompt: "The final subject settles into a clean hero composition, environmental motion slows, and the camera holds for a confident finish.",
       durationSeconds: 6,
       style: { theme: tone, palette, mood: "resolved" },

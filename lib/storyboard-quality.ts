@@ -1,5 +1,10 @@
 import type { GenerationOptions, Scene } from "@/lib/types";
-import { extractBriefSubject, hasMetaProductionNarration, isVideoCreationProductBrief } from "@/lib/brief-semantics";
+import {
+  extractBriefSubject,
+  extractBriefVisualConcepts,
+  hasMetaProductionNarration,
+  isVideoCreationProductBrief
+} from "@/lib/brief-semantics";
 
 const genericSceneNames = [
   "customization",
@@ -88,6 +93,28 @@ function visualPromptsRepeat(scenes: Scene[]) {
   return false;
 }
 
+function conceptToken(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[，。！？；,.!?;:：、-]/g, "");
+}
+
+function coveredVisualConcepts(scenes: Scene[], concepts: string[]) {
+  const visualText = scenes.map((scene) => scene.visualPrompt).join("\n").toLowerCase();
+  return concepts.filter((concept) => {
+    const compact = conceptToken(concept);
+    if (!compact) return false;
+    if (visualText.includes(concept.toLowerCase()) || conceptToken(visualText).includes(compact)) return true;
+    if (/gate/i.test(concept)) return /\bgates?\b|检查点|关卡|闸门|门/u.test(visualText);
+    if (/证据|evidence/i.test(concept)) return /证据|evidence|packet|档案|文件|材料/u.test(visualText);
+    if (/责任|accountability/i.test(concept)) return /责任|owner|ownership|accountability|链路/u.test(visualText);
+    if (/风险|risk/i.test(concept)) return /风险|risk|signal|信号|预警/u.test(visualText);
+    if (/追溯|trace/i.test(concept)) return /追溯|trace|trail|记录|链/u.test(visualText);
+    return false;
+  });
+}
+
 export function detectedShotVariety(scenes: Scene[]) {
   const signatures = new Set<string>();
   for (const scene of scenes) {
@@ -142,6 +169,14 @@ export function storyboardQualityIssues(
     const narration = `${projectTitle ?? ""} ${scenes.map((scene) => scene.voiceover).join(" ")}`.toLowerCase();
     if (isDistinctBrand && !narration.includes(subject.toLowerCase())) {
       issues.push("voiceover loses the client's named company or product");
+    }
+    const concepts = extractBriefVisualConcepts(brief, options?.language !== "英文")
+      .filter((concept) => !/^[A-Z][A-Za-z0-9_-]{2,}$/u.test(concept));
+    if (concepts.length >= 2) {
+      const covered = coveredVisualConcepts(scenes, concepts);
+      if (covered.length < Math.min(3, concepts.length)) {
+        issues.push("visual direction misses brief-specific business concepts");
+      }
     }
   }
   const finalScene = scenes.at(-1);

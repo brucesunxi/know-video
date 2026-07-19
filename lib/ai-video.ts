@@ -5,7 +5,11 @@ import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip 
 import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import { fitScenesNarration } from "@/lib/narration-fit";
-import { hasMetaProductionNarration, isProductionInstructionClause } from "@/lib/brief-semantics";
+import {
+  extractBriefVisualConcepts,
+  hasMetaProductionNarration,
+  isProductionInstructionClause
+} from "@/lib/brief-semantics";
 import { requestsSceneStructureChange, sceneStructureFromRequest, sceneStructureSummary } from "@/lib/scene-structure-intent";
 import { storyboardQualityIssues } from "@/lib/storyboard-quality";
 import { narrationVoiceForBrief } from "@/lib/voice-profiles";
@@ -92,9 +96,9 @@ function compactClause(value: string, maxLength: number) {
     .trim();
 }
 
-function joinChineseParts(parts: string[]) {
+function joinChineseParts(parts: string[], maxLength = 28) {
   const cleaned = parts.map((part) => compactClause(part, 34)).filter(Boolean);
-  return compactClause(cleaned.join("，").replace(/，+/g, "，").replace(/，$/u, ""), 19) + "。";
+  return compactClause(cleaned.join("，").replace(/，+/g, "，").replace(/，$/u, ""), maxLength) + "。";
 }
 
 function localNarrationLine(treatment: Treatment, beat: Treatment["beats"][number], index: number) {
@@ -109,11 +113,11 @@ function localNarrationLine(treatment: Treatment, beat: Treatment["beats"][numbe
   const sourceFact = compactClause(beat.sourceFact, 14);
 
   const chineseTemplates = [
-    [`${subject}面向${audience}`, `解决${problem}`],
-    [`${subject}把${sourceFact || offering}`, `转化为${outcome || "清晰结果"}`],
-    [`${offering || subject}突出${differentiator || sourceFact}`, "让价值更快落地"],
-    [`${subject}${proof ? `以${proof}` : `以${differentiator || offering}`}`, "建立客户信任"],
-    [`${subject}帮助客户${outcome || "完成决策"}`, compactClause(brief.callToAction, 10)]
+    [`${subject}面向${audience}`, `把${problem}变清楚`],
+    [`${subject}整合${sourceFact || offering}`, `形成${outcome || "可执行路径"}`],
+    [`${offering || subject}突出${differentiator || sourceFact}`, "让团队更快判断"],
+    [`${subject}${proof ? `以${proof}` : `依靠${differentiator || offering}`}`, "建立可信决策"],
+    [`${subject}帮助客户${outcome || "完成关键决策"}`, compactClause(brief.callToAction, 12) || "持续向前"]
   ];
   if (isChineseTreatment(treatment)) {
     return joinChineseParts(chineseTemplates[index % chineseTemplates.length].filter(Boolean));
@@ -560,13 +564,26 @@ function continuityDirection(treatment: Treatment) {
   ].join(". ");
 }
 
+function briefVisualConceptDirection(prompt: string, options?: GenerationOptions) {
+  const concepts = extractBriefVisualConcepts(prompt, options?.language !== "英文");
+  if (concepts.length === 0) return "";
+  return [
+    `Brief-derived visual anchors: ${concepts.join(", ")}.`,
+    "Every scene should embody at least one anchor as a concrete object, environment, diagrammatic structure, workflow artifact, or human action.",
+    "For gates, checkpoints, evidence, records, responsibility chains, approvals, or risk signals, use filmable spatial metaphors such as sequential portals, arrow paths, linked evidence packets, checkpoint tables, control-room routes, or traceable trails. Use icons, numbers, and short marks instead of long readable text."
+  ].join(" ");
+}
+
 function normalizeStoryboard(
   parsed: z.infer<typeof storyboardSchema>,
   treatment: Treatment,
-  targetDuration: number
+  targetDuration: number,
+  prompt = "",
+  options?: GenerationOptions
 ) {
   const durations = distributeDurations(parsed.scenes.map((scene) => scene.durationSeconds), targetDuration);
   const continuity = continuityDirection(treatment);
+  const conceptDirection = briefVisualConceptDirection(prompt, options);
 
   const scenes = parsed.scenes.map((scene, index): Scene => ({
     id: crypto.randomUUID(),
@@ -574,7 +591,7 @@ function normalizeStoryboard(
     title: scene.title.trim(),
     // The strategist owns the spoken story. The storyboard pass only designs how to film it.
     voiceover: treatment.beats[index]?.narrationLine.trim() || scene.voiceover.trim(),
-    visualPrompt: `${scene.visualPrompt.trim()}\n${continuity}`,
+    visualPrompt: `${scene.visualPrompt.trim()}\n${continuity}${conceptDirection ? `\n${conceptDirection}` : ""}`,
     motionPrompt: `${scene.motionPrompt.trim()} Camera language: ${treatment.visualBible.cameraLanguage}. Transition: ${treatment.beats[index]?.transition ?? "motivated visual match cut"}.`,
     durationSeconds: durations[index],
     style: {
@@ -604,6 +621,7 @@ async function createTreatment(
   const narrationBudgetDirection = options?.language === "英文"
     ? `Each narrationLine is final spoken copy: approximately ${Math.max(3, Math.floor(averageSceneSeconds * 1.15))}-${Math.max(4, Math.floor(averageSceneSeconds * 2.2))} English words.`
     : `Each narrationLine is final spoken copy: approximately ${Math.max(5, Math.floor(averageSceneSeconds * 2.1))}-${Math.max(8, Math.floor(averageSceneSeconds * 3.65))} Chinese characters, excluding punctuation.`;
+  const conceptDirection = briefVisualConceptDirection(prompt, options);
   const completion = await textModel.client.chat.completions.create({
     model: textModel.model,
     response_format: { type: "json_object" },
@@ -616,6 +634,7 @@ async function createTreatment(
           "First extract a commercialBrief from the client input. Identify the promoted subject, category, audience, customer problem, offering, differentiators, supplied proof, desired outcomes, and call to action.",
           "Treat only facts stated or clearly implied by the client as facts. Never invent customers, metrics, awards, market claims, or product capabilities. Use an empty proofPoints array when no proof is supplied.",
           "Find a visual concept rooted in the user's actual subject, not a software feature list.",
+          "Extract business structures from the client text and make them recurring visual motifs when present: gates, records, responsibility chains, evidence packets, approval paths, budget boundaries, risk signals, or scenario tables.",
           "Separate production instructions (make a video, duration, format, style, scenes) from the company or product being promoted.",
           "The spoken narrative must communicate the client's company, product, customer problem, differentiators, evidence, and outcome. It must never describe the act of making or watching this video unless video creation is itself the client's product.",
           "Each beat must advance one narrative arc and introduce a distinct visual event.",
@@ -628,7 +647,7 @@ async function createTreatment(
       },
       {
         role: "user",
-        content: `Creative request:\n${prompt}${referenceContext ? `\n\n${referenceContext}` : ""}\n\nTarget duration: ${targetDuration} seconds. Required beats: exactly ${sceneCount}.\n${languageDirection}\n${styleDirection}\n${narrationBudgetDirection}\n\nReturn JSON in this exact shape:\n{ "workingTitle": string, "language": string, "audience": string, "corePromise": string, "commercialBrief": { "subject": string, "category": string, "audience": string, "customerProblem": string, "offering": string, "differentiators": string[1-5], "proofPoints": string[0-4], "outcomes": string[1-4], "callToAction": string }, "creativeConcept": string, "narrativeArc": string, "visualBible": { "world": string, "artDirection": string, "palette": string[3-6], "lighting": string, "cameraLanguage": string, "recurringMotif": string, "avoid": string[2-10] }, "beats": [{ "purpose": string, "sourceFact": string, "narrationLine": string, "emotionalBeat": string, "visualAnchor": string, "transition": string }] }`
+        content: `Creative request:\n${prompt}${referenceContext ? `\n\n${referenceContext}` : ""}${conceptDirection ? `\n\n${conceptDirection}` : ""}\n\nTarget duration: ${targetDuration} seconds. Required beats: exactly ${sceneCount}.\n${languageDirection}\n${styleDirection}\n${narrationBudgetDirection}\n\nReturn JSON in this exact shape:\n{ "workingTitle": string, "language": string, "audience": string, "corePromise": string, "commercialBrief": { "subject": string, "category": string, "audience": string, "customerProblem": string, "offering": string, "differentiators": string[1-5], "proofPoints": string[0-4], "outcomes": string[1-4], "callToAction": string }, "creativeConcept": string, "narrativeArc": string, "visualBible": { "world": string, "artDirection": string, "palette": string[3-6], "lighting": string, "cameraLanguage": string, "recurringMotif": string, "avoid": string[2-10] }, "beats": [{ "purpose": string, "sourceFact": string, "narrationLine": string, "emotionalBeat": string, "visualAnchor": string, "transition": string }] }`
       }
     ],
     temperature: 0.6
@@ -682,6 +701,7 @@ async function repairStoryboard(params: {
   options?: GenerationOptions;
   referenceContext?: string;
 }) {
+  const conceptDirection = briefVisualConceptDirection(params.prompt, params.options);
   const completion = await params.textModel.client.chat.completions.create({
     model: params.textModel.model,
     response_format: { type: "json_object" },
@@ -695,6 +715,7 @@ async function repairStoryboard(params: {
           "Use concrete filmable imagery, distinct shot purposes, natural narration, and coherent visual continuity.",
           "The approved treatment owns the spoken story. For scene N, copy treatment.beats[N-1].narrationLine into voiceover exactly; do not paraphrase, expand, or replace it.",
           "Narration must speak about the client's company or product, never about the video, scene, shot, camera, prompt, storyboard, or generation workflow unless that workflow is the actual product in the original request.",
+          "If the original brief contains structures such as gates, evidence packets, responsibility chains, approval records, or risk signals, make them visible as concrete objects, paths, portals, arrows, maps, linked packets, or control-room artifacts.",
           "Across four or more scenes, use at least three clearly named shot scales or camera angles.",
           "Do not reuse the same narration opening, composition, or visual event in multiple scenes.",
           "The final scene must clearly feel like completion, delivery, launch, export, share, or the next action.",
@@ -703,7 +724,7 @@ async function repairStoryboard(params: {
       },
       {
         role: "user",
-        content: `Original request:\n${params.prompt}${params.referenceContext ? `\n\n${params.referenceContext}` : ""}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. Copy each treatment beat's narrationLine into the matching scene voiceover exactly. ${params.options ? `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters. Across four or more scenes, explicitly use at least three different shot scales or camera angles. Give every scene a different composition and visual event. The last scene must resolve the film with a concrete completion, delivery, launch, export, share, or next-action moment.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
+        content: `Original request:\n${params.prompt}${params.referenceContext ? `\n\n${params.referenceContext}` : ""}${conceptDirection ? `\n\n${conceptDirection}` : ""}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. Copy each treatment beat's narrationLine into the matching scene voiceover exactly. ${params.options ? `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters. Across four or more scenes, explicitly use at least three different shot scales or camera angles. Give every scene a different composition and visual event. If brief-derived visual anchors are provided, each scene must include at least one anchor as a concrete visible motif or workflow object. The last scene must resolve the film with a concrete completion, delivery, launch, export, share, or next-action moment.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
       }
     ],
     temperature: 0.35
@@ -733,6 +754,7 @@ export async function createStoryboardProject(
   try {
     const targetDuration = requestedDuration(prompt, options);
     const treatment = await createTreatment(prompt, textModel, options, referenceContext);
+    const conceptDirection = briefVisualConceptDirection(prompt, options);
     const completion = await textModel.client.chat.completions.create({
       model: textModel.model,
       response_format: { type: "json_object" },
@@ -748,6 +770,7 @@ export async function createStoryboardProject(
               "The storyboard must play as a real short film, not a generic SaaS page outline or presentation.",
               "Never use generic section titles such as Customization, User Interface, Benefits, Features, Overview, or Conclusion.",
               "Every scene must have one unmistakable visual subject, a foreground action, an environment, depth, and a specific composition.",
+              "The user's product text may contain business structures such as gates, evidence packets, responsibility chains, approval records, or risk signals. Translate those structures into specific visual objects and spatial systems rather than generic attractive imagery.",
               "Across four or more scenes, explicitly use at least three different shot scales or camera angles, such as macro, close-up, medium, wide, overhead, or low angle.",
               "Maintain the treatment's recurring motif, palette, world, lighting, and camera language across every scene.",
               "Do not rely on readable text, fake logos, generic dashboards, grids of floating cards, or instructions shown inside the image.",
@@ -764,7 +787,7 @@ export async function createStoryboardProject(
         },
         {
           role: "user",
-          content: `Original request:\n${prompt}${referenceContext ? `\n\n${referenceContext}` : ""}\n\nApproved director treatment:\n${JSON.stringify(treatment, null, 2)}\n\nReturn JSON in this exact shape:\n{ "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }\n\nFor each visualPrompt include: the central subject and action, location/environment, foreground-midground-background composition, lens or framing, lighting, material/color details, and the treatment beat's visual anchor. Keep visual continuity without making shots visually repetitive. The final scene must be a resolved delivery, launch, export, share, or next-action moment that can function as a strong ending.`
+          content: `Original request:\n${prompt}${referenceContext ? `\n\n${referenceContext}` : ""}${conceptDirection ? `\n\n${conceptDirection}` : ""}\n\nApproved director treatment:\n${JSON.stringify(treatment, null, 2)}\n\nReturn JSON in this exact shape:\n{ "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }\n\nFor each visualPrompt include: the central subject and action, location/environment, foreground-midground-background composition, lens or framing, lighting, material/color details, and the treatment beat's visual anchor. The visualPrompt must include a concrete object or spatial metaphor from the brief-derived anchors when anchors are provided. Keep visual continuity without making shots visually repetitive. The final scene must be a resolved delivery, launch, export, share, or next-action moment that can function as a strong ending.`
         }
       ],
       temperature: 0.5
@@ -775,7 +798,7 @@ export async function createStoryboardProject(
       throw new Error(`Storyboard returned ${parsed.scenes.length} scenes; expected ${treatment.beats.length}`);
     }
     let acceptedStoryboard = parsed;
-    let scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration);
+    let scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration, prompt, options);
     let qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title, prompt);
     if (qualityIssues.length > 0) {
       console.warn(`[ai-video] Storyboard quality check requested a repair: ${qualityIssues.join(", ")}.`);
@@ -789,7 +812,7 @@ export async function createStoryboardProject(
         options,
         referenceContext
       });
-      scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration);
+      scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration, prompt, options);
       qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title, prompt);
       if (qualityIssues.length > 0) {
         throw new Error(`Repaired storyboard failed quality checks: ${qualityIssues.join(", ")}`);
