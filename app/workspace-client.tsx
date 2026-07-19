@@ -1097,7 +1097,13 @@ function busyActionLabel(action?: BusyAction) {
   }
 }
 
-function projectStatusBadges(project: Project, source: Source) {
+function projectStatusBadges(project: Project, source: Source, stage: Stage) {
+  if (stage === "generating") {
+    return [
+      { label: "正在创建新项目", tone: "working" },
+      { label: "生成进度自动保存", tone: "neutral" }
+    ] as Array<{ label: string; tone: "ready" | "working" | "attention" | "neutral" }>;
+  }
   const version = project.currentVersion;
   const saved = source === "database"
     ? { label: "项目已保存", tone: "ready" }
@@ -1138,7 +1144,14 @@ function Shell({
     appRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [stage]);
-  const statusBadges = projectStatusBadges(project, source);
+  const statusBadges = projectStatusBadges(project, source, stage);
+  const headerTitle = stage === "brief"
+    ? "用一句需求，完成一支视频"
+    : stage === "projects"
+      ? "我的视频项目"
+      : stage === "generating"
+        ? "新视频制作中"
+        : project.title;
 
   return (
     <main className="kv-shell">
@@ -1160,7 +1173,7 @@ function Shell({
         <header className="kv-topbar">
           <div>
             <span className="kv-eyebrow">Know Video 智能视频工作室</span>
-            <h1>{stage === "brief" ? "用一句需求，完成一支视频" : stage === "projects" ? "我的视频项目" : project.title}</h1>
+            <h1>{headerTitle}</h1>
           </div>
           <div className="kv-status-row">
             {statusBadges.map((badge) => (

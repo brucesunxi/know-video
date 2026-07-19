@@ -7,6 +7,10 @@ const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "
 assert.match(workspace, /function elapsedGenerationLabel/);
 assert.match(workspace, /function generationSpecItems/);
 assert.match(workspace, /function GenerationSpecStrip/);
+assert.match(workspace, /stage === "generating"\s*\? "新视频制作中"/);
+assert.match(workspace, /label: "正在创建新项目"/);
+assert.match(workspace, /label: "生成进度自动保存"/);
+assert.match(workspace, /projectStatusBadges\(project, source, stage\)/);
 assert.match(workspace, /startedAt\?: number/);
 assert.match(workspace, /options: GenerationOptions/);
 assert.match(workspace, /setGenerationStartedAt\(pending\.startedAt\)/);
