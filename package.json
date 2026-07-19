@@ -53,6 +53,7 @@
     "transcription:response:smoke": "node scripts/cloudflare-transcription-smoke.mjs",
     "uploaded:narration:smoke": "node scripts/uploaded-narration-smoke.mjs",
     "video:assets:smoke": "node scripts/video-assets-smoke.mjs",
+    "video:cost:smoke": "node scripts/video-cost-policy-smoke.mjs",
     "video:quality:smoke": "node scripts/video-quality-smoke.mjs",
     "video:timing:smoke": "node scripts/clip-timing-smoke.mjs",
     "video:uploaded-timing:smoke": "node scripts/uploaded-video-timing-smoke.mjs",

@@ -5,6 +5,7 @@ export type CaptionStyle = "minimal" | "boxed" | "highlight";
 export type LogoPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type MusicDucking = "off" | "balanced" | "strong";
 export type SceneTransitionKind = "auto" | "cut" | "dissolve" | "push-left" | "push-right" | "zoom" | "wipe";
+export type VideoGenerationTier = "economy" | "balanced";
 
 export type ProductionSettings = {
   captionsEnabled: boolean;
@@ -33,6 +34,7 @@ export type GenerationOptions = {
   language: "中文" | "英文";
   style: "电影质感" | "极简高级" | "明快有活力" | "温暖自然";
   motion: "camera" | "key-scenes";
+  videoTier: VideoGenerationTier;
 };
 
 export type GenerationReferenceAsset = {

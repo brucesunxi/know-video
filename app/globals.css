@@ -285,7 +285,7 @@ button:disabled {
 
 .kv-generation-options {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 10px;
   border-top: 1px solid var(--line);
   padding-top: 14px;
@@ -931,6 +931,65 @@ button:disabled {
 .kv-confirm-modal > div:last-child button.danger {
   border-color: #b42318;
   background: #b42318;
+  color: #fff;
+}
+
+.kv-cost-modal {
+  width: min(520px, 100%);
+}
+
+.kv-cost-modal .kv-confirm-icon {
+  background: #eafaf7;
+  color: #087f73;
+}
+
+.kv-cost-options {
+  display: grid;
+  gap: 9px;
+  margin-top: 4px;
+}
+
+.kv-cost-options label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 64px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 11px 13px;
+  cursor: pointer;
+}
+
+.kv-cost-options label.selected {
+  border-color: #38b9ab;
+  background: #f0fbf9;
+  box-shadow: inset 0 0 0 1px #38b9ab;
+}
+
+.kv-cost-options label span {
+  display: grid;
+  gap: 3px;
+}
+
+.kv-cost-options label small {
+  color: var(--muted);
+}
+
+.kv-cost-options label b {
+  white-space: nowrap;
+  color: #087f73;
+}
+
+.kv-cost-note {
+  border-left: 3px solid #9bded6;
+  padding-left: 10px;
+  font-size: 13px;
+}
+
+.kv-confirm-modal > div:last-child button.kv-cost-confirm {
+  border-color: var(--ink);
+  background: var(--ink);
   color: #fff;
 }
 

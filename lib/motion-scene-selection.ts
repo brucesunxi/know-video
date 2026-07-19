@@ -18,8 +18,8 @@ function termHits(text: string, terms: string[]) {
   return terms.reduce((total, term) => total + (text.includes(term) ? 1 : 0), 0);
 }
 
-export function motionSceneLimit(durationSeconds: number, sceneCount: number) {
-  return durationSeconds >= 45 && sceneCount >= 5 ? 2 : 1;
+export function motionSceneLimit(_durationSeconds: number, _sceneCount: number) {
+  return 1;
 }
 
 export function motionSceneScore(scene: Scene, sceneCount: number) {

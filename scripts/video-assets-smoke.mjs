@@ -29,7 +29,14 @@ vm.runInNewContext(output, {
         return { body: Buffer.alloc(100_000, generationCalls.length), model: "test-video", sourceUrl: "https://example.com/output.mp4" };
       }
     };
-    if (name === "@/lib/image-continuity") return { stableImageSeed: () => 42 };
+    if (name === "@/lib/video-cost-policy") return {
+      VIDEO_GENERATION_DURATION_SECONDS: 3,
+      VIDEO_GENERATION_TIERS: {
+        economy: { resolution: "480p" },
+        balanced: { resolution: "720p" }
+      },
+      videoGenerationEstimate: () => ({ estimatedUsd: 0.16 })
+    };
     if (name === "@/lib/r2") return {
       assetUrlForKey: (key) => `/api/assets/${key}`,
       uploadToR2: async (input) => {
@@ -39,15 +46,15 @@ vm.runInNewContext(output, {
     };
     if (name === "@/lib/video-quality") return {
       GeneratedVideoQualityError,
-      inspectGeneratedVideo: async () => {
+      inspectGeneratedVideo: async (_body, requestedDuration) => {
         inspectionCalls += 1;
         if (inspectionCalls === 1) throw new GeneratedVideoQualityError("quality retry");
         return {
           container: "mp4",
-          duration: 4.9,
-          requestedDuration: 5,
-          width: 1280,
-          height: 720,
+          duration: 2.9,
+          requestedDuration,
+          width: 848,
+          height: 480,
           fps: 30,
           codec: "h264",
           size: 100_000
@@ -62,6 +69,8 @@ const { generateProjectSceneClips } = module.exports;
 const route = fs.readFileSync(new URL("../app/api/assets/video/generate/route.ts", import.meta.url), "utf8");
 assert.match(route, /VIDEO_PROVIDER_BALANCE_REQUIRED/);
 assert.match(route, /视频生成服务额度不足/);
+assert.match(route, /costConsent: z\.literal\(true\)/);
+assert.match(route, /tier: z\.enum\(\["economy", "balanced"\]\)/);
 const project = {
   id: "project",
   title: "Product story",
@@ -83,7 +92,7 @@ const project = {
 const failedResult = await generateProjectSceneClips(project, {
   assetBaseUrl: "https://know-video.example",
   sceneNumbers: [1],
-  quality: "standard"
+  tier: "economy"
 });
 assert.equal(failedResult.failures.length, 1);
 assert.equal(generationCalls.length, 1, "a paid video request must not retry invisibly after quality validation fails");
@@ -92,16 +101,18 @@ assert.equal(uploads.length, 0);
 const result = await generateProjectSceneClips(project, {
   assetBaseUrl: "https://know-video.example",
   sceneNumbers: [1],
-  quality: "standard"
+  tier: "economy"
 });
 const clip = result.project.currentVersion.scenes[0].assets[0];
 assert.equal(result.failures.length, 0);
 assert.equal(generationCalls.length, 2);
-assert.equal(generationCalls[0].seed, generationCalls[1].seed);
+assert.equal(generationCalls[0].tier, "economy");
+assert.equal(generationCalls[0].duration, undefined);
 assert.equal(uploads.length, 1);
 assert.equal(clip.type, "clip");
-assert.equal(clip.metadata.duration, 4.9);
-assert.equal(clip.metadata.requestedDuration, 5);
+assert.equal(clip.metadata.duration, 2.9);
+assert.equal(clip.metadata.requestedDuration, 3);
+assert.equal(clip.metadata.estimatedCostUsd, 0.16);
 assert.equal(clip.metadata.codec, "h264");
 assert.equal(result.project.currentVersion.renderUrl, undefined);
 

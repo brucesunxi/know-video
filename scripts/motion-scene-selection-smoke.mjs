@@ -33,10 +33,10 @@ const scenes = [
 ];
 
 assert.equal(motionSceneLimit(30, 5), 1);
-assert.equal(motionSceneLimit(45, 5), 2);
+assert.equal(motionSceneLimit(45, 5), 1);
 assert.ok(motionSceneScore(scenes[1], scenes.length) > motionSceneScore(scenes[4], scenes.length));
 assert.deepEqual(Array.from(selectMotionCriticalScenes(scenes, 30)), [2]);
-assert.deepEqual(Array.from(selectMotionCriticalScenes(scenes, 60)), [2, 4]);
+assert.deepEqual(Array.from(selectMotionCriticalScenes(scenes, 60)), [2]);
 assert.deepEqual(Array.from(selectMotionCriticalScenes(scenes.map((item, index) => index === 1 ? { ...item, assets: [] } : item), 30)), [4]);
 
 console.log("Motion scene selection smoke checks passed.");

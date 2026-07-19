@@ -64,6 +64,7 @@ import {
   narrationVoiceProfiles
 } from "@/lib/voice-profiles";
 import { VIDEO_FPS } from "@/video/config";
+import { VIDEO_GENERATION_DURATION_SECONDS, VIDEO_GENERATION_TIERS, videoGenerationEstimateLabel } from "@/lib/video-cost-policy";
 import type { ChatMessage, EditChange, EditPlan, GenerationOptions, GenerationReferenceAsset, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
@@ -152,7 +153,7 @@ function generationProgressSteps(motion: GenerationOptions["motion"]) {
 function generationSpecItems(options: GenerationOptions) {
   const sceneLabel = options.sceneCount === "auto" ? "自动规划场景" : `${options.sceneCount} 个场景`;
   const motionLabel = options.motion === "key-scenes"
-    ? `${Number(options.duration) >= 45 && options.sceneCount !== "3" ? "2" : "1"} 个关键动态镜头`
+    ? `1 个${VIDEO_GENERATION_TIERS[options.videoTier].label}镜头`
     : "全片智能运镜";
   return [
     { label: "目标时长", value: `${options.duration} 秒` },
@@ -175,7 +176,7 @@ function generationReviewItems(prompt: string, options: GenerationOptions) {
   const sceneCount = plannedSceneCount(options);
   const secondsPerScene = Math.max(2, Math.round(Number(options.duration) / sceneCount));
   const motionCount = options.motion === "key-scenes"
-    ? Number(options.duration) >= 45 && options.sceneCount !== "3" ? 2 : 1
+    ? 1
     : 0;
   return [
     {
@@ -192,8 +193,10 @@ function generationReviewItems(prompt: string, options: GenerationOptions) {
     },
     {
       label: "动态成本",
-      value: motionCount > 0 ? `${motionCount} 个动态镜头` : "仅智能运镜",
-      detail: motionCount > 0 ? "使用第三方视频模型，按次额外计费" : "低成本生成，后续可逐场景补动态",
+      value: motionCount > 0 ? `最高预估 ${videoGenerationEstimateLabel(options.videoTier)}` : "$0 动态模型费用",
+      detail: motionCount > 0
+        ? `仅生成 ${motionCount} 个 ${VIDEO_GENERATION_DURATION_SECONDS} 秒镜头 · ${VIDEO_GENERATION_TIERS[options.videoTier].resolution} · 不自动重试`
+        : "全部使用本地智能运镜，后续可逐场景自愿补动态",
       tone: motionCount > 0 ? "working" : "ready"
     },
     {
@@ -1413,6 +1416,15 @@ function BriefScreen({
                 <option value="key-scenes">生成关键动态镜头（额外计费）</option>
               </select>
             </label>
+            {options.motion === "key-scenes" ? (
+              <label>
+                <span>动态档位</span>
+                <select onChange={(event) => onOptionsChange({ ...options, videoTier: event.target.value as GenerationOptions["videoTier"] })} value={options.videoTier}>
+                  <option value="economy">经济 · 480p · 最高约 $0.16</option>
+                  <option value="balanced">均衡 · 720p · 最高约 $0.23</option>
+                </select>
+              </label>
+            ) : null}
           </div>
           <div className="kv-brief-attachments">
             <div>
@@ -1438,7 +1450,7 @@ function BriefScreen({
           </div>
           <div className="kv-prompt-tools">
             <span>{options.motion === "key-scenes"
-              ? `${Number(options.duration) >= 45 && options.sceneCount !== "3" ? "2" : "1"} 个场景将调用第三方视频模型并产生额外费用。`
+              ? `只生成 1 个 ${VIDEO_GENERATION_DURATION_SECONDS} 秒动态镜头，最高预估 ${videoGenerationEstimateLabel(options.videoTier)}，失败不自动扣费重试。`
               : "全部场景使用智能画面运镜，不调用高成本动态视频模型。"}</span>
             <button className="kv-primary" disabled={isBusy || prompt.trim().length < 4} type="submit">
               {isBusy ? <Loader2 className="kv-spin" size={18} /> : <Sparkles size={18} />}
@@ -3860,8 +3872,10 @@ export function WorkspaceClient({
     sceneCount: "auto",
     language: "中文",
     style: "电影质感",
-    motion: "camera"
+    motion: "camera",
+    videoTier: "economy"
   });
+  const [pendingVideoGeneration, setPendingVideoGeneration] = useState<{ sceneNumbers: number[] }>();
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [projectQuery, setProjectQuery] = useState("");
   const [projectsLoading, setProjectsLoading] = useState(false);
@@ -4104,7 +4118,7 @@ export function WorkspaceClient({
           setProgress(88 + Math.round((index / Math.max(1, dynamicScenes.length)) * 6));
           setGenerationStatus(`正在生成场景 ${sceneNumber} 的动态视频镜头`);
           try {
-            generatedProject = await requestVideoClips(generatedProject, [sceneNumber], "standard");
+            generatedProject = await requestVideoClips(generatedProject, [sceneNumber], options.videoTier);
             setProject(generatedProject);
           } catch (error) {
             const reason = requestErrorMessage(error, `场景 ${sceneNumber} 的动态镜头生成失败。`);
@@ -4590,13 +4604,7 @@ export function WorkspaceClient({
     }
 
     if (data.regeneration.clipSceneNumbers.length > 0) {
-      setBusyAction("generating-video");
-      try {
-        updatedProject = await requestVideoClips(updatedProject, data.regeneration.clipSceneNumbers, "standard");
-        setProject(updatedProject);
-      } catch (error) {
-        warnings.push(requestErrorMessage(error, "修改场景的动态镜头生成失败。"));
-      }
+      warnings.push(`场景 ${data.regeneration.clipSceneNumbers.join("、")} 的画面已经修改。为避免产生未确认费用，动态镜头不会自动重做；需要时请点击“生成动态”并确认价格。`);
     }
 
     const completionMessage = warnings.length > 0
@@ -5485,7 +5493,7 @@ export function WorkspaceClient({
   async function requestVideoClips(
     baseProject: Project,
     sceneNumbers: number[],
-    quality: "standard" | "premium"
+    tier = generationOptions.videoTier
   ) {
     let updatedProject = baseProject;
     for (const sceneNumber of sceneNumbers) {
@@ -5496,7 +5504,8 @@ export function WorkspaceClient({
           projectId: updatedProject.id,
           versionId: updatedProject.currentVersion.id,
           sceneNumbers: [sceneNumber],
-          quality
+          tier,
+          costConsent: true
         }),
         signal: AbortSignal.timeout(295_000)
       });
@@ -5509,12 +5518,12 @@ export function WorkspaceClient({
     return updatedProject;
   }
 
-  async function generateVideoClips(sceneNumbers: number[], quality: "standard" | "premium" = "standard") {
+  async function generateVideoClips(sceneNumbers: number[], tier = generationOptions.videoTier) {
     setIsBusy(true);
     setBusyAction("generating-video");
     setErrorMessage(undefined);
     try {
-      const updatedProject = await requestVideoClips(project, sceneNumbers, quality);
+      const updatedProject = await requestVideoClips(project, sceneNumbers, tier);
       setProject(updatedProject);
       setGenerationIssues((current) => withoutRepairedGenerationIssues(current, "clip", sceneNumbers));
       pushMessage({
@@ -5804,8 +5813,8 @@ export function WorkspaceClient({
           onUpload={() => fileInputRef.current?.click()}
           onRegenerate={regenerateImages}
           onEnhanceScene={(sceneNumber) => regenerateImages([sceneNumber], "premium")}
-          onGenerateClip={(sceneNumber) => void generateVideoClips([sceneNumber])}
-          onGenerateClips={(sceneNumbers) => void generateVideoClips(sceneNumbers)}
+          onGenerateClip={(sceneNumber) => setPendingVideoGeneration({ sceneNumbers: [sceneNumber] })}
+          onGenerateClips={(sceneNumbers) => setPendingVideoGeneration({ sceneNumbers: sceneNumbers.slice(0, 1) })}
           onRegenerateAudio={regenerateAudio}
           onExport={exportVideo}
           exportProgress={exportProgress}
@@ -5848,6 +5857,43 @@ export function WorkspaceClient({
           selectedScene={selectedScene}
           view={studioView}
         />
+      ) : null}
+      {pendingVideoGeneration ? (
+        <div className="kv-modal-backdrop" onMouseDown={(event) => {
+          if (event.currentTarget === event.target && !isBusy) setPendingVideoGeneration(undefined);
+        }} role="presentation">
+          <section aria-labelledby="video-cost-title" aria-modal="true" className="kv-confirm-modal kv-cost-modal" role="dialog">
+            <div className="kv-confirm-icon"><Film size={21} /></div>
+            <h3 id="video-cost-title">确认生成动态镜头</h3>
+            <p>场景 {pendingVideoGeneration.sceneNumbers.join("、")} 将调用付费视频模型。系统只提交一次 3 秒请求，失败不会自动重试。</p>
+            <div className="kv-cost-options">
+              {(["economy", "balanced"] as const).map((tier) => (
+                <label className={generationOptions.videoTier === tier ? "selected" : ""} key={tier}>
+                  <input
+                    checked={generationOptions.videoTier === tier}
+                    name="video-tier"
+                    onChange={() => setGenerationOptions((current) => ({ ...current, videoTier: tier }))}
+                    type="radio"
+                  />
+                  <span><strong>{VIDEO_GENERATION_TIERS[tier].label}</strong><small>{VIDEO_GENERATION_TIERS[tier].resolution} · 3 秒</small></span>
+                  <b>最高约 {videoGenerationEstimateLabel(tier)}</b>
+                </label>
+              ))}
+            </div>
+            <p className="kv-cost-note">这是按当前公开价格计算的最高预估，不包含静态画面与配音的少量用量。动态镜头会自动适配当前场景时长。</p>
+            <div>
+              <button disabled={isBusy} onClick={() => setPendingVideoGeneration(undefined)} type="button">取消</button>
+              <button className="kv-cost-confirm" disabled={isBusy} onClick={() => {
+                const request = pendingVideoGeneration;
+                const tier = generationOptions.videoTier;
+                setPendingVideoGeneration(undefined);
+                void generateVideoClips(request.sceneNumbers, tier);
+              }} type="button">
+                <Film size={16} />确认，最高 {videoGenerationEstimateLabel(generationOptions.videoTier)}
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </Shell>
   );

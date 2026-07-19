@@ -2,12 +2,17 @@ import { getOptionalEnv } from "@/lib/env";
 import { assertUsableSpeechAudio } from "@/lib/audio-quality";
 import { isMp4Buffer, parseCloudflareVideoUrl } from "@/lib/cloudflare-video-response";
 import { parseCloudflareTranscript, type CloudflareTranscriptionResult } from "@/lib/cloudflare-transcription";
+import {
+  VIDEO_GENERATION_DURATION_SECONDS,
+  VIDEO_GENERATION_MODEL,
+  VIDEO_GENERATION_TIERS,
+  type VideoGenerationTier
+} from "@/lib/video-cost-policy";
 import sharp from "sharp";
 
 const STANDARD_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const PREMIUM_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
 const DEFAULT_TTS_MODEL = "@cf/myshell-ai/melotts";
-const DEFAULT_VIDEO_MODEL = "alibaba/hh1.1-i2v";
 const DEFAULT_VISION_MODEL = "@cf/moondream/moondream3.1-9B-A2B";
 const DEFAULT_TRANSCRIPTION_MODEL = "@cf/openai/whisper-large-v3-turbo";
 
@@ -245,11 +250,10 @@ export async function generateCloudflareSpeech(text: string) {
 export async function generateCloudflareVideo(input: {
   imageUrl: string;
   prompt: string;
-  duration: number;
-  resolution?: "720P" | "1080P";
-  seed?: number;
+  tier: VideoGenerationTier;
 }) {
-  const model = getOptionalEnv("CLOUDFLARE_VIDEO_MODEL") || DEFAULT_VIDEO_MODEL;
+  const model = VIDEO_GENERATION_MODEL;
+  const profile = VIDEO_GENERATION_TIERS[input.tier];
   const response = await fetch(unifiedEndpoint(), {
     method: "POST",
     headers: {
@@ -259,12 +263,11 @@ export async function generateCloudflareVideo(input: {
     body: JSON.stringify({
       model,
       input: {
-        image: input.imageUrl,
+        image: { url: input.imageUrl },
         prompt: input.prompt.slice(0, 2500),
-        duration: Math.min(15, Math.max(3, Math.round(input.duration))),
-        resolution: input.resolution ?? "720P",
-        seed: input.seed,
-        watermark: false
+        duration: VIDEO_GENERATION_DURATION_SECONDS,
+        aspect_ratio: "16:9",
+        resolution: profile.resolution
       }
     }),
     signal: AbortSignal.timeout(280_000)

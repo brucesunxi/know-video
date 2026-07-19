@@ -1,7 +1,7 @@
 import { generateCloudflareVideo, hasCloudflareAI } from "@/lib/cloudflare-ai";
-import { stableImageSeed } from "@/lib/image-continuity";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
-import type { Project, Scene, SceneAsset } from "@/lib/types";
+import type { Project, Scene, SceneAsset, VideoGenerationTier } from "@/lib/types";
+import { VIDEO_GENERATION_DURATION_SECONDS, VIDEO_GENERATION_TIERS, videoGenerationEstimate } from "@/lib/video-cost-policy";
 import { inspectGeneratedVideo } from "@/lib/video-quality";
 
 function sceneVideoPrompt(scene: Scene, project: Project) {
@@ -23,19 +23,17 @@ async function generateSceneClip(input: {
   scene: Scene;
   project: Project;
   assetBaseUrl: string;
-  quality: "standard" | "premium";
+  tier: VideoGenerationTier;
 }) {
   const image = input.scene.assets.find((asset) => asset.type === "image" && asset.url);
   if (!image) throw new Error("Scene has no reference image for video generation");
   const prompt = sceneVideoPrompt(input.scene, input.project);
-  const duration = Math.min(15, Math.max(3, Math.round(input.scene.durationSeconds)));
-  const seed = stableImageSeed(`${input.project.id}:${input.scene.sceneNumber}:video`);
+  const duration = VIDEO_GENERATION_DURATION_SECONDS;
+  const costEstimate = videoGenerationEstimate(input.tier);
   const generated = await generateCloudflareVideo({
     imageUrl: absoluteAssetUrl(image.url, input.assetBaseUrl),
     prompt,
-    duration,
-    resolution: input.quality === "premium" ? "1080P" : "720P",
-    seed
+    tier: input.tier
   });
   const videoMetadata = await inspectGeneratedVideo(generated.body, duration);
   const key = `generated/${input.project.id}/${input.project.currentVersion.id}/scene-${input.scene.sceneNumber}-${crypto.randomUUID()}.mp4`;
@@ -48,11 +46,12 @@ async function generateSceneClip(input: {
     metadata: {
       source: "generated-video",
       model: generated.model,
-      quality: input.quality,
-      resolution: input.quality === "premium" ? "1080P" : "720P",
+      tier: input.tier,
+      resolution: VIDEO_GENERATION_TIERS[input.tier].resolution,
+      estimatedCostUsd: costEstimate.estimatedUsd,
+      billingEstimate: "provider-price-plus-cloudflare-5-percent",
       ...videoMetadata,
       prompt,
-      seed,
       referenceKey: image.r2Key,
       sceneNumber: input.scene.sceneNumber
     }
@@ -64,7 +63,7 @@ export async function generateProjectSceneClips(
   input: {
     assetBaseUrl: string;
     sceneNumbers: number[];
-    quality?: "standard" | "premium";
+    tier: VideoGenerationTier;
   }
 ) {
   if (!hasCloudflareAI()) throw new Error("Cloudflare AI video service is not configured");
@@ -79,7 +78,7 @@ export async function generateProjectSceneClips(
         scene,
         project,
         assetBaseUrl: input.assetBaseUrl,
-        quality: input.quality ?? "standard"
+        tier: input.tier
       });
       scenes[index] = {
         ...scene,

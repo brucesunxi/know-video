@@ -3,12 +3,14 @@ import { z } from "zod";
 import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/media-generation-result";
 import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import { generateProjectSceneClips } from "@/lib/video-assets";
+import { videoGenerationEstimate } from "@/lib/video-cost-policy";
 
 const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
   versionId: z.string().min(1).max(200),
   sceneNumbers: z.array(z.number().int().positive()).length(1),
-  quality: z.enum(["standard", "premium"]).default("standard")
+  tier: z.enum(["economy", "balanced"]),
+  costConsent: z.literal(true)
 });
 
 export const maxDuration = 300;
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "动态镜头请求格式无效。" }, { status: 400 });
   }
   const body = parsed.data;
+  const estimate = videoGenerationEstimate(body.tier);
   const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
   if (!project) {
     return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重试。" }, { status: 409 });
@@ -53,7 +56,7 @@ export async function POST(request: Request) {
   const result = await generateProjectSceneClips(project, {
     assetBaseUrl: new URL(request.url).origin,
     sceneNumbers: body.sceneNumbers,
-    quality: body.quality
+    tier: body.tier
   });
   await persistGeneratedSceneAssets(result.project.currentVersion.id, result.project.currentVersion.scenes, {
     replaceClips: true,
@@ -83,5 +86,5 @@ export async function POST(request: Request) {
       ...progress
     }, { status: 502 });
   }
-  return NextResponse.json({ project: result.project, ...progress });
+  return NextResponse.json({ project: result.project, costEstimate: estimate, ...progress });
 }

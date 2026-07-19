@@ -37,7 +37,8 @@ const requestSchema = z.object({
     sceneCount: z.enum(["auto", "3", "5", "6"]),
     language: z.enum(["中文", "英文"]),
     style: z.enum(["电影质感", "极简高级", "明快有活力", "温暖自然"]),
-    motion: z.enum(["camera", "key-scenes"])
+    motion: z.enum(["camera", "key-scenes"]),
+    videoTier: z.enum(["economy", "balanced"])
   }).optional(),
   referenceAssets: z.array(referenceAssetSchema).max(12).default([])
 }).superRefine((value, context) => {

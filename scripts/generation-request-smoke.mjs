@@ -27,7 +27,8 @@ const options = {
   sceneCount: "5",
   language: "中文",
   style: "电影质感",
-  motion: "key-scenes"
+  motion: "key-scenes",
+  videoTier: "economy"
 };
 const first = generationRequestFingerprint("  生成产品介绍视频  ", options);
 const second = generationRequestFingerprint("生成产品介绍视频", options);
@@ -54,6 +55,10 @@ assert.match(workspace, /生成前审阅/);
 assert.match(workspace, /需求完整度/);
 assert.match(workspace, /分镜节奏/);
 assert.match(workspace, /动态成本/);
+assert.match(workspace, /最高预估/);
+assert.match(workspace, /失败不自动扣费重试/);
+assert.match(workspace, /costConsent: true/);
+assert.match(workspace, /setPendingVideoGeneration/);
 assert.match(workspace, /语言与风格/);
 assert.match(workspace, /约 \$\{secondsPerScene\} 秒\/幕/);
 assert.match(workspace, /脚本、旁白、画面提示词会按此规格统一/);

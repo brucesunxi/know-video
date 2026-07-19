@@ -30,6 +30,7 @@ export function parsePendingGenerationSession(raw: string | null, now = Date.now
       || !["中文", "英文"].includes(value.options.language)
       || !["电影质感", "极简高级", "明快有活力", "温暖自然"].includes(value.options.style)
       || !["camera", "key-scenes"].includes(value.options.motion)
+      || !["economy", "balanced"].includes(value.options.videoTier)
     ) {
       return undefined;
     }
