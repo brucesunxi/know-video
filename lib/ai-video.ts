@@ -5,7 +5,7 @@ import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip 
 import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import { fitScenesNarration } from "@/lib/narration-fit";
-import { hasMetaProductionNarration, isProductionInstructionClause, isVideoCreationProductBrief } from "@/lib/brief-semantics";
+import { hasMetaProductionNarration, isProductionInstructionClause } from "@/lib/brief-semantics";
 import { requestsSceneStructureChange, sceneStructureFromRequest, sceneStructureSummary } from "@/lib/scene-structure-intent";
 import { storyboardQualityIssues } from "@/lib/storyboard-quality";
 import { narrationVoiceForBrief } from "@/lib/voice-profiles";
@@ -79,12 +79,88 @@ function normalizedNarrationOpening(value: string) {
   return (value.toLowerCase().match(/[a-z0-9]+/g) ?? []).slice(0, 4).join(" ");
 }
 
-function treatmentNarrationIssues(treatment: Treatment, prompt: string, targetDuration: number) {
+function isChineseTreatment(treatment: Treatment) {
+  return /中文|chinese|简体|普通话/i.test(treatment.language)
+    || (treatment.beats.map((beat) => beat.narrationLine).join("").match(/\p{Script=Han}/gu) ?? []).length >= 8;
+}
+
+function compactClause(value: string, maxLength: number) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,，。:：;；、-]+|[\s,，。:：;；、-]+$/g, "")
+    .slice(0, maxLength)
+    .trim();
+}
+
+function joinChineseParts(parts: string[]) {
+  const cleaned = parts.map((part) => compactClause(part, 34)).filter(Boolean);
+  return compactClause(cleaned.join("，").replace(/，+/g, "，").replace(/，$/u, ""), 19) + "。";
+}
+
+function localNarrationLine(treatment: Treatment, beat: Treatment["beats"][number], index: number) {
+  const brief = treatment.commercialBrief;
+  const subject = compactClause(brief.subject, 12);
+  const offering = compactClause(brief.offering, 14);
+  const audience = compactClause(brief.audience, 10);
+  const problem = compactClause(brief.customerProblem, 12);
+  const differentiator = compactClause(brief.differentiators[index % brief.differentiators.length] ?? "", 12);
+  const outcome = compactClause(brief.outcomes[index % brief.outcomes.length] ?? "", 12);
+  const proof = compactClause(brief.proofPoints[index % Math.max(1, brief.proofPoints.length)] ?? "", 10);
+  const sourceFact = compactClause(beat.sourceFact, 14);
+
+  const chineseTemplates = [
+    [`${subject}面向${audience}`, `解决${problem}`],
+    [`${subject}把${sourceFact || offering}`, `转化为${outcome || "清晰结果"}`],
+    [`${offering || subject}突出${differentiator || sourceFact}`, "让价值更快落地"],
+    [`${subject}${proof ? `以${proof}` : `以${differentiator || offering}`}`, "建立客户信任"],
+    [`${subject}帮助客户${outcome || "完成决策"}`, compactClause(brief.callToAction, 10)]
+  ];
+  if (isChineseTreatment(treatment)) {
+    return joinChineseParts(chineseTemplates[index % chineseTemplates.length].filter(Boolean));
+  }
+
+  const englishSubject = subject || "The product";
+  const englishTemplates = [
+    `${englishSubject} helps ${brief.audience} solve ${problem || "a costly operational bottleneck"}.`,
+    `${englishSubject} turns ${sourceFact || offering || "scattered work"} into ${outcome || "a clearer business outcome"}.`,
+    `${offering || englishSubject} stands out through ${differentiator || sourceFact || "a focused operating advantage"}.`,
+    `${englishSubject} builds trust with ${proof || differentiator || "a clearer way to prove value"}.`,
+    `${englishSubject} gives customers ${outcome || "a confident next step"}: ${brief.callToAction}.`
+  ];
+  return englishTemplates[index % englishTemplates.length].replace(/\s+/g, " ").trim();
+}
+
+function shouldLocallyRepairNarrationLine(line: string, averageSceneSeconds: number) {
+  const estimated = estimateNarrationSeconds(line);
+  return hasMetaProductionNarration(line)
+    || estimated < Math.max(1.4, averageSceneSeconds * 0.42)
+    || estimated > Math.max(1.4, averageSceneSeconds * 1.12);
+}
+
+function locallyRepairTreatmentNarration(treatment: Treatment, targetDuration: number) {
+  const averageSceneSeconds = targetDuration / treatment.beats.length;
+  const totalSeconds = treatment.beats.reduce((sum, beat) => sum + estimateNarrationSeconds(beat.narrationLine), 0);
+  const repairAll = totalSeconds < Math.max(4, targetDuration * 0.58)
+    || totalSeconds > Math.max(3, targetDuration - treatment.beats.length * 0.28);
+  return {
+    ...treatment,
+    beats: treatment.beats.map((beat, index) => {
+      const line = beat.narrationLine.trim();
+      if (!repairAll && !shouldLocallyRepairNarrationLine(line, averageSceneSeconds)) return beat;
+      return {
+        ...beat,
+        narrationLine: localNarrationLine(treatment, beat, index)
+      };
+    })
+  };
+}
+
+function treatmentNarrationIssues(treatment: Treatment, targetDuration: number) {
   const lines = treatment.beats.map((beat) => beat.narrationLine.trim());
   const issues: string[] = [];
   const openings = lines.map(normalizedNarrationOpening).filter((value) => value.length >= 6);
   if (new Set(openings).size !== openings.length) issues.push("narration openings repeat mechanically");
-  if (!isVideoCreationProductBrief(prompt) && lines.some(hasMetaProductionNarration)) {
+  if (lines.some(hasMetaProductionNarration)) {
     issues.push("narration describes video production instead of the client's business");
   }
   const estimatedTotal = lines.reduce((sum, line) => sum + estimateNarrationSeconds(line), 0);
@@ -556,7 +632,8 @@ async function createTreatment(
   if (treatment.beats.length !== sceneCount) {
     throw new Error(`Director treatment returned ${treatment.beats.length} beats; expected ${sceneCount}`);
   }
-  const narrationIssues = treatmentNarrationIssues(treatment, prompt, targetDuration);
+  treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
+  const narrationIssues = treatmentNarrationIssues(treatment, targetDuration);
   if (narrationIssues.length > 0) {
     const repair = await textModel.client.chat.completions.create({
       model: textModel.model,
@@ -580,8 +657,10 @@ async function createTreatment(
       temperature: 0.25
     });
     treatment = treatmentSchema.parse(extractJson(repair.choices[0]?.message.content ?? "{}"));
-    if (treatment.beats.length !== sceneCount || treatmentNarrationIssues(treatment, prompt, targetDuration).length > 0) {
-      throw new Error("Commercial treatment narration failed semantic or timing validation");
+    treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
+    const remainingNarrationIssues = treatmentNarrationIssues(treatment, targetDuration);
+    if (treatment.beats.length !== sceneCount || remainingNarrationIssues.length > 0) {
+      throw new Error(`Commercial treatment narration failed semantic or timing validation: ${remainingNarrationIssues.join(", ")}`);
     }
   }
   return treatment;
