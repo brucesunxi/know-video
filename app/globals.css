@@ -248,7 +248,7 @@ button:disabled {
   font-family: var(--font-display);
   margin-top: 14px;
   max-width: 920px;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 680;
   line-height: 1.22;
   overflow-wrap: anywhere;
@@ -5437,7 +5437,7 @@ button:disabled {
 
   .kv-section-heading h2 {
     margin-top: 10px;
-    font-size: 23px;
+    font-size: 21px;
     font-weight: 680;
     line-height: 1.18;
   }

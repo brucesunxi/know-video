@@ -1347,7 +1347,7 @@ function BriefScreen({
       <section className="kv-brief-main">
         <div className="kv-section-heading">
           <span className="kv-pill">文字生成视频</span>
-          <h2>描述你想做的视频，脚本、分镜、画面和动态预览一次完成。</h2>
+          <h2>描述你想做的视频，脚本、分镜、画面和动态预览一次完成：</h2>
         </div>
         <form className="kv-prompt-box" onSubmit={onSubmit}>
           <textarea
