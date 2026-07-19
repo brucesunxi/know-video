@@ -581,6 +581,16 @@ function compactText(text: string | undefined, fallback: string, maxLength = 72)
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 1)}…` : trimmed;
 }
 
+function scenePreviewAsset(scene?: Scene) {
+  return scene?.assets.find((asset) => asset.type === "image" && asset.url)
+    ?? scene?.assets.find((asset) => (
+      asset.type === "thumbnail"
+      && asset.url
+      && asset.metadata?.candidate !== true
+      && asset.metadata?.planPreview !== true
+    ));
+}
+
 function sceneNumberListLabel(sceneNumbers: number[]) {
   if (sceneNumbers.length === 0) return "";
   const visible = sceneNumbers.slice(0, 6).join("、");
@@ -1870,10 +1880,10 @@ function Storyboard({
               onPointerUp={finishPointerDrag}
               title="拖动调整顺序"
             ><GripVertical size={15} /></span>
-            {scene.assets.find((asset) => asset.type === "image" && asset.url) ? (
+            {scenePreviewAsset(scene) ? (
               <span
                 className="kv-scene-thumb"
-                style={{ backgroundImage: `url("${scene.assets.find((asset) => asset.type === "image" && asset.url)?.url}")` }}
+                style={{ backgroundImage: `url("${scenePreviewAsset(scene)?.url}")` }}
               />
             ) : scene.assets.some((asset) => asset.type === "clip" && asset.url)
               ? <span className="kv-scene-thumb empty clip"><FileVideo2 size={18} /></span>
@@ -2166,12 +2176,14 @@ function ScenePanel({
 function StoryboardBoard({ scenes }: { scenes: Scene[] }) {
   return (
     <section className="kv-board">
-      {scenes.map((scene) => (
+      {scenes.map((scene) => {
+        const image = scenePreviewAsset(scene);
+        return (
         <article key={scene.id}>
-          {scene.assets.find((asset) => asset.type === "image" && asset.url) ? (
+          {image ? (
             <div
               className="kv-board-image"
-              style={{ backgroundImage: `url("${scene.assets.find((asset) => asset.type === "image" && asset.url)?.url}")` }}
+              style={{ backgroundImage: `url("${image.url}")` }}
             />
           ) : scene.assets.some((asset) => asset.type === "clip" && asset.url)
             ? <div className="kv-board-image empty clip"><FileVideo2 size={24} /><span>已使用视频片段</span></div>
@@ -2187,7 +2199,7 @@ function StoryboardBoard({ scenes }: { scenes: Scene[] }) {
             <li>{compactText(scene.motionPrompt, "Motion prompt", 120)}</li>
           </ul>
         </article>
-      ))}
+      );})}
     </section>
   );
 }
@@ -2653,12 +2665,19 @@ function ProductionSettingsPanel({
 }
 
 function PlanVisualDiff({ change, scene, editPlanId }: { change: EditChange; scene: Scene; editPlanId: string }) {
-  const image = scene.assets.find((asset) => asset.type === "image" && asset.url);
+  const image = scenePreviewAsset(scene);
   const preview = planPreviewAsset(scene, editPlanId);
   const visualRegeneration = change.regenerate.some((type) => ["image", "clip", "thumbnail"].includes(type));
+  const titleChanged = change.after.title && change.after.title !== change.before.title;
+  const canShowDraftTextPreview = Boolean(!preview && image && titleChanged);
   const afterIsLight = change.after.thumbnailTone === "light";
   const beforeColor = scene.style.palette[0] ?? "#101828";
   const afterColor = afterIsLight ? "#f5f7fa" : beforeColor;
+  const afterFrameStyle = preview
+    ? { backgroundImage: `url("${preview.url}")` }
+    : canShowDraftTextPreview || (!visualRegeneration && image)
+      ? { backgroundImage: `url("${image?.url}")` }
+      : { backgroundColor: afterColor };
 
   return (
     <div className="kv-plan-visual-diff" aria-label={`场景 ${change.sceneNumber} 画面对比`}>
@@ -2675,14 +2694,16 @@ function PlanVisualDiff({ change, scene, editPlanId }: { change: EditChange; sce
       <figure>
         <figcaption>修改后</figcaption>
         <div
-          className={`kv-plan-frame after${preview || (!visualRegeneration && image) ? " has-image" : ""}${afterIsLight && !preview ? " light" : ""}`}
-          style={preview
-            ? { backgroundImage: `url("${preview.url}")` }
-            : !visualRegeneration && image
-              ? { backgroundImage: `url("${image.url}")` }
-              : { backgroundColor: afterColor }}
+          className={`kv-plan-frame after${preview || canShowDraftTextPreview || (!visualRegeneration && image) ? " has-image" : ""}${afterIsLight && !preview ? " light" : ""}${canShowDraftTextPreview ? " text-preview" : ""}`}
+          style={afterFrameStyle}
         >
-          {preview ? <span className="kv-plan-preview-ready"><Check size={13} />真实预览</span> : visualRegeneration ? (
+          {preview ? <span className="kv-plan-preview-ready"><Check size={13} />真实预览</span> : canShowDraftTextPreview ? (
+            <>
+              <span className="kv-plan-preview-ready draft"><Check size={13} />文字预览</span>
+              <strong>{change.after.title}</strong>
+              {visualRegeneration ? <small>可继续生成真实画面</small> : null}
+            </>
+          ) : visualRegeneration ? (
             <><ImagePlus size={18} /><strong>{change.after.title}</strong><small>确认后生成新画面</small></>
           ) : (
             <><Check size={18} /><strong>沿用当前画面</strong></>
@@ -2780,7 +2801,7 @@ function StructureSceneCard({
   durationSeconds: number;
   willRegenerate?: boolean;
 }) {
-  const image = !willRegenerate ? scene?.assets.find((asset) => asset.type === "image" && asset.url) : undefined;
+  const image = !willRegenerate ? scenePreviewAsset(scene) : undefined;
   return (
     <div
       className={`kv-structure-scene${image ? " has-image" : ""}${willRegenerate ? " regenerating" : ""}`}

@@ -4876,6 +4876,41 @@ button:disabled {
   line-height: 1;
 }
 
+.kv-plan-preview-ready.draft {
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.kv-plan-frame.text-preview {
+  align-items: flex-end;
+  justify-content: flex-start;
+  background-blend-mode: normal;
+  text-align: left;
+}
+
+.kv-plan-frame.text-preview::before {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(2, 8, 23, 0.08), rgba(2, 8, 23, 0.68));
+  content: "";
+}
+
+.kv-plan-frame.text-preview strong {
+  position: relative;
+  z-index: 1;
+  color: #fff;
+  font-size: clamp(11px, 2.6vw, 16px);
+  line-height: 1.1;
+  text-shadow: 0 1px 8px rgba(2, 8, 23, 0.55);
+}
+
+.kv-plan-frame.text-preview small {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  z-index: 1;
+  color: rgba(255, 255, 255, 0.75);
+}
+
 .kv-review-actions .kv-preview-plan {
   border-color: #9fd8d1;
   background: #edf9f7;

@@ -4,6 +4,8 @@ import vm from "node:vm";
 import ts from "typescript";
 
 const source = fs.readFileSync(new URL("../lib/edit-plan-preview-assets.ts", import.meta.url), "utf8");
+const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
+const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
@@ -53,5 +55,13 @@ assert.equal(assets.some((asset) => asset.id === "unrelated"), true);
 const removed = removeEditPlanPreviewAssets(project, "plan-current");
 assert.equal(removed.currentVersion.scenes[0].assets.some((asset) => asset.id === "preview"), false);
 assert.equal(removed.currentVersion.scenes[0].assets.some((asset) => asset.id === "unrelated"), true);
+
+assert.match(workspace, /function scenePreviewAsset/);
+assert.match(workspace, /asset\.type === "thumbnail"[\s\S]*asset\.metadata\?\.candidate !== true[\s\S]*asset\.metadata\?\.planPreview !== true/);
+assert.match(workspace, /const image = scenePreviewAsset\(scene\);[\s\S]*kv-board-image/);
+assert.match(workspace, /const canShowDraftTextPreview = Boolean\(!preview && image && titleChanged\)/);
+assert.match(workspace, /kv-plan-preview-ready draft/);
+assert.match(styles, /\.kv-plan-frame\.text-preview::before/);
+assert.match(styles, /\.kv-plan-preview-ready\.draft/);
 
 console.log("Edit plan visual preview smoke checks passed.");
