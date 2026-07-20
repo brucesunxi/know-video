@@ -16,6 +16,7 @@ import { narrationVoiceForBrief } from "@/lib/voice-profiles";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
 import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 import { estimateNarrationSeconds } from "@/lib/speech-timing";
+import { visualStyleDirection, visualStyleProfile } from "@/lib/visual-style-profiles";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 
 type AiEngine = "deepseek-flash" | "openai" | "heuristic";
@@ -636,7 +637,7 @@ async function createTreatment(
     ? `Required language for workingTitle, all scene titles, narration, and visible text: ${options.language}.`
     : "Infer the language from the user's request.";
   const styleDirection = options
-    ? `Required overall visual style: ${options.style}. Translate that style into a concrete visual bible rather than merely naming it.`
+    ? `Required overall visual style: ${options.style}. Use this exact style bible and make it visibly different from the other presets: ${visualStyleDirection(options.style)}`
     : "Infer an appropriate visual style from the user's request.";
   const averageSceneSeconds = targetDuration / sceneCount;
   const narrationBudgetDirection = options?.language === "英文"
@@ -675,6 +676,20 @@ async function createTreatment(
   });
 
   let treatment = treatmentSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+  if (options?.style) {
+    const profile = visualStyleProfile(options.style);
+    treatment = {
+      ...treatment,
+      visualBible: {
+        ...treatment.visualBible,
+        artDirection: `${profile.label}: ${profile.artDirection}. ${treatment.visualBible.artDirection}`,
+        palette: profile.palette,
+        lighting: profile.lighting,
+        cameraLanguage: profile.cameraLanguage,
+        avoid: Array.from(new Set([...treatment.visualBible.avoid, profile.avoid])).slice(0, 10)
+      }
+    };
+  }
   if (treatment.beats.length !== sceneCount) {
     throw new Error(`Director treatment returned ${treatment.beats.length} beats; expected ${sceneCount}`);
   }

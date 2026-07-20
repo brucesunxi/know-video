@@ -9,6 +9,7 @@ import {
   extractBriefVisualConcepts,
   isVideoCreationProductBrief
 } from "@/lib/brief-semantics";
+import { visualStyleDirection, visualStyleProfile } from "@/lib/visual-style-profiles";
 
 const palettes = {
   dark: ["#07111d", "#143044", "#38d5e5", "#f8fafc"],
@@ -19,6 +20,10 @@ const palettes = {
 
 function detectTone(text: string) {
   const lower = text.toLowerCase();
+  if (lower.includes("电影质感")) return "cinematic";
+  if (lower.includes("极简高级")) return "light";
+  if (lower.includes("明快有活力")) return "playful";
+  if (lower.includes("温暖自然")) return "cinematic";
   if (lower.includes("light") || lower.includes("bright") || lower.includes("浅色") || lower.includes("白色") || lower.includes("极简")) return "light";
   if (lower.includes("cinematic") || lower.includes("电影") || lower.includes("高级感") || lower.includes("温暖")) return "cinematic";
   if (lower.includes("playful") || lower.includes("fun") || lower.includes("可爱") || lower.includes("活泼") || lower.includes("明快")) return "playful";
@@ -182,16 +187,17 @@ function businessFallbackNarrations(
   return lines;
 }
 
-function localizedFallbackDirection(scene: Scene, index: number, chinese: boolean): Scene {
+function localizedFallbackDirection(scene: Scene, index: number, chinese: boolean, style?: GenerationOptions["style"]): Scene {
   if (!chinese) return scene;
+  const profile = visualStyleProfile(style);
   const subject = scene.title.replace(/[：:]/g, "").trim();
   const visualDirections = [
-    `微距特写，${subject}以一个真实、明确的核心物件作为视觉主体；前景保留细腻的金属或玻璃纹理，中景出现正在操作的手与关键动作，背景是具有纵深的专业工作室环境。侧逆光勾勒主体边缘，冷青与暖金配色形成克制对比，浅景深把注意力牢牢集中在变化发生的瞬间，画面不出现漂浮卡片或大段文字。`,
-    `俯拍广角镜头，围绕${subject}的真实素材在制作台上形成清晰的叙事路径；前景有铅笔、胶片和纸张的材质细节，中景双手正在整理顺序，背景工作室设备自然虚化。柔和顶光穿过半透明介质，青灰、炭黑和暖金色彩保持统一，鸟瞰构图让动作、空间与层次一眼可读。`,
-    `中等景别，一位创作者在沉浸式工作空间中推进${subject}；前景玻璃反射形成自然遮挡，中景人物与核心画面构成稳定对角线，背景沿灯带向远处延伸。轮廓光刻画织物、金属和磨砂玻璃材质，冷色环境中保留温暖肤色，真实摄影质感清晰呈现人物动作与情绪。`,
-    `宽幅远景，${subject}在一个完整、可信的制作环境中发生；前景设备边缘形成引导线，中景人物与关键物件产生明确互动，背景建筑结构和柔和灯光建立空间深度。广角透视保持自然，侧光与环境反射塑造混凝土、木材和玻璃质感，统一配色延续上一场但构图明显不同。`,
-    `近景特写，镜头聚焦${subject}带来的具体变化与人物反应；前景细小光点掠过镜头，中景面部、手势或核心物件保持锐利，背景工作室化为柔和散景。暖色主光与冷色轮廓光共同塑造层次，材质纹理真实可辨，构图保留适度负空间并避免任何通用仪表盘式表达。`,
-    `低机位远景，${subject}以完成后的真实成果成为画面中心；前景深色结构形成稳定基座，中景人物或成片载体清楚可见，背景开阔空间向上延伸。柔和顶光和屏幕反射照亮混凝土与织物材质，冷青、炭黑和暖金色彩自然收束，最终画面庄重、清晰且具有可交付的电影感。`
+    `微距特写，${subject}以一个真实、明确的核心物件作为视觉主体；前景保留${profile.materials}的材质细节，中景出现正在操作的手与关键动作，背景是符合${profile.label}的专业环境。${profile.lighting}，${profile.composition}，画面不出现漂浮卡片或大段文字。`,
+    `俯拍广角镜头，围绕${subject}的真实素材形成清晰叙事路径；前景有与${profile.materials}一致的细节，中景双手正在整理顺序，背景自然虚化。${profile.cameraLanguage}，${profile.palette.join("、")}色彩体系贯穿画面。`,
+    `中等景别，人物在符合${profile.label}的工作空间中推进${subject}；前景形成自然遮挡，中景人物与核心画面构成稳定关系，背景建立空间纵深。${profile.lighting}，材质语言为${profile.materials}。`,
+    `宽幅远景，${subject}在完整可信的商业环境中发生；前景形成引导线，中景人物与关键物件产生明确互动，背景建立空间深度。${profile.composition}，整体坚持${profile.artDirection}。`,
+    `近景特写，镜头聚焦${subject}带来的具体变化与人物反应；前景保留细节，中景主体锐利，背景柔和分层。${profile.cameraLanguage}，色彩严格保持${profile.palette.join("、")}。`,
+    `完成镜头，${subject}以可交付成果成为画面中心；前景形成稳定基座，中景成果清楚可见，背景空间自然收束。${profile.lighting}，最终画面符合${profile.label}而不是其他预设：避免${profile.avoid}。`
   ];
   const motionDirections = [
     "摄影机从极近距离缓慢推近，主体动作由静止转为发生，前中后景产生细微视差；一束连续光轨沿画面方向移动，并自然牵引到下一场。",
@@ -208,7 +214,8 @@ function localizedFallbackDirection(scene: Scene, index: number, chinese: boolea
     motionPrompt: motionDirections[directionIndex],
     style: {
       ...scene.style,
-      theme: "统一电影纪实风格",
+      theme: `${profile.label} · ${profile.artDirection}`,
+      palette: profile.palette,
       mood: index === 0 ? "专注而充满期待" : index === visualDirections.length - 1 ? "从容而坚定" : "清晰而富有推进感"
     }
   };
@@ -230,7 +237,7 @@ function applyFallbackConstraints(
       sceneNumber: index + 1,
       durationSeconds: durations[index],
       voiceover: fitFallbackNarration(scene, durations[index], chinese)
-    }, index, chinese));
+    }, index, chinese, options?.style));
 }
 
 function visualConceptSuffix(prompt: string, chinese: boolean) {
@@ -248,7 +255,8 @@ export function generateProjectFromPrompt(
 ): Project {
   const promptTitle = titleFromPrompt(prompt);
   const tone = detectTone(`${prompt} ${options?.style ?? ""}`);
-  const palette = palettes[tone];
+  const styleProfile = options?.style ? visualStyleProfile(options.style) : undefined;
+  const palette = styleProfile?.palette ?? palettes[tone];
   const chinese = options?.language !== "英文";
   const title = chinese
     ? containsChinese(promptTitle) ? promptTitle : "创意视频项目"
@@ -358,6 +366,7 @@ export function generateProjectFromPrompt(
   const briefFacts = extractBriefFacts(prompt, chinese);
   const briefConcepts = extractBriefVisualConcepts(prompt, chinese);
   const conceptSuffix = visualConceptSuffix(prompt, chinese);
+  const styleSuffix = options?.style ? ` ${chinese ? "视觉风格档案" : "Visual style bible"}：${visualStyleDirection(options.style)}` : "";
   const fallbackTitle = briefSubject === "这项产品" || briefSubject === "This product"
     ? title
     : chinese ? `${briefSubject} 产品介绍` : `${briefSubject} Product Film`;
@@ -371,7 +380,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 1,
       title: chinese ? "开场钩子" : "Opening Hook",
       voiceover: fallbackFact(0, `${briefSubject}，让企业最重要的价值被清楚看见。`, `${briefSubject} makes the company's most important value clear.`),
-      visualPrompt: `${tone} opening cinematic frame for ${briefSubject}, strong product signal, real environment, one clear hero subject.${conceptSuffix}`,
+      visualPrompt: `${tone} opening cinematic frame for ${briefSubject}, strong product signal, real environment, one clear hero subject.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Camera pushes in slowly while the headline resolves and supporting UI details fade into place.",
       durationSeconds: 6,
       style: { theme: tone, palette, mood: "clear" },
@@ -382,7 +391,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 2,
       title: chinese ? "问题情境" : "Problem Context",
       voiceover: fallbackFact(1, `面对复杂业务，${briefSubject}帮助团队更早识别问题并建立清晰共识。`, `In complex work, ${briefSubject} helps teams identify problems earlier and build shared clarity.`),
-      visualPrompt: `${tone} problem scene for ${briefSubject}: scattered risk signals, unresolved approvals, and workflow pressure arranged as concrete objects in a control-room environment.${conceptSuffix}`,
+      visualPrompt: `${tone} problem scene for ${briefSubject}: scattered risk signals, unresolved approvals, and workflow pressure arranged as concrete objects in a control-room environment.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Cards drift apart, warning states appear, then pause for emphasis.",
       durationSeconds: 7,
       style: { theme: tone, palette, mood: "focused" },
@@ -393,7 +402,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 3,
       title: chinese ? "解决路径" : "Solution Flow",
       voiceover: fallbackFact(2, `${briefSubject}把关键流程连接起来，让每一步都有依据、责任与行动路径。`, `${briefSubject} connects the critical workflow so every step has evidence, ownership, and a path to action.`),
-      visualPrompt: `${tone} workflow scene for ${briefSubject}: three connected checkpoints or gates linked by arrows, ownership handoffs, and evidence packets moving through the system.${conceptSuffix}`,
+      visualPrompt: `${tone} workflow scene for ${briefSubject}: three connected checkpoints or gates linked by arrows, ownership handoffs, and evidence packets moving through the system.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Steps connect from left to right, then the active step expands.",
       durationSeconds: 8,
       style: { theme: tone, palette, mood: "systematic" },
@@ -404,7 +413,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 4,
       title: chinese ? "效果证明" : "Proof Moment",
       voiceover: fallbackFact(3, `从分散信息到可验证成果，${briefSubject}让改进过程清晰、可信并且可追溯。`, `From scattered information to verifiable outcomes, ${briefSubject} makes improvement clear, credible, and traceable.`),
-      visualPrompt: `${tone} proof scene for ${briefSubject}: evidence packets lock into a traceable record trail, risk signals resolve, and accountability links become clear.${conceptSuffix}`,
+      visualPrompt: `${tone} proof scene for ${briefSubject}: evidence packets lock into a traceable record trail, risk signals resolve, and accountability links become clear.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Before state compresses, after state slides in with highlighted metrics.",
       durationSeconds: 7,
       style: { theme: tone, palette, mood: "confident" },
@@ -415,7 +424,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 5,
       title: chinese ? "价值升华" : "Human Outcome",
       voiceover: fallbackFact(4, `最终，团队获得的不只是效率，更是更稳定的判断、更顺畅的协作和更可靠的结果。`, `The result is more than efficiency: teams gain stronger decisions, smoother collaboration, and more reliable outcomes.`),
-      visualPrompt: `${tone} closing outcome scene for ${briefSubject}: the finished governance path is visible as a calm sequence of gates, records, and approvals reaching a clear decision point.${conceptSuffix}`,
+      visualPrompt: `${tone} closing outcome scene for ${briefSubject}: the finished governance path is visible as a calm sequence of gates, records, and approvals reaching a clear decision point.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Logo and takeaway fade in, background elements settle, then hold.",
       durationSeconds: 6,
       style: { theme: tone, palette, mood: "polished" },
@@ -426,7 +435,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 6,
       title: chinese ? "成果收束" : "Final Resolve",
       voiceover: fallbackFact(5, `${briefSubject}，让真正重要的工作持续向前。`, `${briefSubject} keeps the work that matters moving forward.`),
-      visualPrompt: `${tone} closing cinematic frame for ${briefSubject}, one concrete hero subject, resolved environment, strong visual identity, premium spacing, no generic presentation layout.${conceptSuffix}`,
+      visualPrompt: `${tone} closing cinematic frame for ${briefSubject}, one concrete hero subject, resolved environment, strong visual identity, premium spacing, no generic presentation layout.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "The final subject settles into a clean hero composition, environmental motion slows, and the camera holds for a confident finish.",
       durationSeconds: 6,
       style: { theme: tone, palette, mood: "resolved" },
