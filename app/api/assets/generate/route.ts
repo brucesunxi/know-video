@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { generateProjectSceneImages } from "@/lib/image-assets";
 import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/media-generation-result";
 import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
@@ -14,12 +15,19 @@ const requestSchema = z.object({
 export const maxDuration = 120;
 
 export async function POST(request: Request) {
+  let user;
+  try {
+    user = await requireCurrentUser();
+  } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    throw error;
+  }
   const parsed = requestSchema.safeParse(await request.json().catch(() => undefined));
   if (!parsed.success) {
     return NextResponse.json({ error: "画面生成请求格式无效。" }, { status: 400 });
   }
   const body = parsed.data;
-  const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
+  const project = await loadCurrentProjectForEdit(body.projectId, body.versionId, user.id);
   if (!project) {
     return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重试。" }, { status: 409 });
   }

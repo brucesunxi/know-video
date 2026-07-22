@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { restoreProjectVersion } from "@/lib/project-mutations";
 
 const schema = z.object({
@@ -9,12 +10,14 @@ const schema = z.object({
 
 export async function POST(request: Request, context: { params: Promise<{ projectId: string }> }) {
   try {
+    const user = await requireCurrentUser();
     const params = await context.params;
     const body = await request.json();
     const { projectId, versionId } = schema.parse({ projectId: params.projectId, versionId: body.versionId });
-    const result = await restoreProjectVersion({ projectId, targetVersionId: versionId });
+    const result = await restoreProjectVersion({ projectId, targetVersionId: versionId, userId: user.id });
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "版本恢复请求无效。" }, { status: 400 });
     }

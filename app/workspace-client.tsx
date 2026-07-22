@@ -23,6 +23,7 @@ import {
   ImagePlus,
   Layers3,
   Loader2,
+  LogOut,
   MessageSquareText,
   Mic2,
   MoreHorizontal,
@@ -71,6 +72,12 @@ type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
 type Engine = "ai" | "heuristic";
 type StudioView = "preview" | "storyboard";
+type AuthUser = {
+  id: string;
+  email: string;
+  name?: string;
+  avatarUrl?: string;
+};
 type MediaGenerationResponse = {
   project?: Project;
   error?: string;
@@ -1137,6 +1144,7 @@ function projectStatusBadges(project: Project, source: Source, stage: Stage) {
 
 function Shell({
   children,
+  currentUser,
   project,
   source,
   stage,
@@ -1145,6 +1153,7 @@ function Shell({
   onOpenStudio
 }: {
   children: React.ReactNode;
+  currentUser: AuthUser;
   project: Project;
   source: Source;
   stage: Stage;
@@ -1192,6 +1201,21 @@ function Shell({
             {statusBadges.map((badge) => (
               <span className={badge.tone} key={`${badge.tone}-${badge.label}`}>{badge.label}</span>
             ))}
+            <div className="kv-user-menu">
+              {currentUser.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img alt="" src={currentUser.avatarUrl} />
+              ) : (
+                <span>{currentUser.email.slice(0, 1).toUpperCase()}</span>
+              )}
+              <strong>{currentUser.name || currentUser.email}</strong>
+              <button aria-label="退出登录" onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST" });
+                window.location.assign("/");
+              }} title="退出登录" type="button">
+                <LogOut size={15} />
+              </button>
+            </div>
           </div>
         </header>
         {children}
@@ -3844,11 +3868,13 @@ function StudioScreen({
 }
 
 export function WorkspaceClient({
+  currentUser,
   initialProject,
   initialMessages,
   initialPendingPlan,
   source
 }: {
+  currentUser: AuthUser;
   initialProject: Project;
   initialMessages: ChatMessage[];
   initialPendingPlan?: EditPlan;
@@ -5753,6 +5779,7 @@ export function WorkspaceClient({
 
   return (
     <Shell
+      currentUser={currentUser}
       onNewVideo={resetToBrief}
       onOpenProjects={() => void openProjects()}
       onOpenStudio={() => {

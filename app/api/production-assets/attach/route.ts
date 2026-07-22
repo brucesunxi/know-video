@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { assertProjectOwner, authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { matchesDeclaredAssetType, maxUploadBytes, uploadedAssetType } from "@/lib/asset-policy";
 import { loadCurrentProjectForEdit } from "@/lib/project-mutations";
 import { attachProductionAsset, createProductionAsset, findOwnedVersionAnchor } from "@/lib/production-assets";
@@ -25,7 +26,9 @@ export async function POST(request: Request) {
     }
   };
   try {
+    const user = await requireCurrentUser();
     const body = schema.parse(await request.json());
+    await assertProjectOwner(body.projectId, user.id);
     uploadedKey = body.key;
     if (!body.key.startsWith(`uploads/${body.projectId}/production/${body.type}/`)) {
       return NextResponse.json({ error: "成片素材上传路径无效。" }, { status: 403 });
@@ -55,11 +58,15 @@ export async function POST(request: Request) {
     }
     const asset = createProductionAsset({ ...body });
     await attachProductionAsset({ projectId: body.projectId, versionId: body.versionId, asset });
-    const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
+    const project = await loadCurrentProjectForEdit(body.projectId, body.versionId, user.id);
     if (!project) throw new Error("视频版本已经发生变化，请刷新后重试。");
     return NextResponse.json({ asset, project });
   } catch (error) {
     await cleanupUpload();
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") {
+      return NextResponse.json({ error: "没有找到当前视频项目。" }, { status: 404 });
+    }
     const invalidRequest = error instanceof z.ZodError;
     return NextResponse.json(
       { error: invalidRequest ? "成片素材信息无效。" : error instanceof Error ? error.message : "成片素材绑定失败。" },

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { loadCurrentProjectForEdit } from "@/lib/project-mutations";
 import { persistSceneStructureMutation } from "@/lib/scene-structure-mutations";
 
@@ -27,11 +28,13 @@ const schema = z.discriminatedUnion("operation", [
 
 export async function POST(request: Request) {
   try {
+    const user = await requireCurrentUser();
     const body = schema.parse(await request.json());
-    const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
+    const project = await loadCurrentProjectForEdit(body.projectId, body.versionId, user.id);
     if (!project) return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重试。" }, { status: 409 });
     return NextResponse.json(await persistSceneStructureMutation({ project, mutation: body }));
   } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     if (error instanceof z.ZodError) return NextResponse.json({ error: "时间线调整参数无效。" }, { status: 400 });
     const message = error instanceof Error ? error.message : "时间线调整失败。";
     const status = /版本已经发生变化/.test(message)

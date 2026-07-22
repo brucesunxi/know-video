@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/media-generation-result";
 import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import { generateProjectSceneClips } from "@/lib/video-assets";
@@ -26,13 +27,20 @@ function videoFailureCode(failures: Array<{ error: unknown }>) {
 }
 
 export async function POST(request: Request) {
+  let user;
+  try {
+    user = await requireCurrentUser();
+  } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    throw error;
+  }
   const parsed = requestSchema.safeParse(await request.json().catch(() => undefined));
   if (!parsed.success) {
     return NextResponse.json({ error: "动态镜头请求格式无效。" }, { status: 400 });
   }
   const body = parsed.data;
   const estimate = videoGenerationEstimate(body.tier);
-  const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
+  const project = await loadCurrentProjectForEdit(body.projectId, body.versionId, user.id);
   if (!project) {
     return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重试。" }, { status: 409 });
   }

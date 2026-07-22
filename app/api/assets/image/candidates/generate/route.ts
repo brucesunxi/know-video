@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { CandidateImageError, generateSceneImageCandidate } from "@/lib/image-candidates";
 import { loadCurrentProjectForEdit } from "@/lib/project-mutations";
 
@@ -15,8 +16,9 @@ export const maxDuration = 120;
 
 export async function POST(request: Request) {
   try {
+    const user = await requireCurrentUser();
     const body = schema.parse(await request.json());
-    const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
+    const project = await loadCurrentProjectForEdit(body.projectId, body.versionId, user.id);
     if (!project) return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重试。" }, { status: 409 });
     const result = await generateSceneImageCandidate(project, {
       quality: body.quality,
@@ -25,6 +27,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     if (error instanceof z.ZodError) return NextResponse.json({ error: "候选画面请求格式无效。" }, { status: 400 });
     if (error instanceof CandidateImageError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("[image-candidates] Unable to generate candidate:", error);

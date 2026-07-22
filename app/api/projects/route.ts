@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { createStoryboardProject } from "@/lib/ai-video";
 import { matchesDeclaredAssetType, maxUploadBytes, uploadedAssetType } from "@/lib/asset-policy";
 import { analyzeCloudflareImage, hasCloudflareAI, transcribeCloudflareAudio } from "@/lib/cloudflare-ai";
@@ -77,7 +78,13 @@ const requestSchema = z.object({
 export const maxDuration = 300;
 
 export async function GET() {
-  return NextResponse.json({ projects: await listProjects() });
+  try {
+    const user = await requireCurrentUser();
+    return NextResponse.json({ projects: await listProjects(user.id) });
+  } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    throw error;
+  }
 }
 
 function publicEngine(engine: string) {
@@ -101,6 +108,7 @@ export async function POST(request: Request) {
   let requestId: string | undefined;
   let uploadedReferenceKeys: string[] = [];
   try {
+    const user = await requireCurrentUser();
     const body = requestSchema.parse(await request.json());
     requestId = body.requestId;
     uploadedReferenceKeys = requestId
@@ -123,7 +131,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ status: "failed", error: claim.record.error || "视频项目生成失败，请重试。" }, { status: 409 });
       }
       if (!claim.claimed && claim.record?.status === "ready" && claim.record.projectId) {
-        const snapshot = await getProjectSnapshot(claim.record.projectId);
+        const snapshot = await getProjectSnapshot(claim.record.projectId, user.id);
         if (!snapshot) throw new Error("生成任务已经完成，但项目读取失败。");
         return NextResponse.json({
           project: snapshot.project,
@@ -192,13 +200,15 @@ export async function POST(request: Request) {
     const persisted = await persistGeneratedProject({
       prompt: body.prompt,
       project,
-      engine
+      engine,
+      userId: user.id
     });
     if (requestId) {
       await completeGenerationRequest({ id: requestId, projectId: persisted.project.id, engine });
     }
     return NextResponse.json({ ...persisted, engine: publicEngine(engine) });
   } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: "请用 4 到 4000 个字符描述要制作的视频，并检查时长、场景数、语言、风格和动态方式。" },

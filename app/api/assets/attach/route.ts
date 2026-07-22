@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { assertProjectOwner, authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { matchesDeclaredAssetType, maxUploadBytes, uploadedAssetType } from "@/lib/asset-policy";
 import { getFromR2, headR2Object, readR2Prefix } from "@/lib/r2";
 import {
@@ -35,7 +36,9 @@ export async function POST(request: Request) {
     }
   };
   try {
+    const user = await requireCurrentUser();
     const body = schema.parse(await request.json());
+    await assertProjectOwner(body.projectId, user.id);
     uploadedKey = body.key;
     if (!body.key.startsWith(`uploads/${body.projectId}/`)) {
       return NextResponse.json({ error: "素材上传路径无效。" }, { status: 403 });
@@ -87,6 +90,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ asset, voiceover: narration?.transcript });
   } catch (error) {
     await cleanupUpload();
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") {
+      return NextResponse.json({ error: "没有找到要绑定素材的项目。" }, { status: 404 });
+    }
     const invalidRequest = error instanceof z.ZodError;
     const message = invalidRequest ? "场景素材信息无效。" : error instanceof Error ? error.message : "无法绑定场景素材。";
     return NextResponse.json({ error: message }, { status: invalidRequest ? 400 : 502 });

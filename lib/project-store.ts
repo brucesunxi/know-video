@@ -258,7 +258,7 @@ async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSn
   };
 }
 
-export async function listProjects(): Promise<ProjectListItem[]> {
+export async function listProjects(userId?: string): Promise<ProjectListItem[]> {
   if (!hasDatabaseUrl()) {
     const firstImage = demoProject.currentVersion.scenes
       .flatMap((scene) => scene.assets)
@@ -329,6 +329,7 @@ export async function listProjects(): Promise<ProjectListItem[]> {
     from projects p
     left join project_versions pv on pv.id = p.current_version_id
     left join scenes s on s.version_id = p.current_version_id
+    where p.user_id = ${userId ?? ""}
     group by p.id, pv.id
     order by p.updated_at desc
     limit 100
@@ -365,7 +366,7 @@ export async function listProjects(): Promise<ProjectListItem[]> {
   });
 }
 
-export async function getProjectSnapshot(projectId: string): Promise<ProjectSnapshot | undefined> {
+export async function getProjectSnapshot(projectId: string, userId?: string): Promise<ProjectSnapshot | undefined> {
   if (!hasDatabaseUrl()) {
     const ephemeral = getEphemeralProject(projectId);
     if (ephemeral) return { ...ephemeral, source: "mock" };
@@ -379,13 +380,14 @@ export async function getProjectSnapshot(projectId: string): Promise<ProjectSnap
     select id, title, current_version_id
     from projects
     where id = ${projectId}
+      and (${userId ?? ""} = '' or user_id = ${userId ?? ""})
     limit 1
   ` as ProjectRow[];
   if (!projects[0]) return undefined;
   return hydrateProjectSnapshot(projects[0]);
 }
 
-export async function getCurrentProjectSnapshot(): Promise<ProjectSnapshot> {
+export async function getCurrentProjectSnapshot(userId?: string): Promise<ProjectSnapshot> {
   if (!hasDatabaseUrl()) {
     if (process.env.NODE_ENV === "production") {
       throw new Error("生产环境数据库尚未配置。");
@@ -403,6 +405,7 @@ export async function getCurrentProjectSnapshot(): Promise<ProjectSnapshot> {
     const projects = await sql`
       select id, title, current_version_id
       from projects
+      where user_id = ${userId ?? ""}
       order by updated_at desc
       limit 1
     ` as ProjectRow[];

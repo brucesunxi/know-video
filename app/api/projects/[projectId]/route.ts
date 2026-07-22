@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { getProjectSnapshot } from "@/lib/project-store";
 import { deleteR2Objects } from "@/lib/r2";
@@ -7,6 +8,7 @@ import { deleteR2Objects } from "@/lib/r2";
 const renameSchema = z.object({ title: z.string().trim().min(1).max(120) });
 
 function routeError(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
   if (error instanceof z.ZodError) {
     return NextResponse.json({ error: "项目名称不能为空，且不能超过 120 个字符。" }, { status: 400 });
   }
@@ -18,8 +20,15 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ projectId: string }> }
 ) {
+  let user;
+  try {
+    user = await requireCurrentUser();
+  } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    throw error;
+  }
   const { projectId } = await context.params;
-  const snapshot = await getProjectSnapshot(projectId);
+  const snapshot = await getProjectSnapshot(projectId, user.id);
   if (!snapshot) {
     return NextResponse.json({ error: "项目不存在或已经被删除。" }, { status: 404 });
   }
@@ -31,6 +40,7 @@ export async function PATCH(
   context: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    const user = await requireCurrentUser();
     if (!hasDatabaseUrl()) return NextResponse.json({ error: "项目重命名需要数据库连接。" }, { status: 409 });
     const { projectId } = await context.params;
     const body = renameSchema.parse(await request.json());
@@ -38,6 +48,7 @@ export async function PATCH(
       update projects
       set title = ${body.title}, updated_at = now()
       where id = ${projectId}
+        and user_id = ${user.id}
       returning id, title, updated_at
     ` as Array<{ id: string; title: string; updated_at: Date | string }>;
     if (!rows[0]) return NextResponse.json({ error: "没有找到项目。" }, { status: 404 });
@@ -54,12 +65,19 @@ export async function DELETE(
   context: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    const user = await requireCurrentUser();
     if (!hasDatabaseUrl()) return NextResponse.json({ error: "项目删除需要数据库连接。" }, { status: 409 });
     const { projectId } = await context.params;
     const sql = getSql();
     const active = await sql`
       select id from render_jobs
-      where project_id = ${projectId} and status in ('queued', 'running')
+      where project_id = ${projectId}
+        and status in ('queued', 'running')
+        and exists (
+          select 1 from projects p
+          where p.id = render_jobs.project_id
+            and p.user_id = ${user.id}
+        )
       limit 1
     ` as Array<{ id: string }>;
     if (active[0]) {
@@ -70,13 +88,18 @@ export async function DELETE(
       from scene_assets sa
       join scenes s on s.id = sa.scene_id
       join project_versions pv on pv.id = s.version_id
+      join projects p on p.id = pv.project_id
       where pv.project_id = ${projectId}
+        and p.user_id = ${user.id}
       union
       select distinct output_r2_key as r2_key
-      from render_jobs
-      where project_id = ${projectId} and output_r2_key is not null
+      from render_jobs rj
+      join projects p on p.id = rj.project_id
+      where rj.project_id = ${projectId}
+        and p.user_id = ${user.id}
+        and output_r2_key is not null
     ` as Array<{ r2_key: string }>;
-    const deleted = await sql`delete from projects where id = ${projectId} returning id` as Array<{ id: string }>;
+    const deleted = await sql`delete from projects where id = ${projectId} and user_id = ${user.id} returning id` as Array<{ id: string }>;
     if (!deleted[0]) return NextResponse.json({ error: "没有找到项目。" }, { status: 404 });
     try {
       await deleteR2Objects(assets.map((asset) => asset.r2_key));
@@ -85,6 +108,7 @@ export async function DELETE(
     }
     return NextResponse.json({ deleted: true, projectId });
   } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     return routeError(error, "项目删除失败，请稍后重试。");
   }
 }

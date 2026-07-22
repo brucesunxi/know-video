@@ -119,6 +119,154 @@ button:disabled {
   backdrop-filter: blur(18px);
 }
 
+.kv-user-menu {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d4ebe7;
+  border-radius: 999px;
+  background: #f4fffc;
+  padding: 4px 6px 4px 4px;
+  color: #0f766e;
+}
+
+.kv-user-menu img,
+.kv-user-menu > span {
+  display: grid;
+  height: 28px;
+  width: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #132238;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.kv-user-menu img {
+  object-fit: cover;
+}
+
+.kv-user-menu strong {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.kv-user-menu button {
+  display: grid;
+  height: 28px;
+  width: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: transparent;
+  color: #0f766e;
+}
+
+.kv-user-menu button:hover {
+  background: #dff8f2;
+}
+
+.kv-login-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(18, 183, 166, 0.16), transparent 28%),
+    linear-gradient(135deg, #f6f9fc 0%, #eef6f4 100%);
+  padding: 28px;
+}
+
+.kv-login-panel {
+  width: min(520px, 100%);
+  border: 1px solid #d9e4ed;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 38px;
+  box-shadow: 0 28px 90px rgba(15, 23, 42, 0.12);
+}
+
+.kv-login-logo {
+  display: grid;
+  height: 56px;
+  width: 56px;
+  place-items: center;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #101828, #26364f);
+  color: #fff;
+  font-size: 34px;
+  font-weight: 900;
+  margin-bottom: 26px;
+}
+
+.kv-login-panel h1 {
+  margin: 8px 0 12px;
+  color: #101828;
+  font-family: var(--font-display);
+  font-size: clamp(34px, 5vw, 52px);
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+.kv-login-panel p {
+  margin: 0 0 26px;
+  color: #667085;
+  font-size: 16px;
+}
+
+.kv-google-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 56px;
+  border: 1px solid #c9d5e1;
+  border-radius: 14px;
+  background: #101828;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.kv-google-login span {
+  display: grid;
+  height: 28px;
+  width: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: #101828;
+  font-weight: 900;
+}
+
+.kv-google-login.disabled {
+  pointer-events: none;
+  background: #8b95a5;
+}
+
+.kv-login-panel small {
+  display: block;
+  margin-top: 14px;
+  color: #667085;
+}
+
+.kv-login-error {
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fff1f2;
+  color: #b42318;
+  font-weight: 750;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+}
+
 .kv-topbar h1,
 .kv-section-heading h2,
 .kv-side-panel h3,

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { assertProjectOwner, authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { maxUploadBytes, uploadedAssetType } from "@/lib/asset-policy";
 import { findOwnedVersionAnchor } from "@/lib/production-assets";
 import { createPresignedUpload } from "@/lib/r2";
@@ -15,7 +16,9 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const user = await requireCurrentUser();
     const body = schema.parse(await request.json());
+    await assertProjectOwner(body.projectId, user.id);
     const uploadedType = uploadedAssetType(body.contentType);
     if ((body.type === "logo" && uploadedType !== "image") || (body.type === "music" && uploadedType !== "audio")) {
       return NextResponse.json({ error: body.type === "logo" ? "Logo 仅支持 PNG、JPEG 或 WebP。" : "背景音乐仅支持 MP3 或 WAV。" }, { status: 415 });
@@ -31,6 +34,10 @@ export async function POST(request: Request) {
     const uploadUrl = await createPresignedUpload({ key, contentType: body.contentType });
     return NextResponse.json({ key, uploadUrl, expiresInSeconds: 900 });
   } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") {
+      return NextResponse.json({ error: "没有找到当前视频项目。" }, { status: 404 });
+    }
     return NextResponse.json({ error: error instanceof z.ZodError ? "成片素材信息无效。" : "无法开始成片素材上传。" }, { status: 400 });
   }
 }

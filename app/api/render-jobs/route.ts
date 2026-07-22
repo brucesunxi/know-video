@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
+import { assertProjectOwner, authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { loadCurrentProjectForEdit } from "@/lib/project-mutations";
 import { publicRenderError, renderOutputMetadataIssue, renderSandboxName } from "@/lib/render-lifecycle";
 import { renderInputMetadataIssue, renderInputReadiness } from "@/lib/render-preflight";
@@ -35,6 +36,13 @@ function isMissingRenderObject(error: unknown) {
 }
 
 export async function GET(request: Request) {
+  let user;
+  try {
+    user = await requireCurrentUser();
+  } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    throw error;
+  }
   const searchParams = new URL(request.url).searchParams;
   const jobId = searchParams.get("id");
   const projectId = searchParams.get("projectId");
@@ -42,21 +50,45 @@ export async function GET(request: Request) {
     if (!z.string().uuid().safeParse(projectId).success) {
       return NextResponse.json({ error: "项目 ID 无效。" }, { status: 400 });
     }
+    try {
+      await assertProjectOwner(projectId, user.id);
+    } catch {
+      return NextResponse.json({ error: "没有找到渲染项目。" }, { status: 404 });
+    }
     return NextResponse.json({ renderJobs: (await listRenderJobs(projectId)).map(publicRenderJob) });
   }
   if (!jobId || !z.string().uuid().safeParse(jobId).success) {
     return NextResponse.json({ error: "缺少有效的渲染任务 ID。" }, { status: 400 });
   }
   const renderJob = await getRenderJob(jobId);
+  if (renderJob) {
+    try {
+      await assertProjectOwner(renderJob.projectId, user.id);
+    } catch {
+      return NextResponse.json({ error: "没有找到渲染任务。" }, { status: 404 });
+    }
+  }
   return renderJob
     ? NextResponse.json({ renderJob: publicRenderJob(renderJob) })
     : NextResponse.json({ error: "没有找到渲染任务。" }, { status: 404 });
 }
 
 export async function DELETE(request: Request) {
+  let user;
+  try {
+    user = await requireCurrentUser();
+  } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    throw error;
+  }
   const parsed = cancelSchema.safeParse(await request.json().catch(() => undefined));
   if (!parsed.success) {
     return NextResponse.json({ error: "取消导出请求格式无效。" }, { status: 400 });
+  }
+  try {
+    await assertProjectOwner(parsed.data.projectId, user.id);
+  } catch {
+    return NextResponse.json({ error: "导出任务已结束或不存在，无法取消。" }, { status: 404 });
   }
   const renderJob = await cancelRenderJob(parsed.data.projectId, parsed.data.jobId);
   if (!renderJob) {
@@ -72,12 +104,19 @@ export async function DELETE(request: Request) {
   return NextResponse.json({ renderJob: publicRenderJob(renderJob) });
 }
 export async function POST(request: Request) {
+  let user;
+  try {
+    user = await requireCurrentUser();
+  } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    throw error;
+  }
   const parsed = requestSchema.safeParse(await request.json().catch(() => undefined));
   if (!parsed.success) {
     return NextResponse.json({ error: "导出请求格式无效。" }, { status: 400 });
   }
   const body = parsed.data;
-  const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
+  const project = await loadCurrentProjectForEdit(body.projectId, body.versionId, user.id);
   if (!project) {
     return NextResponse.json(
       { error: "视频版本已经发生变化，请刷新后导出当前版本。" },

@@ -1,5 +1,33 @@
 create extension if not exists "uuid-ossp";
 
+create table if not exists users (
+  id uuid primary key default uuid_generate_v4(),
+  email text not null unique,
+  name text,
+  avatar_url text,
+  provider text not null default 'google',
+  provider_subject text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(provider, provider_subject)
+);
+
+create table if not exists auth_sessions (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references users(id) on delete cascade,
+  token_hash text not null unique,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists oauth_states (
+  id uuid primary key default uuid_generate_v4(),
+  state_hash text not null unique,
+  redirect_to text not null default '/',
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists projects (
   id uuid primary key default uuid_generate_v4(),
   user_id text,
@@ -8,6 +36,10 @@ create table if not exists projects (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create index if not exists auth_sessions_user_id_idx on auth_sessions(user_id);
+create index if not exists auth_sessions_expires_at_idx on auth_sessions(expires_at);
+create index if not exists oauth_states_expires_at_idx on oauth_states(expires_at);
 
 create table if not exists project_versions (
   id uuid primary key default uuid_generate_v4(),
@@ -114,6 +146,7 @@ create table if not exists generation_requests (
 );
 
 create index if not exists project_versions_project_id_idx on project_versions(project_id);
+create index if not exists projects_user_id_updated_idx on projects(user_id, updated_at desc);
 create index if not exists scenes_version_id_idx on scenes(version_id);
 create index if not exists chat_messages_project_id_idx on chat_messages(project_id);
 create index if not exists edit_plans_project_id_idx on edit_plans(project_id);

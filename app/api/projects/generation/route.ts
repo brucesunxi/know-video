@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { getGenerationRequest } from "@/lib/generation-requests";
 import { getProjectSnapshot } from "@/lib/project-store";
 
 const requestIdSchema = z.string().uuid();
 
 export async function GET(request: Request) {
+  let user;
+  try {
+    user = await requireCurrentUser();
+  } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    throw error;
+  }
   const requestId = new URL(request.url).searchParams.get("requestId");
   const parsed = requestIdSchema.safeParse(requestId);
   if (!parsed.success) {
@@ -16,7 +24,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "没有找到生成任务。" }, { status: 404 });
   }
   if (generation.status === "ready" && generation.projectId) {
-    const snapshot = await getProjectSnapshot(generation.projectId);
+    const snapshot = await getProjectSnapshot(generation.projectId, user.id);
     if (!snapshot) {
       return NextResponse.json({ error: "生成任务已经完成，但项目读取失败。" }, { status: 502 });
     }

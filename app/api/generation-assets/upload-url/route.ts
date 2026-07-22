@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { maxUploadBytes, uploadedAssetType } from "@/lib/asset-policy";
 import { createPresignedUpload } from "@/lib/r2";
 
@@ -12,6 +13,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
+    await requireCurrentUser();
     const body = schema.parse(await request.json());
     if (!uploadedAssetType(body.contentType)) {
       return NextResponse.json({ error: "暂不支持这种参考素材格式。" }, { status: 415 });
@@ -24,6 +26,7 @@ export async function POST(request: Request) {
     const uploadUrl = await createPresignedUpload({ key, contentType: body.contentType });
     return NextResponse.json({ key, uploadUrl, expiresInSeconds: 900 });
   } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     const message = error instanceof z.ZodError
       ? "参考素材信息无效。"
       : error instanceof Error ? error.message : "无法开始上传参考素材。";

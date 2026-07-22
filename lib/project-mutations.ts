@@ -73,6 +73,7 @@ export async function persistGeneratedProject(params: {
   prompt: string;
   project: Project;
   engine: string;
+  userId?: string;
 }): Promise<{ project: Project; messages: ChatMessage[] }> {
   if (!canPersist()) {
     const messages: ChatMessage[] = [
@@ -107,8 +108,8 @@ export async function persistGeneratedProject(params: {
   const assistantContent = `脚本和 ${params.project.currentVersion.scenes.length} 个分镜已经完成，正在继续生成画面与配音。`;
   const queries = [
     sql`
-      insert into projects (id, title)
-      values (${projectId}, ${params.project.title})
+      insert into projects (id, user_id, title)
+      values (${projectId}, ${params.userId ?? null}, ${params.project.title})
     `,
     sql`
       insert into project_versions (
@@ -218,14 +219,16 @@ export async function persistGeneratedProject(params: {
   };
 }
 
-export async function loadProjectForRender(projectId: string, versionId: string): Promise<Project | undefined> {
+export async function loadProjectForRender(projectId: string, versionId: string, userId?: string): Promise<Project | undefined> {
   if (!canPersist()) return getEphemeralProject(projectId, versionId)?.project;
   const sql = getSql();
   const rows = await sql`
     select p.title
     from projects p
     join project_versions pv on pv.project_id = p.id
-    where p.id = ${projectId} and pv.id = ${versionId}
+    where p.id = ${projectId}
+      and pv.id = ${versionId}
+      and (${userId ?? ""} = '' or p.user_id = ${userId ?? ""})
     limit 1
   ` as Array<{ title: string }>;
   if (!rows[0]) return undefined;
@@ -241,7 +244,7 @@ export async function loadProjectForRender(projectId: string, versionId: string)
   };
 }
 
-export async function loadCurrentProjectForEdit(projectId: string, versionId: string) {
+export async function loadCurrentProjectForEdit(projectId: string, versionId: string, userId?: string) {
   if (!canPersist()) {
     const ephemeral = getEphemeralProject(projectId, versionId);
     if (ephemeral) return ephemeral.project;
@@ -252,11 +255,13 @@ export async function loadCurrentProjectForEdit(projectId: string, versionId: st
   const rows = await getSql()`
     select id
     from projects
-    where id = ${projectId} and current_version_id = ${versionId}
+    where id = ${projectId}
+      and current_version_id = ${versionId}
+      and (${userId ?? ""} = '' or user_id = ${userId ?? ""})
     limit 1
   ` as IdRow[];
   if (!rows[0]) return undefined;
-  return loadProjectForRender(projectId, versionId);
+  return loadProjectForRender(projectId, versionId, userId);
 }
 
 export async function loadVersion(versionId: string): Promise<ProjectVersion | undefined> {
@@ -1112,7 +1117,7 @@ export async function applyPersistedEditPlan(params: {
   };
 }
 
-export async function listProjectVersions(projectId: string): Promise<ProjectVersionSummary[]> {
+export async function listProjectVersions(projectId: string, userId?: string): Promise<ProjectVersionSummary[]> {
   if (!canPersist()) {
     if (projectId !== demoProject.id) return [];
     return [{
@@ -1174,6 +1179,7 @@ export async function listProjectVersions(projectId: string): Promise<ProjectVer
     join projects p on p.id = pv.project_id
     left join scenes s on s.version_id = pv.id
     where pv.project_id = ${projectId}
+      and (${userId ?? ""} = '' or p.user_id = ${userId ?? ""})
     group by pv.id, p.current_version_id
     order by pv.created_at desc
   ` as Array<{
@@ -1224,7 +1230,8 @@ export async function listProjectVersions(projectId: string): Promise<ProjectVer
 
 export async function loadProjectVersionPreview(
   projectId: string,
-  versionId: string
+  versionId: string,
+  userId?: string
 ): Promise<ProjectVersionPreview | undefined> {
   if (!canPersist()) {
     if (projectId !== demoProject.id || versionId !== demoProject.currentVersion.id) return undefined;
@@ -1239,7 +1246,9 @@ export async function loadProjectVersionPreview(
     select p.current_version_id
     from projects p
     join project_versions target on target.project_id = p.id
-    where p.id = ${projectId} and target.id = ${versionId}
+    where p.id = ${projectId}
+      and target.id = ${versionId}
+      and (${userId ?? ""} = '' or p.user_id = ${userId ?? ""})
     limit 1
   ` as Array<{ current_version_id: string | null }>;
   const currentVersionId = ownership[0]?.current_version_id;
@@ -1259,6 +1268,7 @@ export async function loadProjectVersionPreview(
 export async function restoreProjectVersion(params: {
   projectId: string;
   targetVersionId: string;
+  userId?: string;
 }): Promise<{ project: Project; message: ChatMessage }> {
   if (!canPersist()) throw new Error("版本恢复需要数据库连接。");
   const sql = getSql();
@@ -1270,6 +1280,7 @@ export async function restoreProjectVersion(params: {
     from projects p
     left join project_versions target on target.id = ${params.targetVersionId}
     where p.id = ${params.projectId}
+      and (${params.userId ?? ""} = '' or p.user_id = ${params.userId ?? ""})
     limit 1
   ` as Array<{
     title: string;

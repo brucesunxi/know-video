@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { generateEditPlanVisualPreviews } from "@/lib/edit-plan-preview";
 import { loadCurrentProjectForEdit, loadProposedEditPlan } from "@/lib/project-mutations";
 
@@ -13,8 +14,9 @@ export const maxDuration = 120;
 
 export async function POST(request: Request) {
   try {
+    const user = await requireCurrentUser();
     const body = requestSchema.parse(await request.json());
-    const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
+    const project = await loadCurrentProjectForEdit(body.projectId, body.versionId, user.id);
     if (!project) {
       return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重新修改。" }, { status: 409 });
     }
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
     const updated = await generateEditPlanVisualPreviews(project, editPlan);
     return NextResponse.json({ project: updated });
   } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     const message = error instanceof z.ZodError
       ? "修改预览信息无效，请刷新后重试。"
       : error instanceof Error

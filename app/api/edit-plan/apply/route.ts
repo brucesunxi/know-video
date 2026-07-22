@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { editPlanObjectSchema } from "@/lib/edit-plan-schema";
 import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
 import {
@@ -23,6 +24,7 @@ export const maxDuration = 120;
 
 export async function POST(request: Request) {
   try {
+    const user = await requireCurrentUser();
     const body = requestSchema.parse(await request.json());
     if (body.editPlan.baseVersionId !== body.versionId) {
       return NextResponse.json({ error: "修改方案不是基于当前视频版本生成的，请重新规划。" }, { status: 409 });
@@ -30,7 +32,7 @@ export async function POST(request: Request) {
     if (body.direct && !z.string().uuid().safeParse(body.editPlan.id).success) {
       return NextResponse.json({ error: "直接编辑方案标识无效，请重试。" }, { status: 400 });
     }
-    const project = await loadCurrentProjectForEdit(body.projectId, body.versionId);
+    const project = await loadCurrentProjectForEdit(body.projectId, body.versionId, user.id);
     if (!project) {
       return NextResponse.json({ error: "视频版本已经发生变化，请刷新后重新修改。" }, { status: 409 });
     }
@@ -92,6 +94,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "修改方案格式无效，请重新生成。" }, { status: 400 });
     }

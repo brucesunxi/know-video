@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { demoProject } from "@/lib/mock-data";
 import { createEditPlan, refineEditPlan } from "@/lib/ai-video";
 import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
@@ -42,11 +43,14 @@ function publicEngine(engine: string) {
 export const maxDuration = 120;
 
 export async function POST(request: Request) {
+  let user;
   let body: z.infer<typeof requestSchema>;
   let uploadedReferenceKeys: string[] = [];
   try {
+    user = await requireCurrentUser();
     body = requestSchema.parse(await request.json());
   } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     return NextResponse.json(
       { error: error instanceof z.ZodError ? "修改要求格式无效。" : "无法读取修改要求。" },
       { status: 400 }
@@ -56,7 +60,7 @@ export async function POST(request: Request) {
     ? body.referenceAssets.map((reference) => reference.key).filter((key) => key.startsWith(`uploads/generation/${body.requestId}/`))
     : [];
   const currentProject = body.projectId && body.versionId
-    ? await loadCurrentProjectForEdit(body.projectId, body.versionId)
+    ? await loadCurrentProjectForEdit(body.projectId, body.versionId, user.id)
     : undefined;
   if (body.projectId && body.versionId && !currentProject) {
     return NextResponse.json(

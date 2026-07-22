@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { assertProjectOwner, authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { matchesDeclaredAssetType, uploadedAssetType } from "@/lib/asset-policy";
 import { assetUrlForKey, deleteR2Objects, uploadToR2 } from "@/lib/r2";
 import { attachUploadedAsset, createUploadedAsset, findOwnedSceneDetails } from "@/lib/scene-assets";
@@ -20,6 +21,7 @@ export const maxDuration = 180;
 
 export async function POST(request: Request) {
   try {
+    const user = await requireCurrentUser();
     const form = await request.formData();
     const file = form.get("file");
 
@@ -37,6 +39,7 @@ export async function POST(request: Request) {
       sceneNumber: form.get("sceneNumber"),
       actualDurationSeconds: form.get("actualDurationSeconds")
     });
+    await assertProjectOwner(fields.projectId, user.id);
     if (fields.actualDurationSeconds && type !== "clip") {
       return NextResponse.json({ error: "只有视频素材可以声明视频时长。" }, { status: 400 });
     }
@@ -73,6 +76,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ asset: uploadedAsset, voiceover: narration?.transcript });
   } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") {
+      return NextResponse.json({ error: "没有找到要绑定素材的项目。" }, { status: 404 });
+    }
     const message = error instanceof z.ZodError
       ? "素材所属的项目或场景信息无效。"
       : error instanceof Error
