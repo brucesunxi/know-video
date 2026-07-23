@@ -3,6 +3,18 @@ import type { Project, Scene } from "@/lib/types";
 
 export type ImageReferenceRole = "current" | "anchor";
 
+export const TEXT_FREE_IMAGE_DIRECTION = [
+  "TEXT-FREE BACKGROUND PLATE — HIGHEST PRIORITY:",
+  "Render absolutely no words, letters, numbers, captions, labels, typography, signatures, watermarks, logos, brand names, interface copy, or text-like glyphs anywhere in the image.",
+  "Any screen, sign, poster, document, package, badge, button, chart, or interface must use only clean unlabeled geometry, blank surfaces, icons, color blocks, lines, and diagrams without characters.",
+  "Do not invent pseudo-writing, scrambled lettering, lorem ipsum, fake Chinese characters, or decorative symbols that resemble text.",
+  "Names and written content mentioned above are semantic context only and must not be painted into the image. The video renderer will add all readable titles, captions, labels, and logos later."
+].join("\n");
+
+export function enforceTextFreeImagePrompt(prompt: string) {
+  return `${prompt.trim()}\n${TEXT_FREE_IMAGE_DIRECTION}`;
+}
+
 export function visualAnchorScore(scene: Scene) {
   const description = `${scene.title} ${scene.visualPrompt}`.toLowerCase();
   let score = Math.min(3, scene.visualPrompt.length / 180);
@@ -68,7 +80,7 @@ export function sceneImagePrompt(
     ? `Reference image ${index} is the current version of this exact scene. Preserve its central subject identity, composition logic, environment, and visual language while improving fidelity and following the revised direction.`
     : `Reference image ${index} is the project's visual anchor. Match its recurring subject identity, design language, materials, lighting, lens character, and color treatment without copying its exact composition.`).join("\n");
 
-  return [
+  return enforceTextFreeImagePrompt([
     `Create a polished 16:9 key visual for a scene in a product video called "${project.title}".`,
     projectVisualIdentity(project),
     sceneAttachmentSummary(scene) ?? "",
@@ -84,7 +96,6 @@ export function sceneImagePrompt(
     `Mood: ${scene.style.mood}. Theme: ${scene.style.theme}. Palette: ${palette}.`,
     "Make it a finished cinematic frame rather than a wireframe or a presentation slide: strong composition, depth, premium lighting, and one clear subject.",
     "Show the actual human workflow, device, environment, and product interaction described by the scene. Use spatial layers and purposeful visual storytelling.",
-    "Use little or no text inside the generated image. Never show prompt instructions, layout annotations, labels, lorem ipsum, fake logos, watermarks, or generic floating cards.",
     "Keep important subjects inside a 16:9 center-safe area."
-  ].filter(Boolean).join("\n");
+  ].filter(Boolean).join("\n"));
 }

@@ -4,6 +4,7 @@ import { generateCloudflareImage, hasCloudflareAI } from "@/lib/cloudflare-ai";
 import { sceneReferenceAssets } from "@/lib/attachment-context";
 import { getOptionalEnv } from "@/lib/env";
 import {
+  enforceTextFreeImagePrompt,
   projectVisualIdentity,
   sceneImagePrompt,
   selectVisualAnchorScene,
@@ -44,15 +45,15 @@ function buildSceneImagePrompt(
 }
 
 function buildBrandSafeImagePrompt(scene: Scene, project: Project) {
-  return [
+  return enforceTextFreeImagePrompt([
     `Create a brand-safe 16:9 cinematic key visual for the product video "${project.title}".`,
     projectVisualIdentity(project),
     `Scene ${scene.sceneNumber}: ${scene.title}.`,
     `Use an elegant abstract visual metaphor built from architecture, light, layered materials, and purposeful motion.`,
     `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
     "Premium commercial art direction, strong depth, one clear focal point, refined lighting, and generous negative space.",
-    "Do not depict people, faces, bodies, weapons, conflict, politics, medical content, brands, logos, readable text, dashboards, presentation slides, or floating UI cards."
-  ].join("\n");
+    "Do not depict people, faces, bodies, weapons, conflict, politics, medical content, dashboards, presentation slides, or floating UI cards."
+  ].join("\n"));
 }
 
 function isSafetyFiltered(error: unknown) {
@@ -142,9 +143,9 @@ async function generateSceneImage(
   let qualityMetadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"] | undefined;
   for (let qualityAttempt = 0; qualityAttempt < 2; qualityAttempt += 1) {
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
-    const attemptPrompt = qualityAttempt === 0
+    const attemptPrompt = enforceTextFreeImagePrompt(qualityAttempt === 0
       ? prompt
-      : `${prompt}\nQuality correction: produce a fully resolved, information-rich cinematic frame with clear subject separation, detailed materials, and meaningful foreground, midground, and background. Avoid empty gradients or featureless surfaces.`;
+      : `${prompt}\nQuality correction: produce a fully resolved, information-rich cinematic frame with clear subject separation, detailed materials, and meaningful foreground, midground, and background. Avoid empty gradients or featureless surfaces.`);
     let generatedBody: Buffer;
     let generatedModel: string;
     let effectivePrompt = attemptPrompt;
