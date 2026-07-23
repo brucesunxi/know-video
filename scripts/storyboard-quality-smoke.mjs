@@ -43,6 +43,10 @@ assert(storyboardQualityIssues(mutate(0, { visualPrompt: "A plain studio dashboa
 assert(storyboardQualityIssues(scenes.map((scene) => ({ ...scene, visualPrompt: scenes[0].visualPrompt })), { language: "中文" }).includes("scene visuals are too repetitive"));
 assert(storyboardQualityIssues(scenes.map((scene) => ({ ...scene, visualPrompt: scene.visualPrompt.replace(/^[^，,]+/u, "中等景别 medium shot") })), { language: "中文" }).includes("shot scale and camera angle lack variety"));
 assert(storyboardQualityIssues(scenes.map((scene) => ({ ...scene, voiceover: `现在开始讲述故事${scene.voiceover}` })), { language: "中文" }).includes("voiceover openings repeat mechanically"));
+assert(storyboardQualityIssues(scenes.map((scene, index) => ({
+  ...scene,
+  voiceover: `DIY 游戏${index === 0 ? "让玩家快速开始创作。" : index === 1 ? "把关卡规则变得更容易理解。" : index === 2 ? "帮助玩家完成自己的作品。" : "让分享和复玩更自然。"}`
+})), { language: "中文" }, "DIY 游戏产品介绍", "为 DIY 游戏制作一支产品介绍视频").includes("voiceover starts with the product name too often"));
 assert(storyboardQualityIssues(mutate(3, {
   title: "空间延展",
   voiceover: "画面继续展示更多细节，让观众看到系统内部的持续变化。",

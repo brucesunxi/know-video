@@ -157,12 +157,12 @@ function businessFallbackNarrations(
     const responsibility = concept(/accountability|responsibility|ownership/i, "责任链路", "accountability chains");
     const risk = concept(/risk|signal/i, "风险信号地图", "risk signal maps");
     return [
-      `${subject} turns scattered project pressure into a clear operating view, so teams can see what needs attention first.`,
+      `When pressure scatters across the project, ${subject} makes the first risk visible and actionable.`,
       `Instead of relying on memory, ${gates} connect approvals, ownership, and key decisions into one visible path.`,
       `${evidence} move through ${record}, giving every important judgment a source, owner, and next step.`,
       `When ${risk} change, the team can follow ${responsibility} to locate issues and recover context quickly.`,
-      `The result is steadier execution: ${subject} helps projects move forward with evidence, alignment, and confidence.`,
-      `${subject} closes the loop by making the next action clear, reviewable, and ready for delivery.`
+      `The result is steadier execution, with evidence, alignment, and confidence moving in the same direction.`,
+      `By the end, the next action is clear, reviewable, and ready for delivery.`
     ].map((line, index) => factHint(index) && factHint(index)!.length < 120 ? `${line} ${factHint(index)}` : line);
   }
 
@@ -177,12 +177,12 @@ function businessFallbackNarrations(
   const responsibility = hasResponsibility ? "责任链" : "协作链";
   const risk = hasRisk ? "风险变化" : "项目变化";
   const lines = [
-    `${subject}把项目压力整理成清晰视图，让团队先看见风险。`,
+    `当项目压力分散时，${subject}先让关键风险浮出水面。`,
     `${gates}串起授权和${responsibility}，每个关键判断都有依据。`,
     `${evidence}沿${record}沉淀，材料、预算和阵容变化都可追溯。`,
     `当${risk}出现时，团队顺着${responsibility}快速定位问题。`,
-    `最终，${subject}让项目推进更稳，协作更顺，复盘和交付也更可信。`,
-    `${subject}把下一步行动留在同一条记录里，让重要工作持续向前。`
+    `最终获得的不是一句结论，而是更稳的推进、更顺的协作。`,
+    `下一步行动留在同一条记录里，重要工作可以持续向前。`
   ];
   return lines;
 }

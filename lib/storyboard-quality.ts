@@ -97,7 +97,19 @@ function conceptToken(value: string) {
   return value
     .toLowerCase()
     .replace(/\s+/g, "")
-    .replace(/[，。！？；,.!?;:：、-]/g, "");
+    .replace(/[，。！？；,.!?;:：、\-_"'“”‘’()（）]/g, "");
+}
+
+function startsWithBriefSubject(line: string, subject: string) {
+  const compactSubject = conceptToken(subject);
+  if (compactSubject.length < 3) return false;
+  if (["这项产品", "这个产品", "thisproduct", "theproduct"].includes(compactSubject)) return false;
+  return conceptToken(line).startsWith(compactSubject);
+}
+
+function repeatedBriefSubjectOpenings(scenes: Scene[], subject: string) {
+  const count = scenes.filter((scene) => startsWithBriefSubject(scene.voiceover, subject)).length;
+  return count >= Math.min(2, Math.max(2, Math.ceil(scenes.length * 0.35)));
 }
 
 function coveredVisualConcepts(scenes: Scene[], concepts: string[]) {
@@ -169,6 +181,9 @@ export function storyboardQualityIssues(
     const narration = `${projectTitle ?? ""} ${scenes.map((scene) => scene.voiceover).join(" ")}`.toLowerCase();
     if (isDistinctBrand && !narration.includes(subject.toLowerCase())) {
       issues.push("voiceover loses the client's named company or product");
+    }
+    if (repeatedBriefSubjectOpenings(scenes, subject)) {
+      issues.push("voiceover starts with the product name too often");
     }
     const concepts = extractBriefVisualConcepts(brief, options?.language !== "英文")
       .filter((concept) => !/^[A-Z][A-Za-z0-9_-]{2,}$/u.test(concept));

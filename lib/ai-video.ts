@@ -84,6 +84,25 @@ function normalizedNarrationOpening(value: string) {
   return (value.toLowerCase().match(/[a-z0-9]+/g) ?? []).slice(0, 4).join(" ");
 }
 
+function compactNarrationToken(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[，。！？；,.!?;:：、\-_"'“”‘’()（）]/g, "");
+}
+
+function startsWithNarrationSubject(line: string, subject: string) {
+  const normalizedSubject = compactNarrationToken(subject);
+  if (normalizedSubject.length < 3) return false;
+  if (["这项产品", "这个产品", "thisproduct", "theproduct"].includes(normalizedSubject)) return false;
+  return compactNarrationToken(line).startsWith(normalizedSubject);
+}
+
+function repeatedSubjectOpenings(lines: string[], subject: string) {
+  const repeated = lines.filter((line) => startsWithNarrationSubject(line, subject)).length;
+  return repeated >= Math.min(2, Math.max(2, Math.ceil(lines.length * 0.35)));
+}
+
 function isChineseTreatment(treatment: Treatment) {
   return /中文|chinese|简体|普通话/i.test(treatment.language)
     || (treatment.beats.map((beat) => beat.narrationLine).join("").match(/\p{Script=Han}/gu) ?? []).length >= 8;
@@ -121,11 +140,12 @@ function localNarrationLine(treatment: Treatment, beat: Treatment["beats"][numbe
   const sourceFact = compactClause(beat.sourceFact, 14);
 
   const chineseTemplates = [
-    [`${subject}面向${audience}`, `把${problem}变清楚`],
-    [`${subject}整合${sourceFact || offering}`, `形成${outcome || "可执行路径"}`],
-    [`${offering || subject}突出${differentiator || sourceFact}`, "让团队更快判断"],
-    [`${subject}${proof ? `以${proof}` : `依靠${differentiator || offering}`}`, "建立可信决策"],
-    [`${subject}帮助客户${outcome || "完成关键决策"}`, compactClause(brief.callToAction, 12) || "持续向前"]
+    [`面对${problem || "关键压力"}`, `${subject}先把问题变清楚`],
+    [`关键变化来自${sourceFact || offering || "核心能力"}`, `形成${outcome || "可执行路径"}`],
+    [`围绕${differentiator || offering || subject}`, "团队更快对齐判断"],
+    [`有了${proof || sourceFact || "清晰依据"}`, "每个决定都更可信"],
+    [`最终交付的是${outcome || "稳定结果"}`, compactClause(brief.callToAction, 12) || "持续向前"],
+    [`给${audience || "客户"}留下的`, `是更清楚的下一步`]
   ];
   if (isChineseTreatment(treatment)) {
     return joinChineseParts(chineseTemplates[index % chineseTemplates.length].filter(Boolean));
@@ -133,18 +153,20 @@ function localNarrationLine(treatment: Treatment, beat: Treatment["beats"][numbe
 
   const englishSubject = subject || "The product";
   const englishTemplates = [
-    `${englishSubject} helps ${brief.audience} solve ${problem || "a costly operational bottleneck"}.`,
-    `${englishSubject} turns ${sourceFact || offering || "scattered work"} into ${outcome || "a clearer business outcome"}.`,
-    `${offering || englishSubject} stands out through ${differentiator || sourceFact || "a focused operating advantage"}.`,
-    `${englishSubject} builds trust with ${proof || differentiator || "a clearer way to prove value"}.`,
-    `${englishSubject} gives customers ${outcome || "a confident next step"}: ${brief.callToAction}.`
+    `When ${brief.audience || "customers"} face ${problem || "a costly bottleneck"}, ${englishSubject} makes the next move clear.`,
+    `The shift starts with ${sourceFact || offering || "the core workflow"}, turning pressure into ${outcome || "a clearer business outcome"}.`,
+    `Around ${differentiator || offering || englishSubject}, teams align faster and judge what matters.`,
+    `With ${proof || sourceFact || "a clearer basis for trust"}, every decision feels more grounded.`,
+    `What customers receive is ${outcome || "a confident next step"}: ${brief.callToAction}.`,
+    `The story closes on momentum, with the next action visible and ready.`
   ];
   return englishTemplates[index % englishTemplates.length].replace(/\s+/g, " ").trim();
 }
 
-function shouldLocallyRepairNarrationLine(line: string, averageSceneSeconds: number) {
+function shouldLocallyRepairNarrationLine(line: string, averageSceneSeconds: number, subject?: string) {
   const estimated = estimateNarrationSeconds(line);
   return hasMetaProductionNarration(line)
+    || Boolean(subject && startsWithNarrationSubject(line, subject))
     || estimated < Math.max(1.8, averageSceneSeconds * 0.62)
     || estimated > Math.max(1.4, averageSceneSeconds * 1.12);
 }
@@ -154,11 +176,16 @@ function locallyRepairTreatmentNarration(treatment: Treatment, targetDuration: n
   const totalSeconds = treatment.beats.reduce((sum, beat) => sum + estimateNarrationSeconds(beat.narrationLine), 0);
   const repairAll = totalSeconds < Math.max(5, targetDuration * 0.7)
     || totalSeconds > Math.max(3, targetDuration - treatment.beats.length * 0.28);
+  const subject = treatment.commercialBrief.subject;
+  let subjectOpeningAllowance = 1;
   return {
     ...treatment,
     beats: treatment.beats.map((beat, index) => {
       const line = beat.narrationLine.trim();
-      if (!repairAll && !shouldLocallyRepairNarrationLine(line, averageSceneSeconds)) return beat;
+      const startsWithSubject = startsWithNarrationSubject(line, subject);
+      const repairSubjectOpening = startsWithSubject && subjectOpeningAllowance <= 0;
+      if (startsWithSubject && subjectOpeningAllowance > 0) subjectOpeningAllowance -= 1;
+      if (!repairAll && !repairSubjectOpening && !shouldLocallyRepairNarrationLine(line, averageSceneSeconds)) return beat;
       return {
         ...beat,
         narrationLine: localNarrationLine(treatment, beat, index)
@@ -172,6 +199,9 @@ function treatmentNarrationIssues(treatment: Treatment, targetDuration: number) 
   const issues: string[] = [];
   const openings = lines.map(normalizedNarrationOpening).filter((value) => value.length >= 6);
   if (new Set(openings).size !== openings.length) issues.push("narration openings repeat mechanically");
+  if (repeatedSubjectOpenings(lines, treatment.commercialBrief.subject)) {
+    issues.push("narration starts with the product name too often");
+  }
   if (lines.some(hasMetaProductionNarration)) {
     issues.push("narration describes video production instead of the client's business");
   }
@@ -617,6 +647,7 @@ function blockingStoryboardIssues(issues: string[]) {
     || issue === "scene structure is generic"
     || issue === "voiceover narrates the production instead of the client's company or product"
     || issue === "voiceover loses the client's named company or product"
+    || issue === "voiceover starts with the product name too often"
     || issue === "voiceover does not fit comfortably inside its scene duration"
     || issue === "voiceover is too sparse for the scene duration"
     || issue === "scene content is not fully localized in Chinese"
@@ -659,6 +690,7 @@ async function createTreatment(
           "Extract business structures from the client text and make them recurring visual motifs when present: gates, records, responsibility chains, evidence packets, approval paths, budget boundaries, risk signals, or scenario tables.",
           "Separate production instructions (make a video, duration, format, style, scenes) from the company or product being promoted.",
           "The spoken narrative must communicate the client's company, product, customer problem, differentiators, evidence, and outcome. It must never describe the act of making or watching this video unless video creation is itself the client's product.",
+          "Mention the promoted subject naturally, but do not start multiple narrationLine values with the same product name or category. Vary openings across problem, action, proof, human change, and outcome.",
           "Each beat must advance one narrative arc and introduce a distinct visual event.",
           "Each beat must cite one sourceFact from commercialBrief and contain one narrationLine that is final, audience-facing spoken copy. It must not contain camera, scene, storyboard, generation, or production instructions.",
           "The final beat must resolve into a concrete delivery, outcome, or call-to-action moment.",
@@ -707,6 +739,7 @@ async function createTreatment(
             "Repair the treatment while preserving every verified client fact and the required beat count.",
             "Separate production instructions from promoted-company content.",
             "Rewrite every narrationLine as concise, natural, audience-facing commercial narration grounded in its sourceFact.",
+            "Do not start multiple narrationLine values with the same product name or category; vary the first phrase of every beat.",
             "Do not invent proof, metrics, customers, awards, or capabilities. Return strict JSON only."
           ].join(" ")
         },
