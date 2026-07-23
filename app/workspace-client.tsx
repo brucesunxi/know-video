@@ -989,6 +989,9 @@ function requestErrorMessage(error: unknown, fallback: string) {
   ) {
     return `${fallback}请求超时，请稍后重试。`;
   }
+  if (/failed to fetch|load failed|networkerror|network request failed|fetch failed/iu.test(message)) {
+    return `${fallback}网络连接中断，请检查上传文件大小、网络或稍后重试。`;
+  }
   return error instanceof Error ? error.message : fallback;
 }
 
@@ -4329,22 +4332,29 @@ export function WorkspaceClient({
     requestId: string,
     metadata: Pick<GenerationReferenceAsset, "derivedFrom" | "referenceRole" | "actualDurationSeconds"> = {}
   ): Promise<GenerationReferenceAsset> {
-    const response = await fetch("/api/generation-assets/upload-url", {
+    const form = new FormData();
+    form.set("file", file);
+    form.set("requestId", requestId);
+    if (metadata.derivedFrom) form.set("derivedFrom", metadata.derivedFrom);
+    if (metadata.referenceRole) form.set("referenceRole", metadata.referenceRole);
+    if (metadata.actualDurationSeconds) form.set("actualDurationSeconds", String(metadata.actualDurationSeconds));
+    const response = await fetch("/api/generation-assets/upload", {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ requestId, name: file.name, size: file.size, contentType: file.type })
+      body: form
     });
-    const session = await response.json() as { key?: string; uploadUrl?: string; error?: string };
-    if (!response.ok || !session.key || !session.uploadUrl) {
-      throw new Error(session.error || `无法上传“${file.name}”。`);
+    const result = await response.json().catch(() => ({})) as GenerationReferenceAsset & { error?: string };
+    if (!response.ok || !result.key) {
+      throw new Error(result.error || `无法上传“${file.name}”。`);
     }
-    const upload = await fetch(session.uploadUrl, {
-      method: "PUT",
-      headers: { "content-type": file.type },
-      body: file
-    });
-    if (!upload.ok) throw new Error(`云端存储拒绝了“${file.name}”（${upload.status}）。`);
-    return { key: session.key, name: file.name, size: file.size, contentType: file.type, ...metadata };
+    return {
+      key: result.key,
+      name: result.name || file.name,
+      size: result.size || file.size,
+      contentType: result.contentType || file.type,
+      derivedFrom: result.derivedFrom,
+      referenceRole: result.referenceRole,
+      actualDurationSeconds: result.actualDurationSeconds
+    };
   }
 
   async function createVideo(event: FormEvent<HTMLFormElement>) {

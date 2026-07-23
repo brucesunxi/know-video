@@ -123,6 +123,8 @@ assert.equal(reprioritized.currentVersion.scenes[1].style.referenceAssets[1].key
 
 const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
 assert.match(workspace, /referenceAssets: uploadedReferences/);
+assert.match(workspace, /\/api\/generation-assets\/upload"/);
+assert.doesNotMatch(workspace, /\/api\/generation-assets\/upload-url"[\s\S]*method: "PUT"/);
 assert.match(workspace, /sceneNumbers: missingImageSceneNumbers/);
 assert.match(workspace, /sceneNumbers: missingAudioSceneNumbers/);
 assert.match(workspace, /if \(missingImageSceneNumbers\.length > 0\)/);
@@ -163,6 +165,11 @@ assert.match(projectsRoute, /referenceAssets: z\.array\(referenceAssetSchema\)\.
 assert.match(projectsRoute, /prioritizedVisualReferences/);
 assert.match(projectsRoute, /reference\.referenceRole === "video-poster"/);
 assert.match(projectsRoute, /uploadedVideoNames\.has\(reference\.derivedFrom\)/);
+
+const generationUploadRoute = fs.readFileSync(new URL("../app/api/generation-assets/upload/route.ts", import.meta.url), "utf8");
+assert.match(generationUploadRoute, /requireCurrentUser/);
+assert.match(generationUploadRoute, /uploadToR2/);
+assert.match(generationUploadRoute, /matchesDeclaredAssetType/);
 
 const cloudflare = fs.readFileSync(new URL("../lib/cloudflare-ai.ts", import.meta.url), "utf8");
 assert.match(cloudflare, /@cf\/moondream\/moondream3\.1-9B-A2B/);
