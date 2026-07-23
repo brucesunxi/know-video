@@ -52,7 +52,7 @@ const legacy = auditProjectMedia(project([scene(1, {
   ]
 })]));
 assert.equal(legacy.ready, false);
-assert.deepEqual(Array.from(legacy.errors, (issue) => issue.code), ["legacy-chinese-voice", "voice-mismatch", "audio-overrun"]);
+assert.deepEqual(Array.from(legacy.errors, (issue) => issue.code), ["legacy-chinese-voice", "voice-mismatch"]);
 assert.deepEqual(Array.from(legacy.repairAudioSceneNumbers), [1]);
 
 const silentTail = auditProjectMedia(project([scene(1, {

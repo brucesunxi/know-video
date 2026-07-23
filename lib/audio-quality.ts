@@ -176,12 +176,6 @@ export function assertUsableSpeechAudio(
     throw new Error("语音服务返回的音频后半段异常静音。");
   }
   if (
-    options.targetDurationSeconds
-    && inspection.durationSeconds > options.targetDurationSeconds + 0.18
-  ) {
-    throw new Error("旁白内容过长，无法在当前场景时长内自然读完。");
-  }
-  if (
     options.expectedTextDurationSeconds
     && options.expectedTextDurationSeconds >= 0.8
     && inspection.durationSeconds > Math.max(

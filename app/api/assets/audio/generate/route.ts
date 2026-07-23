@@ -71,7 +71,7 @@ export async function POST(request: Request) {
         error: mediaGenerationFailureMessage(
           "配音",
           progress,
-          "请缩短过长旁白后重试；如果旁白长度正常，请检查语音服务配置。"
+          "请重试失败场景；系统会按自然语速自动延长对应镜头。"
         ),
         project: updated,
         ...progress

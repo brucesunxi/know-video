@@ -75,9 +75,7 @@ export function auditProjectMedia(project: Project) {
       if (scene.style.narrationVoice && actualVoice && actualVoice !== scene.style.narrationVoice) {
         issues.push({ code: "voice-mismatch", sceneNumber: scene.sceneNumber, media: "audio", severity: "error", message: `场景 ${scene.sceneNumber} 的实际音色与当前选择不一致。` });
       }
-      if (actualDuration && actualDuration > scene.durationSeconds + 0.18) {
-        issues.push({ code: "audio-overrun", sceneNumber: scene.sceneNumber, media: "audio", severity: "error", message: `场景 ${scene.sceneNumber} 的配音比镜头长 ${(actualDuration - scene.durationSeconds).toFixed(1)} 秒。` });
-      } else if (!actualDuration && audio.metadata?.source === "ai-speech") {
+      if (!actualDuration && audio.metadata?.source === "ai-speech") {
         issues.push({ code: "audio-duration-unknown", sceneNumber: scene.sceneNumber, media: "audio", severity: "warning", message: `场景 ${scene.sceneNumber} 的配音缺少时长质检信息。` });
       }
       const trailingSilence = Number(audio.metadata?.trailingSilenceSeconds);
