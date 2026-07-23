@@ -34,8 +34,8 @@ const audio = {
   url: "/voice.wav",
   metadata: { actualDurationSeconds: 3.2 }
 };
-assert.equal(narrationDurationInFrames({ assets: [audio] }, 30, 1, 180), 133);
-assert.equal(narrationDurationInFrames({ assets: [audio] }, 30, 1.25, 180), 133);
+assert.equal(narrationDurationInFrames({ assets: [audio] }, 30, 1, 180), 96);
+assert.equal(narrationDurationInFrames({ assets: [audio] }, 30, 1.25, 180), 77);
 assert.equal(narrationDurationInFrames({ assets: [{ ...audio, metadata: {} }] }, 30, 1, 180), 180);
 assert.equal(narrationDurationInFrames({ assets: [] }, 30, 1, 180), 0);
 
@@ -44,8 +44,8 @@ const shortAudio = {
   url: "/short.wav",
   metadata: { actualDurationSeconds: 1.8 }
 };
-assert.equal(narrationAudioPlaybackRate({ assets: [shortAudio] }, 1, 180, 30), 0.72);
-assert.equal(narrationDurationInFrames({ assets: [shortAudio] }, 30, 1, 180), 75);
+assert.equal(narrationAudioPlaybackRate({ assets: [shortAudio] }, 1, 180, 30), 1);
+assert.equal(narrationDurationInFrames({ assets: [shortAudio] }, 30, 1, 180), 54);
 
 const text = "第一句。第二句更长一些。";
 const first = activeNarrationCaption(text, 0, 120);

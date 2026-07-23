@@ -4,7 +4,7 @@ import { planningSceneSnapshot, versionAttachmentContext } from "@/lib/attachmen
 import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip } from "@/lib/edit-intent";
 import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
-import { fitScenesNarration } from "@/lib/narration-fit";
+import { fitScenesNarrationApproximate } from "@/lib/narration-fit";
 import {
   detectBriefDomain,
   extractBriefVisualConcepts,
@@ -231,14 +231,14 @@ function shouldLocallyRepairNarrationLine(line: string, averageSceneSeconds: num
   const estimated = estimateNarrationSeconds(line);
   return hasMetaProductionNarration(line)
     || Boolean(subject && startsWithNarrationSubject(line, subject))
-    || estimated < Math.max(1.8, averageSceneSeconds * 0.62)
+    || estimated < Math.max(1.35, averageSceneSeconds * 0.38)
     || estimated > Math.max(1.4, averageSceneSeconds * 1.12);
 }
 
 function locallyRepairTreatmentNarration(treatment: Treatment, targetDuration: number) {
   const averageSceneSeconds = targetDuration / treatment.beats.length;
   const totalSeconds = treatment.beats.reduce((sum, beat) => sum + estimateNarrationSeconds(beat.narrationLine), 0);
-  const repairAll = totalSeconds < Math.max(5, targetDuration * 0.7)
+  const repairAll = totalSeconds < Math.max(4, targetDuration * 0.45)
     || totalSeconds > Math.max(3, targetDuration - treatment.beats.length * 0.28);
   const subject = treatment.commercialBrief.subject;
   let subjectOpeningAllowance = 1;
@@ -270,7 +270,7 @@ function treatmentNarrationIssues(treatment: Treatment, targetDuration: number) 
     issues.push("narration describes video production instead of the client's business");
   }
   const estimatedTotal = lines.reduce((sum, line) => sum + estimateNarrationSeconds(line), 0);
-  if (estimatedTotal < Math.max(5, targetDuration * 0.7)) {
+  if (estimatedTotal < Math.max(4, targetDuration * 0.45)) {
     issues.push("locked narration is too sparse for the requested video duration");
   }
   if (estimatedTotal > Math.max(3, targetDuration - treatment.beats.length * 0.28)) {
@@ -284,7 +284,7 @@ function treatmentNarrationIssues(treatment: Treatment, targetDuration: number) 
     issues.push("locked narration cannot fit the requested integer scene durations without truncation");
   }
   const averageSceneSeconds = targetDuration / treatment.beats.length;
-  if (lines.some((line) => estimateNarrationSeconds(line) < Math.max(1.8, averageSceneSeconds * 0.62))) {
+  if (lines.some((line) => estimateNarrationSeconds(line) < Math.max(1.35, averageSceneSeconds * 0.38))) {
     issues.push("one or more locked narration lines are too sparse to carry their scene");
   }
   if (lines.some((line) => estimateNarrationSeconds(line) > Math.max(1.4, averageSceneSeconds * 1.12))) {
@@ -633,26 +633,11 @@ function requestedSceneCount(prompt: string, targetDuration: number, options?: G
   return Math.min(8, maximumFeasibleCount, Math.max(3, count));
 }
 
-function distributeDurations(values: number[], target: number) {
-  const source = values.map((value) => Math.max(2, value));
-  const sourceTotal = source.reduce((sum, value) => sum + value, 0) || source.length;
-  const scaled = source.map((value) => Math.max(2, Math.round((value / sourceTotal) * target)));
-  let difference = target - scaled.reduce((sum, value) => sum + value, 0);
-  let cursor = 0;
-
-  while (difference !== 0 && cursor < 500) {
-    const index = cursor % scaled.length;
-    if (difference > 0) {
-      scaled[index] += 1;
-      difference -= 1;
-    } else if (scaled[index] > 2) {
-      scaled[index] -= 1;
-      difference += 1;
-    }
-    cursor += 1;
-  }
-
-  return scaled;
+function approximateDurationRange(target: number) {
+  return {
+    minimum: Math.max(2, Math.round(target * 0.86)),
+    maximum: Math.max(3, Math.round(target * 1.14))
+  };
 }
 
 function continuityDirection(treatment: Treatment) {
@@ -690,7 +675,6 @@ function normalizeStoryboard(
   prompt = "",
   options?: GenerationOptions
 ) {
-  const durations = distributeDurations(parsed.scenes.map((scene) => scene.durationSeconds), targetDuration);
   const continuity = continuityDirection(treatment);
   const conceptDirection = briefVisualConceptDirection(prompt, options);
 
@@ -702,14 +686,14 @@ function normalizeStoryboard(
     voiceover: treatment.beats[index]?.narrationLine.trim() || scene.voiceover.trim(),
     visualPrompt: `${scene.visualPrompt.trim()}\n${continuity}${conceptDirection ? `\n${conceptDirection}` : ""}`,
     motionPrompt: `${scene.motionPrompt.trim()} Camera language: ${treatment.visualBible.cameraLanguage}. Transition: ${treatment.beats[index]?.transition ?? "motivated visual match cut"}.`,
-    durationSeconds: durations[index],
+    durationSeconds: scene.durationSeconds,
     style: {
       ...scene.style,
       palette: treatment.visualBible.palette
     },
     assets: []
   }));
-  return fitScenesNarration(scenes, targetDuration, { preserveNarration: true });
+  return fitScenesNarrationApproximate(scenes, targetDuration);
 }
 
 function blockingStoryboardIssues(issues: string[]) {
@@ -720,8 +704,8 @@ function blockingStoryboardIssues(issues: string[]) {
     || issue === "voiceover loses the client's named company or product"
     || issue === "voiceover starts with the product name too often"
     || issue === "voiceover conflicts with the client's industry"
+    || issue === "game is framed as a product explainer"
     || issue === "voiceover does not fit comfortably inside its scene duration"
-    || issue === "voiceover is too sparse for the scene duration"
     || issue === "scene content is not fully localized in Chinese"
     || issue === "scene content is not fully localized in English"
     || issue === "project title is not localized in the requested language"
@@ -747,6 +731,9 @@ async function createTreatment(
     ? `Each narrationLine is final spoken copy: approximately ${Math.max(3, Math.floor(averageSceneSeconds * 1.15))}-${Math.max(4, Math.floor(averageSceneSeconds * 2.2))} English words.`
     : `Each narrationLine is final spoken copy: approximately ${Math.max(8, Math.floor(averageSceneSeconds * 2.9))}-${Math.max(12, Math.floor(averageSceneSeconds * 4.25))} Chinese characters, excluding punctuation.`;
   const conceptDirection = briefVisualConceptDirection(prompt, options);
+  const domainDirection = detectBriefDomain(prompt) === "gaming"
+    ? "This is a game trailer or gameplay introduction, not a product explainer. Write about the playable fantasy, player agency, core loop, challenge, progression, feedback, and invitation to play. Never frame the game as a business product, solution, platform, service, workflow, or efficiency tool."
+    : "";
   const completion = await textModel.client.chat.completions.create({
     model: textModel.model,
     response_format: { type: "json_object" },
@@ -774,7 +761,7 @@ async function createTreatment(
       },
       {
         role: "user",
-        content: `Creative request:\n${prompt}${referenceContext ? `\n\n${referenceContext}` : ""}${conceptDirection ? `\n\n${conceptDirection}` : ""}\n\nTarget duration: ${targetDuration} seconds. Required beats: exactly ${sceneCount}.\n${languageDirection}\n${styleDirection}\n${narrationBudgetDirection}\n\nReturn JSON in this exact shape:\n{ "workingTitle": string, "language": string, "audience": string, "corePromise": string, "commercialBrief": { "subject": string, "category": string, "audience": string, "customerProblem": string, "offering": string, "differentiators": string[1-5], "proofPoints": string[0-4], "outcomes": string[1-4], "callToAction": string }, "creativeConcept": string, "narrativeArc": string, "visualBible": { "world": string, "artDirection": string, "palette": string[3-6], "lighting": string, "cameraLanguage": string, "recurringMotif": string, "avoid": string[2-10] }, "beats": [{ "purpose": string, "sourceFact": string, "narrationLine": string, "emotionalBeat": string, "visualAnchor": string, "transition": string }] }`
+        content: `Creative request:\n${prompt}${referenceContext ? `\n\n${referenceContext}` : ""}${conceptDirection ? `\n\n${conceptDirection}` : ""}${domainDirection ? `\n\nDomain directive: ${domainDirection}` : ""}\n\nTarget duration: ${targetDuration} seconds. Required beats: exactly ${sceneCount}.\n${languageDirection}\n${styleDirection}\n${narrationBudgetDirection}\n\nReturn JSON in this exact shape:\n{ "workingTitle": string, "language": string, "audience": string, "corePromise": string, "commercialBrief": { "subject": string, "category": string, "audience": string, "customerProblem": string, "offering": string, "differentiators": string[1-5], "proofPoints": string[0-4], "outcomes": string[1-4], "callToAction": string }, "creativeConcept": string, "narrativeArc": string, "visualBible": { "world": string, "artDirection": string, "palette": string[3-6], "lighting": string, "cameraLanguage": string, "recurringMotif": string, "avoid": string[2-10] }, "beats": [{ "purpose": string, "sourceFact": string, "narrationLine": string, "emotionalBeat": string, "visualAnchor": string, "transition": string }] }`
       }
     ],
     temperature: 0.6
@@ -845,6 +832,7 @@ async function repairStoryboard(params: {
   referenceContext?: string;
 }) {
   const conceptDirection = briefVisualConceptDirection(params.prompt, params.options);
+  const durationRange = approximateDurationRange(params.targetDuration);
   const completion = await params.textModel.client.chat.completions.create({
     model: params.textModel.model,
     response_format: { type: "json_object" },
@@ -867,7 +855,7 @@ async function repairStoryboard(params: {
       },
       {
         role: "user",
-        content: `Original request:\n${params.prompt}${params.referenceContext ? `\n\n${params.referenceContext}` : ""}${conceptDirection ? `\n\n${conceptDirection}` : ""}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and exactly ${params.targetDuration} total seconds, with every scene at least 2 seconds. Copy each treatment beat's narrationLine into the matching scene voiceover exactly. ${params.options ? `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters. Across four or more scenes, explicitly use at least three different shot scales or camera angles. Give every scene a different composition and visual event. If brief-derived visual anchors are provided, each scene must include at least one anchor as a concrete visible motif or workflow object. The last scene must resolve the film with a concrete completion, delivery, launch, export, share, or next-action moment.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
+        content: `Original request:\n${params.prompt}${params.referenceContext ? `\n\n${params.referenceContext}` : ""}${conceptDirection ? `\n\n${conceptDirection}` : ""}\n\nApproved treatment:\n${JSON.stringify(params.treatment, null, 2)}\n\nRejected storyboard:\n${JSON.stringify(params.storyboard, null, 2)}\n\nQuality issues:\n- ${params.issues.join("\n- ")}\n\nRequirements: exactly ${params.treatment.beats.length} scenes and an approximate total duration of ${params.targetDuration} seconds, naturally landing between ${durationRange.minimum} and ${durationRange.maximum} seconds, with every scene at least 2 seconds. Copy each treatment beat's narrationLine into the matching scene voiceover exactly. ${params.options ? `The project title and every scene title, voiceover, visualPrompt, motionPrompt, style.theme, and style.mood must use ${params.options.language}. The visual style must remain ${params.options.style}.` : ""} Every visualPrompt must be at least 120 characters and every motionPrompt at least 60 characters. Across four or more scenes, explicitly use at least three different shot scales or camera angles. Give every scene a different composition and visual event. If brief-derived visual anchors are provided, each scene must include at least one anchor as a concrete visible motif or workflow object. The last scene must resolve the film with a concrete completion, delivery, launch, export, share, or next-action moment.\n\nJSON shape: { "title": string, "scenes": [{ "title": string, "voiceover": string, "visualPrompt": string, "motionPrompt": string, "durationSeconds": number, "style": { "theme": string, "palette": string[], "mood": string } }] }`
       }
     ],
     temperature: 0.35
@@ -896,6 +884,7 @@ export async function createStoryboardProject(
 
   try {
     const targetDuration = requestedDuration(prompt, options);
+    const durationRange = approximateDurationRange(targetDuration);
     const treatment = await createTreatment(prompt, textModel, options, referenceContext);
     const conceptDirection = briefVisualConceptDirection(prompt, options);
     const completion = await textModel.client.chat.completions.create({
@@ -909,7 +898,7 @@ export async function createStoryboardProject(
               "You are a meticulous storyboard director translating an approved treatment into production-ready shots.",
               "Return strict JSON only.",
               `Create exactly ${treatment.beats.length} scenes, one for each treatment beat, in the same order.`,
-              `The complete video must last exactly ${targetDuration} seconds after integer rounding, with every scene at least 2 seconds.`,
+              `Treat ${targetDuration} seconds as an approximate pacing target. Let the complete video land naturally between ${durationRange.minimum} and ${durationRange.maximum} seconds, with every scene at least 2 seconds.`,
               "The storyboard must play as a real short film, not a generic SaaS page outline or presentation.",
               "Never use generic section titles such as Customization, User Interface, Benefits, Features, Overview, or Conclusion.",
               "Every scene must have one unmistakable visual subject, a foreground action, an environment, depth, and a specific composition.",
@@ -944,13 +933,14 @@ export async function createStoryboardProject(
     let acceptedStoryboard = parsed;
     let scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration, prompt, options);
     let qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title, prompt);
-    if (qualityIssues.length > 0) {
-      console.warn(`[ai-video] Storyboard quality check requested a repair: ${qualityIssues.join(", ")}.`);
+    const initialRepairIssues = qualityIssues.filter((issue) => issue !== "voiceover is too sparse for the scene duration");
+    if (initialRepairIssues.length > 0) {
+      console.warn(`[ai-video] Storyboard quality check requested a repair: ${initialRepairIssues.join(", ")}.`);
       acceptedStoryboard = await repairStoryboard({
         prompt,
         treatment,
         storyboard: acceptedStoryboard,
-        issues: qualityIssues,
+        issues: initialRepairIssues,
         targetDuration,
         textModel,
         options,
@@ -965,6 +955,8 @@ export async function createStoryboardProject(
         }
         console.warn(`[ai-video] Accepting repaired storyboard with non-blocking quality warnings: ${qualityIssues.join(", ")}.`);
       }
+    } else if (qualityIssues.length > 0) {
+      console.warn(`[ai-video] Accepting storyboard with natural narration breathing room: ${qualityIssues.join(", ")}.`);
     }
 
     const narrationVoice = narrationVoiceForBrief(prompt);

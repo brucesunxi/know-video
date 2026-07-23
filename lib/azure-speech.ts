@@ -86,13 +86,13 @@ export async function generateAzureChineseSpeech(
     ? narrationVoiceProfile(narrationVoice).azureVoice
     : getOptionalEnv("AZURE_SPEECH_CHINESE_VOICE") || DEFAULT_CHINESE_VOICE;
   const profile = narrationVoiceProfile(narrationVoice);
-  let rate = Math.max(-20, Math.min(45, speechRateForDuration(text, durationSeconds) + profile.rateOffset));
+  let rate = Math.max(-5, Math.min(30, speechRateForDuration(text, durationSeconds) + profile.rateOffset));
   let body = await requestAzureSpeech({ key, region, voice, text, rate, pitch: profile.pitch });
   let actualDurationSeconds = assertUsableSpeechAudio(body).durationSeconds;
-  const targetSeconds = durationSeconds ? Math.max(1.3, durationSeconds - 0.18) : undefined;
+  const targetSeconds = durationSeconds ? Math.max(1.3, durationSeconds - 0.45) : undefined;
   const timingRatio = targetSeconds ? actualDurationSeconds / targetSeconds : 1;
-  const timingNeedsCorrection = timingRatio > 1.03 || timingRatio < 0.82;
-  const rateCanMove = timingRatio > 1 ? rate < 45 : rate > -20;
+  const timingNeedsCorrection = timingRatio > 1.04;
+  const rateCanMove = rate < 30;
   if (targetSeconds && timingNeedsCorrection && rateCanMove) {
     const nextRate = correctedSpeechRate(rate, actualDurationSeconds, targetSeconds);
     if (nextRate !== rate) {

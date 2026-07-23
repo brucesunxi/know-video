@@ -42,8 +42,9 @@ function containsChinese(text: string) {
 }
 
 function distributeFallbackDurations(sceneCount: number, targetDuration: number) {
-  const base = Math.floor(targetDuration / sceneCount);
-  const remainder = targetDuration - base * sceneCount;
+  const naturalDuration = Math.max(sceneCount * 3, Math.round(targetDuration * 0.9));
+  const base = Math.floor(naturalDuration / sceneCount);
+  const remainder = naturalDuration - base * sceneCount;
   return Array.from({ length: sceneCount }, (_, index) => base + (index < remainder ? 1 : 0));
 }
 
@@ -154,23 +155,26 @@ function domainFallbackNarrations(
   const factHint = (index: number) => facts[index]?.replace(/\s+/g, chinese ? "" : " ").trim();
 
   if (domain === "gaming") {
+    const coreAction = concept(/玩法|操控|建造|制作|战斗|解谜|gameplay|player|craft|build|combat|puzzle/i, "核心操作", "the core action");
+    const objective = concept(/关卡|目标|副本|quest|level|objective/i, "眼前的关卡目标", "the objective ahead");
+    const progression = concept(/成长|升级|养成|progression|upgrade/i, "角色成长", "character progression");
     if (!chinese) {
       return [
-        `From the first move, ${subject} puts players directly inside its core experience.`,
-        `The hook comes from readable rules, responsive feedback, and choices that visibly change what happens next.`,
-        `As the challenge grows, players learn through action and discover new ways to approach the objective.`,
-        `Different decisions create different outcomes, giving every run more variety and replay value.`,
-        `Reaching the goal feels earned because progress comes from the player's own timing, strategy, and creativity.`,
-        `Enter ${subject} and start the next challenge on your own terms.`
-      ].map((line, index) => factHint(index) && factHint(index)!.length < 110 ? `${factHint(index)}. ${line}` : line);
+        `Step into ${subject}, where the first decision already belongs to the player.`,
+        `${coreAction} is easy to read, and the world responds immediately to every move.`,
+        `With ${objective} in sight, players can observe, experiment, and find their own route.`,
+        `As ${progression} unfolds, familiar challenges open into new possibilities.`,
+        `A successful run feels earned because its outcome comes from the player's choices.`,
+        `Enter ${subject} and discover what your next run can become.`
+      ];
     }
     return [
-      `从第一次操作开始，${subject}就把玩家带进核心玩法。`,
-      "清楚的规则、即时的反馈，让每个选择都真正改变接下来的局面。",
-      "挑战逐步展开，玩家在行动中掌握技巧，也不断发现新的解法。",
-      "不同策略带来不同结果，每一次尝试都有变化，也更值得反复游玩。",
-      "完成目标时，成就感来自玩家亲手做出的判断、节奏与创造。",
-      `现在进入${subject}，开始属于你的下一局。`
+      `踏进${subject}，第一步就由玩家自己决定。`,
+      `${coreAction}清楚直接，世界会立刻回应每次行动。`,
+      `面对${objective}，观察、尝试，再走出自己的路线。`,
+      `随着${progression}展开，熟悉的挑战也有了新可能。`,
+      "当目标达成，成就感来自玩家亲手做出的选择。",
+      `进入${subject}，看看下一局会变成什么样。`
     ];
   }
 
@@ -450,11 +454,13 @@ export function generateProjectFromPrompt(
   const briefConcepts = extractBriefVisualConcepts(prompt, chinese);
   const conceptSuffix = visualConceptSuffix(prompt, chinese);
   const styleSuffix = options?.style ? ` ${chinese ? "视觉风格档案" : "Visual style bible"}：${visualStyleDirection(options.style)}` : "";
-  const fallbackTitle = briefSubject === "这项产品" || briefSubject === "This product"
-    ? title
-    : chinese ? `${briefSubject} 产品介绍` : `${briefSubject} Product Film`;
   const businessNarrations = domainFallbackNarrations(prompt, briefSubject, briefFacts, briefConcepts, chinese);
   const fallbackDomain = detectBriefDomain(prompt);
+  const fallbackTitle = briefSubject === "这项产品" || briefSubject === "This product"
+    ? title
+    : fallbackDomain === "gaming"
+      ? (chinese ? `${briefSubject} 游戏预告` : `${briefSubject} Game Trailer`)
+      : (chinese ? `${briefSubject} 产品介绍` : `${briefSubject} Product Film`);
   const fallbackTitles = fallbackDomain === "gaming"
     ? (chinese
         ? ["进入游戏", "玩法上手", "挑战升级", "策略变化", "赢得成果", "开始下一局"]

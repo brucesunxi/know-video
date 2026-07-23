@@ -163,7 +163,7 @@ function generationSpecItems(options: GenerationOptions) {
     ? `1 个${VIDEO_GENERATION_TIERS[options.videoTier].label}镜头`
     : "全片智能运镜";
   return [
-    { label: "目标时长", value: `${options.duration} 秒` },
+    { label: "目标时长", value: `约 ${options.duration} 秒` },
     { label: "分镜策略", value: sceneLabel },
     { label: "旁白语言", value: options.language },
     { label: "视觉风格", value: options.style },
@@ -1415,10 +1415,10 @@ function BriefScreen({
             <label>
               <span>视频时长</span>
               <select onChange={(event) => onOptionsChange({ ...options, duration: event.target.value as GenerationOptions["duration"] })} value={options.duration}>
-                <option value="15">15 秒</option>
-                <option value="30">30 秒</option>
-                <option value="45">45 秒</option>
-                <option value="60">60 秒</option>
+                <option value="15">约 15 秒</option>
+                <option value="30">约 30 秒</option>
+                <option value="45">约 45 秒</option>
+                <option value="60">约 60 秒</option>
               </select>
             </label>
             <label>

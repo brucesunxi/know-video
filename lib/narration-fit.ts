@@ -124,3 +124,39 @@ export function fitScenesNarration(
 
   return scenes.map((scene, index) => fitSceneNarration({ ...scene, durationSeconds: durations[index] }));
 }
+
+export function fitScenesNarrationApproximate(
+  scenes: Scene[],
+  targetDuration: number,
+  toleranceRatio = 0.14
+) {
+  if (scenes.length === 0) return scenes;
+  const minimumDuration = Math.max(
+    scenes.length * 2,
+    Math.round(targetDuration * (1 - toleranceRatio))
+  );
+  const maximumDuration = Math.max(
+    minimumDuration,
+    Math.round(targetDuration * (1 + toleranceRatio))
+  );
+  const durations = scenes.map((scene) => Math.max(
+    2,
+    Math.min(20, Math.ceil(Math.max(scene.durationSeconds, estimateNarrationSeconds(scene.voiceover) + 0.7)))
+  ));
+  let total = durations.reduce((sum, duration) => sum + duration, 0);
+
+  if (total > maximumDuration) {
+    return fitScenesNarration(scenes, maximumDuration, { preserveNarration: true });
+  }
+
+  let cursor = 0;
+  while (total < minimumDuration && cursor < 500) {
+    const index = cursor % durations.length;
+    if (durations[index] < 20) {
+      durations[index] += 1;
+      total += 1;
+    }
+    cursor += 1;
+  }
+  return scenes.map((scene, index) => ({ ...scene, durationSeconds: durations[index] }));
+}

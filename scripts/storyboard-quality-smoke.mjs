@@ -51,6 +51,12 @@ assert(storyboardQualityIssues(mutate(0, {
   voiceover: "当项目压力分散时，这款游戏先让关键风险浮出水面。",
   visualPrompt: `${scenes[0].visualPrompt} 企业治理控制室里出现授权责任链和证据包。`
 }), { language: "中文" }, "DIY 游戏产品介绍", "为 DIY 沙盒游戏制作一支介绍片，展示玩家建造关卡").includes("voiceover conflicts with the client's industry"));
+assert(storyboardQualityIssues(
+  scenes,
+  { language: "中文" },
+  "DIY 沙盒游戏产品介绍",
+  "为 DIY 沙盒游戏制作玩法预告，展示玩家建造关卡和角色成长"
+).includes("game is framed as a product explainer"));
 assert(storyboardQualityIssues(mutate(3, {
   title: "空间延展",
   voiceover: "画面继续展示更多细节，让观众看到系统内部的持续变化。",

@@ -39,6 +39,10 @@ const gamingIndustryLeakPatterns = [
   /项目压力|企业治理|授权责任|责任链|证据包|业务材料|审批流程|工作链路|团队对齐|风险信号/u,
   /enterprise pressure|governance workflow|approval chain|evidence packet|accountability chain|business workflow|team alignment/iu
 ];
+const gamingProductFramingPatterns = [
+  /产品介绍|产品宣传|解决方案|效率提升|平台能力|服务客户|业务价值/u,
+  /product (?:film|introduction|explainer)|business solution|improve efficiency|platform capability|customer service/iu
+];
 
 function hasChinese(value?: string) {
   return Boolean(value && /\p{Script=Han}/u.test(value));
@@ -182,9 +186,11 @@ export function storyboardQualityIssues(
   }
   if (brief) {
     if (detectBriefDomain(brief) === "gaming") {
-      const output = scenes.map((scene) => `${scene.voiceover}\n${baseVisualPrompt(scene)}`).join("\n");
+      const output = `${projectTitle ?? ""}\n${scenes.map((scene) => `${scene.voiceover}\n${baseVisualPrompt(scene)}`).join("\n")}`;
       const leaked = gamingIndustryLeakPatterns.some((pattern) => pattern.test(output) && !pattern.test(brief));
       if (leaked) issues.push("voiceover conflicts with the client's industry");
+      const productFraming = gamingProductFramingPatterns.some((pattern) => pattern.test(output) && !pattern.test(brief));
+      if (productFraming) issues.push("game is framed as a product explainer");
     }
     const subject = extractBriefSubject(brief, options?.language !== "英文");
     const isDistinctBrand = /^[A-Z][A-Z0-9_-]{2,}$/u.test(subject);

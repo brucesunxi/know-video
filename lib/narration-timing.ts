@@ -92,19 +92,17 @@ export function narrationDurationInFrames(
 export function narrationAudioPlaybackRate(
   scene: Pick<Scene, "assets">,
   productionPlaybackRate: number,
-  contentDurationInFrames: number,
-  fps: number
+  _contentDurationInFrames: number,
+  _fps: number
 ) {
   const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
   const actualDurationSeconds = Number(audio?.metadata?.actualDurationSeconds);
   if (!audio || !Number.isFinite(actualDurationSeconds) || actualDurationSeconds <= 0) {
     return productionPlaybackRate;
   }
-  const sceneSeconds = contentDurationInFrames / fps;
-  const targetNarrationSeconds = Math.min(sceneSeconds, Math.max(sceneSeconds * 0.74, sceneSeconds - 0.65));
-  if (actualDurationSeconds >= targetNarrationSeconds * productionPlaybackRate) return productionPlaybackRate;
-  const stretchedRate = actualDurationSeconds / Math.max(0.1, targetNarrationSeconds);
-  return Math.max(0.72, Math.min(productionPlaybackRate, stretchedRate));
+  // A short line should leave visual breathing room. Stretching it to fill the
+  // scene produces an unnatural, obviously slowed-down voice.
+  return productionPlaybackRate;
 }
 
 export function activeNarrationCaption(text: string, frame: number, narrationDurationInFrames: number) {

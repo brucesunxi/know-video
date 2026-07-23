@@ -9,7 +9,8 @@ export function speechRateForDuration(text: string, durationSeconds?: number) {
   if (!durationSeconds) return 0;
   const estimatedSeconds = estimateNarrationSeconds(text);
   const availableSeconds = Math.max(1.5, durationSeconds - 0.45);
-  return Math.max(-20, Math.min(45, Math.round((estimatedSeconds / availableSeconds - 1) * 100)));
+  if (estimatedSeconds <= availableSeconds * 1.02) return 0;
+  return Math.min(30, Math.round((estimatedSeconds / availableSeconds - 1) * 100));
 }
 
 function id3v2Size(body: Buffer) {
@@ -31,5 +32,5 @@ export function correctedSpeechRate(currentRate: number, actualSeconds: number, 
   if (actualSeconds <= 0 || targetSeconds <= 0) return currentRate;
   const currentFactor = 1 + currentRate / 100;
   const requiredFactor = currentFactor * (actualSeconds / targetSeconds);
-  return Math.max(-20, Math.min(45, Math.round((requiredFactor - 1) * 100)));
+  return Math.max(-5, Math.min(30, Math.round((requiredFactor - 1) * 100)));
 }

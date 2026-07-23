@@ -80,8 +80,11 @@ const visuals = project.currentVersion.scenes.map((scene) => scene.visualPrompt)
 const titles = project.currentVersion.scenes.map((scene) => scene.title);
 
 assert.equal(titles.join("|"), "进入游戏|玩法上手|挑战升级|策略变化|开始下一局");
+assert.match(project.title, /游戏预告/u);
+assert.doesNotMatch(project.title, /产品介绍/u);
 assert.match(narration, /玩家|玩法|游戏/u);
 assert.doesNotMatch(narration, /项目压力|授权|责任链|证据包|业务材料|风险信号/u);
+assert.doesNotMatch(narration, /产品|平台|解决方案|效率/u);
 assert.match(visuals, /玩家角色|关卡|游戏世界/u);
 assert.doesNotMatch(visuals, /企业治理|授权责任链|证据包|商业环境/u);
 

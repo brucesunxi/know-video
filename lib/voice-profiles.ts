@@ -16,15 +16,15 @@ export const narrationVoiceProfiles: Array<{
 }> = [
   {
     id: "male-clear",
-    label: "专业产品男声",
-    shortLabel: "产品男声",
-    description: "清晰利落、节奏明快，不使用独白腔",
-    useCase: "产品介绍 · 科技发布 · 功能演示",
-    sampleText: "让复杂流程自动运行，让团队把时间留给更重要的创造。Know Video，帮助企业高效呈现产品价值。",
+    label: "清晰活力男声",
+    shortLabel: "活力男声",
+    description: "自然利落、富有行动感，不使用汇报腔或独白腔",
+    useCase: "游戏介绍 · 科技发布 · 功能演示",
+    sampleText: "踏进新的世界，观察环境、选择路线，用自己的操作破解挑战。下一局，会由你创造出完全不同的结果。",
     azureVoice: "zh-CN-YunxiNeural",
     pitch: -1,
     rateOffset: 2,
-    direction: "Professional Mandarin male corporate explainer. Clear, concise and confident, with a polished product-demo cadence. Avoid dramatic monologue, audiobook, radio-host or sales-hype delivery."
+    direction: "Clear, energetic Mandarin male trailer narration. Natural and action-oriented, with varied emphasis and short clean pauses. Avoid corporate presentation, product-demo cadence, dramatic monologue, audiobook, radio-host or sales-hype delivery."
   },
   {
     id: "male-deep",

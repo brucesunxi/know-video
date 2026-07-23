@@ -6,7 +6,7 @@ const speechTiming = fs.readFileSync(new URL("../lib/speech-timing.ts", import.m
   .replace(/^export /gm, "");
 const source = fs.readFileSync(new URL("../lib/narration-fit.ts", import.meta.url), "utf8")
   .replace(/^import .*$/gm, "");
-const compiled = ts.transpileModule(`${speechTiming}\n${source}\nexport { fitNarrationToDuration, fitSceneNarration, fitScenesNarration, narrationComfortIssue };`, {
+const compiled = ts.transpileModule(`${speechTiming}\n${source}\nexport { fitNarrationToDuration, fitSceneNarration, fitScenesNarration, fitScenesNarrationApproximate, narrationComfortIssue };`, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 }
 }).outputText;
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`;
@@ -14,6 +14,7 @@ const {
   fitNarrationToDuration,
   fitSceneNarration,
   fitScenesNarration,
+  fitScenesNarrationApproximate,
   narrationComfortIssue
 } = await import(moduleUrl);
 
@@ -57,5 +58,16 @@ const preservedOverflow = fitScenesNarration([
 ], 18, { preserveNarration: true });
 assert.equal(preservedOverflow.reduce((sum, item) => sum + item.durationSeconds, 0), 18);
 assert.ok(preservedOverflow.every((item) => narrationComfortIssue(item.voiceover, item.durationSeconds) !== "too-long"));
+
+const approximate = fitScenesNarrationApproximate([
+  { ...scene, sceneNumber: 1, voiceover: "踏进游戏世界，第一步由玩家决定。", durationSeconds: 4 },
+  { ...scene, id: "scene-2", sceneNumber: 2, voiceover: "世界会回应每次行动。", durationSeconds: 4 },
+  { ...scene, id: "scene-3", sceneNumber: 3, voiceover: "找到自己的路线。", durationSeconds: 4 },
+  { ...scene, id: "scene-4", sceneNumber: 4, voiceover: "挑战有了新的可能。", durationSeconds: 4 },
+  { ...scene, id: "scene-5", sceneNumber: 5, voiceover: "下一局由你创造。", durationSeconds: 4 }
+], 30);
+const approximateTotal = approximate.reduce((sum, item) => sum + item.durationSeconds, 0);
+assert.ok(approximateTotal >= 26 && approximateTotal <= 34);
+assert.notEqual(approximateTotal, 30);
 
 console.log("Narration fit smoke checks passed.");

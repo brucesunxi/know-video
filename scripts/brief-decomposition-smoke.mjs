@@ -62,7 +62,8 @@ assert.match(aiVideo, /production instruction rather than the promoted company o
 assert.match(aiVideo, /one or more locked narration lines exceed their scene-level spoken-time budget/);
 assert.match(aiVideo, /locked narration is too sparse for the requested video duration/);
 assert.match(aiVideo, /one or more locked narration lines are too sparse to carry their scene/);
-assert.match(aiVideo, /preserveNarration: true/);
+assert.match(aiVideo, /fitScenesNarrationApproximate/);
+assert.match(aiVideo, /approximate pacing target/);
 assert.match(aiVideo, /cannot fit the requested integer scene durations without truncation/);
 assert.match(aiVideo, /Using local storyboard fallback after generation failure/);
 assert.match(aiVideo, /blockingStoryboardIssues/);
