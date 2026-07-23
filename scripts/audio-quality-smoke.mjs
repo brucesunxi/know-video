@@ -61,6 +61,13 @@ assert.throws(() => assertUsableSpeechAudio(wav(2, 0)), /静音/);
 assert.throws(() => assertUsableSpeechAudio(wav(4, 5_000, 0.8)), /后半段异常静音/);
 assert.throws(() => assertUsableSpeechAudio(wav(0.1, 5_000)), /过短/);
 assert.throws(() => assertUsableSpeechAudio(healthy, { targetDurationSeconds: 1 }), /过长/);
+assert.throws(
+  () => assertUsableSpeechAudio(wav(5, 5_000), { expectedTextDurationSeconds: 2 }),
+  /语速异常缓慢或包含重复内容/
+);
+assert.doesNotThrow(
+  () => assertUsableSpeechAudio(wav(3, 5_000), { expectedTextDurationSeconds: 2.2 })
+);
 assert.throws(() => assertUsableSpeechAudio(Buffer.from("not audio")), /无法解码/);
 
 const inspectedMp3 = inspectAudio(mp3());

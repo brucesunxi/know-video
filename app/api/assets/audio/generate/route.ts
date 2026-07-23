@@ -48,7 +48,8 @@ export async function POST(request: Request) {
   await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
     replaceAudio: true,
     sceneNumbers: body.sceneNumbers,
-    updateStyles: Boolean(body.narrationVoice)
+    updateStyles: Boolean(body.narrationVoice),
+    updateNarration: true
   });
 
   const targets = body.sceneNumbers?.length

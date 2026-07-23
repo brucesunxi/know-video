@@ -204,8 +204,6 @@ function SceneFrame({
     ? Math.max(0, declaredClipFrames - 1)
     : Math.max(0, contentDurationInFrames - 1);
   const image = scene.assets.find((asset) => asset.type === "image" && asset.url)?.url;
-  const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url)?.url;
-  const narrationPlaybackRate = narrationAudioPlaybackRate(scene, playbackRate, contentDurationInFrames, VIDEO_FPS);
   const narrationFrames = narrationDurationInFrames(scene, VIDEO_FPS, playbackRate, contentDurationInFrames);
   const caption = activeNarrationCaption(scene.voiceover, visualFrame, narrationFrames);
   const captionEntrance = caption ? interpolate(
@@ -310,24 +308,11 @@ function SceneFrame({
       <div style={{ background: "rgba(255,255,255,.22)", bottom: 56, height: 5, left: 520, opacity: copyOpacity, position: "absolute", right: 74 }}>
         <div style={{ background: accent, height: "100%", width: `${(visualFrame / Math.max(1, contentDurationInFrames - 1)) * 100}%` }} />
       </div>
-      {audio ? (
-        <Sequence durationInFrames={narrationFrames}>
-          <Audio
-            pauseWhenBuffering
-            playbackRate={narrationPlaybackRate}
-            preload="auto"
-            src={audio}
-            volume={(audioFrame) => audioVolume(audioFrame, narrationFrames)}
-          />
-        </Sequence>
-      ) : null}
     </AbsoluteFill>
   );
 }
 
 export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
-  let from = 0;
-  const narrationRanges: NarrationFrameRange[] = [];
   const settings = productionSettings(project);
   const sceneFrames = project.currentVersion.scenes.map((scene) => (
     Math.max(1, Math.round((scene.durationSeconds * VIDEO_FPS) / settings.playbackRate))
@@ -340,6 +325,21 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
       previousSceneFrames: sceneFrames[index - 1],
       sceneFrames: sceneFrames[index]
     }));
+  const sceneStartFrames = sceneFrames.map((_, index) => (
+    sceneFrames.slice(0, index).reduce((sum, frames) => sum + frames, 0)
+  ));
+  const totalFrames = sceneFrames.reduce((sum, frames) => sum + frames, 0);
+  const narrationRanges: NarrationFrameRange[] = project.currentVersion.scenes.flatMap((scene, index) => {
+    const narrationFrames = narrationDurationInFrames(
+      scene,
+      VIDEO_FPS,
+      settings.playbackRate,
+      sceneFrames[index]
+    );
+    return narrationFrames > 0
+      ? [{ startFrame: sceneStartFrames[index], endFrame: sceneStartFrames[index] + narrationFrames - 1 }]
+      : [];
+  });
   const logo = productionAsset(project, "logo");
   const music = productionAsset(project, "music");
   const logoPosition = {
@@ -355,12 +355,7 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
         const contentDurationInFrames = sceneFrames[index];
         const transitionInFrames = transitionFrames[index];
         const transitionOutFrames = transitionFrames[index + 1] ?? 0;
-        const start = from;
-        from += contentDurationInFrames;
-        const narrationFrames = narrationDurationInFrames(scene, VIDEO_FPS, settings.playbackRate, contentDurationInFrames);
-        if (narrationFrames > 0) {
-          narrationRanges.push({ startFrame: start, endFrame: start + narrationFrames - 1 });
-        }
+        const start = sceneStartFrames[index];
         return (
           <Sequence
             durationInFrames={contentDurationInFrames + transitionOutFrames}
@@ -381,6 +376,38 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
           </Sequence>
         );
       })}
+      {project.currentVersion.scenes.map((scene, index) => {
+        const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url)?.url;
+        if (!audio) return null;
+        const narrationFrames = narrationDurationInFrames(
+          scene,
+          VIDEO_FPS,
+          settings.playbackRate,
+          sceneFrames[index]
+        );
+        const narrationPlaybackRate = narrationAudioPlaybackRate(
+          scene,
+          settings.playbackRate,
+          sceneFrames[index],
+          VIDEO_FPS
+        );
+        return (
+          <Sequence
+            durationInFrames={narrationFrames}
+            from={sceneStartFrames[index]}
+            key={`narration-${scene.id}`}
+            premountFor={VIDEO_FPS}
+          >
+            <Audio
+              pauseWhenBuffering
+              playbackRate={narrationPlaybackRate}
+              preload="auto"
+              src={audio}
+              volume={(audioFrame) => audioVolume(audioFrame, narrationFrames)}
+            />
+          </Sequence>
+        );
+      })}
       {music ? (
         <Audio
           loop
@@ -389,7 +416,7 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
           src={music.url}
           volume={(frame) => settings.musicVolume * musicMixEnvelope({
             frame,
-            totalFrames: from,
+            totalFrames,
             narrationRanges,
             ducking: settings.musicDucking,
             attackFrames: Math.round(VIDEO_FPS * 0.2),

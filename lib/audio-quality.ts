@@ -161,7 +161,7 @@ export function inspectAudio(body: Buffer) {
 
 export function assertUsableSpeechAudio(
   body: Buffer,
-  options: { targetDurationSeconds?: number } = {}
+  options: { targetDurationSeconds?: number; expectedTextDurationSeconds?: number } = {}
 ) {
   const inspection = inspectAudio(body);
   if (!inspection) throw new Error("语音服务返回了无法解码的音频。");
@@ -180,6 +180,16 @@ export function assertUsableSpeechAudio(
     && inspection.durationSeconds > options.targetDurationSeconds + 0.18
   ) {
     throw new Error("旁白内容过长，无法在当前场景时长内自然读完。");
+  }
+  if (
+    options.expectedTextDurationSeconds
+    && options.expectedTextDurationSeconds >= 0.8
+    && inspection.durationSeconds > Math.max(
+      options.expectedTextDurationSeconds * 1.55,
+      options.expectedTextDurationSeconds + 1.4
+    )
+  ) {
+    throw new Error("旁白音频语速异常缓慢或包含重复内容。");
   }
   return inspection;
 }

@@ -44,6 +44,7 @@
     "speech:timing:smoke": "node scripts/speech-timing-smoke.mjs",
     "narration:timing:smoke": "node scripts/narration-timing-smoke.mjs",
     "narration:fit:smoke": "node scripts/narration-fit-smoke.mjs",
+    "narration:cleanup:smoke": "node scripts/narration-cleanup-smoke.mjs",
     "color:contrast:smoke": "node scripts/color-contrast-smoke.mjs",
     "audio:quality:smoke": "node scripts/audio-quality-smoke.mjs",
     "audio:mix:smoke": "node scripts/audio-mix-smoke.mjs",

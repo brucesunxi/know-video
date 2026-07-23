@@ -28,7 +28,8 @@ assert.equal(correctedSpeechRate(0, 4, 6), -5);
 
 const azure = fs.readFileSync(new URL("../lib/azure-speech.ts", import.meta.url), "utf8");
 assert.doesNotMatch(azure, /timingRatio < 0\.82/);
-assert.match(azure, /timingRatio > 1\.04/);
+assert.match(azure, /actualDurationSeconds > correctionTarget \* 1\.04/);
+assert.match(azure, /expectedTextDurationSeconds/);
 assert.match(azure, /nextRate !== rate/);
 
 const audioAssets = fs.readFileSync(new URL("../lib/audio-assets.ts", import.meta.url), "utf8");

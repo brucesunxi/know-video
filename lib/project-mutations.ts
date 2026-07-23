@@ -362,6 +362,7 @@ export async function persistGeneratedSceneAssets(
     replaceClips?: boolean;
     sceneNumbers?: number[];
     updateStyles?: boolean;
+    updateNarration?: boolean;
     invalidateRender?: boolean;
   } = {}
 ) {
@@ -403,6 +404,19 @@ export async function persistGeneratedSceneAssets(
       queries.push(sql`
         update scenes
         set style_json = ${JSON.stringify(scene.style)}
+        where id = ${sceneId}
+          and exists (
+            select 1
+            from project_versions pv
+            join projects p on p.id = pv.project_id
+            where pv.id = ${versionId} and p.current_version_id = ${versionId}
+          )
+      `);
+    }
+    if (options.updateNarration) {
+      queries.push(sql`
+        update scenes
+        set voiceover = ${scene.voiceover}
         where id = ${sceneId}
           and exists (
             select 1

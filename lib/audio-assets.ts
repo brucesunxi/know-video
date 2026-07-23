@@ -3,7 +3,9 @@ import { assertUsableSpeechAudio } from "@/lib/audio-quality";
 import { generateAzureChineseSpeech, hasAzureSpeech } from "@/lib/azure-speech";
 import { generateCloudflareSpeech, hasCloudflareAI } from "@/lib/cloudflare-ai";
 import { getOptionalEnv } from "@/lib/env";
+import { sanitizeNarrationForSpeech } from "@/lib/narration-cleanup";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
+import { estimateNarrationSeconds } from "@/lib/speech-timing";
 import { DEFAULT_NARRATION_VOICE, narrationVoiceProfile } from "@/lib/voice-profiles";
 import type { NarrationVoice, Project, Scene, SceneAsset } from "@/lib/types";
 
@@ -27,7 +29,7 @@ async function generateSceneVoice(
   scene: Scene,
   project: Project,
   narrationVoice?: NarrationVoice
-): Promise<SceneAsset> {
+): Promise<{ asset: SceneAsset; voiceover: string }> {
   let body: Buffer;
   let model: string;
   let voice: string;
@@ -35,12 +37,14 @@ async function generateSceneVoice(
   let extension: "mp3" | "wav";
   let rate: number | undefined;
   let actualDurationSeconds: number | undefined;
+  const voiceover = sanitizeNarrationForSpeech(scene.voiceover);
+  const expectedTextDurationSeconds = estimateNarrationSeconds(voiceover);
   const selectedVoice = narrationVoice ?? scene.style.narrationVoice ?? DEFAULT_NARRATION_VOICE;
   const profile = narrationVoiceProfile(selectedVoice);
-  if (containsChinese(scene.voiceover)) {
+  if (containsChinese(voiceover)) {
     try {
       if (!hasAzureSpeech()) throw new Error("Chinese speech service is not configured");
-      const generated = await generateAzureChineseSpeech(scene.voiceover, scene.durationSeconds, selectedVoice);
+      const generated = await generateAzureChineseSpeech(voiceover, scene.durationSeconds, selectedVoice);
       body = generated.body;
       model = generated.model;
       voice = generated.voice;
@@ -58,18 +62,21 @@ async function generateSceneVoice(
       const result = await client.audio.speech.create({
         model,
         voice: voice as "alloy",
-        input: scene.voiceover,
+        input: voiceover,
         response_format: "wav",
         instructions: `${profile.direction} Clear pronunciation, no sound effects. Complete the narration naturally in about ${Math.max(1, scene.durationSeconds - 0.3).toFixed(1)} seconds.`
       });
       body = Buffer.from(await result.arrayBuffer());
-      const inspection = assertUsableSpeechAudio(body, { targetDurationSeconds: scene.durationSeconds });
+      const inspection = assertUsableSpeechAudio(body, {
+        targetDurationSeconds: scene.durationSeconds,
+        expectedTextDurationSeconds
+      });
       actualDurationSeconds = inspection.durationSeconds;
       contentType = "audio/wav";
       extension = "wav";
     }
   } else if (hasCloudflareAI()) {
-    const generated = await generateCloudflareSpeech(scene.voiceover);
+    const generated = await generateCloudflareSpeech(voiceover);
     body = generated.body;
     model = generated.model;
     voice = "default";
@@ -82,22 +89,28 @@ async function generateSceneVoice(
     const result = await client.audio.speech.create({
       model,
       voice: voice as "alloy",
-      input: scene.voiceover,
+      input: voiceover,
       response_format: "mp3",
       instructions: `Natural, confident product-film narration. Match the language of the text. Keep a composed, premium pace and complete in about ${Math.max(1, scene.durationSeconds - 0.3).toFixed(1)} seconds.`
     });
     body = Buffer.from(await result.arrayBuffer());
-    const inspection = assertUsableSpeechAudio(body, { targetDurationSeconds: scene.durationSeconds });
+    const inspection = assertUsableSpeechAudio(body, {
+      targetDurationSeconds: scene.durationSeconds,
+      expectedTextDurationSeconds
+    });
     actualDurationSeconds = inspection.durationSeconds;
     contentType = "audio/mpeg";
     extension = "mp3";
   }
-  const inspection = assertUsableSpeechAudio(body, { targetDurationSeconds: scene.durationSeconds });
+  const inspection = assertUsableSpeechAudio(body, {
+    targetDurationSeconds: scene.durationSeconds,
+    expectedTextDurationSeconds
+  });
   actualDurationSeconds ??= inspection.durationSeconds;
   const key = `generated/${project.id}/${project.currentVersion.id}/scene-${scene.sceneNumber}-voice-${crypto.randomUUID()}.${extension}`;
   const uploaded = await uploadToR2({ key, body, contentType });
 
-  return {
+  const asset: SceneAsset = {
     id: crypto.randomUUID(),
     type: "audio",
     r2Key: uploaded.key,
@@ -109,6 +122,7 @@ async function generateSceneVoice(
       contentType,
       sceneNumber: scene.sceneNumber,
       targetDurationSeconds: scene.durationSeconds,
+      expectedTextDurationSeconds,
       rate,
       actualDurationSeconds,
       audibleStartSeconds: inspection.audibleStartSeconds,
@@ -117,6 +131,10 @@ async function generateSceneVoice(
       narrationVoice: selectedVoice
     }
   };
+  console.info(
+    `[audio-assets] Scene ${scene.sceneNumber} timing: expected=${expectedTextDurationSeconds.toFixed(2)}s actual=${(actualDurationSeconds ?? inspection.durationSeconds).toFixed(2)}s target=${scene.durationSeconds.toFixed(2)}s rate=${rate ?? 0}% voice=${selectedVoice}.`
+  );
+  return { asset, voiceover };
 }
 
 export async function generateProjectVoices(
@@ -145,11 +163,12 @@ export async function generateProjectVoices(
   const concurrency = Math.min(3, Math.max(1, Number(getOptionalEnv("TTS_GENERATION_CONCURRENCY")) || 2));
   await mapWithConcurrency(selectedIndexes, concurrency, async ({ scene, index }) => {
     try {
-      const voice = await generateSceneVoice(scene, project, narrationVoice);
+      const generated = await generateSceneVoice(scene, project, narrationVoice);
       scenes[index] = {
         ...scene,
+        voiceover: generated.voiceover,
         style: narrationVoice ? { ...scene.style, narrationVoice } : scene.style,
-        assets: [voice, ...scene.assets.filter((asset) => asset.type !== "audio")]
+        assets: [generated.asset, ...scene.assets.filter((asset) => asset.type !== "audio")]
       };
     } catch (error) {
       console.error(`[audio-assets] Scene ${scene.sceneNumber} voice generation failed:`, error);
