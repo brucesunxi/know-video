@@ -15,7 +15,7 @@ import { musicMixEnvelope, type NarrationFrameRange } from "@/lib/audio-mix";
 import { clipDurationInFrames, resolvedClipPlaybackRate } from "@/lib/clip-timing";
 import { readableTextColor, sceneAccentColor } from "@/lib/color-contrast";
 import { activeNarrationCaption, narrationAudioPlaybackRate, narrationDurationInFrames } from "@/lib/narration-timing";
-import { productionAsset, productionSettings } from "@/lib/production-settings";
+import { effectiveSceneDurationSeconds, productionAsset, productionSettings } from "@/lib/production-settings";
 import { boundedTransitionFrames, resolvedSceneTransition, type ResolvedSceneTransitionKind } from "@/lib/scene-transitions";
 import { VIDEO_FPS } from "@/video/config";
 
@@ -314,8 +314,10 @@ function SceneFrame({
 
 export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
   const settings = productionSettings(project);
-  const sceneFrames = project.currentVersion.scenes.map((scene) => (
-    Math.max(1, Math.round((scene.durationSeconds * VIDEO_FPS) / settings.playbackRate))
+  const sceneFrames = project.currentVersion.scenes.map((scene, index, scenes) => (
+    Math.max(1, Math.round((
+      effectiveSceneDurationSeconds(scene, index === scenes.length - 1) * VIDEO_FPS
+    ) / settings.playbackRate))
   ));
   const transitionFrames = project.currentVersion.scenes.map((scene, index) => index === 0
     ? 0

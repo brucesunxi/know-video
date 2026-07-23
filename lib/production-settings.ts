@@ -51,11 +51,45 @@ export function productionAsset(project: Project, type: "logo" | "music"): Scene
     .find((asset) => asset.type === type && asset.url);
 }
 
+function positiveMetadataNumber(asset: SceneAsset | undefined, key: string) {
+  const value = Number(asset?.metadata?.[key]);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+export function effectiveSceneDurationSeconds(scene: Scene, isLastScene = false) {
+  const plannedDuration = Math.max(0.1, Number(scene.durationSeconds) || 0.1);
+  const narration = scene.assets?.find((asset) => asset.type === "audio" && asset.url);
+  if (!narration) return plannedDuration;
+
+  const audibleEnd = positiveMetadataNumber(narration, "audibleEndSeconds");
+  const audioDuration = positiveMetadataNumber(narration, "actualDurationSeconds");
+  const narrationEnd = audibleEnd ?? audioDuration;
+  if (!narrationEnd) return plannedDuration;
+
+  // Keep scene changes responsive without cutting off the final syllable.
+  // The last scene gets a slightly longer finish before the video ends.
+  const holdSeconds = isLastScene ? 0.8 : 0.4;
+  const pacedDuration = Math.ceil((narrationEnd + holdSeconds) * 10) / 10;
+  return Math.max(narrationEnd + 0.1, Math.min(plannedDuration, pacedDuration));
+}
+
+export function effectiveVersionDurationSeconds(version: ProjectVersion) {
+  if (
+    version.scenes.length === 0
+    || version.scenes.some((scene) => !Number.isFinite(Number(scene.durationSeconds)) || Number(scene.durationSeconds) <= 0)
+  ) {
+    return Math.max(0.1, version.durationSeconds);
+  }
+  return version.scenes.reduce((total, scene, index) => (
+    total + effectiveSceneDurationSeconds(scene, index === version.scenes.length - 1)
+  ), 0);
+}
+
 export function productionDurationInFrames(version: ProjectVersion, fps: number) {
   const playbackRate: PlaybackRate = productionSettingsFromScenes(version.scenes).playbackRate;
-  return Math.max(1, Math.round((version.durationSeconds * fps) / playbackRate));
+  return Math.max(1, Math.round((effectiveVersionDurationSeconds(version) * fps) / playbackRate));
 }
 
 export function productionDurationSeconds(version: ProjectVersion) {
-  return version.durationSeconds / productionSettingsFromScenes(version.scenes).playbackRate;
+  return effectiveVersionDurationSeconds(version) / productionSettingsFromScenes(version.scenes).playbackRate;
 }

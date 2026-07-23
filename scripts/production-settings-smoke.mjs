@@ -11,7 +11,13 @@ const output = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports });
-const { DEFAULT_PRODUCTION_SETTINGS, productionDurationInFrames, productionSettingsFromScenes } = module.exports;
+const {
+  DEFAULT_PRODUCTION_SETTINGS,
+  effectiveSceneDurationSeconds,
+  effectiveVersionDurationSeconds,
+  productionDurationInFrames,
+  productionSettingsFromScenes
+} = module.exports;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 assert.deepEqual(plain(productionSettingsFromScenes([])), plain(DEFAULT_PRODUCTION_SETTINGS));
@@ -39,6 +45,37 @@ assert.deepEqual(plain(productionSettingsFromScenes([{ style: { production: {
   logoSize: "broken"
 } } }])), plain(DEFAULT_PRODUCTION_SETTINGS));
 assert.equal(productionDurationInFrames({ durationSeconds: 30, scenes: [{ style: { production: { playbackRate: 1.5 } } }] }, 30), 600);
+
+const pacedScenes = [
+  {
+    durationSeconds: 6,
+    style: {},
+    assets: [{
+      type: "audio",
+      url: "/scene-1.wav",
+      metadata: { actualDurationSeconds: 3.5, audibleEndSeconds: 3.42 }
+    }]
+  },
+  {
+    durationSeconds: 6,
+    style: {},
+    assets: [{
+      type: "audio",
+      url: "/scene-2.wav",
+      metadata: { actualDurationSeconds: 4.9, audibleEndSeconds: 4.84 }
+    }]
+  }
+];
+assert.equal(effectiveSceneDurationSeconds(pacedScenes[0], false), 3.9);
+assert.equal(effectiveSceneDurationSeconds(pacedScenes[1], true), 5.7);
+assert.equal(effectiveVersionDurationSeconds({ durationSeconds: 12, scenes: pacedScenes }), 9.6);
+assert.equal(productionDurationInFrames({ durationSeconds: 12, scenes: pacedScenes }, 30), 288);
+assert.equal(effectiveSceneDurationSeconds({ durationSeconds: 6, style: {}, assets: [] }, false), 6);
+assert.equal(effectiveSceneDurationSeconds({
+  durationSeconds: 4,
+  style: {},
+  assets: [{ type: "audio", url: "/long.wav", metadata: { actualDurationSeconds: 4.2 } }]
+}, false), 4.3);
 
 assert.match(workspace, /function productionSummaryItems/);
 assert.match(workspace, /function productionImpactChecks/);
