@@ -11,7 +11,6 @@ export const narrationVoiceProfiles: Array<{
   sampleText: string;
   azureVoice: string;
   pitch: number;
-  rateOffset: number;
   direction: string;
 }> = [
   {
@@ -23,7 +22,6 @@ export const narrationVoiceProfiles: Array<{
     sampleText: "踏进新的世界，观察环境、选择路线，用自己的操作破解挑战。下一局，会由你创造出完全不同的结果。",
     azureVoice: "zh-CN-YunxiNeural",
     pitch: -1,
-    rateOffset: 2,
     direction: "Clear, energetic Mandarin male trailer narration. Natural and action-oriented, with varied emphasis and short clean pauses. Avoid corporate presentation, product-demo cadence, dramatic monologue, audiobook, radio-host or sales-hype delivery."
   },
   {
@@ -35,7 +33,6 @@ export const narrationVoiceProfiles: Array<{
     sampleText: "从战略到执行，我们用可靠的自动化能力连接每一个业务环节，让增长更清晰，让决策更从容。",
     azureVoice: "zh-CN-YunyangNeural",
     pitch: -3,
-    rateOffset: -2,
     direction: "Grounded Mandarin male corporate brand narration. Calm, credible and restrained, with clear emphasis on business value. Avoid dramatic monologue, documentary gravitas and exaggerated advertising tone."
   },
   {
@@ -47,7 +44,6 @@ export const narrationVoiceProfiles: Array<{
     sampleText: "更简单的协作，更智能的流程，让每一次客户沟通都准确、自然，并且值得信赖。",
     azureVoice: "zh-CN-XiaoxiaoNeural",
     pitch: 0,
-    rateOffset: 0,
     direction: "Professional Mandarin female business explainer. Warm, articulate and composed, with a modern corporate presentation cadence. Avoid intimate monologue, audiobook and overly cheerful customer-service delivery."
   }
 ];

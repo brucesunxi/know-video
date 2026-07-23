@@ -26,7 +26,7 @@ assert.equal(narrationVoiceProfiles.length, 3);
 assert.equal(new Set(narrationVoiceProfiles.map((profile) => profile.azureVoice)).size, 3);
 assert.equal(narrationVoiceProfiles.every((profile) => profile.sampleText.length > 20), true);
 assert.equal(narrationVoiceProfiles.every((profile) => profile.useCase.includes("·")), true);
-assert.equal(narrationVoiceProfiles.every((profile) => Number.isFinite(profile.pitch) && Number.isFinite(profile.rateOffset)), true);
+assert.equal(narrationVoiceProfiles.every((profile) => Number.isFinite(profile.pitch) && !("rateOffset" in profile)), true);
 assert.equal(narrationVoiceProfile("male-clear").label, "清晰活力男声");
 assert.equal(narrationVoiceProfile("male-deep").label, "沉稳品牌男声");
 assert.equal(narrationVoiceProfile("female-natural").azureVoice, "zh-CN-XiaoxiaoNeural");

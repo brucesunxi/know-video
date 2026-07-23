@@ -1,10 +1,6 @@
 import { getOptionalEnv } from "@/lib/env";
 import { assertUsableSpeechAudio } from "@/lib/audio-quality";
-import {
-  correctedSpeechRate,
-  estimateNarrationSeconds,
-  speechRateForDuration
-} from "@/lib/speech-timing";
+import { estimateNarrationSeconds } from "@/lib/speech-timing";
 import { narrationVoiceProfile } from "@/lib/voice-profiles";
 import type { NarrationVoice } from "@/lib/types";
 
@@ -28,12 +24,10 @@ async function requestAzureSpeech(input: {
   region: string;
   voice: string;
   text: string;
-  rate: number;
   pitch: number;
 }) {
-  const ssmlRate = `${input.rate >= 0 ? "+" : ""}${input.rate}%`;
   const ssmlPitch = `${input.pitch >= 0 ? "+" : ""}${input.pitch}%`;
-  const ssml = `<speak version="1.0" xml:lang="zh-CN"><voice name="${escapeXml(input.voice)}"><prosody rate="${ssmlRate}" pitch="${ssmlPitch}">${escapeXml(input.text)}</prosody></voice></speak>`;
+  const ssml = `<speak version="1.0" xml:lang="zh-CN"><voice name="${escapeXml(input.voice)}"><prosody pitch="${ssmlPitch}">${escapeXml(input.text)}</prosody></voice></speak>`;
   let body: Buffer | undefined;
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -88,27 +82,8 @@ export async function generateAzureChineseSpeech(
     : getOptionalEnv("AZURE_SPEECH_CHINESE_VOICE") || DEFAULT_CHINESE_VOICE;
   const profile = narrationVoiceProfile(narrationVoice);
   const expectedTextDurationSeconds = estimateNarrationSeconds(text);
-  let rate = Math.max(-5, Math.min(30, speechRateForDuration(text, durationSeconds) + profile.rateOffset));
-  let body = await requestAzureSpeech({ key, region, voice, text, rate, pitch: profile.pitch });
-  let actualDurationSeconds = assertUsableSpeechAudio(body).durationSeconds;
-  const targetSeconds = durationSeconds ? Math.max(1.3, durationSeconds - 0.45) : undefined;
-  const naturalUpperBound = Math.max(
-    expectedTextDurationSeconds * 1.35,
-    expectedTextDurationSeconds + 0.8
-  );
-  const correctionTarget = targetSeconds
-    ? Math.min(targetSeconds, naturalUpperBound)
-    : naturalUpperBound;
-  const timingNeedsCorrection = actualDurationSeconds > correctionTarget * 1.04;
-  const rateCanMove = rate < 30;
-  if (timingNeedsCorrection && rateCanMove) {
-    const nextRate = correctedSpeechRate(rate, actualDurationSeconds, correctionTarget);
-    if (nextRate !== rate) {
-      rate = nextRate;
-      body = await requestAzureSpeech({ key, region, voice, text, rate, pitch: profile.pitch });
-      actualDurationSeconds = assertUsableSpeechAudio(body).durationSeconds;
-    }
-  }
+  const body = await requestAzureSpeech({ key, region, voice, text, pitch: profile.pitch });
+  const actualDurationSeconds = assertUsableSpeechAudio(body).durationSeconds;
   assertUsableSpeechAudio(body, {
     targetDurationSeconds: durationSeconds,
     expectedTextDurationSeconds
@@ -118,7 +93,7 @@ export async function generateAzureChineseSpeech(
     body,
     model: "neural-tts",
     voice,
-    rate,
+    rate: 0,
     actualDurationSeconds,
     expectedTextDurationSeconds,
     contentType: "audio/wav" as const,

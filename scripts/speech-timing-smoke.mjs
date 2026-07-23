@@ -13,28 +13,23 @@ const output = ts.transpileModule(source, {
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports, require: () => ({}) });
 const {
-  correctedSpeechRate,
   estimateCbrMp3Duration,
-  estimateNarrationSeconds,
-  speechRateForDuration
+  estimateNarrationSeconds
 } = module.exports;
 
 assert.ok(estimateNarrationSeconds("这是自然中文旁白。") > 1);
-assert.ok(speechRateForDuration("这是一段明显比较长的中文旁白，需要在很短的时间内读完。", 3) > 0);
-assert.equal(speechRateForDuration("短句。", 10), 0);
-assert.equal(correctedSpeechRate(20, 6, 5), 30);
-assert.equal(correctedSpeechRate(40, 10, 2), 30);
-assert.equal(correctedSpeechRate(0, 4, 6), -5);
 
 const azure = fs.readFileSync(new URL("../lib/azure-speech.ts", import.meta.url), "utf8");
-assert.doesNotMatch(azure, /timingRatio < 0\.82/);
-assert.match(azure, /actualDurationSeconds > correctionTarget \* 1\.04/);
 assert.match(azure, /expectedTextDurationSeconds/);
-assert.match(azure, /nextRate !== rate/);
+assert.doesNotMatch(azure, /speechRateForDuration|correctedSpeechRate|rateOffset/);
+assert.doesNotMatch(azure, /<prosody rate=/);
+assert.match(azure, /rate: 0/);
 
 const audioAssets = fs.readFileSync(new URL("../lib/audio-assets.ts", import.meta.url), "utf8");
 assert.doesNotMatch(audioAssets, /scene\.durationSeconds \* 0\.86/);
 assert.doesNotMatch(audioAssets, /narration was shortened/);
+assert.doesNotMatch(audioAssets, /complete in about/);
+assert.match(audioAssets, /Do not speed up or slow down/);
 assert.match(audioAssets, /TTS_GENERATION_CONCURRENCY"\)\) \|\| 2/);
 
 const narrationFit = fs.readFileSync(new URL("../lib/narration-fit.ts", import.meta.url), "utf8");

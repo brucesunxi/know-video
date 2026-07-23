@@ -64,7 +64,7 @@ async function generateSceneVoice(
         voice: voice as "alloy",
         input: voiceover,
         response_format: "wav",
-        instructions: `${profile.direction} Clear pronunciation, no sound effects. Complete the narration naturally in about ${Math.max(1, scene.durationSeconds - 0.3).toFixed(1)} seconds.`
+        instructions: `${profile.direction} Use your natural speaking pace consistently. Clear pronunciation, no sound effects. Do not speed up or slow down to match a target duration.`
       });
       body = Buffer.from(await result.arrayBuffer());
       const inspection = assertUsableSpeechAudio(body, {
@@ -91,7 +91,7 @@ async function generateSceneVoice(
       voice: voice as "alloy",
       input: voiceover,
       response_format: "mp3",
-      instructions: `Natural, confident product-film narration. Match the language of the text. Keep a composed, premium pace and complete in about ${Math.max(1, scene.durationSeconds - 0.3).toFixed(1)} seconds.`
+      instructions: "Natural, confident film narration. Match the language of the text. Use one consistent natural speaking pace. Do not speed up or slow down to match a target duration."
     });
     body = Buffer.from(await result.arrayBuffer());
     const inspection = assertUsableSpeechAudio(body, {
