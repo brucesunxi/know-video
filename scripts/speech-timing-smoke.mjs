@@ -37,7 +37,7 @@ assert.match(audioAssets, /TTS_GENERATION_CONCURRENCY"\)\) \|\| 2/);
 
 const narrationFit = fs.readFileSync(new URL("../lib/narration-fit.ts", import.meta.url), "utf8");
 assert.match(narrationFit, /options\.preserveNarration/);
-assert.match(narrationFit, /Locked narration cannot fit the requested video duration/);
+assert.match(narrationFit, /return fitScenesNarration\(scenes, targetDuration\)/);
 
 const rawAudio = Buffer.alloc(48_000 / 8 * 5);
 assert.ok(Math.abs(estimateCbrMp3Duration(rawAudio, 48) - 5) < 0.001);

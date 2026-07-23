@@ -1,5 +1,6 @@
 import type { GenerationOptions, Scene } from "@/lib/types";
 import {
+  detectBriefDomain,
   extractBriefSubject,
   extractBriefVisualConcepts,
   hasMetaProductionNarration,
@@ -34,6 +35,10 @@ const shotPatterns = [
 ] as const;
 
 const finalResolvePattern = /(?:final|finish|finished|resolve|resolved|closing|complete|completed|deliver|delivery|export|launch|publish|share|start|try|book|demo|call to action|next step|outcome|result|ready|ship|交付|完成|成片|导出|发布|上线|分享|行动|下一步|预约|试用|开始|结果|成果|收束|落点|终章|准备就绪|可直接使用)/iu;
+const gamingIndustryLeakPatterns = [
+  /项目压力|企业治理|授权责任|责任链|证据包|业务材料|审批流程|工作链路|团队对齐|风险信号/u,
+  /enterprise pressure|governance workflow|approval chain|evidence packet|accountability chain|business workflow|team alignment/iu
+];
 
 function hasChinese(value?: string) {
   return Boolean(value && /\p{Script=Han}/u.test(value));
@@ -176,6 +181,11 @@ export function storyboardQualityIssues(
     issues.push("voiceover narrates the production instead of the client's company or product");
   }
   if (brief) {
+    if (detectBriefDomain(brief) === "gaming") {
+      const output = scenes.map((scene) => `${scene.voiceover}\n${baseVisualPrompt(scene)}`).join("\n");
+      const leaked = gamingIndustryLeakPatterns.some((pattern) => pattern.test(output) && !pattern.test(brief));
+      if (leaked) issues.push("voiceover conflicts with the client's industry");
+    }
     const subject = extractBriefSubject(brief, options?.language !== "英文");
     const isDistinctBrand = /^[A-Z][A-Z0-9_-]{2,}$/u.test(subject);
     const narration = `${projectTitle ?? ""} ${scenes.map((scene) => scene.voiceover).join(" ")}`.toLowerCase();

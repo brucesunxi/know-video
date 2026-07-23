@@ -50,4 +50,12 @@ const fittedScenes = fitScenesNarration([
 assert.equal(fittedScenes.reduce((sum, item) => sum + item.durationSeconds, 0), 18);
 assert.ok(fittedScenes.every((item) => narrationComfortIssue(item.voiceover, item.durationSeconds) !== "too-long"));
 
+const preservedOverflow = fitScenesNarration([
+  { ...scene, sceneNumber: 1, durationSeconds: 6 },
+  { ...scene, id: "scene-2", sceneNumber: 2, durationSeconds: 6 },
+  { ...scene, id: "scene-3", sceneNumber: 3, durationSeconds: 6 }
+], 18, { preserveNarration: true });
+assert.equal(preservedOverflow.reduce((sum, item) => sum + item.durationSeconds, 0), 18);
+assert.ok(preservedOverflow.every((item) => narrationComfortIssue(item.voiceover, item.durationSeconds) !== "too-long"));
+
 console.log("Narration fit smoke checks passed.");

@@ -6,6 +6,7 @@ import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import { fitScenesNarration } from "@/lib/narration-fit";
 import {
+  detectBriefDomain,
   extractBriefVisualConcepts,
   hasMetaProductionNarration,
   isProductionInstructionClause
@@ -128,8 +129,22 @@ function joinChineseParts(parts: string[], maxLength = 28) {
   return compactClause(joined.replace(/，+/g, "，").replace(/，$/u, ""), maxLength) + "。";
 }
 
-function localNarrationLine(treatment: Treatment, beat: Treatment["beats"][number], index: number) {
+function localNarrationLine(
+  treatment: Treatment,
+  beat: Treatment["beats"][number],
+  index: number,
+  averageSceneSeconds: number
+) {
   const brief = treatment.commercialBrief;
+  const domain = detectBriefDomain([
+    brief.subject,
+    brief.category,
+    brief.audience,
+    brief.customerProblem,
+    brief.offering,
+    ...brief.differentiators,
+    ...brief.outcomes
+  ].join(" "));
   const subject = compactClause(brief.subject, 12);
   const offering = compactClause(brief.offering, 14);
   const audience = compactClause(brief.audience, 10);
@@ -138,28 +153,77 @@ function localNarrationLine(treatment: Treatment, beat: Treatment["beats"][numbe
   const outcome = compactClause(brief.outcomes[index % brief.outcomes.length] ?? "", 12);
   const proof = compactClause(brief.proofPoints[index % Math.max(1, brief.proofPoints.length)] ?? "", 10);
   const sourceFact = compactClause(beat.sourceFact, 14);
+  const chineseCharacterBudget = Math.max(12, Math.floor((averageSceneSeconds - 0.55) * 4));
 
-  const chineseTemplates = [
-    [`面对${problem || "关键压力"}`, `${subject}先把问题变清楚`],
-    [`关键变化来自${sourceFact || offering || "核心能力"}`, `形成${outcome || "可执行路径"}`],
-    [`围绕${differentiator || offering || subject}`, "团队更快对齐判断"],
-    [`有了${proof || sourceFact || "清晰依据"}`, "每个决定都更可信"],
-    [`最终交付的是${outcome || "稳定结果"}`, compactClause(brief.callToAction, 12) || "持续向前"],
-    [`给${audience || "客户"}留下的`, `是更清楚的下一步`]
-  ];
+  const chineseTemplates = domain === "gaming"
+    ? [
+        [`从${sourceFact || offering || "核心玩法"}开始`, `${subject || "这款游戏"}让玩家立即进入状态`],
+        [`真正吸引人的`, `是${differentiator || offering || "每次操作都会得到清晰反馈"}`],
+        [`随着${problem || "挑战"}展开`, "选择与行动不断改变局面"],
+        [`每一次尝试`, `都带来${proof || outcome || "新的策略和发现"}`],
+        [`完成目标之后`, `留下的是${outcome || "亲手赢得的成就感"}`],
+        [`现在进入${subject || "游戏世界"}`, compactClause(brief.callToAction, 12) || "开始下一局"]
+      ]
+    : domain === "education"
+      ? [
+          [`从${problem || "学习难点"}出发`, `${subject || "这套课程"}先让知识变得容易理解`],
+          [`关键方法是${sourceFact || offering || "把复杂内容拆成清晰步骤"}`, `帮助${audience || "学习者"}跟上节奏`],
+          [`围绕${differentiator || "真实练习"}`, "理解与应用同步发生"],
+          [`每一次反馈`, `都让${outcome || "学习进步"}更具体`],
+          [`最终收获的是${outcome || "能够真正使用的知识"}`, compactClause(brief.callToAction, 12) || "继续探索"],
+          [`下一步`, `让学习自然延伸到真实场景`]
+        ]
+      : domain === "commerce"
+        ? [
+            [`当${problem || "选择变得复杂"}`, `${subject || "这项服务"}先让商品价值清楚可见`],
+            [`从${sourceFact || offering || "发现商品"}开始`, `体验一路保持顺畅`],
+            [`围绕${differentiator || "真实需求"}`, "每个选择都更贴近消费者"],
+            [`有了${proof || sourceFact || "可靠信息"}`, "下单决定更轻松"],
+            [`最终抵达${outcome || "满意交付"}`, compactClause(brief.callToAction, 12) || "立即体验"],
+            [`从看见到拥有`, "每一步都自然连贯"]
+          ]
+        : domain === "entertainment"
+          ? [
+              [`故事从${sourceFact || offering || "一个鲜明瞬间"}开始`, `${subject || "这项内容"}迅速建立情绪`],
+              [`真正抓住注意力的`, `是${differentiator || "人物与冲突的变化"}`],
+              [`随着${problem || "悬念"}展开`, "情绪与节奏持续推进"],
+              [`每个关键瞬间`, `都留下${proof || outcome || "值得记住的感受"}`],
+              [`最终抵达${outcome || "完整的情绪回响"}`, compactClause(brief.callToAction, 12) || "继续关注"],
+              [`故事暂时落幕`, "期待已经指向下一次相遇"]
+            ]
+          : [
+              [`面对${problem || "关键问题"}`, `${subject}先把问题变清楚`],
+              [`关键变化来自${sourceFact || offering || "核心能力"}`, `形成${outcome || "可执行路径"}`],
+              [`围绕${differentiator || offering || subject}`, "相关人员更快形成判断"],
+              [`有了${proof || sourceFact || "清晰依据"}`, "每个决定都更可信"],
+              [`最终交付的是${outcome || "稳定结果"}`, compactClause(brief.callToAction, 12) || "持续向前"],
+              [`给${audience || "客户"}留下的`, `是更清楚的下一步`]
+            ];
   if (isChineseTreatment(treatment)) {
-    return joinChineseParts(chineseTemplates[index % chineseTemplates.length].filter(Boolean));
+    return joinChineseParts(
+      chineseTemplates[index % chineseTemplates.length].filter(Boolean),
+      chineseCharacterBudget
+    );
   }
 
   const englishSubject = subject || "The product";
-  const englishTemplates = [
-    `When ${brief.audience || "customers"} face ${problem || "a costly bottleneck"}, ${englishSubject} makes the next move clear.`,
-    `The shift starts with ${sourceFact || offering || "the core workflow"}, turning pressure into ${outcome || "a clearer business outcome"}.`,
-    `Around ${differentiator || offering || englishSubject}, teams align faster and judge what matters.`,
-    `With ${proof || sourceFact || "a clearer basis for trust"}, every decision feels more grounded.`,
-    `What customers receive is ${outcome || "a confident next step"}: ${brief.callToAction}.`,
-    `The story closes on momentum, with the next action visible and ready.`
-  ];
+  const englishTemplates = domain === "gaming"
+    ? [
+        `From the first ${sourceFact || offering || "gameplay choice"}, ${englishSubject} puts players inside the action.`,
+        `What makes it compelling is ${differentiator || offering || "immediate, readable feedback to every move"}.`,
+        `As ${problem || "the challenge"} unfolds, each decision changes what happens next.`,
+        `Every attempt reveals ${proof || outcome || "a new strategy, route, or discovery"}.`,
+        `Reaching the goal delivers ${outcome || "the satisfaction of a result the player earned"}.`,
+        `Enter ${englishSubject} and ${brief.callToAction || "start the next run"}.`
+      ]
+    : [
+        `When ${brief.audience || "customers"} face ${problem || "a difficult problem"}, ${englishSubject} makes the next move clear.`,
+        `The shift starts with ${sourceFact || offering || "the core experience"}, leading to ${outcome || "a clearer outcome"}.`,
+        `Around ${differentiator || offering || englishSubject}, people understand what matters faster.`,
+        `With ${proof || sourceFact || "a clearer basis for trust"}, each decision feels more grounded.`,
+        `What customers receive is ${outcome || "a confident next step"}: ${brief.callToAction}.`,
+        `The story closes with the next action visible and ready.`
+      ];
   return englishTemplates[index % englishTemplates.length].replace(/\s+/g, " ").trim();
 }
 
@@ -188,7 +252,7 @@ function locallyRepairTreatmentNarration(treatment: Treatment, targetDuration: n
       if (!repairAll && !repairSubjectOpening && !shouldLocallyRepairNarrationLine(line, averageSceneSeconds)) return beat;
       return {
         ...beat,
-        narrationLine: localNarrationLine(treatment, beat, index)
+        narrationLine: localNarrationLine(treatment, beat, index, averageSceneSeconds)
       };
     })
   };
@@ -605,6 +669,13 @@ function continuityDirection(treatment: Treatment) {
 function briefVisualConceptDirection(prompt: string, options?: GenerationOptions) {
   const concepts = extractBriefVisualConcepts(prompt, options?.language !== "英文");
   if (concepts.length === 0) return "";
+  if (detectBriefDomain(prompt) === "gaming") {
+    return [
+      `Brief-derived game anchors: ${concepts.join(", ")}.`,
+      "Every scene must turn at least one anchor into visible gameplay: a player-controlled action, readable objective, character response, changing challenge, progression feedback, reward, or new route.",
+      "Show the game world itself. Do not translate levels into enterprise gates, or use governance control rooms, approval paths, evidence packets, responsibility chains, dashboards, office meetings, or generic workflow diagrams."
+    ].join(" ");
+  }
   return [
     `Brief-derived visual anchors: ${concepts.join(", ")}.`,
     "Every scene should embody at least one anchor as a concrete object, environment, diagrammatic structure, workflow artifact, or human action.",
@@ -648,6 +719,7 @@ function blockingStoryboardIssues(issues: string[]) {
     || issue === "voiceover narrates the production instead of the client's company or product"
     || issue === "voiceover loses the client's named company or product"
     || issue === "voiceover starts with the product name too often"
+    || issue === "voiceover conflicts with the client's industry"
     || issue === "voiceover does not fit comfortably inside its scene duration"
     || issue === "voiceover is too sparse for the scene duration"
     || issue === "scene content is not fully localized in Chinese"
@@ -685,6 +757,7 @@ async function createTreatment(
           "You are a senior commercial film director and creative strategist.",
           "Develop one coherent, specific treatment for an AI-generated short video.",
           "First extract a commercialBrief from the client input. Identify the promoted subject, category, audience, customer problem, offering, differentiators, supplied proof, desired outcomes, and call to action.",
+          "Infer the client's real industry before writing. Keep every concept inside that industry: a game should speak about players, gameplay, choices, challenge, feedback, progression, replay, and its stated features; never import enterprise pressure, governance, approval, evidence, workflow, or team-alignment language unless the client explicitly supplied it.",
           "Treat only facts stated or clearly implied by the client as facts. Never invent customers, metrics, awards, market claims, or product capabilities. Use an empty proofPoints array when no proof is supplied.",
           "Find a visual concept rooted in the user's actual subject, not a software feature list.",
           "Extract business structures from the client text and make them recurring visual motifs when present: gates, records, responsibility chains, evidence packets, approval paths, budget boundaries, risk signals, or scenario tables.",
@@ -738,6 +811,7 @@ async function createTreatment(
             "You are the commercial brief and narration quality editor.",
             "Repair the treatment while preserving every verified client fact and the required beat count.",
             "Separate production instructions from promoted-company content.",
+            "Preserve the client's industry. Never rewrite a game, course, retail product, or entertainment property with unrelated enterprise-software language.",
             "Rewrite every narrationLine as concise, natural, audience-facing commercial narration grounded in its sourceFact.",
             "Do not start multiple narrationLine values with the same product name or category; vary the first phrase of every beat.",
             "Do not invent proof, metrics, customers, awards, or capabilities. Return strict JSON only."
@@ -849,6 +923,7 @@ export async function createStoryboardProject(
               "The approved treatment owns the spoken story. For scene N, copy treatment.beats[N-1].narrationLine into voiceover exactly; do not paraphrase, expand, or replace it.",
               "Treat requests such as 'make a video', duration, style, format, and scene count only as production instructions, never as the subject of the narration.",
               "Voiceover must sell or explain the client's actual company, product, customer problem, differentiators, evidence, and outcome. Never narrate what the video, scene, shot, camera, storyboard, viewer, or generation process is doing unless video creation is itself the client's product.",
+              "Keep all narration and visuals in the client's actual industry. For games, use the supplied gameplay, player action, world, challenge, progression, feedback, and replay value; never substitute enterprise pressure, governance, approvals, evidence packets, responsibility chains, or generic team workflow.",
               "Every scene must begin its narration differently and depict a different visual event and composition.",
               "The final scene must unmistakably resolve the promise with a deliverable outcome or clear next action, not just another feature beat.",
               "Motion prompts must specify camera movement, subject movement, depth behavior, and the handoff into the next shot."

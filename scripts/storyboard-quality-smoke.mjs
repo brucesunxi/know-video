@@ -47,6 +47,10 @@ assert(storyboardQualityIssues(scenes.map((scene, index) => ({
   ...scene,
   voiceover: `DIY 游戏${index === 0 ? "让玩家快速开始创作。" : index === 1 ? "把关卡规则变得更容易理解。" : index === 2 ? "帮助玩家完成自己的作品。" : "让分享和复玩更自然。"}`
 })), { language: "中文" }, "DIY 游戏产品介绍", "为 DIY 游戏制作一支产品介绍视频").includes("voiceover starts with the product name too often"));
+assert(storyboardQualityIssues(mutate(0, {
+  voiceover: "当项目压力分散时，这款游戏先让关键风险浮出水面。",
+  visualPrompt: `${scenes[0].visualPrompt} 企业治理控制室里出现授权责任链和证据包。`
+}), { language: "中文" }, "DIY 游戏产品介绍", "为 DIY 沙盒游戏制作一支介绍片，展示玩家建造关卡").includes("voiceover conflicts with the client's industry"));
 assert(storyboardQualityIssues(mutate(3, {
   title: "空间延展",
   voiceover: "画面继续展示更多细节，让观众看到系统内部的持续变化。",

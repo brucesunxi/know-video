@@ -4,6 +4,7 @@ import { narrationVoiceForBrief, narrationVoiceFromRequest } from "@/lib/voice-p
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import {
+  detectBriefDomain,
   extractBriefFacts,
   extractBriefSubject,
   extractBriefVisualConcepts,
@@ -138,17 +139,76 @@ function fitFallbackNarration(scene: Scene, durationSeconds: number, chinese: bo
   return compactEnglishNarration(scene.voiceover, maxWords);
 }
 
-function businessFallbackNarrations(
+function domainFallbackNarrations(
+  prompt: string,
   subject: string,
   facts: string[],
   concepts: string[],
   chinese: boolean
 ) {
+  const domain = detectBriefDomain(prompt);
   const concept = (pattern: RegExp, chineseFallback: string, englishFallback: string) => {
     const found = concepts.find((item) => pattern.test(item));
     return found ?? (chinese ? chineseFallback : englishFallback);
   };
   const factHint = (index: number) => facts[index]?.replace(/\s+/g, chinese ? "" : " ").trim();
+
+  if (domain === "gaming") {
+    if (!chinese) {
+      return [
+        `From the first move, ${subject} puts players directly inside its core experience.`,
+        `The hook comes from readable rules, responsive feedback, and choices that visibly change what happens next.`,
+        `As the challenge grows, players learn through action and discover new ways to approach the objective.`,
+        `Different decisions create different outcomes, giving every run more variety and replay value.`,
+        `Reaching the goal feels earned because progress comes from the player's own timing, strategy, and creativity.`,
+        `Enter ${subject} and start the next challenge on your own terms.`
+      ].map((line, index) => factHint(index) && factHint(index)!.length < 110 ? `${factHint(index)}. ${line}` : line);
+    }
+    return [
+      `从第一次操作开始，${subject}就把玩家带进核心玩法。`,
+      "清楚的规则、即时的反馈，让每个选择都真正改变接下来的局面。",
+      "挑战逐步展开，玩家在行动中掌握技巧，也不断发现新的解法。",
+      "不同策略带来不同结果，每一次尝试都有变化，也更值得反复游玩。",
+      "完成目标时，成就感来自玩家亲手做出的判断、节奏与创造。",
+      `现在进入${subject}，开始属于你的下一局。`
+    ];
+  }
+
+  if (domain === "education") {
+    return chinese ? [
+      `从真实学习难点出发，${subject}先让复杂知识变得容易理解。`,
+      "清晰步骤连接讲解与练习，让学习者始终跟得上节奏。",
+      "每一次操作和反馈，都把抽象概念变成可以应用的方法。",
+      "随着理解加深，学习者能够独立解决更具体的问题。",
+      "最终收获的不只是记住内容，而是真正会用的能力。",
+      `从${subject}开始，让下一次学习自然发生。`
+    ] : [
+      `${subject} starts with a real learning challenge and makes complex knowledge easier to understand.`,
+      "Clear steps connect explanation with practice, helping learners stay oriented.",
+      "Every action and response turns an abstract idea into something usable.",
+      "As understanding grows, learners can solve more concrete problems independently.",
+      "The outcome is not just remembered content, but a skill that can be applied.",
+      `Start with ${subject} and carry learning into the next real situation.`
+    ];
+  }
+
+  if (domain === "commerce") {
+    return chinese ? [
+      `${subject}先把真正值得关注的商品价值清楚呈现。`,
+      "从发现、比较到选择，每一步都围绕消费者的真实需求展开。",
+      "可靠信息和直观细节，让决定更轻松，也更有把握。",
+      "下单之后，进度与交付保持清楚，减少等待中的不确定。",
+      "最终抵达的不只是一次购买，而是一段顺畅可信的体验。",
+      `现在体验${subject}，找到更适合你的选择。`
+    ] : [
+      `${subject} makes the product value that matters immediately clear.`,
+      "From discovery and comparison to selection, each step follows a real customer need.",
+      "Reliable information and tangible detail make the decision easier and more confident.",
+      "After checkout, clear progress and delivery reduce uncertainty.",
+      "The result is more than a purchase: it is a smooth, trustworthy experience.",
+      `Explore ${subject} and find the choice that fits.`
+    ];
+  }
 
   if (!chinese) {
     const gates = concept(/gate|checkpoint/i, "多道 Gate 检查点", "gated checkpoints");
@@ -187,18 +247,35 @@ function businessFallbackNarrations(
   return lines;
 }
 
-function localizedFallbackDirection(scene: Scene, index: number, chinese: boolean, style?: GenerationOptions["style"]): Scene {
+function localizedFallbackDirection(
+  scene: Scene,
+  index: number,
+  chinese: boolean,
+  style?: GenerationOptions["style"],
+  prompt = ""
+): Scene {
   if (!chinese) return scene;
   const profile = visualStyleProfile(style);
   const subject = scene.title.replace(/[：:]/g, "").trim();
-  const visualDirections = [
-    `微距特写，${subject}以一个真实、明确的核心物件作为视觉主体；前景保留${profile.materials}的材质细节，中景出现正在操作的手与关键动作，背景是符合${profile.label}的专业环境。${profile.lighting}，${profile.composition}，画面不出现漂浮卡片或大段文字。`,
-    `俯拍广角镜头，围绕${subject}的真实素材形成清晰叙事路径；前景有与${profile.materials}一致的细节，中景双手正在整理顺序，背景自然虚化。${profile.cameraLanguage}，${profile.palette.join("、")}色彩体系贯穿画面。`,
-    `中等景别，人物在符合${profile.label}的工作空间中推进${subject}；前景形成自然遮挡，中景人物与核心画面构成稳定关系，背景建立空间纵深。${profile.lighting}，材质语言为${profile.materials}。`,
-    `宽幅远景，${subject}在完整可信的商业环境中发生；前景形成引导线，中景人物与关键物件产生明确互动，背景建立空间深度。${profile.composition}，整体坚持${profile.artDirection}。`,
-    `近景特写，镜头聚焦${subject}带来的具体变化与人物反应；前景保留细节，中景主体锐利，背景柔和分层。${profile.cameraLanguage}，色彩严格保持${profile.palette.join("、")}。`,
-    `完成镜头，${subject}以可交付成果成为画面中心；前景形成稳定基座，中景成果清楚可见，背景空间自然收束。${profile.lighting}，最终画面符合${profile.label}而不是其他预设：避免${profile.avoid}。`
-  ];
+  const briefSubject = extractBriefSubject(prompt, true);
+  const domain = detectBriefDomain(prompt);
+  const visualDirections = domain === "gaming"
+    ? [
+        `微距特写，${briefSubject}中最有辨识度的玩家角色或核心道具成为画面主体；前景是可交互机关与材质细节，中景角色做出第一步明确操作，背景建立完整游戏世界。${profile.lighting}，${profile.composition}，不出现企业办公室、控制台或漂浮数据卡片。`,
+        `俯拍广角镜头，一段真实可玩的关卡路径清楚展开；前景可拾取物与障碍形成节奏，中景玩家角色朝具体目标移动，背景揭示下一处挑战。${profile.cameraLanguage}，${profile.palette.join("、")}色彩贯穿游戏世界，规则通过动作与空间表达。`,
+        `中等景别，玩家角色完成一次核心玩法动作，机关、敌人或环境立刻产生可见反馈；前景粒子与道具形成遮挡，中景动作清晰，背景保持关卡纵深。${profile.lighting}，角色、场景和道具风格统一。`,
+        `宽幅远景，${briefSubject}的挑战升级为完整游戏遭遇；玩家的选择改变路线、敌人状态或环境结构，前景形成引导线，中景保留可读动作，背景显示尚未探索的区域。${profile.composition}，坚持${profile.artDirection}。`,
+        `近景特写，镜头捕捉玩家完成目标后的角色反应、奖励反馈或创造成果；前景保留高质量材质，中景主体锐利，背景柔和分层。${profile.cameraLanguage}，避免任何企业流程意象。`,
+        `完成镜头，${briefSubject}的角色与最终关卡成果成为画面中心；环境保留自然动态，胜利、解锁或继续探索的下一步清楚可见。${profile.lighting}，画面符合${profile.label}并形成真正的游戏宣传片收束。`
+      ]
+    : [
+        `微距特写，${subject}以一个真实、明确的核心物件作为视觉主体；前景保留${profile.materials}的材质细节，中景出现正在操作的手与关键动作，背景是符合${profile.label}的专业环境。${profile.lighting}，${profile.composition}，画面不出现漂浮卡片或大段文字。`,
+        `俯拍广角镜头，围绕${subject}的真实素材形成清晰叙事路径；前景有与${profile.materials}一致的细节，中景双手正在整理顺序，背景自然虚化。${profile.cameraLanguage}，${profile.palette.join("、")}色彩体系贯穿画面。`,
+        `中等景别，人物在符合${profile.label}的真实空间中推进${subject}；前景形成自然遮挡，中景人物与核心画面构成稳定关系，背景建立空间纵深。${profile.lighting}，材质语言为${profile.materials}。`,
+        `宽幅远景，${subject}在完整可信的使用环境中发生；前景形成引导线，中景人物与关键物件产生明确互动，背景建立空间深度。${profile.composition}，整体坚持${profile.artDirection}。`,
+        `近景特写，镜头聚焦${subject}带来的具体变化与人物反应；前景保留细节，中景主体锐利，背景柔和分层。${profile.cameraLanguage}，色彩严格保持${profile.palette.join("、")}。`,
+        `完成镜头，${subject}以具体成果成为画面中心；前景形成稳定基座，中景成果清楚可见，背景空间自然收束。${profile.lighting}，最终画面符合${profile.label}而不是其他预设：避免${profile.avoid}。`
+      ];
   const motionDirections = [
     "摄影机从极近距离缓慢推近，主体动作由静止转为发生，前中后景产生细微视差；一束连续光轨沿画面方向移动，并自然牵引到下一场。",
     "摄影机在桌面上方平稳横移，素材依次翻转、靠拢并形成顺序，人物双手完成最后一次调整；边缘光线扫过画面后衔接下一镜头。",
@@ -224,7 +301,8 @@ function localizedFallbackDirection(scene: Scene, index: number, chinese: boolea
 function applyFallbackConstraints(
   scenes: Scene[],
   options?: GenerationOptions,
-  chinese = true
+  chinese = true,
+  prompt = ""
 ) {
   const count = options?.sceneCount === "auto" || !options?.sceneCount
     ? 5
@@ -237,12 +315,17 @@ function applyFallbackConstraints(
       sceneNumber: index + 1,
       durationSeconds: durations[index],
       voiceover: fitFallbackNarration(scene, durations[index], chinese)
-    }, index, chinese, options?.style));
+    }, index, chinese, options?.style, prompt));
 }
 
 function visualConceptSuffix(prompt: string, chinese: boolean) {
   const concepts = extractBriefVisualConcepts(prompt, chinese);
   if (concepts.length === 0) return "";
+  if (detectBriefDomain(prompt) === "gaming") {
+    return chinese
+      ? ` 游戏视觉锚点：${concepts.join("、")}；把这些内容表现为玩家可执行的动作、关卡目标、角色反馈、挑战变化和奖励结果，避免企业办公室、治理流程、数据看板或抽象科技背景。`
+      : ` Game visual anchors: ${concepts.join(", ")}; show them as player-controlled actions, playable objectives, character feedback, changing challenges, and earned rewards. Avoid enterprise offices, governance workflows, dashboards, or abstract technology backgrounds.`;
+  }
   return chinese
     ? ` 业务视觉锚点：${concepts.join("、")}；将这些概念转化为真实可见的空间结构、箭头路径、检查点、证据包、责任链或风险地图，避免只做抽象科技背景。`
     : ` Brief visual anchors: ${concepts.join(", ")}; translate them into visible spatial structures, arrow paths, checkpoints, evidence packets, responsibility chains, or risk maps rather than generic tech imagery.`;
@@ -342,7 +425,7 @@ export function generateProjectFromPrompt(
     }
   ];
   if (isVideoCreationProductBrief(prompt)) {
-    const videoGenerationScenes = applyFallbackConstraints(videoGenerationBlueprints, options, chinese);
+    const videoGenerationScenes = applyFallbackConstraints(videoGenerationBlueprints, options, chinese, prompt);
     return {
       ...(baseProject ?? {
         id: crypto.randomUUID(),
@@ -370,7 +453,15 @@ export function generateProjectFromPrompt(
   const fallbackTitle = briefSubject === "这项产品" || briefSubject === "This product"
     ? title
     : chinese ? `${briefSubject} 产品介绍` : `${briefSubject} Product Film`;
-  const businessNarrations = businessFallbackNarrations(briefSubject, briefFacts, briefConcepts, chinese);
+  const businessNarrations = domainFallbackNarrations(prompt, briefSubject, briefFacts, briefConcepts, chinese);
+  const fallbackDomain = detectBriefDomain(prompt);
+  const fallbackTitles = fallbackDomain === "gaming"
+    ? (chinese
+        ? ["进入游戏", "玩法上手", "挑战升级", "策略变化", "赢得成果", "开始下一局"]
+        : ["Enter the Game", "Learn the Loop", "Raise the Challenge", "Change the Strategy", "Earn the Result", "Start the Next Run"])
+    : (chinese
+        ? ["开场钩子", "问题情境", "解决路径", "效果证明", "价值升华", "成果收束"]
+        : ["Opening Hook", "Problem Context", "Solution Flow", "Proof Moment", "Human Outcome", "Final Resolve"]);
   const fallbackFact = (index: number, chineseFallback: string, englishFallback: string) => (
     businessNarrations[index] ?? (chinese ? chineseFallback : englishFallback)
   );
@@ -378,9 +469,11 @@ export function generateProjectFromPrompt(
     {
       id: crypto.randomUUID(),
       sceneNumber: 1,
-      title: chinese ? "开场钩子" : "Opening Hook",
+      title: fallbackTitles[0],
       voiceover: fallbackFact(0, `${briefSubject}，让企业最重要的价值被清楚看见。`, `${briefSubject} makes the company's most important value clear.`),
-      visualPrompt: `${tone} opening cinematic frame for ${briefSubject}, strong product signal, real environment, one clear hero subject.${conceptSuffix}${styleSuffix}`,
+      visualPrompt: fallbackDomain === "gaming"
+        ? `${tone} cinematic opening gameplay frame for ${briefSubject}, one recognizable player-controlled character entering a specific playable world, a clear objective visible ahead, foreground interactive props, layered level depth, no office or enterprise dashboard.${conceptSuffix}${styleSuffix}`
+        : `${tone} opening cinematic frame for ${briefSubject}, strong product signal, real environment, one clear hero subject.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Camera pushes in slowly while the headline resolves and supporting UI details fade into place.",
       durationSeconds: 6,
       style: { theme: tone, palette, mood: "clear" },
@@ -389,9 +482,11 @@ export function generateProjectFromPrompt(
     {
       id: crypto.randomUUID(),
       sceneNumber: 2,
-      title: chinese ? "问题情境" : "Problem Context",
+      title: fallbackTitles[1],
       voiceover: fallbackFact(1, `面对复杂业务，${briefSubject}帮助团队更早识别问题并建立清晰共识。`, `In complex work, ${briefSubject} helps teams identify problems earlier and build shared clarity.`),
-      visualPrompt: `${tone} problem scene for ${briefSubject}: scattered risk signals, unresolved approvals, and workflow pressure arranged as concrete objects in a control-room environment.${conceptSuffix}${styleSuffix}`,
+      visualPrompt: fallbackDomain === "gaming"
+        ? `${tone} playable tutorial encounter for ${briefSubject}: the player character performs the core action, the environment responds instantly, obstacles and objective are readable through space and motion, no business workflow imagery.${conceptSuffix}${styleSuffix}`
+        : `${tone} problem scene for ${briefSubject}: a real user faces the central challenge stated in the brief, expressed through concrete objects, environment, and action.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Cards drift apart, warning states appear, then pause for emphasis.",
       durationSeconds: 7,
       style: { theme: tone, palette, mood: "focused" },
@@ -400,9 +495,11 @@ export function generateProjectFromPrompt(
     {
       id: crypto.randomUUID(),
       sceneNumber: 3,
-      title: chinese ? "解决路径" : "Solution Flow",
+      title: fallbackTitles[2],
       voiceover: fallbackFact(2, `${briefSubject}把关键流程连接起来，让每一步都有依据、责任与行动路径。`, `${briefSubject} connects the critical workflow so every step has evidence, ownership, and a path to action.`),
-      visualPrompt: `${tone} workflow scene for ${briefSubject}: three connected checkpoints or gates linked by arrows, ownership handoffs, and evidence packets moving through the system.${conceptSuffix}${styleSuffix}`,
+      visualPrompt: fallbackDomain === "gaming"
+        ? `${tone} escalating gameplay scene for ${briefSubject}: a richer level opens around the player character, hazards and rewards create a clear route, one decisive action changes the encounter, strong foreground-midground-background depth.${conceptSuffix}${styleSuffix}`
+        : `${tone} solution scene for ${briefSubject}: the product's concrete mechanism connects the user's starting problem to a visible improved state through one clear action.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Steps connect from left to right, then the active step expands.",
       durationSeconds: 8,
       style: { theme: tone, palette, mood: "systematic" },
@@ -411,9 +508,11 @@ export function generateProjectFromPrompt(
     {
       id: crypto.randomUUID(),
       sceneNumber: 4,
-      title: chinese ? "效果证明" : "Proof Moment",
+      title: fallbackTitles[3],
       voiceover: fallbackFact(3, `从分散信息到可验证成果，${briefSubject}让改进过程清晰、可信并且可追溯。`, `From scattered information to verifiable outcomes, ${briefSubject} makes improvement clear, credible, and traceable.`),
-      visualPrompt: `${tone} proof scene for ${briefSubject}: evidence packets lock into a traceable record trail, risk signals resolve, and accountability links become clear.${conceptSuffix}${styleSuffix}`,
+      visualPrompt: fallbackDomain === "gaming"
+        ? `${tone} strategic gameplay variation for ${briefSubject}: two visible player choices produce meaningfully different routes or outcomes inside the same coherent game world, readable action and environmental feedback.${conceptSuffix}${styleSuffix}`
+        : `${tone} proof scene for ${briefSubject}: the brief's promised change is visible in a specific result, user reaction, or before-after condition.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Before state compresses, after state slides in with highlighted metrics.",
       durationSeconds: 7,
       style: { theme: tone, palette, mood: "confident" },
@@ -422,9 +521,11 @@ export function generateProjectFromPrompt(
     {
       id: crypto.randomUUID(),
       sceneNumber: 5,
-      title: chinese ? "价值升华" : "Human Outcome",
+      title: fallbackTitles[4],
       voiceover: fallbackFact(4, `最终，团队获得的不只是效率，更是更稳定的判断、更顺畅的协作和更可靠的结果。`, `The result is more than efficiency: teams gain stronger decisions, smoother collaboration, and more reliable outcomes.`),
-      visualPrompt: `${tone} closing outcome scene for ${briefSubject}: the finished governance path is visible as a calm sequence of gates, records, and approvals reaching a clear decision point.${conceptSuffix}${styleSuffix}`,
+      visualPrompt: fallbackDomain === "gaming"
+        ? `${tone} earned gameplay outcome for ${briefSubject}: the player character completes the objective, reward feedback and world reaction make success unmistakable, emotional close-up with the level still visible behind.${conceptSuffix}${styleSuffix}`
+        : `${tone} closing outcome scene for ${briefSubject}: the promised human or customer outcome is fully visible in a calm, concrete, believable environment.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Logo and takeaway fade in, background elements settle, then hold.",
       durationSeconds: 6,
       style: { theme: tone, palette, mood: "polished" },
@@ -433,9 +534,11 @@ export function generateProjectFromPrompt(
     {
       id: crypto.randomUUID(),
       sceneNumber: 6,
-      title: chinese ? "成果收束" : "Final Resolve",
+      title: fallbackTitles[5],
       voiceover: fallbackFact(5, `${briefSubject}，让真正重要的工作持续向前。`, `${briefSubject} keeps the work that matters moving forward.`),
-      visualPrompt: `${tone} closing cinematic frame for ${briefSubject}, one concrete hero subject, resolved environment, strong visual identity, premium spacing, no generic presentation layout.${conceptSuffix}${styleSuffix}`,
+      visualPrompt: fallbackDomain === "gaming"
+        ? `${tone} final game trailer frame for ${briefSubject}: recognizable hero character, resolved level objective, one enticing unexplored path or next challenge, coherent world identity, cinematic hold, no enterprise visual language.${conceptSuffix}${styleSuffix}`
+        : `${tone} closing cinematic frame for ${briefSubject}, one concrete hero subject, resolved environment, strong visual identity, premium spacing, no generic presentation layout.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "The final subject settles into a clean hero composition, environmental motion slows, and the camera holds for a confident finish.",
       durationSeconds: 6,
       style: { theme: tone, palette, mood: "resolved" },
@@ -443,7 +546,7 @@ export function generateProjectFromPrompt(
     }
   ];
   const narrationVoice = narrationVoiceForBrief(prompt);
-  const scenes = applyFallbackConstraints(genericBlueprints, options, chinese).map((scene) => ({
+  const scenes = applyFallbackConstraints(genericBlueprints, options, chinese, prompt).map((scene) => ({
     ...scene,
     style: { ...scene.style, narrationVoice }
   }));

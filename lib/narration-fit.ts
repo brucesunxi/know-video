@@ -90,7 +90,9 @@ export function fitScenesNarration(
     const durations = scenes.map((scene) => Math.max(2, Math.ceil(estimateNarrationSeconds(scene.voiceover) + 0.45)));
     let remaining = targetDuration - durations.reduce((sum, value) => sum + value, 0);
     if (remaining < 0) {
-      throw new Error("Locked narration cannot fit the requested video duration");
+      // Keep the AI treatment and compact complete spoken clauses instead of
+      // discarding the whole industry-specific storyboard for a generic fallback.
+      return fitScenesNarration(scenes, targetDuration);
     }
     let cursor = 0;
     while (remaining > 0) {

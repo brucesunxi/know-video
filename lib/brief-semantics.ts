@@ -21,6 +21,44 @@ const ignoredBrandTokens = new Set([
   "AI", "VIDEO", "SaaS", "APP", "WEB", "MP4", "HD", "4K", "B2B", "B2C"
 ]);
 
+export type BriefDomain =
+  | "gaming"
+  | "education"
+  | "commerce"
+  | "entertainment"
+  | "business"
+  | "general";
+
+const briefDomainPatterns: Array<[BriefDomain, RegExp]> = [
+  [
+    "gaming",
+    /(?:游戏|玩家|玩法|关卡|角色|战斗|养成|副本|电竞|卡牌|开放世界|沙盒|解谜|闯关|gameplay|game|player|level|quest|battle|character)/iu
+  ],
+  [
+    "education",
+    /(?:教育|课程|课堂|老师|教师|学生|学习|教学|培训|知识|课件|education|course|classroom|teacher|student|learning|training)/iu
+  ],
+  [
+    "commerce",
+    /(?:电商|商品|购物|零售|店铺|库存|订单|物流|跨境|消费者|commerce|e-?commerce|retail|shop|store|inventory|order|logistics)/iu
+  ],
+  [
+    "entertainment",
+    /(?:娱乐|影视|电影|综艺|音乐|艺人|演出|内容创作|粉丝|audience|entertainment|film|music|artist|creator|fandom)|\bIP\b/iu
+  ],
+  [
+    "business",
+    /(?:企业|公司|团队|业务|客户|项目|治理|责任|授权|审批|风险|证据|协作|管理|平台|SaaS|B2B|enterprise|business|workflow|governance|approval|risk|accountability)/iu
+  ]
+];
+
+export function detectBriefDomain(value: string): BriefDomain {
+  for (const [domain, pattern] of briefDomainPatterns) {
+    if (pattern.test(value)) return domain;
+  }
+  return "general";
+}
+
 export function isVideoCreationProductBrief(prompt: string) {
   return videoCreationProductPatterns.some((pattern) => pattern.test(prompt));
 }
@@ -77,7 +115,7 @@ export function extractBriefFacts(prompt: string, chinese = true) {
 }
 
 const visualConceptPatterns: Array<[RegExp, string, string]> = [
-  [/\bGates?\b|Gate\s*记录|闸门|关卡|阶段门/iu, "Gate checkpoints", "多道 Gate 检查点"],
+  [/\bGates?\b|Gate\s*记录|闸门|阶段门/iu, "Gate checkpoints", "多道 Gate 检查点"],
   [/证据包|证据|evidence|audit/iu, "evidence packets", "可审查证据包"],
   [/可追溯|追溯|traceable|traceability|记录/iu, "traceable record trail", "可追溯记录链"],
   [/责任|accountability|ownership|owner/iu, "accountability chain", "责任链路"],
@@ -93,6 +131,21 @@ const visualConceptPatterns: Array<[RegExp, string, string]> = [
 
 export function extractBriefVisualConcepts(prompt: string, chinese = true) {
   const concepts: string[] = [];
+  if (detectBriefDomain(prompt) === "gaming") {
+    const gamingConceptPatterns: Array<[RegExp, string, string]> = [
+      [/玩法|gameplay/iu, "core gameplay action", "核心玩法动作"],
+      [/玩家|player/iu, "player-controlled action", "玩家操控动作"],
+      [/关卡|副本|level|quest|dungeon/iu, "playable level objective", "可游玩关卡目标"],
+      [/角色|character|hero/iu, "recognizable game character", "可识别游戏角色"],
+      [/战斗|battle|combat/iu, "combat encounter", "战斗遭遇"],
+      [/建造|合成|crafting|build(?:ing)?/iu, "crafting or building interaction", "建造与制作交互"],
+      [/解谜|puzzle/iu, "puzzle interaction", "解谜交互"],
+      [/养成|成长|progression|upgrade/iu, "progression and upgrade", "成长与升级反馈"]
+    ];
+    for (const [pattern, english, localized] of gamingConceptPatterns) {
+      if (pattern.test(prompt)) concepts.push(chinese ? localized : english);
+    }
+  }
   for (const [pattern, english, localized] of visualConceptPatterns) {
     if (pattern.test(prompt)) concepts.push(chinese ? localized : english);
   }
