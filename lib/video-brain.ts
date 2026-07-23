@@ -58,25 +58,31 @@ function selectNarrativeScenes<T>(scenes: T[], count: number) {
 }
 
 function compactChineseNarration(text: string, maxCharacters: number) {
-  const normalized = text.replace(/\s+/g, "").trim();
-  if (normalized.replace(/[，。！？；、]/g, "").length <= maxCharacters) return normalized;
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const spokenLength = (value: string) => value.replace(/[\s，。！？；、]/g, "").length;
+  if (spokenLength(normalized) <= maxCharacters) return normalized;
 
   const sentenceParts = normalized.match(/[^。！？；]+[。！？；]?/gu)?.map((part) => part.trim()).filter(Boolean) ?? [normalized];
   let candidate = "";
   for (const part of sentenceParts) {
     const next = `${candidate}${part}`;
-    if (next.replace(/[，。！？；、]/g, "").length > maxCharacters) break;
+    if (spokenLength(next) > maxCharacters) break;
     candidate = next;
   }
-  if (candidate.replace(/[，。！？；、]/g, "").length >= Math.floor(maxCharacters * 0.68)) {
+  if (spokenLength(candidate) >= Math.max(6, Math.floor(maxCharacters * 0.38))) {
     return /[。！？；]$/u.test(candidate) ? candidate : `${candidate}。`;
   }
 
   const clauses = normalized.split(/[，。！？；]/u).map((part) => part.trim()).filter(Boolean);
-  const bestClause = clauses.find((part) => part.length >= Math.floor(maxCharacters * 0.48) && part.length <= maxCharacters);
+  const dependentOpening = /^(?:并|而|且|或|但|就会|则|从而|以及|同时|随后|然后|因此|所以|其中|其|它|这时|Know\s*Video\s*就会把)/iu;
+  const bestClause = clauses.find((part) => (
+    spokenLength(part) >= 6
+    && spokenLength(part) <= maxCharacters
+    && !dependentOpening.test(part)
+  ));
   if (bestClause) return `${bestClause}。`;
 
-  return `${normalized.replace(/[，。！？；、]/g, "").slice(0, maxCharacters)}。`;
+  return `${normalized.replace(/[，。！？；、]/g, "").slice(0, Math.max(6, maxCharacters - 1))}。`;
 }
 
 function compactEnglishNarration(text: string, maxWords: number) {
@@ -354,7 +360,7 @@ export function generateProjectFromPrompt(
       sceneNumber: 1,
       title: chinese ? "输入制作请求" : "Describe the idea",
       voiceover: chinese
-        ? "用户只需要描述想做的视频，Know Video 就会把目标、受众、时长和风格整理成清晰的制作简报。"
+        ? "说出创意，Know Video 随即理解需求并规划分镜。"
         : "Describe the video you want, and Know Video turns the goal, audience, timing, and style into a clear production brief.",
       visualPrompt: `${tone} product video scene: a creator types a video request into Know Video, the prompt expands into audience, goal, tone, and duration chips.`,
       motionPrompt: "Camera pushes toward the prompt box, then the request fans out into structured production cards.",

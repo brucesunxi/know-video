@@ -88,4 +88,20 @@ assert.doesNotMatch(narration, /产品|平台|解决方案|效率/u);
 assert.match(visuals, /玩家角色|关卡|游戏世界/u);
 assert.doesNotMatch(visuals, /企业治理|授权责任链|证据包|商业环境/u);
 
+const creationPlatform = videoBrainModule.exports.generateProjectFromPrompt(
+  "生成一个 30 秒的 AI 视频生成平台介绍片，重点展示 Know Video 如何从一句需求完成脚本、分镜和成片。",
+  undefined,
+  {
+    duration: "30",
+    sceneCount: "5",
+    language: "中文",
+    style: "极简高级",
+    motion: "camera",
+    videoTier: "economy"
+  }
+);
+const openingNarration = creationPlatform.currentVersion.scenes[0].voiceover;
+assert.equal(openingNarration, "说出创意，Know Video 随即理解需求并规划分镜。");
+assert.doesNotMatch(openingNarration, /就会把目标|目标受众时/u);
+
 console.log("Domain-aware fallback smoke passed.");
