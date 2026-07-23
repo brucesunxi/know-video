@@ -28,12 +28,12 @@ export const visualStyleProfiles: Record<VisualStyleName, {
     key: "minimal",
     label: "极简高级",
     palette: ["#F8FAFC", "#E5EDF3", "#111827", "#0F766E", "#CBD5E1"],
-    artDirection: "premium minimalist brand film, quiet luxury, precise spacing, clean product logic, editorial restraint",
+    artDirection: "premium minimalist brand film, quiet luxury, precise spacing, visually explicit business logic, editorial restraint",
     lighting: "bright softbox lighting, airy shadows, clean white or pale gray environments, controlled highlights",
     cameraLanguage: "locked-off symmetry, slow lateral slides, overhead precision shots, macro details, calm transitions",
     materials: "matte glass, white ceramic, satin metal, paper, clear acrylic, fine grid texture",
-    composition: "asymmetric negative space, sparse objects, exact alignment, few but meaningful visual elements",
-    avoid: "busy control rooms, neon sci-fi, dramatic smoke, heavy gradients, crowded teams, loud saturated colors"
+    composition: "asymmetric negative space around a complete cause-and-effect scene, exact alignment, a limited set of recognizable information-bearing objects connected by a clear action or route",
+    avoid: "empty abstract tableaux, lone cubes or acrylic blocks, meaningless hands, decorative geometry without business meaning, busy control rooms, neon sci-fi, dramatic smoke, heavy gradients, crowded teams, loud saturated colors"
   },
   明快有活力: {
     key: "vivid",

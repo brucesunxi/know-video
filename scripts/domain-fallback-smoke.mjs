@@ -104,4 +104,24 @@ const openingNarration = creationPlatform.currentVersion.scenes[0].voiceover;
 assert.equal(openingNarration, "说出创意，Know Video 随即理解需求并规划分镜。");
 assert.doesNotMatch(openingNarration, /就会把目标|目标受众时/u);
 
+const inventorySaas = videoBrainModule.exports.generateProjectFromPrompt(
+  "做一个关于跨境电商库存管理 SaaS 的解释视频，目标客户是运营负责人，展示多仓库存、缺货预警、订单履约和仓间调拨。",
+  undefined,
+  {
+    duration: "30",
+    sceneCount: "5",
+    language: "中文",
+    style: "极简高级",
+    motion: "camera",
+    videoTier: "economy"
+  }
+);
+const inventoryNarration = inventorySaas.currentVersion.scenes.map((scene) => scene.voiceover).join("\n");
+const inventoryVisuals = inventorySaas.currentVersion.scenes.map((scene) => scene.visualPrompt).join("\n");
+assert.match(inventoryNarration, /库存|仓库|订单|履约/u);
+assert.match(inventoryVisuals, /仓库节点|货架/u);
+assert.match(inventoryVisuals, /订单|调拨|补货/u);
+assert.match(inventoryVisuals, /路线|路径/u);
+assert.match(inventoryVisuals, /不使用孤立方块|业务因果一眼可见/u);
+
 console.log("Domain-aware fallback smoke passed.");

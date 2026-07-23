@@ -203,6 +203,24 @@ function domainFallbackNarrations(
   }
 
   if (domain === "commerce") {
+    const inventoryOperations = /(?:跨境|库存|仓库|仓储|订单|物流|调拨|补货|缺货|积压|运营负责人|cross[- ]?border|inventory|warehouse|order|logistics|replenish|stock)/iu.test(prompt);
+    if (inventoryOperations) {
+      return chinese ? [
+        `面对跨境多仓库存，${subject}先让分散库存进入同一幅运营视图。`,
+        "缺货、积压与在途差异不再藏在表格里，风险会在影响订单前出现。",
+        "订单、仓库与可售库存被持续连接，运营团队看得见每一次变化的原因。",
+        "当区域需求改变，补货与仓间调拨可以沿着清晰路径及时发生。",
+        "库存更平衡，履约更稳定，资金也不再被无效库存长期占用。",
+        `用${subject}掌握全球库存，让下一次运营决策更早、更准。`
+      ] : [
+        `${subject} brings fragmented cross-border inventory into one operational view.`,
+        "Stockouts, overstock, and in-transit gaps become visible before they disrupt orders.",
+        "Orders, warehouses, and available stock stay connected so every change has a clear cause.",
+        "When regional demand shifts, replenishment and warehouse transfers follow a visible path.",
+        "Inventory becomes more balanced, fulfillment more reliable, and less capital stays trapped in idle stock.",
+        `${subject} turns global inventory into earlier, clearer operating decisions.`
+      ];
+    }
     return chinese ? [
       `${subject}先把真正值得关注的商品价值清楚呈现。`,
       "从发现、比较到选择，每一步都围绕消费者的真实需求展开。",
@@ -269,6 +287,8 @@ function localizedFallbackDirection(
   const subject = scene.title.replace(/[：:]/g, "").trim();
   const briefSubject = extractBriefSubject(prompt, true);
   const domain = detectBriefDomain(prompt);
+  const inventoryOperations = domain === "commerce"
+    && /(?:跨境|库存|仓库|仓储|订单|物流|调拨|补货|缺货|积压|运营负责人|cross[- ]?border|inventory|warehouse|order|logistics|replenish|stock)/iu.test(prompt);
   const visualDirections = domain === "gaming"
     ? [
         `微距特写，${briefSubject}中最有辨识度的玩家角色或核心道具成为画面主体；前景是可交互机关与材质细节，中景角色做出第一步明确操作，背景建立完整游戏世界。${profile.lighting}，${profile.composition}，不出现企业办公室、控制台或漂浮数据卡片。`,
@@ -278,6 +298,15 @@ function localizedFallbackDirection(
         `近景特写，镜头捕捉玩家完成目标后的角色反应、奖励反馈或创造成果；前景保留高质量材质，中景主体锐利，背景柔和分层。${profile.cameraLanguage}，避免任何企业流程意象。`,
         `完成镜头，${briefSubject}的角色与最终关卡成果成为画面中心；环境保留自然动态，胜利、解锁或继续探索的下一步清楚可见。${profile.lighting}，画面符合${profile.label}并形成真正的游戏宣传片收束。`
       ]
+    : inventoryOperations
+      ? [
+          `俯拍广角建立镜头，一张浅灰色世界物流台面上分布三个可识别的仓库节点：货架、同款商品箱和集装箱分别位于亚洲、北美与欧洲区域；细窄路线把节点连接，一处库存堆过高、另一处接近空缺，琥珀色信号明确指出失衡。${profile.lighting}，保持${profile.label}，不使用孤立方块或无意义摆拍。`,
+          `中近景问题镜头，同一种商品在前景空货架、中景积压货架与背景在途集装箱之间形成强烈对照；运营人员正在核对订单流向，红色订单标记在缺货仓前停住。${profile.composition}，所有物件共同表达“有货却不在需要的位置”。`,
+          `斜俯视解决镜头，透明运营台面把订单圆点、仓库节点、可售库存堆叠与在途包裹连接成一条可读路径；运营人员移动一个补货节点后，订单沿绿色路线重新分配。${profile.materials}，业务因果一眼可见，界面仅用无文字图形编码。`,
+          `宽幅流程镜头，左侧订单需求进入中央分配枢纽，再分别通向补货、仓间调拨和本地履约三条实体路线；包裹、货架和集装箱沿路径移动，低库存仓逐步恢复。${profile.cameraLanguage}，前中后景形成完整跨境库存系统。`,
+          `近景成果镜头，三个区域仓库的同款商品库存恢复到合理层级，订单顺利进入打包与出库；运营负责人放松地确认整体状态，背景仍能看见连续物流路线。${profile.lighting}，画面简洁但信息完整，体现库存平衡与稳定履约。`,
+          `最终英雄镜头，全球仓网、订单流和履约路线收束成一个稳定运转的跨境网络；前景是已完成出库的包裹，中景仓库节点保持平衡，背景货运路线继续延伸。${profile.artDirection}，形成可信的企业产品收尾。`
+        ]
     : [
         `微距特写，${subject}以一个真实、明确的核心物件作为视觉主体；前景保留${profile.materials}的材质细节，中景出现正在操作的手与关键动作，背景是符合${profile.label}的专业环境。${profile.lighting}，${profile.composition}，画面不出现漂浮卡片或大段文字。`,
         `俯拍广角镜头，围绕${subject}的真实素材形成清晰叙事路径；前景有与${profile.materials}一致的细节，中景双手正在整理顺序，背景自然虚化。${profile.cameraLanguage}，${profile.palette.join("、")}色彩体系贯穿画面。`,

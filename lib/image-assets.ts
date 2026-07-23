@@ -6,6 +6,7 @@ import { getOptionalEnv } from "@/lib/env";
 import {
   enforceTextFreeImagePrompt,
   projectVisualIdentity,
+  sceneRequiresPremiumImage,
   sceneImagePrompt,
   selectVisualAnchorScene,
   stableImageSeed,
@@ -46,7 +47,7 @@ function buildSceneImagePrompt(
 
 function buildBrandSafeImagePrompt(scene: Scene, project: Project) {
   return enforceTextFreeImagePrompt([
-    `Create a brand-safe 16:9 cinematic key visual for the product video "${project.title}".`,
+    `Create a brand-safe 16:9 cinematic key visual for the commercial film "${project.title}".`,
     projectVisualIdentity(project),
     `Scene ${scene.sceneNumber}: ${scene.title}.`,
     `Use an elegant abstract visual metaphor built from architecture, light, layered materials, and purposeful motion.`,
@@ -134,6 +135,9 @@ async function generateSceneImage(
   variantKey = "primary",
   visualInstruction?: string
 ): Promise<{ asset: SceneAsset; reference: ImageReference } | undefined> {
+  const effectiveQuality: ImageQuality = quality === "premium" || sceneRequiresPremiumImage(scene)
+    ? "premium"
+    : "standard";
   const usableReferences = hasCloudflareAI() ? references : [];
   const baseSeed = stableImageSeed(`${project.id}:${scene.sceneNumber}:${variantKey}`);
   let prompt = buildSceneImagePrompt(scene, project, usableReferences, visualInstruction);
@@ -153,14 +157,14 @@ async function generateSceneImage(
       if (hasCloudflareAI()) {
         let generated;
         try {
-          generated = await generateCloudflareImage(attemptPrompt, quality, {
+          generated = await generateCloudflareImage(attemptPrompt, effectiveQuality, {
             seed,
             references: usableReferences
           });
         } catch (error) {
           if (!isSafetyFiltered(error)) throw error;
           effectivePrompt = buildBrandSafeImagePrompt(scene, project);
-          generated = await generateCloudflareImage(effectivePrompt, quality, {
+          generated = await generateCloudflareImage(effectivePrompt, effectiveQuality, {
             seed,
             references: usableReferences.filter((reference) => reference.role === "anchor")
           });
@@ -210,7 +214,7 @@ async function generateSceneImage(
     metadata: {
       source: "generated-image",
       model,
-      quality,
+      quality: effectiveQuality,
       prompt,
       seed,
       ...qualityMetadata,

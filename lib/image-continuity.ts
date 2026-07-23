@@ -15,6 +15,17 @@ export function enforceTextFreeImagePrompt(prompt: string) {
   return `${prompt.trim()}\n${TEXT_FREE_IMAGE_DIRECTION}`;
 }
 
+export function sceneRequiresPremiumImage(scene: Pick<Scene, "title" | "voiceover" | "visualPrompt">) {
+  const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`;
+  const concreteSystems = [
+    /(?:跨境|cross[- ]?border)/iu,
+    /(?:库存|仓库|仓储|inventory|warehouse|stock)/iu,
+    /(?:订单|履约|物流|调拨|补货|order|fulfillment|logistics|transfer|replenish)/iu,
+    /(?:gate|检查点|证据|责任|审批|风险|追溯|evidence|approval|risk|trace)/iu
+  ].filter((pattern) => pattern.test(description)).length;
+  return concreteSystems >= 2;
+}
+
 export function visualAnchorScore(scene: Scene) {
   const description = `${scene.title} ${scene.visualPrompt}`.toLowerCase();
   let score = Math.min(3, scene.visualPrompt.length / 180);
@@ -64,6 +75,30 @@ export function projectVisualIdentity(project: Project) {
   ].join("\n");
 }
 
+function semanticSceneDirection(scene: Scene) {
+  const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`.toLowerCase();
+  if (/(?:跨境|库存|仓库|仓储|订单|物流|调拨|补货|缺货|积压|cross[- ]?border|inventory|warehouse|order|logistics|replenish|stock)/iu.test(description)) {
+    return [
+      "BUSINESS SEMANTIC FIDELITY:",
+      "Make the inventory or logistics logic immediately legible through recognizable warehouse shelving, SKU or parcel groups, containers, warehouse nodes, routes, order flow, stock imbalance, transfer, or replenishment actions named by this scene.",
+      "Show a visible cause-and-effect relationship among at least three brief-linked elements. Minimalism may simplify their styling, but must not remove the operational system.",
+      "Never substitute a lone cube, blank acrylic block, isolated hand, empty pedestal, generic office still life, or decorative geometry for the inventory workflow."
+    ].join("\n");
+  }
+  if (/(?:gate|检查点|证据|责任|审批|风险|追溯|governance|evidence|approval|risk|trace)/iu.test(description)) {
+    return [
+      "BUSINESS SEMANTIC FIDELITY:",
+      "Make the stated business structure visibly legible as connected checkpoints, evidence objects, ownership paths, approval routes, risk signals, or traceable spatial relationships.",
+      "Show a cause-and-effect system, not a decorative technology metaphor."
+    ].join("\n");
+  }
+  return [
+    "SEMANTIC FIDELITY:",
+    "Style is only the rendering language; it must never replace the scene's concrete subject, action, environment, and cause-and-effect story.",
+    "Do not use a generic hand with an abstract object or decorative geometry unless that exact object is central to the client brief."
+  ].join("\n");
+}
+
 export function sceneImagePrompt(
   scene: Scene,
   project: Project,
@@ -81,12 +116,13 @@ export function sceneImagePrompt(
     : `Reference image ${index} is the project's visual anchor. Match its recurring subject identity, design language, materials, lighting, lens character, and color treatment without copying its exact composition.`).join("\n");
 
   return enforceTextFreeImagePrompt([
-    `Create a polished 16:9 key visual for a scene in a product video called "${project.title}".`,
+    `Create a polished 16:9 key visual for a scene in the commercial film "${project.title}".`,
     projectVisualIdentity(project),
     sceneAttachmentSummary(scene) ?? "",
     referenceDirection,
     `Scene ${scene.sceneNumber}: ${scene.title}.`,
     `Visual direction: ${scene.visualPrompt}`,
+    semanticSceneDirection(scene),
     `Motion direction to imply: ${scene.motionPrompt}`,
     revision ? [
       "Targeted visual revision for this candidate only:",

@@ -16,6 +16,7 @@ import { storyboardQualityIssues } from "@/lib/storyboard-quality";
 import { narrationVoiceForBrief } from "@/lib/voice-profiles";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
 import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
+import { parseModelJson } from "@/lib/model-json";
 import { estimateNarrationSeconds } from "@/lib/speech-timing";
 import { visualStyleDirection, visualStyleProfile } from "@/lib/visual-style-profiles";
 import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
@@ -608,11 +609,6 @@ function getVisionModel() {
   };
 }
 
-function extractJson(content: string) {
-  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  return JSON.parse(fenced?.[1] ?? content);
-}
-
 function isModelConnectionError(error: unknown) {
   const message = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   return /timeout|timed out|connection|fetch failed|econn|etimedout|network/i.test(message);
@@ -767,7 +763,7 @@ async function createTreatment(
     temperature: 0.6
   });
 
-  let treatment = treatmentSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+  let treatment = treatmentSchema.parse(parseModelJson(completion.choices[0]?.message.content ?? "{}"));
   if (options?.style) {
     const profile = visualStyleProfile(options.style);
     treatment = {
@@ -811,7 +807,7 @@ async function createTreatment(
       ],
       temperature: 0.25
     });
-    treatment = treatmentSchema.parse(extractJson(repair.choices[0]?.message.content ?? "{}"));
+    treatment = treatmentSchema.parse(parseModelJson(repair.choices[0]?.message.content ?? "{}"));
     treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
     const remainingNarrationIssues = treatmentNarrationIssues(treatment, targetDuration);
     if (treatment.beats.length !== sceneCount || remainingNarrationIssues.length > 0) {
@@ -861,7 +857,7 @@ async function repairStoryboard(params: {
     temperature: 0.35
   });
 
-  const repaired = storyboardSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+  const repaired = storyboardSchema.parse(parseModelJson(completion.choices[0]?.message.content ?? "{}"));
   if (repaired.scenes.length !== params.treatment.beats.length) {
     throw new Error(`Repaired storyboard returned ${repaired.scenes.length} scenes; expected ${params.treatment.beats.length}`);
   }
@@ -926,7 +922,7 @@ export async function createStoryboardProject(
       temperature: 0.5
     });
 
-    const parsed = storyboardSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+    const parsed = storyboardSchema.parse(parseModelJson(completion.choices[0]?.message.content ?? "{}"));
     if (parsed.scenes.length !== treatment.beats.length) {
       throw new Error(`Storyboard returned ${parsed.scenes.length} scenes; expected ${treatment.beats.length}`);
     }
@@ -1118,7 +1114,7 @@ export async function createEditPlan(params: {
       ],
       temperature: globalChineseRewrite ? 0.2 : 0.45
     });
-    return editPlanPayloadSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+    return editPlanPayloadSchema.parse(parseModelJson(completion.choices[0]?.message.content ?? "{}"));
   }
 
   try {
@@ -1262,7 +1258,7 @@ export async function refineEditPlan(params: {
         ],
         temperature: 0.2
       });
-      return editPlanPayloadSchema.parse(extractJson(completion.choices[0]?.message.content ?? "{}"));
+      return editPlanPayloadSchema.parse(parseModelJson(completion.choices[0]?.message.content ?? "{}"));
     }
     let payload = await requestRefinedPayload();
     if (combinedIntent.global && !validGlobalScopePayload(payload, params.version, combinedRequest)) {

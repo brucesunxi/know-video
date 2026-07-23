@@ -35,6 +35,7 @@
     "scene:transitions:smoke": "node scripts/scene-transitions-smoke.mjs",
     "storyboard:quality:smoke": "node scripts/storyboard-quality-smoke.mjs",
     "brief:decomposition:smoke": "node scripts/brief-decomposition-smoke.mjs",
+    "model:json:smoke": "node scripts/model-json-smoke.mjs",
     "fallback:domain:smoke": "node scripts/domain-fallback-smoke.mjs",
     "image:continuity:smoke": "node scripts/image-continuity-smoke.mjs",
     "image:quality:smoke": "node scripts/image-quality-smoke.mjs",

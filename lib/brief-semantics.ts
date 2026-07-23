@@ -146,6 +146,20 @@ export function extractBriefVisualConcepts(prompt: string, chinese = true) {
       if (pattern.test(prompt)) concepts.push(chinese ? localized : english);
     }
   }
+  if (detectBriefDomain(prompt) === "commerce") {
+    const commerceConceptPatterns: Array<[RegExp, string, string]> = [
+      [/跨境|cross[- ]?border|海外/iu, "cross-border warehouse route", "跨境仓网路线"],
+      [/库存|inventory|stock/iu, "multi-warehouse inventory balance", "多仓库存平衡"],
+      [/仓库|仓储|warehouse|fulfillment/iu, "recognizable warehouse nodes and shelving", "可识别仓库节点与货架"],
+      [/订单|order/iu, "order flow through fulfillment stages", "订单履约流"],
+      [/物流|运输|配送|logistics|shipping|delivery/iu, "parcel and container logistics route", "包裹与集装箱物流路线"],
+      [/缺货|断货|低库存|滞销|积压|补货|out[- ]?of[- ]?stock|low stock|overstock|replenish/iu, "stock imbalance and replenishment signal", "库存失衡与补货信号"],
+      [/调拨|transfer|allocation/iu, "warehouse transfer path", "仓间调拨路径"]
+    ];
+    for (const [pattern, english, localized] of commerceConceptPatterns) {
+      if (pattern.test(prompt)) concepts.push(chinese ? localized : english);
+    }
+  }
   for (const [pattern, english, localized] of visualConceptPatterns) {
     if (pattern.test(prompt)) concepts.push(chinese ? localized : english);
   }
