@@ -23,6 +23,18 @@ const schema = z.discriminatedUnion("operation", [
   z.object({ ...common, operation: z.literal("split") }),
   z.object({ ...common, operation: z.literal("merge-next") }),
   z.object({ ...common, operation: z.literal("duplicate") }),
+  z.object({
+    ...common,
+    operation: z.literal("insert"),
+    placement: z.enum(["before", "after"]),
+    scene: z.object({
+      title: z.string().min(1).max(240),
+      voiceover: z.string().min(1).max(4000),
+      visualPrompt: z.string().min(1).max(8000),
+      motionPrompt: z.string().min(1).max(4000),
+      durationSeconds: z.number().int().min(2).max(20)
+    })
+  }),
   z.object({ ...common, operation: z.literal("delete") })
 ]);
 

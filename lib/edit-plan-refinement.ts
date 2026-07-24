@@ -1,4 +1,5 @@
 import { extractRequestedSceneNumbers } from "@/lib/edit-intent";
+import { editPlanOperations } from "@/lib/edit-operations";
 import type { EditPlan, ProjectVersion } from "@/lib/types";
 
 export function refineEditPlanScope(params: {
@@ -9,7 +10,7 @@ export function refineEditPlanScope(params: {
 }) {
   const available = params.version.scenes.map((scene) => scene.sceneNumber);
   const requested = extractRequestedSceneNumbers(params.request, available);
-  if (requested.length === 0 || params.existingPlan.sceneStructure) return undefined;
+  if (requested.length === 0 || editPlanOperations(params.existingPlan).length > 0) return undefined;
   if (/(?:但|同时|并且|另外|以及|再把|and|while|also)/iu.test(params.request)) return undefined;
 
   const requestedSet = new Set(requested);

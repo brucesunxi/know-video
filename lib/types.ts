@@ -18,15 +18,28 @@ export type ProductionSettings = {
 };
 
 export type SceneStructureMutation =
-  | { operation: "set-duration"; sceneNumber: number; durationSeconds: number }
-  | { operation: "set-transition"; sceneNumber: number; kind: SceneTransitionKind; durationSeconds: number }
-  | { operation: "set-visual"; sceneNumber: number; assetId: string }
-  | { operation: "move"; sceneNumber: number; direction: "earlier" | "later" }
-  | { operation: "move-to"; sceneNumber: number; targetSceneNumber: number }
-  | { operation: "split"; sceneNumber: number }
-  | { operation: "merge-next"; sceneNumber: number }
-  | { operation: "duplicate"; sceneNumber: number }
-  | { operation: "delete"; sceneNumber: number };
+  | { operation: "set-duration"; sceneNumber: number; sceneId?: string; durationSeconds: number }
+  | { operation: "set-transition"; sceneNumber: number; sceneId?: string; kind: SceneTransitionKind; durationSeconds: number }
+  | { operation: "set-visual"; sceneNumber: number; sceneId?: string; assetId: string }
+  | { operation: "move"; sceneNumber: number; sceneId?: string; direction: "earlier" | "later" }
+  | { operation: "move-to"; sceneNumber: number; sceneId?: string; targetSceneNumber: number; targetSceneId?: string }
+  | { operation: "split"; sceneNumber: number; sceneId?: string }
+  | { operation: "merge-next"; sceneNumber: number; sceneId?: string }
+  | { operation: "duplicate"; sceneNumber: number; sceneId?: string }
+  | {
+      operation: "insert";
+      sceneNumber: number;
+      sceneId?: string;
+      placement: "before" | "after";
+      scene: {
+        title: string;
+        voiceover: string;
+        visualPrompt: string;
+        motionPrompt: string;
+        durationSeconds: number;
+      };
+    }
+  | { operation: "delete"; sceneNumber: number; sceneId?: string };
 
 export type GenerationOptions = {
   duration: "15" | "30" | "45" | "60";
@@ -190,6 +203,8 @@ export type EditPlan = {
   changes: EditChange[];
   referenceAssets?: GenerationReferenceAsset[];
   productionSettings?: Partial<ProductionSettings>;
+  operations?: SceneStructureMutation[];
+  /** @deprecated Read legacy persisted plans through operations instead. */
   sceneStructure?: SceneStructureMutation;
   createdAt: string;
 };

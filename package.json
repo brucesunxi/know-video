@@ -19,6 +19,7 @@
     "edit:plan:smoke": "node scripts/edit-plan-normalizer-smoke.mjs",
     "edit:apply:smoke": "node scripts/edit-application-smoke.mjs",
     "edit:proposal:smoke": "node scripts/edit-proposal-smoke.mjs",
+    "edit:conversation:smoke": "node scripts/conversation-edit-program-smoke.mjs",
     "edit:refinement:smoke": "node scripts/edit-plan-refinement-smoke.mjs",
     "edit:references:smoke": "node scripts/edit-reference-assets-smoke.mjs",
     "attachment:context:smoke": "node scripts/attachment-context-smoke.mjs",

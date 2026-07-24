@@ -4554,6 +4554,20 @@ button:disabled {
   gap: 6px;
 }
 
+.kv-structure-removed {
+  display: grid;
+  min-height: 74px;
+  place-items: center;
+  border: 1px dashed #d0d5dd;
+  border-radius: 7px;
+  background: #f8fafc;
+  padding: 10px;
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
+}
+
 .kv-structure-scene {
   display: flex;
   min-width: 0;

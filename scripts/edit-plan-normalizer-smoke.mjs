@@ -34,6 +34,12 @@ vm.runInNewContext(output, {
   require: (specifier) => {
     if (specifier === "@/lib/edit-intent") return intentModule.exports;
     if (specifier === "@/lib/language-quality") return languageQualityModule.exports;
+    if (specifier === "@/lib/edit-operations") {
+      return {
+        editPlanOperations: (plan) => plan.operations ?? (plan.sceneStructure ? [plan.sceneStructure] : []),
+        affectedSceneNumbersForOperations: (operations) => operations.map((operation) => operation.sceneNumber)
+      };
+    }
     return {};
   }
 });

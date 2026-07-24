@@ -52,6 +52,7 @@ import { referenceDescriptor } from "@/lib/attachment-context";
 import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { editPlanVisualSceneNumbers, planPreviewAsset, removeEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { analyzeEditIntent, globalEditTargetSceneNumbers } from "@/lib/edit-intent";
+import { editPlanOperations } from "@/lib/edit-operations";
 import { parsePendingGenerationSession, PENDING_GENERATION_STORAGE_KEY, type PendingGenerationSession } from "@/lib/generation-session";
 import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 import { missingMotionSceneNumbers, missingSceneAssetNumbers, sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
@@ -254,7 +255,7 @@ function renderJobTime(job: RenderJob) {
 }
 
 function uniqueRegenerate(plan: EditPlan) {
-  const structural = plan.sceneStructure?.operation === "split" || plan.sceneStructure?.operation === "merge-next"
+  const structural = editPlanOperations(plan).some((operation) => operation.operation === "split" || operation.operation === "merge-next")
     ? ["image", "audio", "thumbnail", "caption", "render"] as SceneAsset["type"][]
     : [];
   return Array.from(new Set([...plan.changes.flatMap((change) => change.regenerate), ...structural]))
@@ -273,14 +274,14 @@ function planScopeLabel(plan: EditPlan, sceneCount: number) {
 function planAssetWorkLabel(plan: EditPlan) {
   const regenerate = uniqueRegenerate(plan);
   const settingCount = productionSettingLabels(plan.productionSettings).length;
-  const structure = plan.sceneStructure ? "时间线结构" : "";
+  const structure = editPlanOperations(plan).length > 0 ? "时间线结构" : "";
   return [regenerate ? `重做${regenerate}` : "", structure, settingCount > 0 ? `${settingCount} 项成片设置` : ""]
     .filter(Boolean)
     .join("、") || "只更新文字和版本记录";
 }
 
 function planApplyLabel(plan: EditPlan, visualPreview: { total: number; ready: number }) {
-  if (plan.sceneStructure) return "应用并调整时间线";
+  if (editPlanOperations(plan).length > 0) return "应用并调整时间线";
   if (visualPreview.total > 0 && visualPreview.ready < visualPreview.total) return "应用并生成素材";
   if (uniqueRegenerate(plan)) return "应用并重做素材";
   return "应用并创建版本";
@@ -301,7 +302,7 @@ function planApplyBlocker(input: {
 
 function planRenderImpactLabel(plan: EditPlan) {
   const regenerate = new Set(plan.changes.flatMap((change) => change.regenerate));
-  const structureInvalidatesRender = Boolean(plan.sceneStructure);
+  const structureInvalidatesRender = editPlanOperations(plan).length > 0;
   if (regenerate.has("render") || structureInvalidatesRender) return "应用后需重新导出 MP4";
   if (regenerate.size > 0) return "素材更新后建议检查导出";
   return "现有成片不受影响";
@@ -316,7 +317,7 @@ function planReviewChecklist(plan: EditPlan, visualPreview: { total: number; rea
       : missingPreview === 0
         ? { label: "画面预览", value: `${visualPreview.ready} 个真实预览已就绪`, tone: "ready" }
         : { label: "画面预览", value: `${missingPreview} 个场景可先生成真实预览`, tone: "attention" },
-    { label: "执行任务", value: planAssetWorkLabel(plan), tone: uniqueRegenerate(plan) || plan.sceneStructure ? "working" : "ready" },
+    { label: "执行任务", value: planAssetWorkLabel(plan), tone: uniqueRegenerate(plan) || editPlanOperations(plan).length > 0 ? "working" : "ready" },
     { label: "成片影响", value: planRenderImpactLabel(plan), tone: planRenderImpactLabel(plan).includes("重新导出") ? "attention" : "ready" }
   ] as Array<{ label: string; value: string; tone: "ready" | "working" | "attention" }>;
 }
@@ -565,6 +566,7 @@ function sceneStructureLabel(mutation?: EditPlan["sceneStructure"]) {
   if (mutation.operation === "split") return `拆分场景 ${mutation.sceneNumber} 为两个镜头`;
   if (mutation.operation === "merge-next") return `合并场景 ${mutation.sceneNumber} 与后一场景`;
   if (mutation.operation === "duplicate") return `复制场景 ${mutation.sceneNumber} 到下一位置`;
+  if (mutation.operation === "insert") return `在场景 ${mutation.sceneNumber} ${mutation.placement === "before" ? "前" : "后"}新增“${mutation.scene.title}”`;
   return `删除场景 ${mutation.sceneNumber}`;
 }
 
@@ -2841,11 +2843,33 @@ function StructureSceneCard({
   );
 }
 
-function StructurePlanPreview({ plan, scenes }: { plan: EditPlan; scenes: Scene[] }) {
-  const mutation = plan.sceneStructure;
-  if (!mutation || (mutation.operation !== "split" && mutation.operation !== "merge-next")) return null;
+function StructurePlanPreview({ mutation, scenes }: { mutation: SceneStructureMutation; scenes: Scene[] }) {
+  if (!mutation || !["split", "merge-next", "insert", "delete"].includes(mutation.operation)) return null;
   const source = scenes.find((scene) => scene.sceneNumber === mutation.sceneNumber);
   if (!source) return null;
+
+  if (mutation.operation === "insert") {
+    return (
+      <div className="kv-structure-preview" aria-label={`场景 ${mutation.sceneNumber} 新增场景预览`}>
+        <div><small>定位场景</small><StructureSceneCard durationSeconds={source.durationSeconds} scene={source} title={source.title} /></div>
+        <ArrowRight aria-hidden="true" size={16} />
+        <div>
+          <small>{mutation.placement === "before" ? "在此之前新增" : "在此之后新增"}</small>
+          <StructureSceneCard durationSeconds={mutation.scene.durationSeconds} title={mutation.scene.title} willRegenerate />
+        </div>
+      </div>
+    );
+  }
+
+  if (mutation.operation === "delete") {
+    return (
+      <div className="kv-structure-preview" aria-label={`场景 ${mutation.sceneNumber} 删除预览`}>
+        <div><small>当前</small><StructureSceneCard durationSeconds={source.durationSeconds} scene={source} title={source.title} /></div>
+        <ArrowRight aria-hidden="true" size={16} />
+        <div><small>修改后</small><div className="kv-structure-removed">该场景将被删除，其余场景自动重新编号</div></div>
+      </div>
+    );
+  }
 
   if (mutation.operation === "split") {
     const split = sceneSplitPreview(source);
@@ -2928,7 +2952,7 @@ function ChatPanel({
     return scene && planPreviewAsset(scene, pendingPlan.id);
   }) : [];
   const planModificationCount = pendingPlan
-    ? pendingPlan.changes.length + productionSettingLabels(pendingPlan.productionSettings).length + (pendingPlan.sceneStructure ? 1 : 0)
+    ? pendingPlan.changes.length + productionSettingLabels(pendingPlan.productionSettings).length + editPlanOperations(pendingPlan).length
     : 0;
   const visualPreviewState = { total: visualSceneNumbers.length, ready: previewedSceneNumbers.length };
   const applyLabel = pendingPlan ? planApplyLabel(pendingPlan, visualPreviewState) : "应用修改";
@@ -3042,13 +3066,26 @@ function ChatPanel({
               </div>
             ) : null}
             <p>{pendingPlan.summary}</p>
-            {pendingPlan.sceneStructure ? (
+            {editPlanOperations(pendingPlan).length > 0 ? (
               <>
                 <div className="kv-structure-plan" aria-label="时间线结构修改">
                   <Layers3 size={17} />
-                  <div><strong>时间线结构</strong><span>{sceneStructureLabel(pendingPlan.sceneStructure)}</span></div>
+                  <div>
+                    <strong>时间线结构</strong>
+                    {editPlanOperations(pendingPlan).map((operation, index) => (
+                      <span key={`${operation.operation}-${operation.sceneId ?? operation.sceneNumber}-${index}`}>
+                        {index + 1}. {sceneStructureLabel(operation)}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <StructurePlanPreview plan={pendingPlan} scenes={scenes} />
+                {editPlanOperations(pendingPlan).map((operation, index) => (
+                  <StructurePlanPreview
+                    key={`preview-${operation.operation}-${operation.sceneId ?? operation.sceneNumber}-${index}`}
+                    mutation={operation}
+                    scenes={scenes}
+                  />
+                ))}
               </>
             ) : null}
             {productionSettingLabels(pendingPlan.productionSettings).length > 0 ? (

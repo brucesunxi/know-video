@@ -101,6 +101,7 @@ export function versionAttachmentContext(version: ProjectVersion) {
 
 export function planningSceneSnapshot(version: ProjectVersion) {
   return version.scenes.map((scene) => ({
+    sceneId: scene.id,
     sceneNumber: scene.sceneNumber,
     title: scene.title,
     voiceover: scene.voiceover,

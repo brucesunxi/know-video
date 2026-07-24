@@ -8,7 +8,7 @@ import {
   loadCurrentProjectForEdit,
   loadProposedEditPlan
 } from "@/lib/project-mutations";
-import { persistSceneStructureMutation } from "@/lib/scene-structure-mutations";
+import { editPlanOperations } from "@/lib/edit-operations";
 import type { EditPlan } from "@/lib/types";
 
 const requestSchema = z.object({
@@ -16,7 +16,10 @@ const requestSchema = z.object({
   versionId: z.string().min(1).max(200),
   direct: z.boolean().optional().default(false),
   editPlan: editPlanObjectSchema.extend({ status: z.literal("proposed") }).refine(
-    (plan) => plan.changes.length > 0 || Object.keys(plan.productionSettings ?? {}).length > 0 || Boolean(plan.sceneStructure)
+    (plan) => plan.changes.length > 0
+      || Object.keys(plan.productionSettings ?? {}).length > 0
+      || Boolean(plan.operations?.length)
+      || Boolean(plan.sceneStructure)
   )
 });
 
@@ -54,38 +57,22 @@ export async function POST(request: Request) {
       editPlan,
       project.currentVersion.scenes
     );
-    if (normalizedPlan.sceneStructure) {
-      if (!sceneNumbers.has(normalizedPlan.sceneStructure.sceneNumber)) {
+    const operations = editPlanOperations(normalizedPlan);
+    for (const operation of operations) {
+      const targetExists = operation.sceneId
+        ? project.currentVersion.scenes.some((scene) => scene.id === operation.sceneId)
+        : sceneNumbers.has(operation.sceneNumber);
+      if (!targetExists) {
         return NextResponse.json({ error: "修改方案包含当前版本中不存在的场景。" }, { status: 409 });
       }
-      if (normalizedPlan.sceneStructure.operation === "move-to" && !sceneNumbers.has(normalizedPlan.sceneStructure.targetSceneNumber)) {
-        return NextResponse.json({ error: "修改方案包含当前版本中不存在的目标位置。" }, { status: 409 });
-      }
-      if (normalizedPlan.changes.length > 0) {
-        return NextResponse.json({ error: "时间线结构方案暂不支持同时修改场景内容，请拆成两次修改。" }, { status: 400 });
-      }
-      const structuralProject = normalizedPlan.productionSettings ? {
-        ...project,
-        currentVersion: {
-          ...project.currentVersion,
-          scenes: project.currentVersion.scenes.map((scene, index) => index === 0 ? {
-            ...scene,
-            style: {
-              ...scene.style,
-              production: { ...scene.style.production, ...normalizedPlan.productionSettings }
-            }
-          } : scene)
+      if (operation.operation === "move-to") {
+        const destinationExists = operation.targetSceneId
+          ? project.currentVersion.scenes.some((scene) => scene.id === operation.targetSceneId)
+          : sceneNumbers.has(operation.targetSceneNumber);
+        if (!destinationExists) {
+          return NextResponse.json({ error: "修改方案包含当前版本中不存在的目标位置。" }, { status: 409 });
         }
-      } : project;
-      const structural = await persistSceneStructureMutation({
-        project: structuralProject,
-        mutation: normalizedPlan.sceneStructure,
-        editPlanId: body.direct ? undefined : normalizedPlan.id
-      });
-      return NextResponse.json({
-        ...structural,
-        regeneration: structural.regeneration
-      });
+      }
     }
     const result = await applyPersistedEditPlan({
       project,

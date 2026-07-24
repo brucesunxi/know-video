@@ -62,7 +62,9 @@ export function applySceneStructureMutation(
   createId: () => string = crypto.randomUUID
 ) {
   const original = [...project.currentVersion.scenes].sort((left, right) => left.sceneNumber - right.sceneNumber);
-  const index = original.findIndex((scene) => scene.sceneNumber === mutation.sceneNumber);
+  const index = original.findIndex((scene) => (
+    mutation.sceneId ? scene.id === mutation.sceneId : scene.sceneNumber === mutation.sceneNumber
+  ));
   if (index < 0) throw new Error("没有找到要调整的场景。");
 
   const production = original[0]?.style.production;
@@ -126,14 +128,17 @@ export function applySceneStructureMutation(
     selectedSceneNumber = target + 1;
     description = `场景已向${mutation.direction === "earlier" ? "前" : "后"}移动一位。`;
   } else if (mutation.operation === "move-to") {
-    if (!Number.isInteger(mutation.targetSceneNumber) || mutation.targetSceneNumber < 1 || mutation.targetSceneNumber > scenes.length) {
+    const targetIndex = mutation.targetSceneId
+      ? scenes.findIndex((scene) => scene.id === mutation.targetSceneId)
+      : mutation.targetSceneNumber - 1;
+    if (targetIndex < 0 || targetIndex >= scenes.length) {
       throw new Error("目标位置超出了当前时间线范围。");
     }
-    if (mutation.targetSceneNumber === mutation.sceneNumber) throw new Error("场景位置没有变化。");
+    if (targetIndex === index) throw new Error("场景位置没有变化。");
     const [moved] = scenes.splice(index, 1);
-    scenes.splice(mutation.targetSceneNumber - 1, 0, moved);
-    selectedSceneNumber = mutation.targetSceneNumber;
-    description = `场景 ${mutation.sceneNumber} 已移动到第 ${mutation.targetSceneNumber} 位。`;
+    scenes.splice(targetIndex, 0, moved);
+    selectedSceneNumber = targetIndex + 1;
+    description = `场景 ${mutation.sceneNumber} 已移动到第 ${selectedSceneNumber} 位。`;
   } else if (mutation.operation === "split") {
     if (scenes.length >= 20) throw new Error("单个视频最多支持 20 个场景。");
     const source = scenes[index];
@@ -197,6 +202,26 @@ export function applySceneStructureMutation(
     scenes.splice(index + 1, 0, copy);
     selectedSceneNumber = index + 2;
     description = `场景 ${mutation.sceneNumber} 已复制到下一位置。`;
+  } else if (mutation.operation === "insert") {
+    if (scenes.length >= 20) throw new Error("单个视频最多支持 20 个场景。");
+    const insertionIndex = mutation.placement === "before" ? index : index + 1;
+    const anchor = scenes[index];
+    scenes.splice(insertionIndex, 0, {
+      id: createId(),
+      sceneNumber: insertionIndex + 1,
+      title: mutation.scene.title,
+      voiceover: mutation.scene.voiceover,
+      visualPrompt: mutation.scene.visualPrompt,
+      motionPrompt: mutation.scene.motionPrompt,
+      durationSeconds: mutation.scene.durationSeconds,
+      style: {
+        ...anchor.style,
+        transition: insertionIndex === 0 ? undefined : anchor.style.transition
+      },
+      assets: []
+    });
+    selectedSceneNumber = insertionIndex + 1;
+    description = `已在场景 ${mutation.sceneNumber} ${mutation.placement === "before" ? "之前" : "之后"}新增“${mutation.scene.title}”场景。`;
   } else {
     if (scenes.length <= 1) throw new Error("视频至少需要保留一个场景。");
     scenes.splice(index, 1);
@@ -220,6 +245,12 @@ export function applySceneStructureMutation(
       ? { imageSceneNumbers: [index + 1, index + 2], audioSceneNumbers: [index + 1, index + 2], clipSceneNumbers: [] }
       : mutation.operation === "merge-next"
         ? { imageSceneNumbers: [index + 1], audioSceneNumbers: [index + 1], clipSceneNumbers: [] }
+        : mutation.operation === "insert"
+          ? {
+              imageSceneNumbers: [mutation.placement === "before" ? index + 1 : index + 2],
+              audioSceneNumbers: [mutation.placement === "before" ? index + 1 : index + 2],
+              clipSceneNumbers: []
+            }
         : { imageSceneNumbers: [], audioSceneNumbers: [], clipSceneNumbers: [] },
     project: {
       ...project,
@@ -238,5 +269,91 @@ export function applySceneStructureMutation(
         scenes: normalizedScenes
       }
     } satisfies Project
+  };
+}
+
+export function applySceneStructureOperations(
+  project: Project,
+  operations: SceneStructureMutation[],
+  createId: () => string = crypto.randomUUID
+) {
+  if (operations.length === 0) {
+    return {
+      project,
+      descriptions: [],
+      selectedSceneNumber: project.currentVersion.scenes[0]?.sceneNumber ?? 1,
+      regeneration: { imageSceneNumbers: [], audioSceneNumbers: [], clipSceneNumbers: [] }
+    };
+  }
+
+  const baseVersionId = project.currentVersion.id;
+  let working = project;
+  let selectedSceneNumber = project.currentVersion.scenes[0]?.sceneNumber ?? 1;
+  const descriptions: string[] = [];
+  const imageSceneIds = new Set<string>();
+  const audioSceneIds = new Set<string>();
+  const clipSceneIds = new Set<string>();
+
+  for (const operation of operations) {
+    const currentTarget = working.currentVersion.scenes.find((scene) => (
+      operation.sceneId ? scene.id === operation.sceneId : scene.sceneNumber === operation.sceneNumber
+    ));
+    if (!currentTarget) throw new Error(`第 ${operation.sceneNumber} 个操作的目标场景已经不存在。`);
+    const targetScene = operation.operation === "move-to"
+      ? working.currentVersion.scenes.find((scene) => (
+          operation.targetSceneId
+            ? scene.id === operation.targetSceneId
+            : scene.sceneNumber === operation.targetSceneNumber
+        ))
+      : undefined;
+    const resolvedOperation = {
+      ...operation,
+      sceneNumber: currentTarget.sceneNumber,
+      ...(operation.operation === "move-to" && targetScene
+        ? { targetSceneNumber: targetScene.sceneNumber }
+        : {})
+    } as SceneStructureMutation;
+    const result = applySceneStructureMutation(working, resolvedOperation, createId);
+    descriptions.push(result.description);
+    selectedSceneNumber = result.selectedSceneNumber;
+    result.regeneration.imageSceneNumbers.forEach((sceneNumber) => {
+      const scene = result.project.currentVersion.scenes.find((item) => item.sceneNumber === sceneNumber);
+      if (scene) imageSceneIds.add(scene.id);
+    });
+    result.regeneration.audioSceneNumbers.forEach((sceneNumber) => {
+      const scene = result.project.currentVersion.scenes.find((item) => item.sceneNumber === sceneNumber);
+      if (scene) audioSceneIds.add(scene.id);
+    });
+    result.regeneration.clipSceneNumbers.forEach((sceneNumber) => {
+      const scene = result.project.currentVersion.scenes.find((item) => item.sceneNumber === sceneNumber);
+      if (scene) clipSceneIds.add(scene.id);
+    });
+    working = result.project;
+  }
+
+  const finalSceneNumber = new Map(working.currentVersion.scenes.map((scene) => [scene.id, scene.sceneNumber]));
+  const numbersFor = (ids: Set<string>) => Array.from(ids)
+    .map((id) => finalSceneNumber.get(id))
+    .filter((sceneNumber): sceneNumber is number => Boolean(sceneNumber))
+    .sort((left, right) => left - right);
+
+  return {
+    project: {
+      ...working,
+      currentVersion: {
+        ...working.currentVersion,
+        id: createId(),
+        parentVersionId: baseVersionId,
+        label: "对话式时间线调整",
+        createdAt: new Date().toISOString()
+      }
+    },
+    descriptions,
+    selectedSceneNumber,
+    regeneration: {
+      imageSceneNumbers: numbersFor(imageSceneIds),
+      audioSceneNumbers: numbersFor(audioSceneIds),
+      clipSceneNumbers: numbersFor(clipSceneIds)
+    }
   };
 }

@@ -1,5 +1,6 @@
 import type { AssetType, EditPlan, Scene } from "@/lib/types";
 import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip } from "@/lib/edit-intent";
+import { affectedSceneNumbersForOperations, editPlanOperations } from "@/lib/edit-operations";
 import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 
 export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) {
@@ -111,7 +112,10 @@ export function normalizeEditPlanAgainstScenes(plan: EditPlan, scenes: Scene[]) 
 
   return {
     ...plan,
-    affectedScenes: changes.map((change) => change.sceneNumber),
+    affectedScenes: Array.from(new Set([
+      ...changes.map((change) => change.sceneNumber),
+      ...affectedSceneNumbersForOperations(editPlanOperations(plan))
+    ])).sort((left, right) => left - right),
     changes
   };
 }

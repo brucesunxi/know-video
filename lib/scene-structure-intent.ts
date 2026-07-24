@@ -1,16 +1,53 @@
 import { extractRequestedSceneNumbers } from "@/lib/edit-intent";
 import type { SceneStructureMutation } from "@/lib/types";
 
+function chineseInteger(value: string) {
+  const normalized = value.replaceAll("两", "二");
+  const digits: Record<string, number> = {
+    一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9
+  };
+  if (normalized === "十") return 10;
+  if (normalized.startsWith("十")) return 10 + (digits[normalized[1]] ?? 0);
+  if (normalized.endsWith("十")) return (digits[normalized[0]] ?? 0) * 10;
+  if (normalized.includes("十")) {
+    const [tens, ones] = normalized.split("十");
+    return (digits[tens] ?? 0) * 10 + (digits[ones] ?? 0);
+  }
+  return digits[normalized] ?? Number.NaN;
+}
+
+export function normalizeSceneReferences(request: string, availableSceneNumbers: number[] = []) {
+  const last = availableSceneNumbers.at(-1);
+  return request
+    .replace(/倒数第\s*([一二三四五六七八九十两]{1,3}|\d{1,2})\s*(?:个)?(?:分镜|场景|镜头|章节)/gu, (_match, raw: string) => {
+      const offset = /^\d+$/.test(raw) ? Number(raw) : chineseInteger(raw);
+      const sceneNumber = last && Number.isFinite(offset) ? last - offset + 1 : Number.NaN;
+      return Number.isFinite(sceneNumber) && sceneNumber > 0 ? `第${sceneNumber}个场景` : _match;
+    })
+    .replace(/(?:最后|最末)(?:一|1)?\s*(?:个)?(?:分镜|场景|镜头|章节)/gu, last ? `第${last}个场景` : "最后一个场景")
+    .replace(/第\s*([一二三四五六七八九十两]{1,3})\s*(?:个)?\s*(分镜|场景|镜头|章节)/gu, (_match, raw: string, label: string) => {
+      const sceneNumber = chineseInteger(raw);
+      return Number.isFinite(sceneNumber) ? `第${sceneNumber}个${label === "分镜" ? "场景" : label}` : _match;
+    })
+    .replace(/第\s*([一二三四五六七八九十两]{1,3})\s*(位|位置)/gu, (_match, raw: string, label: string) => {
+      const position = chineseInteger(raw);
+      return Number.isFinite(position) ? `第${position}${label}` : _match;
+    })
+    .replaceAll("分镜", "场景");
+}
+
 export function requestsSceneStructureChange(request: string) {
-  if (/(?:转场|硬切|叠化|溶解|淡入淡出|左推|右推|缩放转场|变焦转场|擦除|划像|wipe|crossfade)/iu.test(request)
-    && /(?:第\s*)?\d{1,2}\s*(?:个)?(?:场景|镜头|章节)/u.test(request)) return true;
-  return /(?:删除|移除|去掉|复制|克隆|拆分|拆开|拆成|切分|合并|合在一起|向前|往前|前移|向后|往后|后移|移动到|移到|放到|拖到|场景时长|镜头时长|改成\s*\d+\s*秒|调整为\s*\d+\s*秒).{0,16}(?:场景|镜头|章节|位置|位)|(?:场景|镜头|章节).{0,16}(?:删除|移除|去掉|复制|克隆|拆分|拆开|拆成|切分|合并|合在一起|向前|往前|前移|向后|往后|后移|移动到|移到|放到|拖到|\d+\s*秒)/u.test(request);
+  const normalized = normalizeSceneReferences(request);
+  if (/(?:转场|硬切|叠化|溶解|淡入淡出|左推|右推|缩放转场|变焦转场|擦除|划像|wipe|crossfade)/iu.test(normalized)
+    && /(?:第\s*)?\d{1,2}\s*(?:个)?(?:场景|镜头|章节)/u.test(normalized)) return true;
+  return /(?:删除|移除|去掉|复制|克隆|拆分|拆开|拆成|切分|合并|合在一起|向前|往前|前移|向后|往后|后移|移动到|移到|放到|拖到|场景时长|镜头时长|改成\s*\d+\s*秒|调整为\s*\d+\s*秒).{0,16}(?:场景|镜头|章节|位置|位)|(?:场景|镜头|章节).{0,16}(?:删除|移除|去掉|复制|克隆|拆分|拆开|拆成|切分|合并|合在一起|向前|往前|前移|向后|往后|后移|移动到|移到|放到|拖到|\d+\s*秒)/u.test(normalized);
 }
 
 export function sceneStructureFromRequest(
   request: string,
   availableSceneNumbers: number[]
 ): SceneStructureMutation | undefined {
+  request = normalizeSceneReferences(request, availableSceneNumbers);
   const moveTo = request.match(/(?:第\s*)?(\d{1,2})\s*(?:个)?(?:场景|镜头|章节).{0,12}?(?:移动到|移到|放到|拖到).{0,8}?(?:第\s*)?(\d{1,2})\s*(?:个)?(?:场景|镜头|章节|位置|位)/u)
     ?? request.match(/(?:把|将).{0,6}?(?:场景|镜头|章节)\s*(\d{1,2}).{0,12}?(?:移动到|移到|放到|拖到).{0,8}?(?:场景|镜头|章节|位置|第)\s*(\d{1,2})/u);
   if (moveTo) {
@@ -58,7 +95,7 @@ export function sceneStructureFromRequest(
                 ? "wipe" as const
                 : "auto" as const;
     const durationMatch = request.match(/(0?\.\d+|1(?:\.\d+)?)\s*秒/u);
-    const requestedDuration = durationMatch ? Number(durationMatch[1]) : 0.5;
+    const requestedDuration = durationMatch ? Number(durationMatch[1]) : 0.25;
     const durationSeconds = kind === "cut" ? 0 : Math.min(1.2, Math.max(0.2, requestedDuration));
     return { operation: "set-transition", sceneNumber, kind, durationSeconds };
   }
@@ -91,6 +128,43 @@ export function sceneStructureFromRequest(
   return undefined;
 }
 
+export function sceneStructuresFromRequest(
+  request: string,
+  availableSceneNumbers: number[]
+): SceneStructureMutation[] {
+  const normalized = normalizeSceneReferences(request, availableSceneNumbers);
+  const clauses = splitEditClauses(normalized)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+  const parsed = clauses
+    .map((clause) => sceneStructureFromRequest(clause, availableSceneNumbers))
+    .filter(Boolean) as SceneStructureMutation[];
+  if (parsed.length === 0) {
+    const single = sceneStructureFromRequest(normalized, availableSceneNumbers);
+    return single ? [single] : [];
+  }
+  const seen = new Set<string>();
+  return parsed.filter((operation) => {
+    const key = JSON.stringify(operation);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function splitEditClauses(request: string) {
+  return request.split(/(?:[，；。\n]+|然后|并且|随后|接着|并(?=把|将)|再(?=把|将|删除|移除|去掉|复制|拆分|合并|移动|调整|修改))/u);
+}
+
+export function requestWithoutSceneStructureClauses(request: string, availableSceneNumbers: number[]) {
+  const normalized = normalizeSceneReferences(request, availableSceneNumbers);
+  return splitEditClauses(normalized)
+    .map((clause) => clause.trim())
+    .filter((clause) => clause && !sceneStructureFromRequest(clause, availableSceneNumbers))
+    .join("，")
+    .trim();
+}
+
 export function sceneStructureSummary(mutation: SceneStructureMutation) {
   if (mutation.operation === "set-duration") return `将场景 ${mutation.sceneNumber} 的时长调整为 ${mutation.durationSeconds} 秒。`;
   if (mutation.operation === "set-transition") {
@@ -102,5 +176,10 @@ export function sceneStructureSummary(mutation: SceneStructureMutation) {
   if (mutation.operation === "split") return `按旁白语义将场景 ${mutation.sceneNumber} 拆分为两个连续镜头，重新分配时长并更新画面与配音。`;
   if (mutation.operation === "merge-next") return `将场景 ${mutation.sceneNumber} 与后一场景合并为一个镜头，并更新合并后的画面与配音。`;
   if (mutation.operation === "duplicate") return `复制场景 ${mutation.sceneNumber} 到下一位置，并自动重新编号。`;
+  if (mutation.operation === "insert") return `在场景 ${mutation.sceneNumber} ${mutation.placement === "before" ? "之前" : "之后"}新增“${mutation.scene.title}”场景，并生成对应画面与配音。`;
   return `从当前版本删除场景 ${mutation.sceneNumber}，并自动重新编号。`;
+}
+
+export function sceneStructuresSummary(mutations: SceneStructureMutation[]) {
+  return mutations.map(sceneStructureSummary).join(" ");
 }

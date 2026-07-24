@@ -15,7 +15,7 @@ vm.runInNewContext(output, {
     ? { mediaAssetStatus: (scenes) => scenes.every((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type) && asset.url) && scene.assets.some((asset) => asset.type === "audio" && asset.url)) ? "ready" : "partial" }
     : {}
 });
-const { applySceneStructureMutation } = module.exports;
+const { applySceneStructureMutation, applySceneStructureOperations } = module.exports;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 let id = 0;
@@ -125,6 +125,34 @@ const deleted = applySceneStructureMutation(project, { operation: "delete", scen
 assert.deepEqual(plain(deleted.project.currentVersion.scenes.map((item) => item.title)), ["B", "C"]);
 assert.equal(deleted.project.currentVersion.scenes[0].style.production.captionsEnabled, false);
 assert.equal(deleted.project.currentVersion.scenes[0].assets.filter((asset) => ["logo", "music"].includes(asset.type)).length, 2);
+
+const sandboxed = applySceneStructureOperations(project, [
+  { operation: "delete", sceneNumber: 2, sceneId: "scene-2" },
+  { operation: "move-to", sceneNumber: 3, sceneId: "scene-3", targetSceneNumber: 1, targetSceneId: "scene-1" }
+], createId);
+assert.deepEqual(plain(sandboxed.project.currentVersion.scenes.map((item) => item.title)), ["C", "A"]);
+assert.equal(sandboxed.project.currentVersion.parentVersionId, "version-1");
+assert.equal(sandboxed.project.currentVersion.label, "对话式时间线调整");
+assert.equal(sandboxed.descriptions.length, 2);
+assert.deepEqual(plain(sandboxed.regeneration), { imageSceneNumbers: [], audioSceneNumbers: [], clipSceneNumbers: [] });
+
+const inserted = applySceneStructureOperations(project, [{
+  operation: "insert",
+  sceneNumber: 2,
+  sceneId: "scene-2",
+  placement: "after",
+  scene: {
+    title: "Inserted",
+    voiceover: "A complete inserted narration.",
+    visualPrompt: "A meaningful inserted visual.",
+    motionPrompt: "A restrained camera push.",
+    durationSeconds: 4
+  }
+}], createId);
+assert.equal(inserted.project.currentVersion.scenes.length, 4);
+assert.equal(inserted.project.currentVersion.scenes[2].title, "Inserted");
+assert.deepEqual(plain(inserted.regeneration.imageSceneNumbers), [3]);
+assert.deepEqual(plain(inserted.regeneration.audioSceneNumbers), [3]);
 
 assert.throws(() => applySceneStructureMutation(project, { operation: "move", sceneNumber: 1, direction: "earlier" }, createId), /边界/);
 assert.throws(() => applySceneStructureMutation(project, { operation: "set-transition", sceneNumber: 1, kind: "wipe", durationSeconds: 0.5 }, createId), /首个场景/);

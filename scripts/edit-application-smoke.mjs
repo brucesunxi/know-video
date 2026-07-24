@@ -61,11 +61,11 @@ assert.equal(isEditApplicationConflict(new Error("network unavailable")), false)
 
 assert.match(route, /normalizeEditPlanAgainstScenes/);
 assert.match(route, /const normalizedPlan = normalizeEditPlanAgainstScenes\(\s*editPlan,\s*project\.currentVersion\.scenes\s*\)/);
-assert.match(route, /if \(normalizedPlan\.sceneStructure\)/);
-assert.match(route, /normalizedPlan\.changes\.length > 0/);
-assert.match(route, /时间线结构方案暂不支持同时修改场景内容/);
-assert.match(route, /mutation: normalizedPlan\.sceneStructure/);
+assert.match(route, /const operations = editPlanOperations\(normalizedPlan\)/);
+assert.match(route, /for \(const operation of operations\)/);
+assert.match(route, /operation\.sceneId/);
+assert.doesNotMatch(route, /时间线结构方案暂不支持同时修改场景内容/);
 assert.match(route, /editPlan: normalizedPlan/);
-assert.match(route, /没有覆盖\|未完成的中文字段\|暂不支持同时修改场景内容/);
+assert.match(route, /没有覆盖\|未完成的中文字段/);
 
 console.log("Edit application smoke checks passed.");

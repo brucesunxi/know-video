@@ -52,6 +52,8 @@ export async function persistSceneStructureMutation(input: {
         ? `合并场景 ${input.mutation.sceneNumber} 与后一场景`
       : input.mutation.operation === "duplicate"
         ? `复制场景 ${input.mutation.sceneNumber}`
+      : input.mutation.operation === "insert"
+        ? `在场景 ${input.mutation.sceneNumber} ${input.mutation.placement === "before" ? "前" : "后"}新增“${input.mutation.scene.title}”`
         : `删除场景 ${input.mutation.sceneNumber}`;
 
   const queries = [

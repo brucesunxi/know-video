@@ -3,6 +3,7 @@ import { isEditApplicationConflict, materializeAppliedVersion } from "@/lib/edit
 import { promoteEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { editPlanSchema } from "@/lib/edit-plan-schema";
 import { normalizeEditPlanAgainstScenes } from "@/lib/edit-plan-normalizer";
+import { editPlanOperations } from "@/lib/edit-operations";
 import { materializeEditProposal } from "@/lib/edit-proposal";
 import {
   getEphemeralProject,
@@ -14,6 +15,7 @@ import { mediaAssetStatus } from "@/lib/generation-resume";
 import { demoProject } from "@/lib/mock-data";
 import { initialVersionStatus, materializeNewProject } from "@/lib/project-creation";
 import { productionSettingsFromScenes } from "@/lib/production-settings";
+import { applySceneStructureOperations } from "@/lib/scene-structure";
 import { assetUrlForKey } from "@/lib/r2";
 import { invalidateVersionRender } from "@/lib/render-jobs";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
@@ -870,10 +872,11 @@ export async function applyPersistedEditPlan(params: {
     params.project.currentVersion.scenes
   );
   const normalizedChanges = normalizedPlan.changes;
+  const structureOperations = editPlanOperations(normalizedPlan);
   const currentProduction = productionSettingsFromScenes(params.project.currentVersion.scenes);
   const productionChanged = Object.entries(normalizedPlan.productionSettings ?? {})
     .some(([key, value]) => currentProduction[key as keyof typeof currentProduction] !== value);
-  if (normalizedChanges.length === 0 && !productionChanged) {
+  if (normalizedChanges.length === 0 && !productionChanged && structureOperations.length === 0) {
     throw new Error("修改方案没有产生实际变化，请换一种说法后重新生成。");
   }
   const changedProject = attachEditPlanReferenceAssets(applyEditPlan(params.project, normalizedPlan), normalizedPlan);
@@ -896,6 +899,11 @@ export async function applyPersistedEditPlan(params: {
   const audioTargets = new Set(audioSceneNumbers);
   const clipTargets = new Set(clipSceneNumbers);
   const captionTargets = new Set(captionSceneNumbers);
+  const targetSceneIds = {
+    image: new Set(promoted.project.currentVersion.scenes.filter((scene) => imageTargets.has(scene.sceneNumber)).map((scene) => scene.id)),
+    audio: new Set(promoted.project.currentVersion.scenes.filter((scene) => audioTargets.has(scene.sceneNumber)).map((scene) => scene.id)),
+    clip: new Set(promoted.project.currentVersion.scenes.filter((scene) => clipTargets.has(scene.sceneNumber)).map((scene) => scene.id))
+  };
   const scenes = promoted.project.currentVersion.scenes.map((scene) => ({
     ...scene,
     assets: scene.assets.filter((asset) => {
@@ -907,10 +915,10 @@ export async function applyPersistedEditPlan(params: {
       return true;
     })
   }));
-  const nextProject: Project = {
-    ...changedProject,
+  const contentProject: Project = {
+    ...promoted.project,
     currentVersion: {
-      ...changedProject.currentVersion,
+      ...promoted.project.currentVersion,
       status: "draft",
       renderUrl: undefined,
       assetStatus: mediaAssetStatus(scenes),
@@ -918,8 +926,29 @@ export async function applyPersistedEditPlan(params: {
       scenes
     }
   };
-  const regeneration = { imageSceneNumbers, audioSceneNumbers, clipSceneNumbers };
-  const pendingMedia = imageSceneNumbers.length > 0 || audioSceneNumbers.length > 0 || clipSceneNumbers.length > 0;
+  const sandbox = applySceneStructureOperations(contentProject, structureOperations);
+  const nextProject = sandbox.project;
+  const finalNumberById = new Map(nextProject.currentVersion.scenes.map((scene) => [scene.id, scene.sceneNumber]));
+  const finalNumbers = (ids: Set<string>) => Array.from(ids)
+    .map((id) => finalNumberById.get(id))
+    .filter((sceneNumber): sceneNumber is number => Boolean(sceneNumber));
+  const regeneration = {
+    imageSceneNumbers: Array.from(new Set([
+      ...finalNumbers(targetSceneIds.image),
+      ...sandbox.regeneration.imageSceneNumbers
+    ])).sort((left, right) => left - right),
+    audioSceneNumbers: Array.from(new Set([
+      ...finalNumbers(targetSceneIds.audio),
+      ...sandbox.regeneration.audioSceneNumbers
+    ])).sort((left, right) => left - right),
+    clipSceneNumbers: Array.from(new Set([
+      ...finalNumbers(targetSceneIds.clip),
+      ...sandbox.regeneration.clipSceneNumbers
+    ])).sort((left, right) => left - right)
+  };
+  const pendingMedia = regeneration.imageSceneNumbers.length > 0
+    || regeneration.audioSceneNumbers.length > 0
+    || regeneration.clipSceneNumbers.length > 0;
 
   if (!canPersist()) {
     const message: ChatMessage = {

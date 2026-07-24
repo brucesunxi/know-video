@@ -5,13 +5,24 @@ import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip 
 import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import { fitScenesNarrationApproximate } from "@/lib/narration-fit";
+import { affectedSceneNumbersForOperations, bindOperationSceneIds, editPlanOperations } from "@/lib/edit-operations";
 import {
   detectBriefDomain,
   extractBriefVisualConcepts,
   hasMetaProductionNarration,
   isProductionInstructionClause
 } from "@/lib/brief-semantics";
-import { requestsSceneStructureChange, sceneStructureFromRequest, sceneStructureSummary } from "@/lib/scene-structure-intent";
+import { applySceneStructureOperations } from "@/lib/scene-structure";
+import {
+  canonicalConversationOperations,
+  conversationEditProgramSchema
+} from "@/lib/conversation-edit-program";
+import {
+  requestWithoutSceneStructureClauses,
+  requestsSceneStructureChange,
+  sceneStructuresFromRequest,
+  sceneStructuresSummary
+} from "@/lib/scene-structure-intent";
 import { storyboardQualityIssues } from "@/lib/storyboard-quality";
 import { narrationVoiceForBrief } from "@/lib/voice-profiles";
 import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video-brain";
@@ -19,7 +30,7 @@ import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 import { parseModelJson } from "@/lib/model-json";
 import { estimateNarrationSeconds } from "@/lib/speech-timing";
 import { visualStyleDirection, visualStyleProfile } from "@/lib/visual-style-profiles";
-import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from "@/lib/types";
+import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene, SceneStructureMutation } from "@/lib/types";
 
 type AiEngine = "deepseek-flash" | "openai" | "heuristic";
 
@@ -600,6 +611,122 @@ function getTextModel() {
   return undefined;
 }
 
+function conversationSandboxProject(version: ProjectVersion): Project {
+  return {
+    id: "conversation-edit-sandbox",
+    title: "conversation-edit-sandbox",
+    engine: "Animation Engine",
+    credits: 0,
+    plan: "Free",
+    currentVersion: version
+  };
+}
+
+async function planConversationEdit(params: {
+  request: string;
+  version: ProjectVersion;
+  requestAttachmentContext?: string;
+}): Promise<{
+  operations: SceneStructureMutation[];
+  remainingInstruction: string;
+  clarification?: string;
+  engine: AiEngine;
+}> {
+  const textModel = getTextModel();
+  const availableSceneNumbers = params.version.scenes.map((scene) => scene.sceneNumber);
+  if (textModel) {
+    try {
+      const attachmentContext = [versionAttachmentContext(params.version), params.requestAttachmentContext]
+        .filter(Boolean)
+        .join("\n\n");
+      const completion = await textModel.client.chat.completions.create({
+        model: textModel.model,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: [
+              "You are the semantic compiler for a conversational video editor.",
+              "Understand the user's meaning from the full current storyboard, including semantic references such as 'the inventory warning scene', 'the repetitive shot', 'the final scene', or 'the scene before the solution'.",
+              "Compile timeline changes into ordered operations. Use only sceneId values copied exactly from the current storyboard; sceneNumber is explanatory and will be canonicalized by the server.",
+              "Supported timeline operations are set-duration, set-transition, move, move-to, split, merge-next, duplicate, insert, and delete.",
+              "Use operations only for timeline structure, scene duration, ordering, and transitions.",
+              "Put all requests about narration, language, title, captions, visual content, image style, motion, voice, music, branding, or generated media into remainingInstruction, preserving the user's full meaning.",
+              "A request may produce both operations and remainingInstruction.",
+              "Do not reject a request merely because it combines several edits.",
+              "For destructive instructions that remain genuinely ambiguous after reading the storyboard, return classification clarify and one concise clarification question.",
+              "Otherwise never ask for clarification when a uniquely best scene or scope can be inferred.",
+              "Return strict JSON only."
+            ].join(" ")
+          },
+          {
+            role: "user",
+            content: [
+              `Current storyboard:\n${JSON.stringify(planningSceneSnapshot(params.version), null, 2)}`,
+              attachmentContext ? `Reference context:\n${attachmentContext}` : "",
+              `User request:\n${params.request}`,
+              [
+                "Return JSON:",
+                "{",
+                '  "classification": "timeline"|"content"|"mixed"|"production"|"clarify",',
+                '  "understoodRequest": string,',
+                '  "operations": [',
+                '    {"operation":"delete"|"duplicate"|"split"|"merge-next","sceneId":uuid,"sceneNumber":number}',
+                '    or {"operation":"move","sceneId":uuid,"sceneNumber":number,"direction":"earlier"|"later"}',
+                '    or {"operation":"move-to","sceneId":uuid,"sceneNumber":number,"targetSceneId":uuid,"targetSceneNumber":number}',
+                '    or {"operation":"set-duration","sceneId":uuid,"sceneNumber":number,"durationSeconds":2..20}',
+                '    or {"operation":"set-transition","sceneId":uuid,"sceneNumber":number,"kind":"auto"|"cut"|"dissolve"|"push-left"|"push-right"|"zoom"|"wipe","durationSeconds":0..1.2}',
+                '    or {"operation":"insert","sceneId":anchorUuid,"sceneNumber":anchorNumber,"placement":"before"|"after","scene":{"title":string,"voiceover":string,"visualPrompt":string,"motionPrompt":string,"durationSeconds":2..20}}',
+                "  ],",
+                '  "remainingInstruction": string,',
+                '  "clarification"?: string,',
+                '  "confidence": 0..1',
+                "}"
+              ].join("\n")
+            ].filter(Boolean).join("\n\n")
+          }
+        ],
+        temperature: 0.1
+      });
+      const program = conversationEditProgramSchema.parse(
+        parseModelJson(completion.choices[0]?.message.content ?? "{}")
+      );
+      if (program.classification === "clarify") {
+        return {
+          operations: [],
+          remainingInstruction: "",
+          clarification: program.clarification || "请再说明希望修改的具体场景或内容。",
+          engine: textModel.engine
+        };
+      }
+      const operations = canonicalConversationOperations(program, params.version);
+      if (operations.length > 0) {
+        applySceneStructureOperations(conversationSandboxProject(params.version), operations);
+      }
+      const remainingInstruction = program.remainingInstruction.trim()
+        || (operations.length === 0 ? params.request.trim() : "");
+      return { operations, remainingInstruction, engine: textModel.engine };
+    } catch (error) {
+      console.error("[ai-video] Semantic edit compiler failed; using guarded local fallback:", error);
+    }
+  }
+
+  const operations = bindOperationSceneIds(
+    sceneStructuresFromRequest(params.request, availableSceneNumbers),
+    params.version
+  );
+  if (operations.length > 0) {
+    applySceneStructureOperations(conversationSandboxProject(params.version), operations);
+  }
+  return {
+    operations,
+    remainingInstruction: operations.length > 0
+      ? requestWithoutSceneStructureClauses(params.request, availableSceneNumbers)
+      : params.request,
+    engine: "heuristic"
+  };
+}
+
 function getVisionModel() {
   if (!process.env.OPENAI_API_KEY) return undefined;
   return {
@@ -992,47 +1119,52 @@ export async function createEditPlan(params: {
   version: ProjectVersion;
   editNumber: number;
   requestAttachmentContext?: string;
+  skipConversationPlanning?: boolean;
 }): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
   const requestedProductionSettings = productionSettingsFromRequest(params.request);
-  const requestedStructure = sceneStructureFromRequest(
-    params.request,
-    params.version.scenes.map((scene) => scene.sceneNumber)
-  );
-  if (requestsSceneStructureChange(params.request) && !requestedStructure) {
-    throw new Error("请明确指定场景和操作，例如“拆分第 2 场景”“合并第 2 和第 3 场景”或“第 1 场景改成 6 秒”。");
+  const conversationProgram = params.skipConversationPlanning
+    ? {
+        operations: [] as SceneStructureMutation[],
+        remainingInstruction: params.request,
+        engine: "heuristic" as AiEngine
+      }
+    : await planConversationEdit(params);
+  if ("clarification" in conversationProgram && conversationProgram.clarification) {
+    throw new Error(conversationProgram.clarification);
   }
-  if (requestedStructure) {
-    const index = params.version.scenes.findIndex((scene) => scene.sceneNumber === requestedStructure.sceneNumber);
-    if (requestedStructure.operation === "delete" && params.version.scenes.length <= 1) {
-      throw new Error("视频至少需要保留一个场景。");
+  const requestedStructures = conversationProgram.operations;
+  if (requestedStructures.length > 0) {
+    applySceneStructureOperations(conversationSandboxProject(params.version), requestedStructures);
+    const structureSummary = sceneStructuresSummary(requestedStructures);
+    const remainingRequest = conversationProgram.remainingInstruction;
+    if (remainingRequest.length >= 2) {
+      const contentResult = await createEditPlan({
+        ...params,
+        request: remainingRequest,
+        skipConversationPlanning: true
+      });
+      const operations = [...requestedStructures, ...editPlanOperations(contentResult.editPlan)];
+      return {
+        engine: contentResult.engine,
+        editPlan: {
+          ...contentResult.editPlan,
+          userRequest: params.request,
+          summary: `${structureSummary} ${contentResult.editPlan.summary}`,
+          affectedScenes: Array.from(new Set([
+            ...contentResult.editPlan.affectedScenes,
+            ...affectedSceneNumbersForOperations(requestedStructures)
+          ])).sort((left, right) => left - right),
+          operations,
+          sceneStructure: undefined,
+          productionSettings: {
+            ...contentResult.editPlan.productionSettings,
+            ...requestedProductionSettings
+          }
+        }
+      };
     }
-    if (requestedStructure.operation === "move") {
-      const atBoundary = requestedStructure.direction === "earlier"
-        ? index === 0
-        : index === params.version.scenes.length - 1;
-      if (atBoundary) throw new Error("该场景已经位于时间线边界。");
-    }
-    if (requestedStructure.operation === "move-to" && requestedStructure.sceneNumber === requestedStructure.targetSceneNumber) {
-      throw new Error("场景位置没有变化。");
-    }
-    if (requestedStructure.operation === "split") {
-      const source = params.version.scenes[index];
-      if (!source || source.durationSeconds < 4 || source.voiceover.trim().length < 8) {
-        throw new Error("该场景内容过短，无法拆分为两个完整镜头。");
-      }
-      if (params.version.scenes.length >= 20) throw new Error("单个视频最多支持 20 个场景。");
-    }
-    if (requestedStructure.operation === "merge-next") {
-      const source = params.version.scenes[index];
-      const next = params.version.scenes[index + 1];
-      if (!next) throw new Error("该场景没有后一场景可以合并。");
-      if (source.durationSeconds + next.durationSeconds > 20) {
-        throw new Error("合并后的场景超过 20 秒，请先缩短两个场景的时长。");
-      }
-    }
-    const structureSummary = sceneStructureSummary(requestedStructure);
     return {
-      engine: "heuristic",
+      engine: conversationProgram.engine,
       editPlan: {
         id: crypto.randomUUID(),
         editNumber: params.editNumber,
@@ -1042,15 +1174,19 @@ export async function createEditPlan(params: {
         summary: Object.keys(requestedProductionSettings).length > 0
           ? `${structureSummary} 同时更新指定的全片设置。`
           : structureSummary,
-        affectedScenes: requestedStructure.operation === "merge-next"
-          ? [requestedStructure.sceneNumber, requestedStructure.sceneNumber + 1]
-          : [requestedStructure.sceneNumber],
+        affectedScenes: affectedSceneNumbersForOperations(requestedStructures),
         changes: [],
-        sceneStructure: requestedStructure,
+        operations: requestedStructures,
         productionSettings: Object.keys(requestedProductionSettings).length > 0 ? requestedProductionSettings : undefined,
         createdAt: new Date().toISOString()
       }
     };
+  }
+  if (!params.skipConversationPlanning && conversationProgram.remainingInstruction.trim()) {
+    params = { ...params, request: conversationProgram.remainingInstruction.trim() };
+  }
+  if (!params.skipConversationPlanning && requestsSceneStructureChange(params.request)) {
+    throw new Error("我理解到你要调整时间线，但没有找到可安全执行的唯一目标。请补充目标场景的内容特征或编号。");
   }
   if (isProductionOnlyRequest(params.request)) {
     return { editPlan: buildEditPlanFromRequest(params), engine: "heuristic" };
@@ -1105,7 +1241,7 @@ export async function createEditPlan(params: {
         {
           role: "system",
           content:
-            "You are an AI video editor. Convert user instructions into a scene-level edit plan. Preserve unrelated scenes. Never return changes for a scene outside an explicitly requested scene or range. Scene insertion and deletion are not supported in this editor, so every returned change must use status updated. A request without a specific scene target that changes language, narration, captions, style, palette, pacing, music, fonts, logos, watermarks, or voice applies to the full video. Supported narrationVoice values are male-clear for a clear energetic male voice, male-deep for a calm authoritative male voice, and female-natural for a warm natural female voice. Only change narrationVoice when the user asks for an audio voice or vocal character change. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. A request to generate or animate a video clip is a media operation: preserve unrelated scene text and visual direction, and regenerate clip plus render. User-uploaded attachments are authoritative source material: preserve their product, person, brand, composition, narration, or music identity unless the user explicitly asks to replace that attachment. If a requested visual transformation requires regeneration, describe the attachment identity that must remain in after.visualPrompt. Return strict JSON only."
+            "You are an AI video editor responsible for content and media changes after timeline operations have already been compiled separately. Convert the remaining instruction into a scene-level edit plan. Preserve unrelated scenes. Never return changes for a scene outside an explicitly requested or semantically identified scene or range. Every returned content change must use status updated. A request without a specific scene target that changes language, narration, captions, style, palette, pacing, music, fonts, logos, watermarks, or voice applies to the full video. Supported narrationVoice values are male-clear for a clear energetic male voice, male-deep for a calm authoritative male voice, and female-natural for a warm natural female voice. Only change narrationVoice when the user asks for an audio voice or vocal character change. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. A request to generate or animate a video clip is a media operation: preserve unrelated scene text and visual direction, and regenerate clip plus render. User-uploaded attachments are authoritative source material: preserve their product, person, brand, composition, narration, or music identity unless the user explicitly asks to replace that attachment. If a requested visual transformation requires regeneration, describe the attachment identity that must remain in after.visualPrompt. Return strict JSON only."
         },
         {
           role: "user",
@@ -1181,12 +1317,82 @@ export async function refineEditPlan(params: {
   existingPlan: EditPlan;
   editNumber: number;
   requestAttachmentContext?: string;
+  skipConversationPlanning?: boolean;
 }): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
   if (params.existingPlan.baseVersionId !== params.version.id || params.existingPlan.status !== "proposed") {
     throw new Error("当前修改方案已经失效，请重新生成。");
   }
 
   const requestedProductionSettings = productionSettingsFromRequest(params.request);
+  const conversationProgram = params.skipConversationPlanning
+    ? {
+        operations: [] as SceneStructureMutation[],
+        remainingInstruction: params.request,
+        engine: "heuristic" as AiEngine
+      }
+    : await planConversationEdit(params);
+  if ("clarification" in conversationProgram && conversationProgram.clarification) {
+    throw new Error(conversationProgram.clarification);
+  }
+  const additionalOperations = conversationProgram.operations;
+  if (additionalOperations.length > 0) {
+    const operations = [...editPlanOperations(params.existingPlan), ...additionalOperations];
+    applySceneStructureOperations(conversationSandboxProject(params.version), operations);
+    const remainingRequest = conversationProgram.remainingInstruction.trim();
+    if (remainingRequest.length >= 2) {
+      const contentResult = await refineEditPlan({
+        ...params,
+        request: remainingRequest,
+        skipConversationPlanning: true
+      });
+      return {
+        engine: contentResult.engine === "heuristic" ? conversationProgram.engine : contentResult.engine,
+        editPlan: {
+          ...contentResult.editPlan,
+          userRequest: `${params.existingPlan.userRequest}\n补充要求：${params.request}`,
+          summary: `${sceneStructuresSummary(additionalOperations)} ${contentResult.editPlan.summary}`,
+          affectedScenes: Array.from(new Set([
+            ...contentResult.editPlan.affectedScenes,
+            ...affectedSceneNumbersForOperations(additionalOperations)
+          ])).sort((left, right) => left - right),
+          operations,
+          sceneStructure: undefined,
+          productionSettings: {
+            ...contentResult.editPlan.productionSettings,
+            ...requestedProductionSettings
+          }
+        }
+      };
+    }
+    return {
+      engine: conversationProgram.engine,
+      editPlan: {
+        ...params.existingPlan,
+        id: crypto.randomUUID(),
+        editNumber: params.editNumber,
+        userRequest: `${params.existingPlan.userRequest}\n补充要求：${params.request}`,
+        summary: `${params.existingPlan.summary} ${sceneStructuresSummary(additionalOperations)}`,
+        affectedScenes: Array.from(new Set([
+          ...params.existingPlan.affectedScenes,
+          ...affectedSceneNumbersForOperations(additionalOperations)
+        ])).sort((left, right) => left - right),
+        operations,
+        sceneStructure: undefined,
+        productionSettings: {
+          ...params.existingPlan.productionSettings,
+          ...requestedProductionSettings
+        },
+        status: "proposed",
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
+  if (!params.skipConversationPlanning && conversationProgram.remainingInstruction.trim()) {
+    params = { ...params, request: conversationProgram.remainingInstruction.trim() };
+  }
+  if (!params.skipConversationPlanning && requestsSceneStructureChange(params.request)) {
+    throw new Error("我理解到你要继续调整时间线，但没有找到可安全执行的唯一目标。请补充目标场景的内容特征或编号。");
+  }
   if (isProductionOnlyRequest(params.request)) {
     return {
       engine: "heuristic",
@@ -1208,10 +1414,6 @@ export async function refineEditPlan(params: {
 
   const deterministic = refineEditPlanScope(params);
   if (deterministic) return { editPlan: deterministic, engine: "heuristic" };
-  if (params.existingPlan.sceneStructure) {
-    throw new Error("时间线结构方案暂不支持继续补充，请先取消，再用一句完整要求重新规划。");
-  }
-
   const textModel = getTextModel();
   if (!textModel) {
     throw new Error("当前方案需要语义改写服务才能继续细化，请稍后重试。");

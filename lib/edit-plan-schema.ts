@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 const narrationVoiceSchema = z.enum(["male-clear", "male-deep", "female-natural"]);
+const sceneTargetSchema = {
+  sceneNumber: z.number().int().positive(),
+  sceneId: z.string().uuid().optional()
+};
 const referenceAssetSchema = z.object({
   key: z.string().min(1).max(800),
   name: z.string().min(1).max(240),
@@ -16,20 +20,37 @@ const referenceAssetSchema = z.object({
   referenceUsage: z.literal("source-media").optional()
 });
 const sceneStructureSchema = z.discriminatedUnion("operation", [
-  z.object({ operation: z.literal("set-duration"), sceneNumber: z.number().int().positive(), durationSeconds: z.number().int().min(2).max(20) }),
+  z.object({ operation: z.literal("set-duration"), ...sceneTargetSchema, durationSeconds: z.number().int().min(2).max(20) }),
   z.object({
     operation: z.literal("set-transition"),
-    sceneNumber: z.number().int().positive(),
+    ...sceneTargetSchema,
     kind: z.enum(["auto", "cut", "dissolve", "push-left", "push-right", "zoom", "wipe"]),
     durationSeconds: z.number().min(0).max(1.2)
   }),
-  z.object({ operation: z.literal("set-visual"), sceneNumber: z.number().int().positive(), assetId: z.string().uuid() }),
-  z.object({ operation: z.literal("move"), sceneNumber: z.number().int().positive(), direction: z.enum(["earlier", "later"]) }),
-  z.object({ operation: z.literal("move-to"), sceneNumber: z.number().int().positive(), targetSceneNumber: z.number().int().positive() }),
-  z.object({ operation: z.literal("split"), sceneNumber: z.number().int().positive() }),
-  z.object({ operation: z.literal("merge-next"), sceneNumber: z.number().int().positive() }),
-  z.object({ operation: z.literal("duplicate"), sceneNumber: z.number().int().positive() }),
-  z.object({ operation: z.literal("delete"), sceneNumber: z.number().int().positive() })
+  z.object({ operation: z.literal("set-visual"), ...sceneTargetSchema, assetId: z.string().uuid() }),
+  z.object({ operation: z.literal("move"), ...sceneTargetSchema, direction: z.enum(["earlier", "later"]) }),
+  z.object({
+    operation: z.literal("move-to"),
+    ...sceneTargetSchema,
+    targetSceneNumber: z.number().int().positive(),
+    targetSceneId: z.string().uuid().optional()
+  }),
+  z.object({ operation: z.literal("split"), ...sceneTargetSchema }),
+  z.object({ operation: z.literal("merge-next"), ...sceneTargetSchema }),
+  z.object({ operation: z.literal("duplicate"), ...sceneTargetSchema }),
+  z.object({
+    operation: z.literal("insert"),
+    ...sceneTargetSchema,
+    placement: z.enum(["before", "after"]),
+    scene: z.object({
+      title: z.string().min(1).max(240),
+      voiceover: z.string().min(1).max(4000),
+      visualPrompt: z.string().min(1).max(8000),
+      motionPrompt: z.string().min(1).max(4000),
+      durationSeconds: z.number().int().min(2).max(20)
+    })
+  }),
+  z.object({ operation: z.literal("delete"), ...sceneTargetSchema })
 ]);
 
 export const editSideSchema = z.object({
@@ -66,10 +87,11 @@ export const editPlanObjectSchema = z.object({
     logoPosition: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]).optional(),
     logoSize: z.number().min(6).max(24).optional()
   }).optional(),
+  operations: z.array(sceneStructureSchema).min(1).max(20).optional(),
   sceneStructure: sceneStructureSchema.optional(),
   createdAt: z.string().min(1).max(100)
 });
 
-export const editPlanSchema = editPlanObjectSchema.refine((plan) => plan.changes.length > 0 || Object.keys(plan.productionSettings ?? {}).length > 0 || Boolean(plan.sceneStructure), {
+export const editPlanSchema = editPlanObjectSchema.refine((plan) => plan.changes.length > 0 || Object.keys(plan.productionSettings ?? {}).length > 0 || Boolean(plan.operations?.length) || Boolean(plan.sceneStructure), {
   message: "修改方案必须包含场景变化或成片设置。"
 });

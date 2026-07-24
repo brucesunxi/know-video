@@ -21,6 +21,11 @@ vm.runInNewContext(output, {
   crypto: { randomUUID: () => "refined-plan" },
   require: (specifier) => {
     if (specifier === "@/lib/edit-intent") return intentModule.exports;
+    if (specifier === "@/lib/edit-operations") {
+      return {
+        editPlanOperations: (plan) => plan.operations ?? (plan.sceneStructure ? [plan.sceneStructure] : [])
+      };
+    }
     return {};
   }
 });

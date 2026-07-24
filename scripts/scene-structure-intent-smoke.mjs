@@ -21,7 +21,13 @@ vm.runInNewContext(transpile("../lib/scene-structure-intent.ts"), {
   exports: structureModule.exports,
   require: localRequire
 });
-const { requestsSceneStructureChange, sceneStructureFromRequest } = structureModule.exports;
+const {
+  normalizeSceneReferences,
+  requestWithoutSceneStructureClauses,
+  requestsSceneStructureChange,
+  sceneStructureFromRequest,
+  sceneStructuresFromRequest
+} = structureModule.exports;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const scenes = [1, 2, 3, 4, 5];
 
@@ -37,7 +43,16 @@ assert.equal(sceneStructureFromRequest("合并第 2 和第 4 场景", scenes), u
 assert.deepEqual(plain(sceneStructureFromRequest("第 1 场景时长改成 6 秒", scenes)), { operation: "set-duration", sceneNumber: 1, durationSeconds: 6 });
 assert.deepEqual(plain(sceneStructureFromRequest("把第 3 场景改成 0.75 秒叠化转场", scenes)), { operation: "set-transition", sceneNumber: 3, kind: "dissolve", durationSeconds: 0.75 });
 assert.deepEqual(plain(sceneStructureFromRequest("第 2 个镜头直接硬切", scenes)), { operation: "set-transition", sceneNumber: 2, kind: "cut", durationSeconds: 0 });
-assert.deepEqual(plain(sceneStructureFromRequest("第 4 场景使用向左推进转场", scenes)), { operation: "set-transition", sceneNumber: 4, kind: "push-left", durationSeconds: 0.5 });
+assert.deepEqual(plain(sceneStructureFromRequest("第 4 场景使用向左推进转场", scenes)), { operation: "set-transition", sceneNumber: 4, kind: "push-left", durationSeconds: 0.25 });
+assert.deepEqual(plain(sceneStructureFromRequest("删除第二个分镜", scenes)), { operation: "delete", sceneNumber: 2 });
+assert.deepEqual(plain(sceneStructureFromRequest("复制最后一个分镜", scenes)), { operation: "duplicate", sceneNumber: 5 });
+assert.deepEqual(plain(sceneStructureFromRequest("删除倒数第二个镜头", scenes)), { operation: "delete", sceneNumber: 4 });
+assert.deepEqual(plain(sceneStructuresFromRequest("删除第二个分镜，然后把第五个分镜移动到第一位", scenes)), [
+  { operation: "delete", sceneNumber: 2 },
+  { operation: "move-to", sceneNumber: 5, targetSceneNumber: 1 }
+]);
+assert.equal(requestWithoutSceneStructureClauses("删除第二个分镜，并把全片配音换成女声", scenes), "把全片配音换成女声");
+assert.equal(normalizeSceneReferences("把第二个分镜移到最后一个分镜", scenes), "把第2个场景移到第5个场景");
 assert.equal(sceneStructureFromRequest("第 1 场景使用叠化转场", scenes), undefined);
 assert.equal(sceneStructureFromRequest("删除一个场景", scenes), undefined);
 assert.equal(requestsSceneStructureChange("删除第 2 场景"), true);
