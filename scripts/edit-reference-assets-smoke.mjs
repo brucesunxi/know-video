@@ -59,6 +59,19 @@ const imageReference = {
   analysis: "银色设备放在白色桌面上"
 };
 
+const productionLogo = bindReferenceAssetsToPlan({
+  plan: {
+    ...plan("把这张上传图片作为全片 Logo", []),
+    productionAssets: { logo: { action: "attach-upload" } }
+  },
+  references: [imageReference],
+  version
+});
+assert.deepEqual(Array.from(productionLogo.affectedScenes), []);
+assert.equal(productionLogo.changes.length, 0);
+assert.equal(productionLogo.productionAssets.logo.referenceKey, imageReference.key);
+assert.equal(productionLogo.referenceAssets[0].referenceUsage, "production-logo");
+
 const targeted = bindReferenceAssetsToPlan({
   plan: plan("让场景 2 参考这张图"),
   references: [imageReference],
@@ -101,6 +114,27 @@ const audioReference = {
   analysisKind: "transcript",
   analysis: "把复杂知识讲得清楚，也讲得好看。"
 };
+const productionMusic = bindReferenceAssetsToPlan({
+  plan: {
+    ...plan("把这个音频作为背景音乐", []),
+    productionAssets: { music: { action: "attach-upload" } }
+  },
+  references: [audioReference],
+  version
+});
+assert.deepEqual(Array.from(productionMusic.affectedScenes), []);
+assert.equal(productionMusic.changes.length, 0);
+assert.equal(productionMusic.productionAssets.music.referenceKey, audioReference.key);
+assert.equal(productionMusic.referenceAssets[0].referenceUsage, "production-music");
+
+assert.throws(() => bindReferenceAssetsToPlan({
+  plan: {
+    ...plan("把上传图片作为 Logo", []),
+    productionAssets: { logo: { action: "attach-upload" } }
+  },
+  references: [],
+  version
+}), /请上传一张图片/);
 const transcript = bindReferenceAssetsToPlan({
   plan: plan("用这个录音内容作为第 2 个场景的旁白"),
   references: [audioReference],

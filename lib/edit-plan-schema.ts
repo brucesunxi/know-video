@@ -17,7 +17,7 @@ const referenceAssetSchema = z.object({
   actualDurationSeconds: z.number().positive().max(21_600).optional(),
   targetSceneNumber: z.number().int().positive().optional(),
   targetSceneNumbers: z.array(z.number().int().positive()).max(20).optional(),
-  referenceUsage: z.literal("source-media").optional()
+  referenceUsage: z.enum(["source-media", "production-logo", "production-music"]).optional()
 });
 const sceneStructureSchema = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("set-duration"), ...sceneTargetSchema, durationSeconds: z.number().int().min(2).max(20) }),
@@ -78,6 +78,17 @@ export const editPlanObjectSchema = z.object({
     regenerate: z.array(z.enum(["image", "audio", "clip", "thumbnail", "caption", "render"]))
   })).max(20),
   referenceAssets: z.array(referenceAssetSchema).max(12).optional(),
+  projectTitle: z.string().trim().min(1).max(160).optional(),
+  productionAssets: z.object({
+    logo: z.object({
+      action: z.enum(["attach-upload", "remove"]),
+      referenceKey: z.string().min(1).max(800).optional()
+    }).optional(),
+    music: z.object({
+      action: z.enum(["attach-upload", "remove"]),
+      referenceKey: z.string().min(1).max(800).optional()
+    }).optional()
+  }).optional(),
   productionSettings: z.object({
     captionsEnabled: z.boolean().optional(),
     captionStyle: z.enum(["minimal", "boxed", "highlight"]).optional(),
@@ -92,6 +103,6 @@ export const editPlanObjectSchema = z.object({
   createdAt: z.string().min(1).max(100)
 });
 
-export const editPlanSchema = editPlanObjectSchema.refine((plan) => plan.changes.length > 0 || Object.keys(plan.productionSettings ?? {}).length > 0 || Boolean(plan.operations?.length) || Boolean(plan.sceneStructure), {
+export const editPlanSchema = editPlanObjectSchema.refine((plan) => plan.changes.length > 0 || Boolean(plan.projectTitle) || Object.keys(plan.productionAssets ?? {}).length > 0 || Object.keys(plan.productionSettings ?? {}).length > 0 || Boolean(plan.operations?.length) || Boolean(plan.sceneStructure), {
   message: "修改方案必须包含场景变化或成片设置。"
 });

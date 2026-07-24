@@ -51,12 +51,36 @@ export const conversationEditProgramSchema = z.object({
   classification: z.enum(["timeline", "content", "mixed", "production", "clarify"]),
   understoodRequest: z.string().min(1).max(1000),
   operations: z.array(conversationOperationSchema).max(20),
+  directAction: z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("visual-candidate"),
+      sceneId: z.string().uuid(),
+      sceneNumber: z.number().int().positive(),
+      instruction: z.string().min(1).max(4000)
+    }),
+    z.object({ kind: z.literal("restore-parent-version") })
+  ]).optional(),
+  projectTitle: z.string().trim().min(1).max(160).optional(),
+  productionAssets: z.object({
+    logo: z.enum(["attach-upload", "remove"]).optional(),
+    music: z.enum(["attach-upload", "remove"]).optional()
+  }).optional(),
+  productionSettings: z.object({
+    captionsEnabled: z.boolean().optional(),
+    captionStyle: z.enum(["minimal", "boxed", "highlight"]).optional(),
+    playbackRate: z.union([z.literal(0.75), z.literal(1), z.literal(1.25), z.literal(1.5)]).optional(),
+    musicVolume: z.number().min(0).max(0.5).optional(),
+    musicDucking: z.enum(["off", "balanced", "strong"]).optional(),
+    logoPosition: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]).optional(),
+    logoSize: z.number().min(6).max(24).optional()
+  }).optional(),
   remainingInstruction: z.string().max(4000),
   clarification: z.string().max(500).optional(),
   confidence: z.number().min(0).max(1)
 });
 
 export type ConversationEditProgram = z.infer<typeof conversationEditProgramSchema>;
+export type ConversationDirectAction = NonNullable<ConversationEditProgram["directAction"]>;
 
 export function canonicalConversationOperations(
   program: ConversationEditProgram,
@@ -77,4 +101,15 @@ export function canonicalConversationOperations(
       targetSceneNumber: target.sceneNumber
     };
   });
+}
+
+export function canonicalConversationDirectAction(
+  action: ConversationDirectAction | undefined,
+  version: Pick<ProjectVersion, "scenes">
+): ConversationDirectAction | undefined {
+  if (!action) return undefined;
+  if (action.kind === "restore-parent-version") return action;
+  const scene = version.scenes.find((item) => item.id === action.sceneId);
+  if (!scene) throw new Error("AI edit program referenced a direct-action scene outside the current version");
+  return { ...action, sceneNumber: scene.sceneNumber };
 }

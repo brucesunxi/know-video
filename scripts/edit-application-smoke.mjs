@@ -5,6 +5,7 @@ import ts from "typescript";
 
 const source = fs.readFileSync(new URL("../lib/edit-application.ts", import.meta.url), "utf8");
 const route = fs.readFileSync(new URL("../app/api/edit-plan/apply/route.ts", import.meta.url), "utf8");
+const mutations = fs.readFileSync(new URL("../lib/project-mutations.ts", import.meta.url), "utf8");
 const output = ts.transpileModule(source, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
@@ -67,5 +68,9 @@ assert.match(route, /operation\.sceneId/);
 assert.doesNotMatch(route, /时间线结构方案暂不支持同时修改场景内容/);
 assert.match(route, /editPlan: normalizedPlan/);
 assert.match(route, /没有覆盖\|未完成的中文字段/);
+assert.match(mutations, /title:\s*normalizedPlan\.projectTitle\?\.trim\(\)\s*\|\|\s*appliedProject\.title/);
+assert.match(mutations, /title = \$\{nextProject\.title\}/);
+assert.match(mutations, /applyEditPlanProductionAssets/);
+assert.match(mutations, /productionAssetsChanged/);
 
 console.log("Edit application smoke checks passed.");

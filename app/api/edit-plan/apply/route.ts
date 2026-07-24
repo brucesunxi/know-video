@@ -17,6 +17,8 @@ const requestSchema = z.object({
   direct: z.boolean().optional().default(false),
   editPlan: editPlanObjectSchema.extend({ status: z.literal("proposed") }).refine(
     (plan) => plan.changes.length > 0
+      || Boolean(plan.projectTitle)
+      || Object.keys(plan.productionAssets ?? {}).length > 0
       || Object.keys(plan.productionSettings ?? {}).length > 0
       || Boolean(plan.operations?.length)
       || Boolean(plan.sceneStructure)

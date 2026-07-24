@@ -11,20 +11,31 @@ const module = { exports: {} };
 vm.runInNewContext(output, {
   module,
   exports: module.exports,
-  require: (specifier) => specifier === "@/lib/scene-assets"
-    ? {
-      createUploadedAsset: (reference) => ({
-        id: `asset-${reference.name}`,
-        type: reference.contentType.startsWith("image/") ? "image" : reference.contentType.startsWith("video/") ? "clip" : "audio",
-        r2Key: reference.key,
-        url: `/api/assets/${reference.key}`,
-        metadata: { ...reference, source: "user-upload" }
-      })
+  crypto: { randomUUID: () => "production-asset-id" },
+  require: (specifier) => {
+    if (specifier === "@/lib/scene-assets") {
+      return {
+        createUploadedAsset: (reference) => ({
+          id: `asset-${reference.name}`,
+          type: reference.contentType.startsWith("image/") ? "image" : reference.contentType.startsWith("video/") ? "clip" : "audio",
+          r2Key: reference.key,
+          url: `/api/assets/${reference.key}`,
+          metadata: { ...reference, source: "user-upload" }
+        })
+      };
     }
-    : {}
+    if (specifier === "@/lib/r2") return { assetUrlForKey: (key) => `/api/assets/${key}` };
+    return {};
+  }
 });
 
-const { attachEditPlanReferenceAssets, attachGenerationReferenceAssets, createGenerationReferenceAsset, generationReferenceContext } = module.exports;
+const {
+  applyEditPlanProductionAssets,
+  attachEditPlanReferenceAssets,
+  attachGenerationReferenceAssets,
+  createGenerationReferenceAsset,
+  generationReferenceContext
+} = module.exports;
 const references = [
   {
     key: "uploads/generation/r/image.png",
@@ -121,6 +132,29 @@ const reprioritized = attachEditPlanReferenceAssets({
 assert.equal(reprioritized.currentVersion.scenes[1].style.referenceAssets[0].key, references[0].key);
 assert.equal(reprioritized.currentVersion.scenes[1].style.referenceAssets[1].key, references[2].key);
 
+const productionAttached = applyEditPlanProductionAssets(project, {
+  productionAssets: {
+    logo: { action: "attach-upload", referenceKey: references[0].key },
+    music: { action: "attach-upload", referenceKey: references[3].key }
+  },
+  referenceAssets: [
+    { ...references[0], referenceUsage: "production-logo" },
+    { ...references[3], referenceUsage: "production-music" }
+  ]
+});
+assert.deepEqual(
+  Array.from(productionAttached.currentVersion.scenes[0].assets, (asset) => asset.type).sort(),
+  ["logo", "music"]
+);
+assert.equal(productionAttached.currentVersion.scenes[0].assets.find((asset) => asset.type === "logo").r2Key, references[0].key);
+assert.equal(project.currentVersion.scenes[0].assets.length, 0);
+
+const productionRemoved = applyEditPlanProductionAssets(productionAttached, {
+  productionAssets: { music: { action: "remove" } }
+});
+assert.equal(productionRemoved.currentVersion.scenes[0].assets.some((asset) => asset.type === "music"), false);
+assert.equal(productionRemoved.currentVersion.scenes[0].assets.some((asset) => asset.type === "logo"), true);
+
 const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
 assert.match(workspace, /referenceAssets: uploadedReferences/);
 assert.match(workspace, /\/api\/generation-assets\/upload"/);
@@ -151,7 +185,8 @@ assert.match(editReferences, /analysisKind === "transcript"/);
 assert.match(editReferences, /"audio", "caption", "render"/);
 
 const projectMutations = fs.readFileSync(new URL("../lib/project-mutations.ts", import.meta.url), "utf8");
-assert.match(projectMutations, /attachEditPlanReferenceAssets\(applyEditPlan/);
+assert.match(projectMutations, /applyEditPlanProductionAssets/);
+assert.match(projectMutations, /attachEditPlanReferenceAssets\(productionAssetProject/);
 assert.match(projectMutations, /patch_json->'referenceAssets'/);
 
 const projectsRoute = fs.readFileSync(new URL("../app/api/projects/route.ts", import.meta.url), "utf8");

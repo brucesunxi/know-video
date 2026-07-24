@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { z } from "zod";
 import { planningSceneSnapshot, versionAttachmentContext } from "@/lib/attachment-context";
 import { analyzeEditIntent, globalEditTargetSceneNumbers, requestsGeneratedClip } from "@/lib/edit-intent";
+import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { refineEditPlanScope } from "@/lib/edit-plan-refinement";
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import { fitScenesNarrationApproximate } from "@/lib/narration-fit";
@@ -14,8 +15,10 @@ import {
 } from "@/lib/brief-semantics";
 import { applySceneStructureOperations } from "@/lib/scene-structure";
 import {
+  canonicalConversationDirectAction,
   canonicalConversationOperations,
-  conversationEditProgramSchema
+  conversationEditProgramSchema,
+  type ConversationDirectAction
 } from "@/lib/conversation-edit-program";
 import {
   requestWithoutSceneStructureClauses,
@@ -30,9 +33,12 @@ import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 import { parseModelJson } from "@/lib/model-json";
 import { estimateNarrationSeconds } from "@/lib/speech-timing";
 import { visualStyleDirection, visualStyleProfile } from "@/lib/visual-style-profiles";
-import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene, SceneStructureMutation } from "@/lib/types";
+import type { EditPlan, GenerationOptions, ProductionAssetChange, ProductionSettings, Project, ProjectVersion, Scene, SceneStructureMutation } from "@/lib/types";
 
 type AiEngine = "deepseek-flash" | "openai" | "heuristic";
+type EditPlanningResult =
+  | { editPlan: EditPlan; directAction?: never; engine: AiEngine }
+  | { editPlan?: never; directAction: ConversationDirectAction; engine: AiEngine };
 
 const sceneSchema = z.object({
   title: z.string().min(1),
@@ -622,12 +628,28 @@ function conversationSandboxProject(version: ProjectVersion): Project {
   };
 }
 
+function productionAssetChangeSummary(changes: EditPlan["productionAssets"]) {
+  return [
+    changes?.logo?.action === "attach-upload" ? "使用上传图片作为全片 Logo" : changes?.logo?.action === "remove" ? "移除全片 Logo" : "",
+    changes?.music?.action === "attach-upload" ? "使用上传音频作为背景音乐" : changes?.music?.action === "remove" ? "移除背景音乐" : ""
+  ].filter(Boolean).join("，");
+}
+
 async function planConversationEdit(params: {
   request: string;
   version: ProjectVersion;
   requestAttachmentContext?: string;
+  selectedSceneNumber?: number;
+  allowDirectActions?: boolean;
 }): Promise<{
   operations: SceneStructureMutation[];
+  directAction?: ConversationDirectAction;
+  projectTitle?: string;
+  productionAssets?: {
+    logo?: ProductionAssetChange;
+    music?: ProductionAssetChange;
+  };
+  productionSettings?: Partial<ProductionSettings>;
   remainingInstruction: string;
   clarification?: string;
   engine: AiEngine;
@@ -651,7 +673,15 @@ async function planConversationEdit(params: {
               "Compile timeline changes into ordered operations. Use only sceneId values copied exactly from the current storyboard; sceneNumber is explanatory and will be canonicalized by the server.",
               "Supported timeline operations are set-duration, set-transition, move, move-to, split, merge-next, duplicate, insert, and delete.",
               "Use operations only for timeline structure, scene duration, ordering, and transitions.",
-              "Put all requests about narration, language, title, captions, visual content, image style, motion, voice, music, branding, or generated media into remainingInstruction, preserving the user's full meaning.",
+              "When the user explicitly renames the video or project itself, return the new name in projectTitle. Do not use projectTitle for a scene heading or on-screen copy.",
+              "When the user explicitly asks to use an uploaded image as the full-video logo, set productionAssets.logo to attach-upload. When they ask to remove the logo, set it to remove. When they explicitly ask to use uploaded audio as background music, set productionAssets.music to attach-upload; when they ask to remove background music, set it to remove.",
+              "A logo or background-music attachment is a full-video production asset, never scene source media, narration, or visual reference. Do not repeat that production-asset instruction in remainingInstruction.",
+              "Compile full-video captions, caption style, playback rate, music volume/ducking, Logo position, and Logo size into productionSettings. Choose the nearest supported value from the schema. Do not repeat those setting instructions in remainingInstruction.",
+              "Put all other requests about narration, language, scene titles, visual content, image style, motion, voice, branding, or generated media into remainingInstruction, preserving the user's full meaning.",
+              "When remainingInstruction targets one or more scenes, replace pronouns and semantic references with explicit current scene numbers, for example '让当前这幕动起来' becomes '让场景 3 动起来'.",
+              params.allowDirectActions === false
+                ? "Do not return a directAction while revising an existing proposal; express the requested change in remainingInstruction."
+                : "When the user explicitly asks for an alternative, candidate, or comparison image that must not replace the current video yet, return directAction visual-candidate for exactly one scene and leave operations empty. When the user asks to undo the latest applied edit or return to the immediately previous version, return directAction restore-parent-version.",
               "A request may produce both operations and remainingInstruction.",
               "Do not reject a request merely because it combines several edits.",
               "For destructive instructions that remain genuinely ambiguous after reading the storyboard, return classification clarify and one concise clarification question.",
@@ -663,6 +693,9 @@ async function planConversationEdit(params: {
             role: "user",
             content: [
               `Current storyboard:\n${JSON.stringify(planningSceneSnapshot(params.version), null, 2)}`,
+              params.selectedSceneNumber
+                ? `Currently selected scene number: ${params.selectedSceneNumber}. Resolve phrases such as 'this scene', 'current shot', '当前这个场景', or '这一幕' to this scene when context permits.`
+                : "",
               attachmentContext ? `Reference context:\n${attachmentContext}` : "",
               `User request:\n${params.request}`,
               [
@@ -678,6 +711,10 @@ async function planConversationEdit(params: {
                 '    or {"operation":"set-transition","sceneId":uuid,"sceneNumber":number,"kind":"auto"|"cut"|"dissolve"|"push-left"|"push-right"|"zoom"|"wipe","durationSeconds":0..1.2}',
                 '    or {"operation":"insert","sceneId":anchorUuid,"sceneNumber":anchorNumber,"placement":"before"|"after","scene":{"title":string,"voiceover":string,"visualPrompt":string,"motionPrompt":string,"durationSeconds":2..20}}',
                 "  ],",
+                '  "directAction"?: {"kind":"visual-candidate","sceneId":uuid,"sceneNumber":number,"instruction":string} | {"kind":"restore-parent-version"},',
+                '  "projectTitle"?: string,',
+                '  "productionAssets"?: {"logo"?:"attach-upload"|"remove","music"?:"attach-upload"|"remove"},',
+                '  "productionSettings"?: {"captionsEnabled"?:boolean,"captionStyle"?:"minimal"|"boxed"|"highlight","playbackRate"?:0.75|1|1.25|1.5,"musicVolume"?:0..0.5,"musicDucking"?:"off"|"balanced"|"strong","logoPosition"?:"top-left"|"top-right"|"bottom-left"|"bottom-right","logoSize"?:6..24},',
                 '  "remainingInstruction": string,',
                 '  "clarification"?: string,',
                 '  "confidence": 0..1',
@@ -700,12 +737,22 @@ async function planConversationEdit(params: {
         };
       }
       const operations = canonicalConversationOperations(program, params.version);
+      const directAction = canonicalConversationDirectAction(program.directAction, params.version);
+      if (directAction && (operations.length > 0 || program.projectTitle || program.productionAssets || program.productionSettings || program.remainingInstruction.trim())) {
+        throw new Error("AI edit program mixed an immediate candidate action with a versioned edit plan");
+      }
       if (operations.length > 0) {
         applySceneStructureOperations(conversationSandboxProject(params.version), operations);
       }
       const remainingInstruction = program.remainingInstruction.trim()
         || (operations.length === 0 ? params.request.trim() : "");
-      return { operations, remainingInstruction, engine: textModel.engine };
+      const productionAssets = program.productionAssets
+        ? {
+            logo: program.productionAssets.logo ? { action: program.productionAssets.logo } : undefined,
+            music: program.productionAssets.music ? { action: program.productionAssets.music } : undefined
+          }
+        : undefined;
+      return { operations, directAction, projectTitle: program.projectTitle, productionAssets, productionSettings: program.productionSettings, remainingInstruction, engine: textModel.engine };
     } catch (error) {
       console.error("[ai-video] Semantic edit compiler failed; using guarded local fallback:", error);
     }
@@ -718,11 +765,59 @@ async function planConversationEdit(params: {
   if (operations.length > 0) {
     applySceneStructureOperations(conversationSandboxProject(params.version), operations);
   }
+  const candidateFallback = params.allowDirectActions === false
+    ? undefined
+    : candidateEditFromRequest(params.request, availableSceneNumbers, params.selectedSceneNumber);
+  const candidateScene = candidateFallback
+    ? params.version.scenes.find((scene) => scene.sceneNumber === candidateFallback.sceneNumber)
+    : undefined;
+  const restoreFallback = params.allowDirectActions !== false
+    && Boolean(params.version.parentVersionId)
+    && /(?:撤销(?:刚才|上次|最近)?(?:的)?修改|(?:回退到?|退回|返回|恢复)(?:上一版|前一版|上个版本)|undo(?:\s+the)?\s+(?:last|latest)\s+(?:edit|change|version))/iu.test(params.request);
+  const selectedSceneFallback = params.selectedSceneNumber
+    && availableSceneNumbers.includes(params.selectedSceneNumber)
+    && /(?:当前|这个|本|该|这一)\s*(?:场景|镜头|章节|幕|段)|(?:当前|这个|本|该|这一)(?:幕|段)|current\s+(?:scene|shot)/iu.test(params.request)
+    ? `${params.request}（目标：场景 ${params.selectedSceneNumber}）`
+    : params.request;
+  const projectTitleMatch = params.request.match(
+    /(?:把|将)?(?:这个|当前)?(?:视频|项目)(?:的)?(?:名字|名称|标题)?(?:改成|改为|命名为|重命名为)\s*[“"]?([^”"，,。；;\n]{1,80})/u
+  );
+  const projectTitleFallback = projectTitleMatch?.[1]?.trim();
+  const logoAttachFallback = /(?:把|将|用|使用).{0,20}(?:上传|附件|这|该).{0,8}(?:图片|图像|照片).{0,20}(?:作为|设为|用作).{0,8}(?:logo|标志|标识)/iu.test(params.request);
+  const logoRemoveFallback = /(?:删除|移除|去掉|不要).{0,10}(?:logo|标志|标识)/iu.test(params.request);
+  const musicAttachFallback = /(?:把|将|用|使用).{0,20}(?:上传|附件|这|该).{0,8}(?:音频|音乐|歌曲).{0,20}(?:作为|设为|用作).{0,8}(?:背景音乐|配乐)|(?:把|将).{0,10}(?:背景音乐|配乐).{0,12}(?:换成|替换为).{0,12}(?:上传|附件|这|该)/iu.test(params.request);
+  const musicRemoveFallback = /(?:删除|移除|去掉|不要|关闭).{0,10}(?:背景音乐|配乐)/iu.test(params.request);
+  const productionAssets = logoAttachFallback || logoRemoveFallback || musicAttachFallback || musicRemoveFallback
+    ? {
+        logo: logoAttachFallback || logoRemoveFallback
+          ? { action: logoRemoveFallback ? "remove" as const : "attach-upload" as const }
+          : undefined,
+        music: musicAttachFallback || musicRemoveFallback
+          ? { action: musicRemoveFallback ? "remove" as const : "attach-upload" as const }
+          : undefined
+      }
+    : undefined;
+  const fallbackRemaining = projectTitleMatch
+    ? selectedSceneFallback.replace(projectTitleMatch[0], "").replace(/^[，,。；;\s]+|[，,。；;\s]+$/gu, "")
+    : selectedSceneFallback;
   return {
     operations,
+    directAction: restoreFallback
+      ? { kind: "restore-parent-version" }
+      : candidateFallback && candidateScene
+      ? {
+          kind: "visual-candidate",
+          sceneId: candidateScene.id,
+          sceneNumber: candidateScene.sceneNumber,
+          instruction: candidateFallback.instruction
+        }
+      : undefined,
+    projectTitle: projectTitleFallback,
+    productionAssets,
+    productionSettings: productionSettingsFromRequest(params.request),
     remainingInstruction: operations.length > 0
       ? requestWithoutSceneStructureClauses(params.request, availableSceneNumbers)
-      : params.request,
+      : candidateFallback || restoreFallback ? "" : fallbackRemaining,
     engine: "heuristic"
   };
 }
@@ -1119,19 +1214,27 @@ export async function createEditPlan(params: {
   version: ProjectVersion;
   editNumber: number;
   requestAttachmentContext?: string;
+  selectedSceneNumber?: number;
+  allowDirectActions?: boolean;
   skipConversationPlanning?: boolean;
-}): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
-  const requestedProductionSettings = productionSettingsFromRequest(params.request);
+}): Promise<EditPlanningResult> {
   const conversationProgram = params.skipConversationPlanning
     ? {
         operations: [] as SceneStructureMutation[],
         remainingInstruction: params.request,
         engine: "heuristic" as AiEngine
       }
-    : await planConversationEdit(params);
+    : await planConversationEdit({ ...params, allowDirectActions: params.allowDirectActions !== false });
+  const requestedProductionSettings = conversationProgram.productionSettings
+    ?? productionSettingsFromRequest(params.request);
   if ("clarification" in conversationProgram && conversationProgram.clarification) {
     throw new Error(conversationProgram.clarification);
   }
+  if (conversationProgram.directAction) {
+    return { directAction: conversationProgram.directAction, engine: conversationProgram.engine };
+  }
+  const requestedProjectTitle = conversationProgram.projectTitle?.trim();
+  const requestedProductionAssets = conversationProgram.productionAssets;
   const requestedStructures = conversationProgram.operations;
   if (requestedStructures.length > 0) {
     applySceneStructureOperations(conversationSandboxProject(params.version), requestedStructures);
@@ -1143,6 +1246,7 @@ export async function createEditPlan(params: {
         request: remainingRequest,
         skipConversationPlanning: true
       });
+      if (!contentResult.editPlan) throw new Error("内容修改被错误编译为即时操作，请重新提交。");
       const operations = [...requestedStructures, ...editPlanOperations(contentResult.editPlan)];
       return {
         engine: contentResult.engine,
@@ -1156,6 +1260,8 @@ export async function createEditPlan(params: {
           ])).sort((left, right) => left - right),
           operations,
           sceneStructure: undefined,
+          projectTitle: requestedProjectTitle ?? contentResult.editPlan.projectTitle,
+          productionAssets: requestedProductionAssets ?? contentResult.editPlan.productionAssets,
           productionSettings: {
             ...contentResult.editPlan.productionSettings,
             ...requestedProductionSettings
@@ -1177,7 +1283,110 @@ export async function createEditPlan(params: {
         affectedScenes: affectedSceneNumbersForOperations(requestedStructures),
         changes: [],
         operations: requestedStructures,
+        projectTitle: requestedProjectTitle,
+        productionAssets: requestedProductionAssets,
         productionSettings: Object.keys(requestedProductionSettings).length > 0 ? requestedProductionSettings : undefined,
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
+  if (requestedProjectTitle) {
+    const remainingRequest = conversationProgram.remainingInstruction.trim();
+    if (remainingRequest.length >= 2) {
+      const contentResult = await createEditPlan({
+        ...params,
+        request: remainingRequest,
+        skipConversationPlanning: true
+      });
+      if (!contentResult.editPlan) throw new Error("内容修改被错误编译为即时操作，请重新提交。");
+      return {
+        engine: contentResult.engine,
+        editPlan: {
+          ...contentResult.editPlan,
+          userRequest: params.request,
+          summary: `将项目名称改为“${requestedProjectTitle}”。 ${contentResult.editPlan.summary}`,
+          projectTitle: requestedProjectTitle,
+          productionAssets: requestedProductionAssets,
+          productionSettings: {
+            ...contentResult.editPlan.productionSettings,
+            ...requestedProductionSettings
+          }
+        }
+      };
+    }
+    return {
+      engine: conversationProgram.engine,
+      editPlan: {
+        id: crypto.randomUUID(),
+        editNumber: params.editNumber,
+        baseVersionId: params.version.id,
+        status: "proposed",
+        userRequest: params.request,
+        summary: `将项目名称改为“${requestedProjectTitle}”。`,
+        affectedScenes: [],
+        changes: [],
+        projectTitle: requestedProjectTitle,
+        productionAssets: requestedProductionAssets,
+        productionSettings: Object.keys(requestedProductionSettings).length > 0 ? requestedProductionSettings : undefined,
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
+  if (requestedProductionAssets) {
+    const remainingRequest = conversationProgram.remainingInstruction.trim();
+    if (remainingRequest.length >= 2) {
+      const contentResult = await createEditPlan({
+        ...params,
+        request: remainingRequest,
+        skipConversationPlanning: true
+      });
+      if (!contentResult.editPlan) throw new Error("成片素材修改被错误编译为即时操作，请重新提交。");
+      return {
+        engine: contentResult.engine,
+        editPlan: {
+          ...contentResult.editPlan,
+          userRequest: params.request,
+          summary: `${productionAssetChangeSummary(requestedProductionAssets)}。 ${contentResult.editPlan.summary}`,
+          productionAssets: {
+            ...contentResult.editPlan.productionAssets,
+            ...requestedProductionAssets
+          }
+        }
+      };
+    }
+    return {
+      engine: conversationProgram.engine,
+      editPlan: {
+        id: crypto.randomUUID(),
+        editNumber: params.editNumber,
+        baseVersionId: params.version.id,
+        status: "proposed",
+        userRequest: params.request,
+        summary: `${productionAssetChangeSummary(requestedProductionAssets)}。`,
+        affectedScenes: [],
+        changes: [],
+        productionAssets: requestedProductionAssets,
+        productionSettings: Object.keys(requestedProductionSettings).length > 0 ? requestedProductionSettings : undefined,
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
+  if (
+    Object.keys(requestedProductionSettings).length > 0
+    && !conversationProgram.remainingInstruction.trim()
+  ) {
+    return {
+      engine: conversationProgram.engine,
+      editPlan: {
+        id: crypto.randomUUID(),
+        editNumber: params.editNumber,
+        baseVersionId: params.version.id,
+        status: "proposed",
+        userRequest: params.request,
+        summary: "按你的要求更新全片播放、字幕或品牌设置。",
+        affectedScenes: [],
+        changes: [],
+        productionSettings: requestedProductionSettings,
         createdAt: new Date().toISOString()
       }
     };
@@ -1317,23 +1526,27 @@ export async function refineEditPlan(params: {
   existingPlan: EditPlan;
   editNumber: number;
   requestAttachmentContext?: string;
+  selectedSceneNumber?: number;
   skipConversationPlanning?: boolean;
-}): Promise<{ editPlan: EditPlan; engine: AiEngine }> {
+}): Promise<EditPlanningResult> {
   if (params.existingPlan.baseVersionId !== params.version.id || params.existingPlan.status !== "proposed") {
     throw new Error("当前修改方案已经失效，请重新生成。");
   }
 
-  const requestedProductionSettings = productionSettingsFromRequest(params.request);
   const conversationProgram = params.skipConversationPlanning
     ? {
         operations: [] as SceneStructureMutation[],
         remainingInstruction: params.request,
         engine: "heuristic" as AiEngine
       }
-    : await planConversationEdit(params);
+    : await planConversationEdit({ ...params, allowDirectActions: false });
+  const requestedProductionSettings = conversationProgram.productionSettings
+    ?? productionSettingsFromRequest(params.request);
   if ("clarification" in conversationProgram && conversationProgram.clarification) {
     throw new Error(conversationProgram.clarification);
   }
+  const requestedProjectTitle = conversationProgram.projectTitle?.trim();
+  const requestedProductionAssets = conversationProgram.productionAssets;
   const additionalOperations = conversationProgram.operations;
   if (additionalOperations.length > 0) {
     const operations = [...editPlanOperations(params.existingPlan), ...additionalOperations];
@@ -1345,6 +1558,7 @@ export async function refineEditPlan(params: {
         request: remainingRequest,
         skipConversationPlanning: true
       });
+      if (!contentResult.editPlan) throw new Error("方案细化被错误编译为即时操作，请重新提交。");
       return {
         engine: contentResult.engine === "heuristic" ? conversationProgram.engine : contentResult.engine,
         editPlan: {
@@ -1357,6 +1571,11 @@ export async function refineEditPlan(params: {
           ])).sort((left, right) => left - right),
           operations,
           sceneStructure: undefined,
+          projectTitle: requestedProjectTitle ?? contentResult.editPlan.projectTitle,
+          productionAssets: {
+            ...contentResult.editPlan.productionAssets,
+            ...requestedProductionAssets
+          },
           productionSettings: {
             ...contentResult.editPlan.productionSettings,
             ...requestedProductionSettings
@@ -1378,6 +1597,116 @@ export async function refineEditPlan(params: {
         ])).sort((left, right) => left - right),
         operations,
         sceneStructure: undefined,
+        projectTitle: requestedProjectTitle ?? params.existingPlan.projectTitle,
+        productionAssets: {
+          ...params.existingPlan.productionAssets,
+          ...requestedProductionAssets
+        },
+        productionSettings: {
+          ...params.existingPlan.productionSettings,
+          ...requestedProductionSettings
+        },
+        status: "proposed",
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
+  if (requestedProjectTitle) {
+    const remainingRequest = conversationProgram.remainingInstruction.trim();
+    if (remainingRequest.length >= 2) {
+      const contentResult = await refineEditPlan({
+        ...params,
+        request: remainingRequest,
+        skipConversationPlanning: true
+      });
+      if (!contentResult.editPlan) throw new Error("方案细化被错误编译为即时操作，请重新提交。");
+      return {
+        engine: contentResult.engine,
+        editPlan: {
+          ...contentResult.editPlan,
+          userRequest: `${params.existingPlan.userRequest}\n补充要求：${params.request}`,
+          summary: `将项目名称改为“${requestedProjectTitle}”。 ${contentResult.editPlan.summary}`,
+          projectTitle: requestedProjectTitle,
+          productionAssets: {
+            ...contentResult.editPlan.productionAssets,
+            ...requestedProductionAssets
+          }
+        }
+      };
+    }
+    return {
+      engine: conversationProgram.engine,
+      editPlan: {
+        ...params.existingPlan,
+        id: crypto.randomUUID(),
+        editNumber: params.editNumber,
+        userRequest: `${params.existingPlan.userRequest}\n补充要求：${params.request}`,
+        summary: `${params.existingPlan.summary} 将项目名称改为“${requestedProjectTitle}”。`,
+        projectTitle: requestedProjectTitle,
+        productionAssets: {
+          ...params.existingPlan.productionAssets,
+          ...requestedProductionAssets
+        },
+        productionSettings: {
+          ...params.existingPlan.productionSettings,
+          ...requestedProductionSettings
+        },
+        status: "proposed",
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
+  if (requestedProductionAssets) {
+    const remainingRequest = conversationProgram.remainingInstruction.trim();
+    if (remainingRequest.length >= 2) {
+      const contentResult = await refineEditPlan({
+        ...params,
+        request: remainingRequest,
+        skipConversationPlanning: true
+      });
+      if (!contentResult.editPlan) throw new Error("全片素材方案被错误编译为即时操作，请重新提交。");
+      return {
+        engine: contentResult.engine,
+        editPlan: {
+          ...contentResult.editPlan,
+          userRequest: `${params.existingPlan.userRequest}\n补充要求：${params.request}`,
+          summary: `${contentResult.editPlan.summary} ${productionAssetChangeSummary(requestedProductionAssets)}。`,
+          productionAssets: {
+            ...contentResult.editPlan.productionAssets,
+            ...requestedProductionAssets
+          }
+        }
+      };
+    }
+    return {
+      engine: conversationProgram.engine,
+      editPlan: {
+        ...params.existingPlan,
+        id: crypto.randomUUID(),
+        editNumber: params.editNumber,
+        userRequest: `${params.existingPlan.userRequest}\n补充要求：${params.request}`,
+        summary: `${params.existingPlan.summary} ${productionAssetChangeSummary(requestedProductionAssets)}。`,
+        productionAssets: {
+          ...params.existingPlan.productionAssets,
+          ...requestedProductionAssets
+        },
+        status: "proposed",
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
+  if (
+    Object.keys(requestedProductionSettings).length > 0
+    && !conversationProgram.remainingInstruction.trim()
+  ) {
+    return {
+      engine: conversationProgram.engine,
+      editPlan: {
+        ...params.existingPlan,
+        id: crypto.randomUUID(),
+        editNumber: params.editNumber,
+        userRequest: `${params.existingPlan.userRequest}\n补充要求：${params.request}`,
+        summary: `${params.existingPlan.summary} 并按补充要求更新全片播放、字幕或品牌设置。`,
         productionSettings: {
           ...params.existingPlan.productionSettings,
           ...requestedProductionSettings

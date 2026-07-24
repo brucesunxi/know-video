@@ -3,11 +3,16 @@ import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { demoProject } from "@/lib/mock-data";
 import { createEditPlan, refineEditPlan } from "@/lib/ai-video";
-import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { bindReferenceAssetsToPlan } from "@/lib/edit-reference-assets";
 import { generationReferenceContext } from "@/lib/generation-reference-assets";
 import { CandidateImageError, generateSceneImageCandidate } from "@/lib/image-candidates";
-import { loadCurrentProjectForEdit, loadProposedEditPlan, persistCandidateEditConversation, persistEditPlan } from "@/lib/project-mutations";
+import {
+  loadCurrentProjectForEdit,
+  loadProposedEditPlan,
+  persistCandidateEditConversation,
+  persistEditPlan,
+  restoreProjectVersion
+} from "@/lib/project-mutations";
 import { referenceAssetInputSchema, validateAndAnalyzeReferenceAssets, validateReferenceRelationships } from "@/lib/reference-asset-processing";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import type { ChatMessage, ProjectVersion } from "@/lib/types";
@@ -81,16 +86,60 @@ export async function POST(request: Request) {
       { status: 409 }
     );
   }
-  const candidateIntent = currentProject
-    ? candidateEditFromRequest(
-        body.request,
-        currentProject.currentVersion.scenes.map((scene) => scene.sceneNumber),
-        body.selectedSceneNumber
-      )
-    : undefined;
-  if (!existingPlan && body.referenceAssets.length === 0 && currentProject && body.projectId && body.versionId && candidateIntent) {
-    try {
-      const result = await generateSceneImageCandidate(currentProject, {
+  const workingVersion: ProjectVersion = currentProject?.currentVersion ?? demoProject.currentVersion;
+  const editNumber = Math.max(1, Math.round(Date.now() / 1000) % 10000);
+
+  let editPlan;
+  let engine;
+  try {
+    const references = body.requestId && body.referenceAssets.length > 0
+      ? await validateAndAnalyzeReferenceAssets({ requestId: body.requestId, references: body.referenceAssets })
+      : [];
+    const requestAttachmentContext = references.length > 0
+      ? `${generationReferenceContext(references)}\nThese attachments belong to this edit request. Infer their intended role from the user's request. Only bind them to a selected or named scene when the request is actually scene-level; full-video Logo and background-music requests are production assets.`
+      : undefined;
+    const result = existingPlan
+      ? await refineEditPlan({
+          request: body.request,
+          version: workingVersion,
+          existingPlan,
+          editNumber,
+          requestAttachmentContext,
+          selectedSceneNumber: body.selectedSceneNumber
+        })
+      : await createEditPlan({
+          request: body.request,
+          version: workingVersion,
+          editNumber,
+          requestAttachmentContext,
+          selectedSceneNumber: body.selectedSceneNumber,
+          allowDirectActions: references.length === 0
+        });
+    if (result.directAction) {
+      if (!currentProject || !body.projectId || !body.versionId) {
+        throw new Error("这项操作需要在已保存的视频项目中执行。");
+      }
+      if (result.directAction.kind === "restore-parent-version") {
+        if (!currentProject.currentVersion.parentVersionId) {
+          throw new Error("当前已经是最早版本，没有可以撤销的上一个版本。");
+        }
+        const restored = await restoreProjectVersion({
+          projectId: body.projectId,
+          targetVersionId: currentProject.currentVersion.parentVersionId,
+          userId: user.id,
+          userRequest: body.request
+        });
+        return NextResponse.json({
+          action: "version-restored",
+          project: restored.project,
+          messages: [restored.message]
+        });
+      }
+      const candidateIntent = {
+        sceneNumber: result.directAction.sceneNumber,
+        instruction: result.directAction.instruction
+      };
+      const candidateResult = await generateSceneImageCandidate(currentProject, {
         sceneNumber: candidateIntent.sceneNumber,
         instruction: candidateIntent.instruction,
         quality: "standard"
@@ -107,7 +156,7 @@ export async function POST(request: Request) {
           request: body.request,
           response: responseText,
           sceneNumber: candidateIntent.sceneNumber,
-          candidateAssetId: result.candidate.id
+          candidateAssetId: candidateResult.candidate.id
         });
       } catch (error) {
         console.error("[edit-plan] Candidate conversation persistence failed:", error);
@@ -119,44 +168,12 @@ export async function POST(request: Request) {
       return NextResponse.json({
         action: "visual-candidate",
         candidateIntent,
-        candidate: result.candidate,
-        project: result.project,
+        candidate: candidateResult.candidate,
+        project: candidateResult.project,
         messages
       });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "候选画面生成失败，请稍后重试。";
-      return NextResponse.json(
-        { error: message },
-        { status: error instanceof CandidateImageError ? error.status : 502 }
-      );
     }
-  }
-  const workingVersion: ProjectVersion = currentProject?.currentVersion ?? demoProject.currentVersion;
-  const editNumber = Math.max(1, Math.round(Date.now() / 1000) % 10000);
-
-  let editPlan;
-  let engine;
-  try {
-    const references = body.requestId && body.referenceAssets.length > 0
-      ? await validateAndAnalyzeReferenceAssets({ requestId: body.requestId, references: body.referenceAssets })
-      : [];
-    const requestAttachmentContext = references.length > 0
-      ? `${generationReferenceContext(references)}\nThese attachments belong to this edit request. Use them for the selected or explicitly requested target scene.`
-      : undefined;
-    const result = existingPlan
-      ? await refineEditPlan({
-          request: body.request,
-          version: workingVersion,
-          existingPlan,
-          editNumber,
-          requestAttachmentContext
-        })
-      : await createEditPlan({
-          request: body.request,
-          version: workingVersion,
-          editNumber,
-          requestAttachmentContext
-        });
+    if (!result.editPlan) throw new Error("AI 没有生成可执行的修改方案。");
     editPlan = bindReferenceAssetsToPlan({
       plan: result.editPlan,
       references,
@@ -171,7 +188,7 @@ export async function POST(request: Request) {
     console.error("[edit-plan] Plan generation failed:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "修改计划生成失败，请重试。" },
-      { status: 502 }
+      { status: error instanceof CandidateImageError ? error.status : 502 }
     );
   }
 

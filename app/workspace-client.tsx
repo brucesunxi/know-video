@@ -49,7 +49,6 @@ import {
 import { KnowVideoPlayer } from "@/app/video-player";
 import { maxUploadBytes, replacementAssetTypes, uploadedAssetType } from "@/lib/asset-policy";
 import { referenceDescriptor } from "@/lib/attachment-context";
-import { candidateEditFromRequest } from "@/lib/candidate-edit-intent";
 import { editPlanVisualSceneNumbers, planPreviewAsset, removeEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { analyzeEditIntent, globalEditTargetSceneNumbers } from "@/lib/edit-intent";
 import { editPlanOperations } from "@/lib/edit-operations";
@@ -263,9 +262,20 @@ function uniqueRegenerate(plan: EditPlan) {
     .join("、");
 }
 
+function productionAssetChangeLabels(plan: EditPlan) {
+  return [
+    plan.productionAssets?.logo?.action === "attach-upload" ? "替换全片 Logo" : plan.productionAssets?.logo?.action === "remove" ? "移除全片 Logo" : "",
+    plan.productionAssets?.music?.action === "attach-upload" ? "替换背景音乐" : plan.productionAssets?.music?.action === "remove" ? "移除背景音乐" : ""
+  ].filter(Boolean);
+}
+
 function planScopeLabel(plan: EditPlan, sceneCount: number) {
   const targetScenes = Array.from(new Set(plan.affectedScenes)).sort((a, b) => a - b);
-  if (targetScenes.length === 0) return "只调整全片设置";
+  if (targetScenes.length === 0) {
+    if (plan.projectTitle) return "只修改项目名称";
+    if (productionAssetChangeLabels(plan).length > 0) return "只调整全片品牌与声音";
+    return "只调整全片设置";
+  }
   if (targetScenes.length === sceneCount && sceneCount > 1) return `覆盖全片 ${sceneCount} 个场景`;
   if (targetScenes.length === 1) return `只影响场景 ${targetScenes[0]}`;
   return `影响场景 ${targetScenes.join("、")}`;
@@ -275,7 +285,7 @@ function planAssetWorkLabel(plan: EditPlan) {
   const regenerate = uniqueRegenerate(plan);
   const settingCount = productionSettingLabels(plan.productionSettings).length;
   const structure = editPlanOperations(plan).length > 0 ? "时间线结构" : "";
-  return [regenerate ? `重做${regenerate}` : "", structure, settingCount > 0 ? `${settingCount} 项成片设置` : ""]
+  return [regenerate ? `重做${regenerate}` : "", structure, plan.projectTitle ? "项目名称" : "", ...productionAssetChangeLabels(plan), settingCount > 0 ? `${settingCount} 项成片设置` : ""]
     .filter(Boolean)
     .join("、") || "只更新文字和版本记录";
 }
@@ -328,6 +338,22 @@ function planCoverageState(plan: EditPlan, scenes: Scene[]) {
   const changes = Array.from(new Set(plan.changes.map((change) => change.sceneNumber))).sort((left, right) => left - right);
   const affected = Array.from(new Set(plan.affectedScenes)).sort((left, right) => left - right);
   const covered = changes.length > 0 ? changes : affected;
+
+  if (covered.length === 0 && plan.projectTitle) {
+    return {
+      tone: "ready",
+      title: "项目名称修改",
+      detail: `应用后项目将命名为“${plan.projectTitle}”，分镜内容保持不变。`
+    } as const;
+  }
+
+  if (covered.length === 0 && productionAssetChangeLabels(plan).length > 0) {
+    return {
+      tone: "ready",
+      title: "全片素材修改",
+      detail: `${productionAssetChangeLabels(plan).join("、")}，分镜内容保持不变。`
+    } as const;
+  }
 
   if (covered.length === 0 && productionSettingLabels(plan.productionSettings).length > 0) {
     return {
@@ -434,14 +460,10 @@ function planRequestTrail(plan: EditPlan) {
 
 function chatInputMode({
   input,
-  pendingPlan,
-  sceneNumbers,
-  selectedScene
+  pendingPlan
 }: {
   input: string;
   pendingPlan?: EditPlan;
-  sceneNumbers: number[];
-  selectedScene: number;
 }) {
   if (pendingPlan) {
     return {
@@ -451,22 +473,10 @@ function chatInputMode({
     } as const;
   }
 
-  const request = input.trim();
-  const candidateIntent = request.length > 1
-    ? candidateEditFromRequest(request, sceneNumbers, selectedScene)
-    : undefined;
-  if (candidateIntent) {
-    return {
-      tone: "ready",
-      title: `生成场景 ${candidateIntent.sceneNumber} 的候选画面`,
-      detail: "只生成候选素材，采用前不会替换当前视频。"
-    } as const;
-  }
-
   return {
     tone: "neutral",
-    title: "先生成可确认的修改方案",
-    detail: "发送后会创建改片计划，点击应用才会生成新版本。"
+    title: input.trim() ? "AI 正在理解你的修改意图" : "先生成可确认的修改方案",
+    detail: "AI 会结合当前分镜和选中场景理解要求，再决定生成方案或候选素材。"
   } as const;
 }
 
@@ -2952,7 +2962,7 @@ function ChatPanel({
     return scene && planPreviewAsset(scene, pendingPlan.id);
   }) : [];
   const planModificationCount = pendingPlan
-    ? pendingPlan.changes.length + productionSettingLabels(pendingPlan.productionSettings).length + editPlanOperations(pendingPlan).length
+    ? pendingPlan.changes.length + (pendingPlan.projectTitle ? 1 : 0) + productionAssetChangeLabels(pendingPlan).length + productionSettingLabels(pendingPlan.productionSettings).length + editPlanOperations(pendingPlan).length
     : 0;
   const visualPreviewState = { total: visualSceneNumbers.length, ready: previewedSceneNumbers.length };
   const applyLabel = pendingPlan ? planApplyLabel(pendingPlan, visualPreviewState) : "应用修改";
@@ -2964,9 +2974,7 @@ function ChatPanel({
   const applyDisabled = isBusy || Boolean(applyBlocker);
   const inputMode = chatInputMode({
     input,
-    pendingPlan,
-    sceneNumbers: scenes.map((scene) => scene.sceneNumber),
-    selectedScene
+    pendingPlan
   });
 
   useEffect(() => {
@@ -3092,6 +3100,18 @@ function ChatPanel({
               <div className="kv-production-plan" aria-label="全片设置修改">
                 <strong>全片设置</strong>
                 <div>{productionSettingLabels(pendingPlan.productionSettings).map((label) => <span key={label}>{label}</span>)}</div>
+              </div>
+            ) : null}
+            {productionAssetChangeLabels(pendingPlan).length > 0 ? (
+              <div className="kv-production-plan" aria-label="全片素材修改">
+                <strong>全片素材</strong>
+                <div>{productionAssetChangeLabels(pendingPlan).map((label) => <span key={label}>{label}</span>)}</div>
+              </div>
+            ) : null}
+            {pendingPlan.projectTitle ? (
+              <div className="kv-production-plan" aria-label="项目名称修改">
+                <strong>项目名称</strong>
+                <div><span>{pendingPlan.projectTitle}</span></div>
               </div>
             ) : null}
             <div className="kv-change-list">
@@ -4515,14 +4535,7 @@ export function WorkspaceClient({
     setChatInput("");
     setCandidateToCompare(undefined);
     setIsBusy(true);
-    const candidateIntent = pendingPlan || attachments.length > 0
-      ? undefined
-      : candidateEditFromRequest(
-          request,
-          project.currentVersion.scenes.map((scene) => scene.sceneNumber),
-          selectedScene
-        );
-    setBusyAction(pendingPlan ? "refining-edit" : candidateIntent ? "generating-candidate" : "planning-edit");
+    setBusyAction(pendingPlan ? "refining-edit" : "planning-edit");
     setErrorMessage(undefined);
     pushMessage({
       role: "user",
@@ -4566,13 +4579,27 @@ export function WorkspaceClient({
         throw new Error(failure.error || "修改计划生成失败，请重试。");
       }
       const data = await response.json() as {
-        action?: "visual-candidate";
+        action?: "visual-candidate" | "version-restored";
         editPlan?: EditPlan;
         messages: ChatMessage[];
         project?: Project;
         candidate?: SceneAsset;
         candidateIntent?: { sceneNumber: number; instruction: string };
       };
+      if (data.action === "version-restored") {
+        if (!data.project || !Array.isArray(data.messages)) {
+          throw new Error("版本恢复返回格式异常，请重试。");
+        }
+        setProject(data.project);
+        setPendingPlan(undefined);
+        setSelectedScene(data.project.currentVersion.scenes[0]?.sceneNumber ?? 1);
+        setStudioView("preview");
+        setVersionsOpen(false);
+        setVersionPreview(undefined);
+        setMessages((current) => [...current, ...data.messages.filter((message) => message.role === "assistant")]);
+        void loadVersions();
+        return;
+      }
       if (data.action === "visual-candidate") {
         if (!data.project || !data.candidate || !data.candidateIntent || !Array.isArray(data.messages)) {
           throw new Error("候选画面返回格式异常，请重试。");

@@ -1,4 +1,5 @@
 import { createUploadedAsset } from "@/lib/scene-assets";
+import { assetUrlForKey } from "@/lib/r2";
 import type { EditPlan, GenerationReferenceAsset, Project, SceneAsset } from "@/lib/types";
 
 function referenceRole(contentType: string) {
@@ -150,5 +151,42 @@ export function attachEditPlanReferenceAssets(project: Project, plan: EditPlan):
         : scene.assets
     };
   });
+  return { ...project, currentVersion: { ...project.currentVersion, scenes } };
+}
+
+export function applyEditPlanProductionAssets(project: Project, plan: EditPlan): Project {
+  if (!plan.productionAssets || project.currentVersion.scenes.length === 0) return project;
+  const scenes = project.currentVersion.scenes.map((scene) => ({ ...scene, assets: [...scene.assets] }));
+  const anchor = scenes[0];
+  if (!anchor) return project;
+
+  for (const type of ["logo", "music"] as const) {
+    const change = plan.productionAssets[type];
+    if (!change) continue;
+    anchor.assets = anchor.assets.filter((asset) => asset.type !== type);
+    if (change.action === "remove") continue;
+    const reference = plan.referenceAssets?.find((item) => item.key === change.referenceKey);
+    const validType = type === "logo"
+      ? reference?.contentType.startsWith("image/")
+      : reference?.contentType.startsWith("audio/");
+    if (!reference || !validType) {
+      throw new Error(type === "logo"
+        ? "Logo 修改缺少有效的上传图片，请重新生成方案。"
+        : "背景音乐修改缺少有效的上传音频，请重新生成方案。");
+    }
+    anchor.assets.unshift({
+      id: crypto.randomUUID(),
+      type,
+      r2Key: reference.key,
+      url: assetUrlForKey(reference.key),
+      metadata: {
+        name: reference.name,
+        size: reference.size,
+        contentType: reference.contentType,
+        source: "user-upload",
+        role: type
+      }
+    });
+  }
   return { ...project, currentVersion: { ...project.currentVersion, scenes } };
 }

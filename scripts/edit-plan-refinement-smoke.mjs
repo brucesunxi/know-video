@@ -79,6 +79,7 @@ assert.equal(refineEditPlanScope({
   editNumber: 5
 }), undefined);
 
-assert.match(aiVideo, /const requestedProductionSettings = productionSettingsFromRequest\(params\.request\);[\s\S]*if \(isProductionOnlyRequest\(params\.request\)\)[\s\S]*productionSettings: \{[\s\S]*\.\.\.params\.existingPlan\.productionSettings,[\s\S]*\.\.\.requestedProductionSettings/);
+assert.match(aiVideo, /const requestedProductionSettings = conversationProgram\.productionSettings[\s\S]*\?\? productionSettingsFromRequest\(params\.request\)/);
+assert.match(aiVideo, /productionSettings: \{[\s\S]*\.\.\.params\.existingPlan\.productionSettings,[\s\S]*\.\.\.requestedProductionSettings/);
 
 console.log("Edit plan refinement smoke checks passed.");

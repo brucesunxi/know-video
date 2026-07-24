@@ -62,7 +62,12 @@ export type GenerationReferenceAsset = {
   actualDurationSeconds?: number;
   targetSceneNumber?: number;
   targetSceneNumbers?: number[];
-  referenceUsage?: "source-media";
+  referenceUsage?: "source-media" | "production-logo" | "production-music";
+};
+
+export type ProductionAssetChange = {
+  action: "attach-upload" | "remove";
+  referenceKey?: string;
 };
 
 export type SceneAsset = {
@@ -202,6 +207,11 @@ export type EditPlan = {
   affectedScenes: number[];
   changes: EditChange[];
   referenceAssets?: GenerationReferenceAsset[];
+  projectTitle?: string;
+  productionAssets?: {
+    logo?: ProductionAssetChange;
+    music?: ProductionAssetChange;
+  };
   productionSettings?: Partial<ProductionSettings>;
   operations?: SceneStructureMutation[];
   /** @deprecated Read legacy persisted plans through operations instead. */

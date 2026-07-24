@@ -7,17 +7,47 @@ export function bindReferenceAssetsToPlan(params: {
   version: ProjectVersion;
   selectedSceneNumber?: number;
 }): EditPlan {
-  if (params.references.length === 0) return params.plan;
+  const productionAssets = params.plan.productionAssets
+    ? { ...params.plan.productionAssets }
+    : undefined;
+  const productionReferenceKeys = new Set<string>();
+  if (productionAssets?.logo?.action === "attach-upload") {
+    const reference = params.references.find((item) => item.contentType.startsWith("image/"));
+    if (!reference) throw new Error("请上传一张图片，再把它设为全片 Logo。");
+    productionAssets.logo = { ...productionAssets.logo, referenceKey: reference.key };
+    productionReferenceKeys.add(reference.key);
+  }
+  if (productionAssets?.music?.action === "attach-upload") {
+    const reference = params.references.find((item) => item.contentType.startsWith("audio/"));
+    if (!reference) throw new Error("请上传一个音频文件，再把它设为背景音乐。");
+    productionAssets.music = { ...productionAssets.music, referenceKey: reference.key };
+    productionReferenceKeys.add(reference.key);
+  }
+  if (params.references.length === 0) return { ...params.plan, productionAssets };
+  const sceneReferences = params.references.filter((reference) => !productionReferenceKeys.has(reference.key));
   const available = new Set(params.version.scenes.map((scene) => scene.sceneNumber));
   const primaryTargetSceneNumber = params.plan.affectedScenes.find((sceneNumber) => sceneNumber === params.selectedSceneNumber)
     ?? params.plan.affectedScenes.find((sceneNumber) => available.has(sceneNumber))
     ?? (params.selectedSceneNumber && available.has(params.selectedSceneNumber) ? params.selectedSceneNumber : params.version.scenes[0]?.sceneNumber);
-  if (!primaryTargetSceneNumber) return params.plan;
+  if (!primaryTargetSceneNumber) {
+    return {
+      ...params.plan,
+      productionAssets,
+      referenceAssets: params.references.map((reference) => ({
+        ...reference,
+        referenceUsage: reference.key === productionAssets?.logo?.referenceKey
+          ? "production-logo" as const
+          : reference.key === productionAssets?.music?.referenceKey
+            ? "production-music" as const
+            : reference.referenceUsage
+      }))
+    };
+  }
   const intent = analyzeEditIntent(params.plan.userRequest, Array.from(available));
   const visualTargetSceneNumbers = intent.global
     ? globalEditTargetSceneNumbers(params.plan.userRequest, Array.from(available))
     : [primaryTargetSceneNumber];
-  const visualContextReferences = params.references.filter((reference) =>
+  const visualContextReferences = sceneReferences.filter((reference) =>
     reference.contentType.startsWith("image/") || reference.contentType.startsWith("video/")
   );
   const visualReferences = visualContextReferences.filter((reference) =>
@@ -79,11 +109,12 @@ export function bindReferenceAssetsToPlan(params: {
         : [...changes, forced];
     }
   }
-  const transcriptReference = params.references.find((reference) =>
+  const transcriptReference = sceneReferences.find((reference) =>
     reference.analysisKind === "transcript" && reference.analysis?.trim()
   );
-  const audioReferences = params.references.filter((reference) => reference.contentType.startsWith("audio/"));
-  const directAudioRequest = /(?:直接)?(?:用|使用|采用|把|将).{0,16}(?:这|该|上传|附件|本次)?.{0,8}(?:录音|音频|原声|声音).{0,16}(?:作为|当作|替换|配音|旁白|音轨)|(?:保留|使用).{0,10}(?:原声|原始声音)/u.test(params.plan.userRequest)
+  const audioReferences = sceneReferences.filter((reference) => reference.contentType.startsWith("audio/"));
+  const directAudioRequest = productionAssets?.music?.action !== "attach-upload"
+    && /(?:直接)?(?:用|使用|采用|把|将).{0,16}(?:这|该|上传|附件|本次)?.{0,8}(?:录音|音频|原声|声音).{0,16}(?:作为|当作|替换|配音|旁白|音轨)|(?:保留|使用).{0,10}(?:原声|原始声音)/u.test(params.plan.userRequest)
     && !/(?:录音|音频).{0,10}(?:内容|文字|台词|转写)|(?:内容|文字|台词|转写).{0,10}(?:录音|音频)/u.test(params.plan.userRequest);
   const directAudioReference = directAudioRequest
     ? audioReferences.find((reference) => reference.analysisKind === "transcript" && reference.analysis?.trim())
@@ -133,10 +164,20 @@ export function bindReferenceAssetsToPlan(params: {
   }
   return {
     ...params.plan,
-    summary: `${params.plan.summary} 已把本次上传素材${directVisualReference || directAudioReference ? "直接用于" : "作为生成依据用于"}${visualTargetSceneNumbers.length > 1 ? `场景 ${visualTargetSceneNumbers.join("、")}` : `场景 ${primaryTargetSceneNumber}`}。`,
-    affectedScenes: Array.from(new Set([...params.plan.affectedScenes, ...visualTargetSceneNumbers, primaryTargetSceneNumber])).sort((a, b) => a - b),
+    productionAssets,
+    summary: sceneReferences.length > 0
+      ? `${params.plan.summary} 已把本次上传素材${directVisualReference || directAudioReference ? "直接用于" : "作为生成依据用于"}${visualTargetSceneNumbers.length > 1 ? `场景 ${visualTargetSceneNumbers.join("、")}` : `场景 ${primaryTargetSceneNumber}`}。`
+      : params.plan.summary,
+    affectedScenes: Array.from(new Set([
+      ...params.plan.affectedScenes,
+      ...(sceneReferences.length > 0 ? [...visualTargetSceneNumbers, primaryTargetSceneNumber] : [])
+    ])).sort((a, b) => a - b),
     changes: [...changes].sort((left, right) => left.sceneNumber - right.sceneNumber),
-    referenceAssets: params.references.map((reference) => reference.contentType.startsWith("image/") || reference.contentType.startsWith("video/")
+    referenceAssets: params.references.map((reference) => reference.key === productionAssets?.logo?.referenceKey
+        ? { ...reference, referenceUsage: "production-logo" as const }
+        : reference.key === productionAssets?.music?.referenceKey
+          ? { ...reference, referenceUsage: "production-music" as const }
+          : reference.contentType.startsWith("image/") || reference.contentType.startsWith("video/")
         ? {
             ...reference,
             targetSceneNumber: primaryTargetSceneNumber,

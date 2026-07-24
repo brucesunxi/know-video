@@ -67,6 +67,12 @@ assert.equal(editPlanSchema.safeParse({
 assert.equal(editPlanSchema.safeParse({ ...valid, affectedScenes: [], changes: [], productionSettings: {} }).success, false);
 assert.equal(editPlanSchema.safeParse({
   ...valid,
+  affectedScenes: [],
+  changes: [],
+  projectTitle: "新的项目名称"
+}).success, true);
+assert.equal(editPlanSchema.safeParse({
+  ...valid,
   affectedScenes: [2],
   changes: [],
   sceneStructure: { operation: "duplicate", sceneNumber: 2 }

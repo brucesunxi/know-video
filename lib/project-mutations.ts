@@ -10,7 +10,7 @@ import {
   saveEphemeralProject,
   updateEphemeralVersionScenes
 } from "@/lib/ephemeral-project-store";
-import { attachEditPlanReferenceAssets } from "@/lib/generation-reference-assets";
+import { applyEditPlanProductionAssets, attachEditPlanReferenceAssets } from "@/lib/generation-reference-assets";
 import { mediaAssetStatus } from "@/lib/generation-resume";
 import { demoProject } from "@/lib/mock-data";
 import { initialVersionStatus, materializeNewProject } from "@/lib/project-creation";
@@ -874,12 +874,28 @@ export async function applyPersistedEditPlan(params: {
   const normalizedChanges = normalizedPlan.changes;
   const structureOperations = editPlanOperations(normalizedPlan);
   const currentProduction = productionSettingsFromScenes(params.project.currentVersion.scenes);
+  const projectTitleChanged = Boolean(
+    normalizedPlan.projectTitle?.trim()
+    && normalizedPlan.projectTitle.trim() !== params.project.title
+  );
   const productionChanged = Object.entries(normalizedPlan.productionSettings ?? {})
     .some(([key, value]) => currentProduction[key as keyof typeof currentProduction] !== value);
-  if (normalizedChanges.length === 0 && !productionChanged && structureOperations.length === 0) {
+  const currentProductionAssets = params.project.currentVersion.scenes.flatMap((scene) => scene.assets);
+  const productionAssetsChanged = (["logo", "music"] as const).some((type) => {
+    const change = normalizedPlan.productionAssets?.[type];
+    if (!change) return false;
+    const current = currentProductionAssets.find((asset) => asset.type === type);
+    return change.action === "remove" ? Boolean(current) : current?.r2Key !== change.referenceKey;
+  });
+  if (normalizedChanges.length === 0 && !projectTitleChanged && !productionChanged && !productionAssetsChanged && structureOperations.length === 0) {
     throw new Error("修改方案没有产生实际变化，请换一种说法后重新生成。");
   }
-  const changedProject = attachEditPlanReferenceAssets(applyEditPlan(params.project, normalizedPlan), normalizedPlan);
+  const appliedProject = applyEditPlan(params.project, normalizedPlan);
+  const productionAssetProject = applyEditPlanProductionAssets({
+    ...appliedProject,
+    title: normalizedPlan.projectTitle?.trim() || appliedProject.title
+  }, normalizedPlan);
+  const changedProject = attachEditPlanReferenceAssets(productionAssetProject, normalizedPlan);
   const imageSceneNumbersRequested = normalizedChanges
     .filter((change) => change.regenerate.includes("image"))
     .map((change) => change.sceneNumber);
@@ -1115,7 +1131,10 @@ export async function applyPersistedEditPlan(params: {
     ]),
     sql`
       update projects
-      set current_version_id = ${versionId}, updated_at = now()
+      set
+        current_version_id = ${versionId},
+        title = ${nextProject.title},
+        updated_at = now()
       where id = ${params.project.id}
         and current_version_id = ${baseVersionId}
     `,
@@ -1312,6 +1331,7 @@ export async function restoreProjectVersion(params: {
   projectId: string;
   targetVersionId: string;
   userId?: string;
+  userRequest?: string;
 }): Promise<{ project: Project; message: ChatMessage }> {
   if (!canPersist()) throw new Error("版本恢复需要数据库连接。");
   const sql = getSql();
@@ -1343,6 +1363,7 @@ export async function restoreProjectVersion(params: {
   if (!target) throw new Error("没有找到要恢复的版本。");
 
   const versionId = crypto.randomUUID();
+  const userMessageId = params.userRequest ? crypto.randomUUID() : undefined;
   const messageId = crypto.randomUUID();
   const restoredStatus = restoredVersionStatus(target.scenes);
   const persistedScenes = target.scenes.map((scene) => ({
@@ -1367,6 +1388,19 @@ export async function restoreProjectVersion(params: {
         and base_version_id = ${projectRow.current_version_id}
         and status = 'proposed'
     `,
+    ...(userMessageId && params.userRequest ? [
+      sql`
+        insert into chat_messages (id, project_id, version_id, role, message_type, content)
+        values (
+          ${userMessageId},
+          ${params.projectId},
+          ${projectRow.current_version_id},
+          'user',
+          'text',
+          ${params.userRequest}
+        )
+      `
+    ] : []),
     sql`
       insert into project_versions (
         id,
@@ -1374,7 +1408,8 @@ export async function restoreProjectVersion(params: {
         parent_version_id,
         status,
         scene_plan_json,
-        duration_seconds
+        duration_seconds,
+        created_from_message_id
       )
       select
         ${versionId},
@@ -1382,7 +1417,8 @@ export async function restoreProjectVersion(params: {
         ${projectRow.current_version_id},
         ${restoredStatus},
         ${JSON.stringify(persistedScenes)},
-        ${target.durationSeconds}
+        ${target.durationSeconds},
+        ${userMessageId ?? null}
       from projects
       where id = ${params.projectId}
         and current_version_id = ${projectRow.current_version_id}
