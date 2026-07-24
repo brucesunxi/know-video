@@ -66,11 +66,11 @@ export function effectiveSceneDurationSeconds(scene: Scene, isLastScene = false)
   const narrationEnd = audibleEnd ?? audioDuration;
   if (!narrationEnd) return plannedDuration;
 
-  // Keep scene changes responsive without cutting off the final syllable.
-  // The last scene gets a slightly longer finish before the video ends.
-  const holdSeconds = isLastScene ? 0.8 : 0.4;
-  const pacedDuration = Math.ceil((narrationEnd + holdSeconds) * 10) / 10;
-  return Math.max(narrationEnd + 0.1, Math.min(plannedDuration, pacedDuration));
+  // Cut promptly once speech ends. A few frames protect the final syllable,
+  // while the last scene keeps a brief visual finish before the film ends.
+  const holdSeconds = isLastScene ? 0.45 : 0.14;
+  const pacedDuration = Math.ceil((narrationEnd + holdSeconds) * 100) / 100;
+  return Math.max(narrationEnd + 0.08, Math.min(plannedDuration, pacedDuration));
 }
 
 export function effectiveVersionDurationSeconds(version: ProjectVersion) {

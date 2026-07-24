@@ -20,7 +20,11 @@ export function resolvedSceneTransition(scene: Pick<Scene, "motionPrompt" | "sce
   const kind = !configured || configured.kind === "auto"
     ? inferredTransitionKind(scene)
     : configured.kind;
-  const requestedDuration = Number(configured?.durationSeconds ?? 0.5);
+  const requestedDuration = Number(
+    !configured || configured.kind === "auto"
+      ? 0.25
+      : configured.durationSeconds
+  );
   return {
     kind,
     durationSeconds: kind === "cut" ? 0 : Math.min(1.2, Math.max(0.2, requestedDuration))

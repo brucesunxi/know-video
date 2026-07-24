@@ -66,16 +66,16 @@ const pacedScenes = [
     }]
   }
 ];
-assert.equal(effectiveSceneDurationSeconds(pacedScenes[0], false), 3.9);
-assert.equal(effectiveSceneDurationSeconds(pacedScenes[1], true), 5.7);
-assert.equal(effectiveVersionDurationSeconds({ durationSeconds: 12, scenes: pacedScenes }), 9.6);
-assert.equal(productionDurationInFrames({ durationSeconds: 12, scenes: pacedScenes }, 30), 288);
+assert.equal(effectiveSceneDurationSeconds(pacedScenes[0], false), 3.56);
+assert.equal(effectiveSceneDurationSeconds(pacedScenes[1], true), 5.29);
+assert.equal(effectiveVersionDurationSeconds({ durationSeconds: 12, scenes: pacedScenes }), 8.85);
+assert.equal(productionDurationInFrames({ durationSeconds: 12, scenes: pacedScenes }, 30), 266);
 assert.equal(effectiveSceneDurationSeconds({ durationSeconds: 6, style: {}, assets: [] }, false), 6);
 assert.equal(effectiveSceneDurationSeconds({
   durationSeconds: 4,
   style: {},
   assets: [{ type: "audio", url: "/long.wav", metadata: { actualDurationSeconds: 4.2 } }]
-}, false), 4.3);
+}, false), 4.28);
 
 assert.match(workspace, /function productionSummaryItems/);
 assert.match(workspace, /function productionImpactChecks/);
