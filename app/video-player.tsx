@@ -4,6 +4,7 @@ import { Player, type PlayerRef } from "@remotion/player";
 import { AlertCircle, FileVideo2, Loader2, RefreshCcw } from "lucide-react";
 import { forwardRef, useEffect, useState } from "react";
 import type { Project } from "@/lib/types";
+import { compositionRevision } from "@/lib/composition-revision";
 import { productionDurationInFrames } from "@/lib/production-settings";
 import { KnowVideoComposition } from "@/video/know-video-composition";
 import { VIDEO_FPS, VIDEO_HEIGHT, VIDEO_WIDTH } from "@/video/config";
@@ -16,12 +17,13 @@ export const KnowVideoPlayer = forwardRef<PlayerRef, { project: Project; classNa
   const [useRenderedVideo, setUseRenderedVideo] = useState(false);
   const [renderedVideoFailed, setRenderedVideoFailed] = useState(false);
   const renderUrl = project.currentVersion.renderUrl;
+  const previewRevision = compositionRevision(project.currentVersion);
 
   useEffect(() => {
     setUseRenderedVideo(false);
     setRenderedVideoFailed(false);
     setRetryKey(0);
-  }, [project.currentVersion.id]);
+  }, [project.currentVersion.id, previewRevision]);
 
   if (useRenderedVideo && renderUrl) {
     return (
@@ -63,7 +65,7 @@ export const KnowVideoPlayer = forwardRef<PlayerRef, { project: Project; classNa
   return (
     <div className={`${className ?? ""} kv-player-shell`}>
       <Player
-        key={`${project.currentVersion.id}-${retryKey}`}
+        key={`${project.currentVersion.id}-${previewRevision}-${retryKey}`}
         ref={ref}
         component={KnowVideoComposition}
         inputProps={{ project }}
