@@ -15,8 +15,8 @@ import { musicMixEnvelope, type NarrationFrameRange } from "@/lib/audio-mix";
 import { clipDurationInFrames, resolvedClipPlaybackRate } from "@/lib/clip-timing";
 import { readableTextColor, sceneAccentColor } from "@/lib/color-contrast";
 import { activeNarrationCaption, narrationAudioPlaybackRate, narrationDurationInFrames } from "@/lib/narration-timing";
-import { effectiveSceneDurationSeconds, productionAsset, productionSettings } from "@/lib/production-settings";
-import { boundedTransitionFrames, resolvedSceneTransition, type ResolvedSceneTransitionKind } from "@/lib/scene-transitions";
+import { productionAsset, productionSceneTimeline, productionSettings } from "@/lib/production-settings";
+import { resolvedSceneTransition, type ResolvedSceneTransitionKind } from "@/lib/scene-transitions";
 import { VIDEO_FPS } from "@/video/config";
 
 export type KnowVideoCompositionProps = { project: Project };
@@ -156,7 +156,7 @@ function SceneFrame({
   const fadeOut = hasTransitionOut
     ? interpolate(
       frame,
-      [contentDurationInFrames, contentDurationInFrames + transitionOutFrames],
+      [Math.max(0, contentDurationInFrames - transitionOutFrames), contentDurationInFrames],
       [1, 0],
       { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
     )
@@ -314,23 +314,7 @@ function SceneFrame({
 
 export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
   const settings = productionSettings(project);
-  const sceneFrames = project.currentVersion.scenes.map((scene, index, scenes) => (
-    Math.max(1, Math.round((
-      effectiveSceneDurationSeconds(scene, index === scenes.length - 1) * VIDEO_FPS
-    ) / settings.playbackRate))
-  ));
-  const transitionFrames = project.currentVersion.scenes.map((scene, index) => index === 0
-    ? 0
-    : boundedTransitionFrames({
-      scene,
-      fps: VIDEO_FPS,
-      previousSceneFrames: sceneFrames[index - 1],
-      sceneFrames: sceneFrames[index]
-    }));
-  const sceneStartFrames = sceneFrames.map((_, index) => (
-    sceneFrames.slice(0, index).reduce((sum, frames) => sum + frames, 0)
-  ));
-  const totalFrames = sceneFrames.reduce((sum, frames) => sum + frames, 0);
+  const { sceneFrames, transitionFrames, sceneStartFrames, totalFrames } = productionSceneTimeline(project.currentVersion, VIDEO_FPS);
   const narrationRanges: NarrationFrameRange[] = project.currentVersion.scenes.flatMap((scene, index) => {
     const narrationFrames = narrationDurationInFrames(
       scene,
@@ -360,7 +344,7 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
         const start = sceneStartFrames[index];
         return (
           <Sequence
-            durationInFrames={contentDurationInFrames + transitionOutFrames}
+            durationInFrames={contentDurationInFrames}
             from={start}
             key={scene.id}
             premountFor={VIDEO_FPS * 3}

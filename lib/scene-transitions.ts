@@ -3,7 +3,7 @@ import type { Scene, SceneTransitionKind } from "@/lib/types";
 export type ResolvedSceneTransitionKind = Exclude<SceneTransitionKind, "auto">;
 
 function inferredTransitionKind(scene: Pick<Scene, "motionPrompt" | "sceneNumber">): ResolvedSceneTransitionKind {
-  const direction = scene.motionPrompt.toLowerCase();
+  const direction = String(scene.motionPrompt ?? "").toLowerCase();
   if (direction.includes("wipe") || direction.includes("遮罩") || direction.includes("擦除")) return "wipe";
   if (direction.includes("right") || direction.includes("向右")) return "push-right";
   if (direction.includes("left") || direction.includes("向左")) return "push-left";
@@ -22,7 +22,7 @@ export function resolvedSceneTransition(scene: Pick<Scene, "motionPrompt" | "sce
     : configured.kind;
   const requestedDuration = Number(
     !configured || configured.kind === "auto"
-      ? 0.25
+      ? 0.18
       : configured.durationSeconds
   );
   return {

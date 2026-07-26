@@ -1,4 +1,5 @@
 import type { PlaybackRate, ProductionSettings, Project, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
+import { boundedTransitionFrames } from "@/lib/scene-transitions";
 
 export const DEFAULT_PRODUCTION_SETTINGS: ProductionSettings = {
   captionsEnabled: true,
@@ -68,9 +69,46 @@ export function effectiveSceneDurationSeconds(scene: Scene, isLastScene = false)
 
   // Cut promptly once speech ends. A few frames protect the final syllable,
   // while the last scene keeps a brief visual finish before the film ends.
-  const holdSeconds = isLastScene ? 0.45 : 0.14;
+  const holdSeconds = isLastScene ? 0.32 : 0.18;
   const pacedDuration = Math.ceil((narrationEnd + holdSeconds) * 100) / 100;
   return Math.max(narrationEnd + 0.08, Math.min(plannedDuration, pacedDuration));
+}
+
+export function productionSceneTimeline(version: ProjectVersion, fps: number) {
+  const playbackRate: PlaybackRate = productionSettingsFromScenes(version.scenes).playbackRate;
+  const fallbackTotalFrames = Math.max(1, Math.round((Math.max(0.1, version.durationSeconds) * fps) / playbackRate));
+  if (
+    version.scenes.length === 0
+    || version.scenes.some((scene) => !Number.isFinite(Number(scene.durationSeconds)) || Number(scene.durationSeconds) <= 0)
+  ) {
+    return {
+      sceneFrames: [],
+      transitionFrames: [],
+      sceneStartFrames: [],
+      totalFrames: fallbackTotalFrames
+    };
+  }
+  const sceneFrames = version.scenes.map((scene, index, scenes) => (
+    Math.max(1, Math.round((
+      effectiveSceneDurationSeconds(scene, index === scenes.length - 1) * fps
+    ) / playbackRate))
+  ));
+  const transitionFrames = version.scenes.map((scene, index) => index === 0
+    ? 0
+    : boundedTransitionFrames({
+      scene,
+      fps,
+      previousSceneFrames: sceneFrames[index - 1],
+      sceneFrames: sceneFrames[index]
+    }));
+  const sceneStartFrames = sceneFrames.map((_, index) => {
+    if (index === 0) return 0;
+    const elapsed = sceneFrames.slice(0, index).reduce((sum, frames) => sum + frames, 0);
+    const overlap = transitionFrames.slice(0, index + 1).reduce((sum, frames) => sum + frames, 0);
+    return Math.max(0, elapsed - overlap);
+  });
+  const totalFrames = Math.max(1, sceneStartFrames[sceneStartFrames.length - 1] + sceneFrames[sceneFrames.length - 1]);
+  return { sceneFrames, transitionFrames, sceneStartFrames, totalFrames };
 }
 
 export function effectiveVersionDurationSeconds(version: ProjectVersion) {
@@ -80,14 +118,27 @@ export function effectiveVersionDurationSeconds(version: ProjectVersion) {
   ) {
     return Math.max(0.1, version.durationSeconds);
   }
-  return version.scenes.reduce((total, scene, index) => (
+  const duration = version.scenes.reduce((total, scene, index) => (
     total + effectiveSceneDurationSeconds(scene, index === version.scenes.length - 1)
   ), 0);
+  const transitionOverlapSeconds = version.scenes.reduce((total, scene, index, scenes) => {
+    if (index === 0) return total;
+    const previousDuration = effectiveSceneDurationSeconds(scenes[index - 1], false);
+    const sceneDuration = effectiveSceneDurationSeconds(scene, index === scenes.length - 1);
+    return total + (
+      boundedTransitionFrames({
+        scene,
+        fps: 100,
+        previousSceneFrames: Math.round(previousDuration * 100),
+        sceneFrames: Math.round(sceneDuration * 100)
+      }) / 100
+    );
+  }, 0);
+  return Math.max(0.1, duration - transitionOverlapSeconds);
 }
 
 export function productionDurationInFrames(version: ProjectVersion, fps: number) {
-  const playbackRate: PlaybackRate = productionSettingsFromScenes(version.scenes).playbackRate;
-  return Math.max(1, Math.round((effectiveVersionDurationSeconds(version) * fps) / playbackRate));
+  return productionSceneTimeline(version, fps).totalFrames;
 }
 
 export function productionDurationSeconds(version: ProjectVersion) {

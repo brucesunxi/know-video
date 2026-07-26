@@ -4,17 +4,28 @@ import vm from "node:vm";
 import ts from "typescript";
 
 const source = fs.readFileSync(new URL("../lib/production-settings.ts", import.meta.url), "utf8");
+const transitionsSource = fs.readFileSync(new URL("../lib/scene-transitions.ts", import.meta.url), "utf8");
 const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
 const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+const transitionsOutput = ts.transpileModule(transitionsSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+}).outputText;
+const transitionsModule = { exports: {} };
+vm.runInNewContext(transitionsOutput, { module: transitionsModule, exports: transitionsModule.exports, require: () => ({}) });
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
 const module = { exports: {} };
-vm.runInNewContext(output, { module, exports: module.exports });
+vm.runInNewContext(output, {
+  module,
+  exports: module.exports,
+  require: (id) => id === "@/lib/scene-transitions" ? transitionsModule.exports : {}
+});
 const {
   DEFAULT_PRODUCTION_SETTINGS,
   effectiveSceneDurationSeconds,
   effectiveVersionDurationSeconds,
+  productionSceneTimeline,
   productionDurationInFrames,
   productionSettingsFromScenes
 } = module.exports;
@@ -66,10 +77,16 @@ const pacedScenes = [
     }]
   }
 ];
-assert.equal(effectiveSceneDurationSeconds(pacedScenes[0], false), 3.56);
-assert.equal(effectiveSceneDurationSeconds(pacedScenes[1], true), 5.29);
-assert.equal(effectiveVersionDurationSeconds({ durationSeconds: 12, scenes: pacedScenes }), 8.85);
-assert.equal(productionDurationInFrames({ durationSeconds: 12, scenes: pacedScenes }, 30), 266);
+assert.equal(effectiveSceneDurationSeconds(pacedScenes[0], false), 3.6);
+assert.equal(effectiveSceneDurationSeconds(pacedScenes[1], true), 5.16);
+assert.equal(effectiveVersionDurationSeconds({ durationSeconds: 12, scenes: pacedScenes }), 8.56);
+assert.equal(productionDurationInFrames({ durationSeconds: 12, scenes: pacedScenes }, 30), 257);
+assert.deepEqual(plain(productionSceneTimeline({ durationSeconds: 12, scenes: pacedScenes }, 30)), {
+  sceneFrames: [108, 155],
+  transitionFrames: [0, 6],
+  sceneStartFrames: [0, 102],
+  totalFrames: 257
+});
 assert.equal(effectiveSceneDurationSeconds({ durationSeconds: 6, style: {}, assets: [] }, false), 6);
 assert.equal(effectiveSceneDurationSeconds({
   durationSeconds: 4,

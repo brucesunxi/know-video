@@ -80,12 +80,16 @@ export function narrationDurationInFrames(
   const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
   const effectivePlaybackRate = narrationAudioPlaybackRate(scene, playbackRate, contentDurationInFrames, fps);
   const actualDurationSeconds = Number(audio?.metadata?.actualDurationSeconds);
+  const audibleEndSeconds = Number(audio?.metadata?.audibleEndSeconds);
   if (!audio || !Number.isFinite(actualDurationSeconds) || actualDurationSeconds <= 0) {
     return audio ? contentDurationInFrames : 0;
   }
+  const playbackDurationSeconds = Number.isFinite(audibleEndSeconds) && audibleEndSeconds > 0
+    ? Math.min(actualDurationSeconds, audibleEndSeconds + 0.05)
+    : actualDurationSeconds;
   return Math.min(
     contentDurationInFrames,
-    Math.max(1, Math.round((actualDurationSeconds * fps) / Math.max(0.1, effectivePlaybackRate)))
+    Math.max(1, Math.round((playbackDurationSeconds * fps) / Math.max(0.1, effectivePlaybackRate)))
   );
 }
 
