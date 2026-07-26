@@ -25,7 +25,7 @@ vm.runInNewContext(output, {
   exports: module.exports,
   require: (specifier) => specifier === "@/lib/attachment-context" ? attachmentModule.exports : {}
 });
-const { enforceTextFreeImagePrompt, normalizeVisualRevisionInstruction, projectVisualIdentity, sceneImagePrompt, sceneRequiresPremiumImage, sceneVisualDiversityDirection, selectVisualAnchorScene, shouldUseProjectAnchorReference, stableImageSeed, visualAnchorScore } = module.exports;
+const { enforceTextFreeImagePrompt, normalizeVisualRevisionInstruction, projectVisualIdentity, sceneImagePrompt, sceneRequiresPremiumImage, sceneVisualDiversityDirection, stableImageSeed } = module.exports;
 
 const scene = {
   id: "scene-1",
@@ -65,28 +65,10 @@ assert.notEqual(stableImageSeed("project-stable:1"), stableImageSeed("project-st
 assert.match(projectVisualIdentity(project), /thin cyan light ribbon/);
 assert.match(projectVisualIdentity(project), /Locked palette: #07111d, #22c7b8, #f5c46b/);
 
-const abstractOpening = {
-  ...scene,
-  id: "scene-abstract",
-  sceneNumber: 1,
-  title: "Abstract particle opening",
-  visualPrompt: "Macro close-up of an abstract glowing particle on an empty surface."
-};
-const representativeScene = {
-  ...scene,
-  id: "scene-representative",
-  sceneNumber: 2,
-  title: "Creator workspace",
-  visualPrompt: "Wide establishing shot of the recurring creator using the product device inside the shared architectural studio environment."
-};
-assert.equal(selectVisualAnchorScene([abstractOpening, representativeScene]).id, "scene-representative");
-assert.ok(visualAnchorScore(representativeScene) > visualAnchorScore(abstractOpening));
-
-const prompt = sceneImagePrompt(scene, project, ["current", "anchor"]);
+const prompt = sceneImagePrompt(scene, project, ["current"]);
 assert.match(prompt, /current version of this exact scene/);
-assert.match(prompt, /project's visual anchor/);
 assert.match(prompt, /Do not repeat the same layout/);
-assert.match(prompt, /Do not copy its layout/);
+assert.match(prompt, /Do not use it as a template for any other scene/);
 assert.match(prompt, /SCENE DIFFERENTIATION/);
 assert.match(prompt, /Style is only the rendering language/);
 assert.match(prompt, /TEXT-FREE BACKGROUND PLATE — HIGHEST PRIORITY/);
@@ -135,13 +117,11 @@ const minecraftProject = {
   title: "Minecraft 创意课程宣传片",
   currentVersion: { ...project.currentVersion, scenes: [minecraftScene] }
 };
-const minecraftPrompt = sceneImagePrompt(minecraftScene, minecraftProject, ["anchor"]);
+const minecraftPrompt = sceneImagePrompt(minecraftScene, minecraftProject, []);
 assert.match(minecraftPrompt, /COURSE \/ GAME SEMANTIC FIDELITY/);
 assert.match(minecraftPrompt, /not five repeated landscapes/);
 assert.match(minecraftPrompt, /logic and experimentation beat/);
 assert.match(minecraftPrompt, /generic voxel sandbox aesthetic/);
-assert.equal(shouldUseProjectAnchorReference(minecraftScene, minecraftProject), false);
-assert.equal(shouldUseProjectAnchorReference(scene, project), true);
 assert.match(sceneVisualDiversityDirection(minecraftScene, 5), /redstone-like circuits/);
 
 console.log("Image continuity smoke checks passed.");

@@ -8,10 +8,7 @@ import {
   projectVisualIdentity,
   sceneRequiresPremiumImage,
   sceneImagePrompt,
-  selectVisualAnchorScene,
-  shouldUseProjectAnchorReference,
-  stableImageSeed,
-  type ImageReferenceRole
+  stableImageSeed
 } from "@/lib/image-continuity";
 import { GeneratedImageQualityError, normalizeGeneratedImage } from "@/lib/image-quality";
 import { mediaAssetStatus } from "@/lib/generation-resume";
@@ -40,7 +37,7 @@ function imageModel() {
 function buildSceneImagePrompt(
   scene: Scene,
   project: Project,
-  references: Array<{ role: "current" | "anchor" }>,
+  references: Array<{ role: "current" }>,
   visualInstruction?: string
 ) {
   return sceneImagePrompt(scene, project, references.map((reference) => reference.role), visualInstruction);
@@ -66,7 +63,7 @@ type ImageQuality = "standard" | "premium";
 type ImageReference = {
   body: Buffer;
   contentType: "image/jpeg";
-  role: ImageReferenceRole;
+  role: "current";
   r2Key: string;
 };
 
@@ -135,7 +132,7 @@ async function generateSceneImage(
   references: ImageReference[],
   variantKey = "primary",
   visualInstruction?: string
-): Promise<{ asset: SceneAsset; reference: ImageReference } | undefined> {
+): Promise<{ asset: SceneAsset } | undefined> {
   const effectiveQuality: ImageQuality = quality === "premium" || sceneRequiresPremiumImage(scene)
     ? "premium"
     : "standard";
@@ -167,7 +164,7 @@ async function generateSceneImage(
           effectivePrompt = buildBrandSafeImagePrompt(scene, project);
           generated = await generateCloudflareImage(effectivePrompt, effectiveQuality, {
             seed,
-            references: usableReferences.filter((reference) => reference.role === "anchor")
+            references: usableReferences
           });
         }
         generatedBody = generated.body;
@@ -224,15 +221,7 @@ async function generateSceneImage(
       sceneNumber: scene.sceneNumber
     }
   };
-  const referenceBody = await sharp(body)
-    .rotate()
-    .resize(512, 288, { fit: "cover" })
-    .jpeg({ quality: 82, chromaSubsampling: "4:2:0" })
-    .toBuffer();
-  return {
-    asset,
-    reference: { body: referenceBody, contentType: "image/jpeg", role: "anchor", r2Key: uploaded.key }
-  };
+  return { asset };
 }
 
 export async function generateProjectSceneImages(
@@ -268,61 +257,12 @@ export async function generateProjectSceneImages(
     .filter(({ scene }) => !selectedScenes || selectedScenes.has(scene.sceneNumber));
   if (selectedIndexes.length === 0) return project;
   const concurrency = Math.min(3, Math.max(1, Number(getOptionalEnv("IMAGE_GENERATION_CONCURRENCY")) || 2));
-  const existingAnchorScene = selectVisualAnchorScene(
-    scenes.filter((scene) => (
-      scene.assets.some((asset) => asset.type === "image" && asset.url)
-      || sceneReferenceAssets(scene).some((reference) => reference.contentType.startsWith("image/"))
-    ))
-  );
-  let projectAnchor = existingAnchorScene
-    ? await loadSceneImageReference(existingAnchorScene, "anchor")
-    : undefined;
   const targets = [...selectedIndexes];
-
-  if (!projectAnchor && targets.length > 0) {
-    const preferredAnchor = selectVisualAnchorScene(targets.map((target) => target.scene));
-    const anchorIndex = Math.max(0, targets.findIndex((target) => target.scene.id === preferredAnchor?.id));
-    const [anchorTarget] = targets.splice(anchorIndex, 1);
-    try {
-      const currentReference = await loadSceneImageReference(anchorTarget.scene, "current");
-      const generated = await generateSceneImage(
-        anchorTarget.scene,
-        project,
-        options.quality ?? "standard",
-        currentReference ? [currentReference] : [],
-        options.variantKey,
-        options.visualInstruction
-      );
-      if (generated) {
-        const generatedAsset = options.candidate ? {
-          ...generated.asset,
-          type: "thumbnail" as const,
-          metadata: { ...generated.asset.metadata, candidate: true }
-        } : generated.asset;
-        const existingAssets = options.replaceExistingImages
-          ? anchorTarget.scene.assets.filter((asset) => !["image", "clip"].includes(asset.type))
-          : anchorTarget.scene.assets;
-        scenes[anchorTarget.index] = {
-          ...anchorTarget.scene,
-          assets: options.candidate ? [...existingAssets, generatedAsset] : [generatedAsset, ...existingAssets]
-        };
-        projectAnchor = generated.reference;
-      }
-    } catch (error) {
-      failures.push(classifyImageError(error));
-      console.error(`[image-assets] Anchor scene ${anchorTarget.scene.sceneNumber} image generation failed:`, error);
-    }
-  }
 
   await mapWithConcurrency(targets, concurrency, async ({ scene, index }) => {
       try {
         const currentReference = await loadSceneImageReference(scene, "current");
-        const references = [
-          currentReference,
-          shouldUseProjectAnchorReference(scene, project) && projectAnchor && projectAnchor.r2Key !== currentReference?.r2Key
-            ? projectAnchor
-            : undefined
-        ].filter(Boolean) as ImageReference[];
+        const references = [currentReference].filter(Boolean) as ImageReference[];
         const generated = await generateSceneImage(
           scene,
           project,
