@@ -51,6 +51,7 @@
     "color:contrast:smoke": "node scripts/color-contrast-smoke.mjs",
     "audio:quality:smoke": "node scripts/audio-quality-smoke.mjs",
     "audio:mix:smoke": "node scripts/audio-mix-smoke.mjs",
+    "audio:generation-retry:smoke": "node scripts/audio-generation-retry-smoke.mjs",
     "voice:profiles:smoke": "node scripts/voice-profiles-smoke.mjs",
     "voice:preview:smoke": "node scripts/voice-preview-smoke.mjs",
     "asset:policy:smoke": "node scripts/asset-policy-smoke.mjs",

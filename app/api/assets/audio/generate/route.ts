@@ -4,6 +4,7 @@ import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { generateProjectVoices } from "@/lib/audio-assets";
 import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/media-generation-result";
 import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
+import type { Scene } from "@/lib/types";
 import { isNarrationVoice } from "@/lib/voice-profiles";
 
 const requestSchema = z.object({
@@ -14,6 +15,18 @@ const requestSchema = z.object({
 });
 
 export const maxDuration = 120;
+
+function audioFailedScenes(
+  scenes: Scene[],
+  sceneNumbers: number[],
+  previousAudioKeys: Map<number, string | undefined>
+) {
+  const targets = scenes.filter((scene) => sceneNumbers.includes(scene.sceneNumber));
+  return targets.filter((scene) => {
+    const nextAudio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
+    return !nextAudio || nextAudio.r2Key === previousAudioKeys.get(scene.sceneNumber);
+  });
+}
 
 export async function POST(request: Request) {
   let user;
@@ -43,7 +56,18 @@ export async function POST(request: Request) {
   if (body.narrationVoice && !body.sceneNumbers?.length) {
     return NextResponse.json({ error: "选择音色时必须指定要更新的场景。" }, { status: 400 });
   }
-  const updated = await generateProjectVoices(project, body.sceneNumbers, body.narrationVoice);
+  const requestedSceneNumbers = body.sceneNumbers?.length
+    ? body.sceneNumbers
+    : project.currentVersion.scenes.map((scene) => scene.sceneNumber);
+  let updated = await generateProjectVoices(project, body.sceneNumbers, body.narrationVoice);
+  let failed = audioFailedScenes(updated.currentVersion.scenes, requestedSceneNumbers, previousAudioKeys);
+
+  for (let retry = 0; retry < 2 && failed.length > 0; retry += 1) {
+    const retrySceneNumbers = failed.map((scene) => scene.sceneNumber);
+    console.warn(`[audio-assets] Retrying failed voice scenes (${retry + 1}/2): ${retrySceneNumbers.join(",")}.`);
+    updated = await generateProjectVoices(updated, retrySceneNumbers, body.narrationVoice);
+    failed = audioFailedScenes(updated.currentVersion.scenes, requestedSceneNumbers, previousAudioKeys);
+  }
 
   await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
     replaceAudio: true,
@@ -52,15 +76,8 @@ export async function POST(request: Request) {
     updateNarration: true
   });
 
-  const targets = body.sceneNumbers?.length
-    ? updated.currentVersion.scenes.filter((scene) => body.sceneNumbers?.includes(scene.sceneNumber))
-    : updated.currentVersion.scenes;
-  const failed = targets.filter((scene) => {
-    const nextAudio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
-    return !nextAudio || nextAudio.r2Key === previousAudioKeys.get(scene.sceneNumber);
-  });
   const progress = mediaGenerationProgress(
-    targets.map((scene) => scene.sceneNumber),
+    requestedSceneNumbers,
     failed.map((scene) => scene.sceneNumber)
   );
   console.info(`[audio-assets] Voice generation completed ${progress.completedSceneNumbers.length}/${progress.requestedSceneNumbers.length}; failed scenes: ${progress.failedSceneNumbers.join(",") || "none"}.`);

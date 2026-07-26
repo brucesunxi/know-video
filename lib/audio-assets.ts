@@ -184,7 +184,7 @@ export async function generateProjectVoices(
     currentVersion: {
       ...project.currentVersion,
       renderUrl: undefined,
-      status: "draft",
+      status: "draft" as const,
       scenes
     }
   };
