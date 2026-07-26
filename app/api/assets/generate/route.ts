@@ -4,6 +4,7 @@ import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { generateProjectSceneImages } from "@/lib/image-assets";
 import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/media-generation-result";
 import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
+import type { Scene } from "@/lib/types";
 
 const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
@@ -13,6 +14,19 @@ const requestSchema = z.object({
 });
 
 export const maxDuration = 120;
+
+function imageFailedScenes(
+  scenes: Scene[],
+  sceneNumbers: number[],
+  previousImageKeys: Map<number, string | undefined>
+) {
+  return scenes
+    .filter((scene) => sceneNumbers.includes(scene.sceneNumber))
+    .filter((scene) => {
+      const nextImage = scene.assets.find((asset) => asset.type === "image" && asset.url);
+      return !nextImage || nextImage.r2Key === previousImageKeys.get(scene.sceneNumber);
+    });
+}
 
 export async function POST(request: Request) {
   let user;
@@ -41,28 +55,33 @@ export async function POST(request: Request) {
       scene.assets.find((asset) => asset.type === "image" && asset.url)?.r2Key
     ])
   );
-  const updated = await generateProjectSceneImages(project, {
+  const requestedSceneNumbers = body.sceneNumbers?.length
+    ? body.sceneNumbers
+    : project.currentVersion.scenes.map((scene) => scene.sceneNumber);
+  let updated = await generateProjectSceneImages(project, {
     replaceExistingImages: true,
     sceneNumbers: body.sceneNumbers,
     quality: body.quality
   });
+  let failedTargets = imageFailedScenes(updated.currentVersion.scenes, requestedSceneNumbers, previousImageKeys);
 
-  const targetScenes = body.sceneNumbers?.length
-    ? updated.currentVersion.scenes.filter((scene) => body.sceneNumbers?.includes(scene.sceneNumber))
-    : updated.currentVersion.scenes;
-  const failedTargets = targetScenes.filter(
-    (scene) => {
-      const nextImage = scene.assets.find((asset) => asset.type === "image" && asset.url);
-      return !nextImage || nextImage.r2Key === previousImageKeys.get(scene.sceneNumber);
-    }
-  );
+  for (let retry = 0; retry < 2 && failedTargets.length > 0; retry += 1) {
+    const retrySceneNumbers = failedTargets.map((scene) => scene.sceneNumber);
+    console.warn(`[image-assets] Retrying failed image scenes (${retry + 1}/2): ${retrySceneNumbers.join(",")}.`);
+    updated = await generateProjectSceneImages(updated, {
+      replaceExistingImages: true,
+      sceneNumbers: retrySceneNumbers,
+      quality: body.quality
+    });
+    failedTargets = imageFailedScenes(updated.currentVersion.scenes, requestedSceneNumbers, previousImageKeys);
+  }
 
   await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
     replaceImages: true,
     sceneNumbers: body.sceneNumbers
   });
   const progress = mediaGenerationProgress(
-    targetScenes.map((scene) => scene.sceneNumber),
+    requestedSceneNumbers,
     failedTargets.map((scene) => scene.sceneNumber)
   );
 
