@@ -9,6 +9,7 @@ import {
   sceneRequiresPremiumImage,
   sceneImagePrompt,
   selectVisualAnchorScene,
+  shouldUseProjectAnchorReference,
   stableImageSeed,
   type ImageReferenceRole
 } from "@/lib/image-continuity";
@@ -318,7 +319,9 @@ export async function generateProjectSceneImages(
         const currentReference = await loadSceneImageReference(scene, "current");
         const references = [
           currentReference,
-          projectAnchor && projectAnchor.r2Key !== currentReference?.r2Key ? projectAnchor : undefined
+          shouldUseProjectAnchorReference(scene, project) && projectAnchor && projectAnchor.r2Key !== currentReference?.r2Key
+            ? projectAnchor
+            : undefined
         ].filter(Boolean) as ImageReference[];
         const generated = await generateSceneImage(
           scene,

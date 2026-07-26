@@ -70,13 +70,28 @@ export function projectVisualIdentity(project: Project) {
     `Project visual identity: "${project.title}".`,
     `Locked palette: ${palettes.join(", ")}.`,
     ...continuity,
-    "Keep recurring people, products, wardrobe, architecture, material language, lighting direction, lens character, and color treatment recognizably consistent across every scene.",
-    "Do not redesign recurring subjects between scenes. Changes in shot scale and action are allowed; identity and art direction are locked."
+    "Keep the art direction, palette, lighting language, lens character, and material treatment recognizably consistent across every scene.",
+    "Do not repeat the same layout, camera angle, foreground object, background, or subject arrangement across scenes. Each scene must show a different narrative beat and a visibly different composition."
+  ].join("\n");
+}
+
+function educationGameCourseDirection(description: string) {
+  if (!/(?:minecraft|我的世界|方块|沙盒|游戏|玩家|玩法|关卡|课程|课堂|老师|教师|学生|学习|教学|training|course|classroom|teacher|student|learning|game|gameplay|sandbox|block)/iu.test(description)) {
+    return undefined;
+  }
+  return [
+    "COURSE / GAME SEMANTIC FIDELITY:",
+    "Make this look like a learning beat inside a game-creation course, not five repeated landscapes.",
+    "Across scenes, vary the visible learning moment: teacher guidance, student planning, block building, redstone or logic experimentation, collaborative testing, finished world showcase, or course outcome.",
+    "Use different shot scales and camera positions: classroom over-shoulder, close-up hands building blocks, top-down planning table, in-game first-person view, wide showcase, or mentor feedback moment.",
+    "Use a generic voxel sandbox aesthetic inspired by block-based creative games, without rendering official logos, UI text, copyrighted characters, or brand marks."
   ].join("\n");
 }
 
 function semanticSceneDirection(scene: Scene) {
   const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`.toLowerCase();
+  const courseDirection = educationGameCourseDirection(description);
+  if (courseDirection) return courseDirection;
   if (/(?:跨境|库存|仓库|仓储|订单|物流|调拨|补货|缺货|积压|cross[- ]?border|inventory|warehouse|order|logistics|replenish|stock)/iu.test(description)) {
     return [
       "BUSINESS SEMANTIC FIDELITY:",
@@ -99,6 +114,39 @@ function semanticSceneDirection(scene: Scene) {
   ].join("\n");
 }
 
+export function sceneVisualDiversityDirection(scene: Pick<Scene, "sceneNumber" | "title" | "voiceover" | "visualPrompt">, sceneCount = 5) {
+  const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`.toLowerCase();
+  const courseLike = /(?:minecraft|我的世界|方块|沙盒|游戏|玩家|玩法|关卡|课程|课堂|老师|教师|学生|学习|教学|training|course|classroom|teacher|student|learning|game|gameplay|sandbox|block)/iu.test(description);
+  const sceneNumber = Math.max(1, Number(scene.sceneNumber) || 1);
+  if (courseLike) {
+    const beats = [
+      "opening hook: learner curiosity, teacher or mentor setting up the challenge, classroom or desk context",
+      "planning beat: sketches, block palette, lesson materials, or student selecting a build goal",
+      "hands-on build beat: close view of block placement, construction, or in-game creation action",
+      "logic and experimentation beat: redstone-like circuits, cause-and-effect testing, debugging, or collaboration",
+      "outcome beat: finished voxel world, proud student showcase, course transformation, or next-step invitation"
+    ];
+    return [
+      "SCENE DIFFERENTIATION:",
+      `This is scene ${sceneNumber} of ${sceneCount}. Primary visual beat: ${beats[Math.min(beats.length - 1, sceneNumber - 1)]}.`,
+      "Do not reuse the same exterior voxel landscape or the same classroom table composition from other scenes."
+    ].join("\n");
+  }
+  return [
+    "SCENE DIFFERENTIATION:",
+    `This is scene ${sceneNumber} of ${sceneCount}. Make its location, camera distance, subject action, foreground object, and background clearly different from adjacent scenes while preserving the shared art direction.`,
+    "Avoid making another version of the same hero image."
+  ].join("\n");
+}
+
+export function shouldUseProjectAnchorReference(scene: Scene, project: Project) {
+  const description = `${project.title}\n${project.currentVersion.scenes.map((item) => `${item.title}\n${item.voiceover}\n${item.visualPrompt}`).join("\n")}\n${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`;
+  if (/(?:minecraft|我的世界|方块|沙盒|游戏|玩家|玩法|关卡|课程|课堂|老师|教师|学生|学习|教学|training|course|classroom|teacher|student|learning|game|gameplay|sandbox|block)/iu.test(description)) {
+    return false;
+  }
+  return true;
+}
+
 export function sceneImagePrompt(
   scene: Scene,
   project: Project,
@@ -113,7 +161,7 @@ export function sceneImagePrompt(
     .replaceAll(">", "＞");
   const referenceDirection = referenceRoles.map((role, index) => role === "current"
     ? `Reference image ${index} is the current version of this exact scene. Preserve its central subject identity, composition logic, environment, and visual language while improving fidelity and following the revised direction.`
-    : `Reference image ${index} is the project's visual anchor. Match its recurring subject identity, design language, materials, lighting, lens character, and color treatment without copying its exact composition.`).join("\n");
+    : `Reference image ${index} is the project's visual anchor. Borrow only broad art direction, palette, material language, lighting, and lens character. Do not copy its layout, camera angle, background, subject placement, or exact objects.`).join("\n");
 
   return enforceTextFreeImagePrompt([
     `Create a polished 16:9 key visual for a scene in the commercial film "${project.title}".`,
@@ -123,6 +171,7 @@ export function sceneImagePrompt(
     `Scene ${scene.sceneNumber}: ${scene.title}.`,
     `Visual direction: ${scene.visualPrompt}`,
     semanticSceneDirection(scene),
+    sceneVisualDiversityDirection(scene, project.currentVersion.scenes.length),
     `Motion direction to imply: ${scene.motionPrompt}`,
     revision ? [
       "Targeted visual revision for this candidate only:",

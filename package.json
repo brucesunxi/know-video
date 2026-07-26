@@ -40,6 +40,7 @@
     "model:json:smoke": "node scripts/model-json-smoke.mjs",
     "fallback:domain:smoke": "node scripts/domain-fallback-smoke.mjs",
     "image:continuity:smoke": "node scripts/image-continuity-smoke.mjs",
+    "image:anchor-policy:smoke": "node scripts/image-anchor-policy-smoke.mjs",
     "image:quality:smoke": "node scripts/image-quality-smoke.mjs",
     "image:candidates:smoke": "node scripts/image-candidates-smoke.mjs",
     "image:generation-retry:smoke": "node scripts/image-generation-retry-smoke.mjs",
