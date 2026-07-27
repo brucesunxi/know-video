@@ -5,6 +5,7 @@ import { sceneReferenceAssets } from "@/lib/attachment-context";
 import { getOptionalEnv } from "@/lib/env";
 import {
   enforceTextFreeImagePrompt,
+  imageSafeSemanticText,
   projectVisualIdentity,
   sceneRequiresPremiumImage,
   sceneImagePrompt,
@@ -45,14 +46,39 @@ function buildSceneImagePrompt(
 
 function buildBrandSafeImagePrompt(scene: Scene, project: Project) {
   return enforceTextFreeImagePrompt([
-    `Create a brand-safe 16:9 cinematic key visual for the commercial film "${project.title}".`,
+    `Create a brand-safe 16:9 cinematic key visual for the commercial film "${imageSafeSemanticText(project.title)}".`,
     projectVisualIdentity(project),
-    `Scene ${scene.sceneNumber}: ${scene.title}.`,
-    `Use an elegant abstract visual metaphor built from architecture, light, layered materials, and purposeful motion.`,
+    `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
+    `Scene meaning: ${imageSafeSemanticText(scene.voiceover)} ${imageSafeSemanticText(scene.visualPrompt)}`,
+    `Use a brand-neutral educational or commercial metaphor built from architecture, light, layered materials, objects, devices, voxel-like blocks when relevant, and purposeful motion.`,
     `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
     "Premium commercial art direction, strong depth, one clear focal point, refined lighting, and generous negative space.",
-    "Do not depict people, faces, bodies, weapons, conflict, politics, medical content, dashboards, presentation slides, or floating UI cards."
+    "Do not depict identifiable people, faces, children, weapons, conflict, politics, medical content, dashboards, presentation slides, floating UI cards, protected characters, official game logos, or brand marks."
   ].join("\n"));
+}
+
+function buildUltraSafeSceneImagePrompt(scene: Scene, project: Project) {
+  return enforceTextFreeImagePrompt([
+    "Create a safe 16:9 educational commercial background plate.",
+    `Topic: ${imageSafeSemanticText(project.title)}.`,
+    `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
+    `Meaning to visualize: ${imageSafeSemanticText(scene.voiceover)}.`,
+    semanticFallbackComposition(scene),
+    `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
+    "Use only abstract learning objects, clean studio lighting, hands-free product props, geometric paths, neutral voxel blocks, empty desks, and environment details.",
+    "No recognizable brands, logos, readable text, real minors, faces, copyrighted characters, weapons, harm, conflict, or sensitive content."
+  ].join("\n"));
+}
+
+function semanticFallbackComposition(scene: Scene) {
+  const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`;
+  if (/(?:方块|沙盒|游戏|课程|编程|voxel|sandbox|game|course|programming)/iu.test(description)) {
+    return "Composition: a different voxel-learning beat for this scene, such as a planning desk with unlabeled colored blocks, an abstract block-building workspace, a simple logic circuit made of cubes and light paths, or a finished voxel world display with no characters or logos.";
+  }
+  if (/(?:库存|仓库|物流|订单|跨境|inventory|warehouse|logistics|order)/iu.test(description)) {
+    return "Composition: a clear abstract operations map with warehouse nodes, parcels, route lines, inventory groups, and cause-and-effect flow, all unlabeled.";
+  }
+  return "Composition: a scene-specific metaphor with a distinct foreground object, middle-ground action, and background environment that matches the narration.";
 }
 
 function isSafetyFiltered(error: unknown) {
@@ -162,10 +188,16 @@ async function generateSceneImage(
         } catch (error) {
           if (!isSafetyFiltered(error)) throw error;
           effectivePrompt = buildBrandSafeImagePrompt(scene, project);
-          generated = await generateCloudflareImage(effectivePrompt, effectiveQuality, {
-            seed,
-            references: usableReferences
-          });
+          try {
+            generated = await generateCloudflareImage(effectivePrompt, effectiveQuality, { seed });
+          } catch (fallbackError) {
+            if (!isSafetyFiltered(fallbackError)) throw fallbackError;
+            effectivePrompt = buildUltraSafeSceneImagePrompt(scene, project);
+            generated = await generateCloudflareImage(effectivePrompt, effectiveQuality, {
+              seed: (seed + 7_919) % 2_147_483_647 || 1,
+              guidance: 3
+            });
+          }
         }
         generatedBody = generated.body;
         generatedModel = generated.model;

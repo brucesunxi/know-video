@@ -39,6 +39,18 @@ export function normalizeVisualRevisionInstruction(value?: string) {
   return (value ?? "").replace(/\s+/gu, " ").trim().slice(0, 600);
 }
 
+export function imageSafeSemanticText(value: string) {
+  return value
+    .replace(/minecraft/giu, "a generic voxel sandbox building game")
+    .replace(/我的世界/gu, "方块沙盒创作游戏")
+    .replace(/(?:小朋友|孩子们|孩子|儿童|少儿|幼儿|未成年人)/gu, "学习者")
+    .replace(/(?:kids|children|child|minor|minors|young children)/giu, "learners")
+    .replace(/(?:boy|girl|boys|girls)/giu, "learner")
+    .replace(/(?:brand|logo|trademark)/giu, "visual identity")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
 export function projectVisualIdentity(project: Project) {
   const palettes = project.currentVersion.scenes
     .flatMap((scene) => scene.style.palette)
@@ -46,11 +58,12 @@ export function projectVisualIdentity(project: Project) {
     .slice(0, 6);
   const continuity = project.currentVersion.scenes
     .flatMap((scene) => scene.visualPrompt.split("\n"))
+    .map(imageSafeSemanticText)
     .filter((line) => /Shared visual world|Art direction|Lighting|Recurring motif|Avoid:/i.test(line))
     .filter((line, index, values) => values.indexOf(line) === index)
     .slice(0, 5);
   return [
-    `Project visual identity: "${project.title}".`,
+    `Project visual identity: "${imageSafeSemanticText(project.title)}".`,
     `Locked palette: ${palettes.join(", ")}.`,
     ...continuity,
     "Keep the art direction, palette, lighting language, lens character, and material treatment recognizably consistent across every scene.",
@@ -129,6 +142,10 @@ export function sceneImagePrompt(
   revisionInstruction?: string
 ) {
   const palette = scene.style.palette.join(", ");
+  const safeTitle = imageSafeSemanticText(scene.title);
+  const safeProjectTitle = imageSafeSemanticText(project.title);
+  const safeVisualPrompt = imageSafeSemanticText(scene.visualPrompt);
+  const safeMotionPrompt = imageSafeSemanticText(scene.motionPrompt);
   const revision = normalizeVisualRevisionInstruction(revisionInstruction);
   const delimitedRevision = revision
     .replaceAll("&", "＆")
@@ -139,15 +156,15 @@ export function sceneImagePrompt(
   )).join("\n");
 
   return enforceTextFreeImagePrompt([
-    `Create a polished 16:9 key visual for a scene in the commercial film "${project.title}".`,
+    `Create a polished 16:9 key visual for a scene in the commercial film "${safeProjectTitle}".`,
     projectVisualIdentity(project),
     sceneAttachmentSummary(scene) ?? "",
     referenceDirection,
-    `Scene ${scene.sceneNumber}: ${scene.title}.`,
-    `Visual direction: ${scene.visualPrompt}`,
+    `Scene ${scene.sceneNumber}: ${safeTitle}.`,
+    `Visual direction: ${safeVisualPrompt}`,
     semanticSceneDirection(scene),
     sceneVisualDiversityDirection(scene, project.currentVersion.scenes.length),
-    `Motion direction to imply: ${scene.motionPrompt}`,
+    `Motion direction to imply: ${safeMotionPrompt}`,
     revision ? [
       "Targeted visual revision for this candidate only:",
       `<visual_revision>${delimitedRevision}</visual_revision>`,
@@ -156,6 +173,7 @@ export function sceneImagePrompt(
     `Mood: ${scene.style.mood}. Theme: ${scene.style.theme}. Palette: ${palette}.`,
     "Make it a finished cinematic frame rather than a wireframe or a presentation slide: strong composition, depth, premium lighting, and one clear subject.",
     "Show the actual human workflow, device, environment, and product interaction described by the scene. Use spatial layers and purposeful visual storytelling.",
+    "For education or game-course scenes, prefer hands, classroom materials, screens with abstract unlabeled blocks, voxel environments, and avatar-like figures; do not depict identifiable real children.",
     "Keep important subjects inside a 16:9 center-safe area."
   ].filter(Boolean).join("\n"));
 }

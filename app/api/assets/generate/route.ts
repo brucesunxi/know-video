@@ -13,7 +13,7 @@ const requestSchema = z.object({
   quality: z.enum(["standard", "premium"]).default("standard")
 });
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 function imageFailedScenes(
   scenes: Scene[],

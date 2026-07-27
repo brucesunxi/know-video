@@ -122,6 +122,11 @@ assert.match(minecraftPrompt, /COURSE \/ GAME SEMANTIC FIDELITY/);
 assert.match(minecraftPrompt, /not five repeated landscapes/);
 assert.match(minecraftPrompt, /logic and experimentation beat/);
 assert.match(minecraftPrompt, /generic voxel sandbox aesthetic/);
+assert.match(minecraftPrompt, /generic voxel sandbox building game|方块沙盒创作游戏/);
+assert.match(minecraftPrompt, /do not depict identifiable real children/i);
+assert.doesNotMatch(minecraftPrompt, /Minecraft/);
+assert.doesNotMatch(minecraftPrompt, /我的世界/);
+assert.doesNotMatch(minecraftPrompt, /孩子|小朋友/);
 assert.match(sceneVisualDiversityDirection(minecraftScene, 5), /redstone-like circuits/);
 
 console.log("Image continuity smoke checks passed.");
