@@ -1177,7 +1177,7 @@ export async function createStoryboardProject(
       console.warn(`[ai-video] Accepting storyboard with natural narration breathing room: ${qualityIssues.join(", ")}.`);
     }
 
-    const narrationVoice = narrationVoiceForBrief(prompt);
+    const narrationVoice = options?.narrationVoice ?? narrationVoiceForBrief(prompt);
     scenes = scenes.map((scene) => ({
       ...scene,
       style: { ...scene.style, narrationVoice }

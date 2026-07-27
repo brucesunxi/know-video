@@ -31,6 +31,7 @@ export function parsePendingGenerationSession(raw: string | null, now = Date.now
       || !["电影质感", "极简高级", "明快有活力", "温暖自然"].includes(value.options.style)
       || !["camera", "key-scenes"].includes(value.options.motion)
       || !["economy", "balanced"].includes(value.options.videoTier)
+      || (value.options.narrationVoice !== undefined && !["male-clear", "male-deep", "female-natural"].includes(value.options.narrationVoice))
     ) {
       return undefined;
     }

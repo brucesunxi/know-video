@@ -48,6 +48,7 @@ export type GenerationOptions = {
   style: "电影质感" | "极简高级" | "明快有活力" | "温暖自然";
   motion: "camera" | "key-scenes";
   videoTier: VideoGenerationTier;
+  narrationVoice?: NarrationVoice;
 };
 
 export type GenerationReferenceAsset = {

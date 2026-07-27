@@ -6,6 +6,10 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
+  Bell,
+  BookOpen,
+  Brush,
+  Calendar,
   Check,
   Captions,
   ChevronRight,
@@ -13,11 +17,13 @@ import {
   Clock3,
   Combine,
   Copy,
+  CreditCard,
   Download,
   FileVideo2,
   Film,
   FolderOpen,
   GripVertical,
+  HelpCircle,
   History,
   Eye,
   ImagePlus,
@@ -26,8 +32,10 @@ import {
   LogOut,
   MessageSquareText,
   Mic2,
+  Moon,
   MoreHorizontal,
   Music2,
+  Palette,
   PanelRightOpen,
   Paperclip,
   Pause,
@@ -39,10 +47,13 @@ import {
   Scissors,
   Search,
   Send,
+  Settings,
   SlidersHorizontal,
   Sparkles,
   Trash2,
   Upload,
+  User,
+  Users,
   Volume2,
   X
 } from "lucide-react";
@@ -132,6 +143,47 @@ const promptExamples = [
   "生成一个 30 秒的 AI 视频生成平台产品介绍视频，风格高级、节奏快、适合官网首屏。",
   "做一个关于跨境电商库存管理 SaaS 的解释视频，目标客户是运营负责人。",
   "制作一个教育产品宣传视频，展示老师如何用 AI 快速生成课程内容。"
+];
+type BriefSettingsPanel = "style" | "avatar" | "voice" | "brand";
+type BriefStyleMode = "animated" | "realistic";
+type BriefStylePreset = {
+  id: string;
+  label: string;
+  mode: BriefStyleMode;
+  tone: GenerationOptions["style"];
+  summary: string;
+  thumbnail: string;
+};
+type BriefAvatarMode = "none" | "preset" | "custom";
+type BriefBrandKitMode = "none" | "minimal" | "uploaded";
+
+const stylePresets: BriefStylePreset[] = [
+  { id: "chalkboard", label: "Chalkboard", mode: "animated", tone: "温暖自然", summary: "手绘线条、教学感、适合课程解释", thumbnail: "kv-style-thumb-chalkboard" },
+  { id: "collage", label: "Collage", mode: "animated", tone: "明快有活力", summary: "拼贴卡片、轻量动效、适合社媒短片", thumbnail: "kv-style-thumb-collage" },
+  { id: "comic", label: "Comic Book", mode: "animated", tone: "明快有活力", summary: "漫画分格、强情绪、适合故事化介绍", thumbnail: "kv-style-thumb-comic" },
+  { id: "memphis", label: "Corporate Memphis", mode: "animated", tone: "极简高级", summary: "轻商务插画、干净友好、适合 SaaS", thumbnail: "kv-style-thumb-memphis" },
+  { id: "isometric", label: "Isometric", mode: "animated", tone: "极简高级", summary: "等距空间、流程结构清楚", thumbnail: "kv-style-thumb-isometric" },
+  { id: "pixel", label: "Pixel Art", mode: "animated", tone: "明快有活力", summary: "像素块面、适合游戏和少儿课程", thumbnail: "kv-style-thumb-pixel" },
+  { id: "construction", label: "Construction Realism", mode: "realistic", tone: "电影质感", summary: "工地现场、真实人物、暖色晨昏光", thumbnail: "kv-style-thumb-construction" },
+  { id: "cyber", label: "Cyber Realism", mode: "realistic", tone: "电影质感", summary: "深色控制台、数据屏幕、科技感", thumbnail: "kv-style-thumb-cyber" },
+  { id: "industrial", label: "Industrial Realism", mode: "realistic", tone: "电影质感", summary: "工厂设备、清洁产线、企业质感", thumbnail: "kv-style-thumb-industrial" },
+  { id: "medical", label: "Medical Realism", mode: "realistic", tone: "极简高级", summary: "明亮医疗空间、克制可信", thumbnail: "kv-style-thumb-medical" },
+  { id: "office", label: "Office Realism", mode: "realistic", tone: "极简高级", summary: "现代办公室、真实团队协作", thumbnail: "kv-style-thumb-office" }
+];
+
+const briefWorkflowCards = [
+  { icon: BookOpen, title: "Explain a concept", detail: "把一个概念拆成清楚步骤" },
+  { icon: FileVideo2, title: "Turn a doc into video", detail: "上传资料，自动提炼场景" },
+  { icon: PanelRightOpen, title: "Make a social short", detail: "短节奏、强字幕、适合传播" },
+  { icon: Users, title: "Train your team", detail: "教程、培训、流程说明" }
+];
+
+const briefCategoryPills = ["Training", "Corporate", "Marketing", "Sales", "Tutorials & explainers", "Finance", "Education", "Social media"];
+
+const briefTemplateCards = [
+  { title: "库存预警解释片", detail: "跨境电商运营", className: "inventory" },
+  { title: "安全培训短片", detail: "团队培训", className: "safety" },
+  { title: "客户服务案例", detail: "品牌沟通", className: "support" }
 ];
 const transitionOptions: Array<{ value: SceneTransitionKind; label: string }> = [
   { value: "auto", label: "自动" },
@@ -1193,48 +1245,118 @@ function Shell({
         : project.title;
 
   return (
-    <main className="kv-shell">
+    <main className={`kv-shell${stage === "brief" ? " kv-shell-brief" : ""}`}>
       <aside className="kv-sidebar">
-        <div className="kv-logo">K</div>
-        <nav className="kv-nav">
-          <button aria-label="新建视频" className={stage === "brief" ? "active" : ""} onClick={onNewVideo} type="button">
-            <Plus size={18} />
-          </button>
-          <button aria-label="视频工作室" className={stage === "studio" ? "active" : ""} disabled={source === "empty"} onClick={onOpenStudio} type="button">
-            <Clapperboard size={18} />
-          </button>
-          <button aria-label="项目列表" className={stage === "projects" ? "active" : ""} onClick={onOpenProjects} type="button">
-            <Layers3 size={18} />
-          </button>
-        </nav>
-      </aside>
-      <section className="kv-app" ref={appRef}>
-        <header className="kv-topbar">
-          <div>
-            <span className="kv-eyebrow">Know Video 智能视频工作室</span>
-            <h1>{headerTitle}</h1>
-          </div>
-          <div className="kv-status-row">
-            {statusBadges.map((badge) => (
-              <span className={badge.tone} key={`${badge.tone}-${badge.label}`}>{badge.label}</span>
-            ))}
-            <div className="kv-user-menu">
-              {currentUser.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img alt="" src={currentUser.avatarUrl} />
+        {stage === "brief" ? (
+          <div className="kv-home-sidebar">
+            <div className="kv-home-brand">
+              <div className="kv-logo">K</div>
+              <strong>Know Video</strong>
+            </div>
+            <button className="kv-home-new" onClick={onNewVideo} type="button">
+              <MessageSquareText size={17} />
+              New video
+            </button>
+            <label className="kv-home-search">
+              <Search size={16} />
+              <input placeholder="Search..." />
+            </label>
+            <nav className="kv-home-menu">
+              <button className="active" onClick={onNewVideo} type="button"><Plus size={16} /> Create</button>
+              <button onClick={onOpenProjects} type="button"><Layers3 size={16} /> Gallery</button>
+            </nav>
+            <div className="kv-home-list">
+              <span>Projects</span>
+              {source !== "empty" && project.currentVersion.scenes.length > 0 ? (
+                <button onClick={onOpenStudio} type="button">{project.title}</button>
               ) : (
-                <span>{currentUser.email.slice(0, 1).toUpperCase()}</span>
+                <small>No projects yet</small>
               )}
-              <strong>{currentUser.name || currentUser.email}</strong>
-              <button aria-label="退出登录" onClick={async () => {
-                await fetch("/api/auth/logout", { method: "POST" });
-                window.location.assign("/");
-              }} title="退出登录" type="button">
-                <LogOut size={15} />
-              </button>
+            </div>
+            <div className="kv-home-list">
+              <span>Your chats</span>
+              <small>Start a request to create the first video thread.</small>
+            </div>
+            <div className="kv-home-sidebar-bottom">
+              <button type="button"><CreditCard size={16} /> Pricing</button>
+              <button type="button"><Calendar size={16} /> Book a Demo</button>
+              <button aria-label="帮助" type="button"><HelpCircle size={16} /></button>
             </div>
           </div>
-        </header>
+        ) : (
+          <>
+            <div className="kv-logo">K</div>
+            <nav className="kv-nav">
+              <button aria-label="新建视频" onClick={onNewVideo} type="button">
+                <Plus size={18} />
+              </button>
+              <button aria-label="视频工作室" className={stage === "studio" ? "active" : ""} disabled={source === "empty"} onClick={onOpenStudio} type="button">
+                <Clapperboard size={18} />
+              </button>
+              <button aria-label="项目列表" className={stage === "projects" ? "active" : ""} onClick={onOpenProjects} type="button">
+                <Layers3 size={18} />
+              </button>
+            </nav>
+          </>
+        )}
+      </aside>
+      <section className="kv-app" ref={appRef}>
+        {stage === "brief" ? (
+          <header className="kv-home-topbar">
+            <button className="kv-workspace-switcher" type="button">
+              <User size={16} />
+              Personal
+              <ChevronRight size={15} />
+            </button>
+            <div className="kv-home-top-actions">
+              <span className="kv-credit-pill"><AlertCircle size={14} /> Free · 996 credits · Get more</span>
+              <button aria-label="夜间模式" type="button"><Moon size={18} /></button>
+              <button aria-label="通知" type="button"><Bell size={18} /></button>
+              <div className="kv-user-menu">
+                {currentUser.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img alt="" src={currentUser.avatarUrl} />
+                ) : (
+                  <span>{currentUser.email.slice(0, 1).toUpperCase()}</span>
+                )}
+                <strong>{currentUser.name || currentUser.email}</strong>
+                <button aria-label="退出登录" onClick={async () => {
+                  await fetch("/api/auth/logout", { method: "POST" });
+                  window.location.assign("/");
+                }} title="退出登录" type="button">
+                  <LogOut size={15} />
+                </button>
+              </div>
+            </div>
+          </header>
+        ) : (
+          <header className="kv-topbar">
+            <div>
+              <span className="kv-eyebrow">Know Video 智能视频工作室</span>
+              <h1>{headerTitle}</h1>
+            </div>
+            <div className="kv-status-row">
+              {statusBadges.map((badge) => (
+                <span className={badge.tone} key={`${badge.tone}-${badge.label}`}>{badge.label}</span>
+              ))}
+              <div className="kv-user-menu">
+                {currentUser.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img alt="" src={currentUser.avatarUrl} />
+                ) : (
+                  <span>{currentUser.email.slice(0, 1).toUpperCase()}</span>
+                )}
+                <strong>{currentUser.name || currentUser.email}</strong>
+                <button aria-label="退出登录" onClick={async () => {
+                  await fetch("/api/auth/logout", { method: "POST" });
+                  window.location.assign("/");
+                }} title="退出登录" type="button">
+                  <LogOut size={15} />
+                </button>
+              </div>
+            </div>
+          </header>
+        )}
         {children}
       </section>
     </main>
@@ -1412,19 +1534,178 @@ function BriefScreen({
   errorMessage?: string;
 }) {
   const reviewItems = generationReviewItems(prompt, options);
+  const [activeSettings, setActiveSettings] = useState<BriefSettingsPanel>();
+  const [styleMode, setStyleMode] = useState<BriefStyleMode>("realistic");
+  const [selectedStyleId, setSelectedStyleId] = useState("office");
+  const [avatarMode, setAvatarMode] = useState<BriefAvatarMode>("none");
+  const [brandMode, setBrandMode] = useState<BriefBrandKitMode>("none");
+  const [selectedVoice, setSelectedVoice] = useState<NarrationVoice>(options.narrationVoice ?? DEFAULT_NARRATION_VOICE);
+  const [voiceQuery, setVoiceQuery] = useState("");
+  const [previewingVoice, setPreviewingVoice] = useState<NarrationVoice>();
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string>();
+  const previewUrlsRef = useRef(new Map<NarrationVoice, string>());
+  const previewAudioRef = useRef<HTMLAudioElement>();
+  const previewAbortRef = useRef<AbortController>();
+  const selectedStyle = stylePresets.find((style) => style.id === selectedStyleId) ?? stylePresets[0];
+  const selectedVoiceProfile = narrationVoiceProfile(selectedVoice);
+  const filteredVoices = narrationVoiceProfiles.filter((profile) => `${profile.label} ${profile.useCase} ${profile.description}`.toLocaleLowerCase().includes(voiceQuery.trim().toLocaleLowerCase()));
+  const visibleStylePresets = stylePresets.filter((style) => style.mode === styleMode);
+
+  useEffect(() => () => {
+    previewAbortRef.current?.abort();
+    previewAudioRef.current?.pause();
+    previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
+
+  async function toggleBriefVoicePreview(voice: NarrationVoice) {
+    if (previewingVoice === voice) {
+      previewAbortRef.current?.abort();
+      previewAbortRef.current = undefined;
+      previewAudioRef.current?.pause();
+      if (previewAudioRef.current) previewAudioRef.current.currentTime = 0;
+      previewAudioRef.current = undefined;
+      setPreviewingVoice(undefined);
+      setPreviewLoading(false);
+      return;
+    }
+    previewAbortRef.current?.abort();
+    previewAudioRef.current?.pause();
+    previewAudioRef.current = undefined;
+    setPreviewError(undefined);
+    setPreviewingVoice(voice);
+    setPreviewLoading(true);
+    const controller = new AbortController();
+    previewAbortRef.current = controller;
+    try {
+      let url = previewUrlsRef.current.get(voice);
+      if (!url) {
+        const response = await fetch("/api/assets/audio/preview", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ voice }),
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(65_000)])
+        });
+        if (!response.ok) {
+          const detail = await response.json().catch(() => undefined) as { error?: string } | undefined;
+          throw new Error(detail?.error || "试听加载失败。请稍后重试。");
+        }
+        url = URL.createObjectURL(await response.blob());
+        previewUrlsRef.current.set(voice, url);
+      }
+      const audio = new Audio(url);
+      if (controller.signal.aborted) return;
+      previewAbortRef.current = undefined;
+      previewAudioRef.current = audio;
+      audio.onended = () => {
+        previewAudioRef.current = undefined;
+        setPreviewingVoice(undefined);
+        setPreviewLoading(false);
+      };
+      audio.onerror = () => {
+        previewAudioRef.current = undefined;
+        setPreviewingVoice(undefined);
+        setPreviewLoading(false);
+        setPreviewError("试听音频无法播放，请稍后重试。");
+      };
+      await audio.play();
+      setPreviewLoading(false);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      previewAbortRef.current = undefined;
+      previewAudioRef.current = undefined;
+      setPreviewingVoice(undefined);
+      setPreviewLoading(false);
+      setPreviewError(error instanceof Error ? error.message : "试听加载失败。请稍后重试。");
+    }
+  }
+
+  function chooseStyle(style: BriefStylePreset) {
+    setSelectedStyleId(style.id);
+    onOptionsChange({ ...options, style: style.tone });
+  }
+
+  function chooseVoice(voice: NarrationVoice) {
+    setSelectedVoice(voice);
+    onOptionsChange({ ...options, narrationVoice: voice });
+  }
+
   return (
-    <div className="kv-brief">
-      <section className="kv-brief-main">
-        <div className="kv-section-heading">
-          <span className="kv-pill">文字生成视频</span>
-          <h2>描述你想做的视频，脚本、分镜、画面和动态预览一次完成：</h2>
-        </div>
-        <form className="kv-prompt-box" onSubmit={onSubmit}>
+    <div className="kv-brief kv-brief-home">
+      <section className="kv-home-hero">
+        <span className="kv-home-engine">Idea to Video Engine</span>
+        <h2>Generate polished videos from one request</h2>
+        <p>输入需求，Know Video 会规划脚本、分镜、画面、配音和可继续对话修改的版本。</p>
+        <form className="kv-home-composer" onSubmit={onSubmit}>
+          <div className="kv-composer-settings" role="toolbar" aria-label="视频生成设置">
+            <button onClick={() => setActiveSettings("style")} type="button">
+              <i><Brush size={18} /></i>
+              <span><strong>{selectedStyle.label}</strong><small>Style</small></span>
+            </button>
+            <button onClick={() => setActiveSettings("avatar")} type="button">
+              <i><User size={18} /></i>
+              <span><strong>{avatarMode === "none" ? "None" : avatarMode === "preset" ? "Preset" : "Custom"}</strong><small>Avatar</small></span>
+            </button>
+            <button onClick={() => setActiveSettings("voice")} type="button">
+              <i><Mic2 size={18} /></i>
+              <span><strong>{selectedVoiceProfile.shortLabel}</strong><small>Voice</small></span>
+            </button>
+            <button onClick={() => setActiveSettings("brand")} type="button">
+              <i><Palette size={18} /></i>
+              <span><strong>{brandMode === "none" ? "None" : brandMode === "minimal" ? "Minimal" : "Uploaded"}</strong><small>Brand kit</small></span>
+            </button>
+          </div>
           <textarea
             onChange={(event) => onPromptChange(event.target.value)}
-            placeholder="例如：生成一个 30 秒产品介绍视频，展示用户输入需求、AI 自动分镜、生成视频并能聊天修改..."
+            placeholder="Tell Know Video your explainer video idea"
             value={prompt}
           />
+          <div className="kv-home-attachment-row">
+            <div>
+              <button aria-label="高级设置" onClick={() => setActiveSettings("style")} type="button"><Settings size={18} /></button>
+              <button aria-label="上传参考素材" disabled={isBusy || attachments.length >= 6} onClick={onOpenAttachmentPicker} type="button"><Paperclip size={18} /></button>
+              {attachments.length > 0 ? <span>{attachments.length} / 6 references</span> : null}
+            </div>
+            <button aria-label="开始生成" className="kv-home-send" disabled={isBusy || prompt.trim().length < 4} type="submit">
+              {isBusy ? <Loader2 className="kv-spin" size={20} /> : <ArrowRight size={21} />}
+            </button>
+          </div>
+          {attachments.length > 0 ? (
+            <ul className="kv-home-attachments" aria-label="已选择的参考素材">
+              {attachments.map((file, index) => (
+                <li key={`${file.name}-${file.size}-${file.lastModified}`}>
+                  <span title={file.name}>{file.name}</span>
+                  <small>{file.type.startsWith("image/") ? "Image" : file.type.startsWith("video/") ? "Video" : "Audio"}</small>
+                  <button aria-label={`移除 ${file.name}`} disabled={isBusy} onClick={() => onRemoveAttachment(index)} type="button"><X size={13} /></button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </form>
+        <div className="kv-home-workflows">
+          {briefWorkflowCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <button key={card.title} onClick={() => onUseExample(card.title === "Explain a concept" ? promptExamples[0] : card.title === "Turn a doc into video" ? promptExamples[1] : promptExamples[2])} type="button">
+                <i><Icon size={18} /></i>
+                <span><strong>{card.title}</strong><small>{card.detail}</small></span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="kv-home-categories">
+          {briefCategoryPills.map((pill, index) => <button className={index === 0 ? "active" : ""} key={pill} type="button">{pill}</button>)}
+        </div>
+        <div className="kv-home-templates">
+          {briefTemplateCards.map((card) => (
+            <button className={card.className} key={card.title} onClick={() => onUseExample(card.title === "库存预警解释片" ? promptExamples[1] : card.title === "安全培训短片" ? "制作一个企业安全培训短片，讲清常见风险、正确动作和团队协作要求。" : promptExamples[2])} type="button">
+              <span>{card.title}</span>
+              <small>{card.detail}</small>
+            </button>
+          ))}
+        </div>
+        <details className="kv-home-advanced">
+          <summary>生成参数</summary>
           <div className="kv-generation-options">
             <label>
               <span>视频时长</span>
@@ -1452,61 +1733,12 @@ function BriefScreen({
               </select>
             </label>
             <label>
-              <span>视觉风格</span>
-              <select onChange={(event) => onOptionsChange({ ...options, style: event.target.value as GenerationOptions["style"] })} value={options.style}>
-                <option value="电影质感">电影质感</option>
-                <option value="极简高级">极简高级</option>
-                <option value="明快有活力">明快有活力</option>
-                <option value="温暖自然">温暖自然</option>
-              </select>
-            </label>
-            <label>
               <span>动态方式</span>
               <select onChange={(event) => onOptionsChange({ ...options, motion: event.target.value as GenerationOptions["motion"] })} value={options.motion}>
                 <option value="camera">智能运镜（低成本）</option>
                 <option value="key-scenes">生成关键动态镜头（额外计费）</option>
               </select>
             </label>
-            {options.motion === "key-scenes" ? (
-              <label>
-                <span>动态档位</span>
-                <select onChange={(event) => onOptionsChange({ ...options, videoTier: event.target.value as GenerationOptions["videoTier"] })} value={options.videoTier}>
-                  <option value="economy">经济 · 480p · 最高约 $0.16</option>
-                  <option value="balanced">均衡 · 720p · 最高约 $0.23</option>
-                </select>
-              </label>
-            ) : null}
-          </div>
-          <div className="kv-brief-attachments">
-            <div>
-              <button disabled={isBusy || attachments.length >= 6} onClick={onOpenAttachmentPicker} type="button">
-                <Paperclip size={16} />
-                参考素材
-              </button>
-              <span>{attachments.length > 0 ? `${attachments.length} / 6` : "图片 · 视频 · 音频"}</span>
-            </div>
-            {attachments.length > 0 ? (
-              <ul aria-label="已选择的参考素材">
-                {attachments.map((file, index) => (
-                  <li key={`${file.name}-${file.size}-${file.lastModified}`}>
-                    <span title={file.name}>{file.name}</span>
-                    <small>{file.type.startsWith("image/") ? "图片" : file.type.startsWith("video/") ? "视频" : "音频"}</small>
-                    <button aria-label={`移除 ${file.name}`} disabled={isBusy} onClick={() => onRemoveAttachment(index)} title="移除素材" type="button">
-                      <X size={14} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-          <div className="kv-prompt-tools">
-            <span>{options.motion === "key-scenes"
-              ? `只生成 1 个 ${VIDEO_GENERATION_DURATION_SECONDS} 秒动态镜头，最高预估 ${videoGenerationEstimateLabel(options.videoTier)}，失败不自动扣费重试。`
-              : "全部场景使用智能画面运镜，不调用高成本动态视频模型。"}</span>
-            <button className="kv-primary" disabled={isBusy || prompt.trim().length < 4} type="submit">
-              {isBusy ? <Loader2 className="kv-spin" size={18} /> : <Sparkles size={18} />}
-              开始生成
-            </button>
           </div>
           <GenerationSpecStrip options={options} />
           <div className="kv-generation-review" aria-label="生成前审阅清单">
@@ -1522,51 +1754,112 @@ function BriefScreen({
               ))}
             </div>
           </div>
-        </form>
+        </details>
         {errorMessage ? (
           <div className="kv-inline-error" role="alert">
             <AlertCircle size={18} />
             <span>{errorMessage}</span>
           </div>
         ) : null}
-        <div className="kv-example-grid">
-          {promptExamples.map((example) => (
-            <button key={example} onClick={() => onUseExample(example)} type="button">
-              <span>{example}</span>
-              <ArrowRight size={16} />
-            </button>
-          ))}
-        </div>
+        {hasCurrentProject ? (
+          <button className="kv-home-current-project" onClick={onOpenStudio} type="button">
+            继续编辑：{currentProject.title}
+            <ChevronRight size={16} />
+          </button>
+        ) : null}
       </section>
-      <aside className="kv-brief-side">
-        <div className="kv-side-panel">
-          <span className="kv-eyebrow">最近项目</span>
-          {hasCurrentProject ? (
-            <>
-              <h3>{currentProject.title}</h3>
-              <p>{currentProject.currentVersion.scenes.length} 个场景 · {durationLabel(currentProject.currentVersion.durationSeconds)}</p>
-              <button onClick={onOpenStudio} type="button">
-                打开工作室
-                <ChevronRight size={16} />
-              </button>
-            </>
-          ) : (
-            <>
-              <h3>还没有视频项目</h3>
-              <p>输入一句需求，创建第一支可继续对话修改的视频。</p>
-            </>
-          )}
+      {activeSettings ? (
+        <div className="kv-settings-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setActiveSettings(undefined);
+        }}>
+          <section aria-modal="true" className={`kv-settings-modal ${activeSettings}`} role="dialog">
+            <button aria-label="关闭设置" className="kv-settings-close" onClick={() => setActiveSettings(undefined)} type="button"><X size={18} /></button>
+            {activeSettings === "style" ? (
+              <>
+                <div className="kv-settings-header">
+                  <h3>Style Library</h3>
+                  <div className="kv-settings-tabs"><button className="active" type="button">Styles</button><button type="button">Logos</button></div>
+                </div>
+                <div className="kv-settings-segment" role="group" aria-label="Style mode">
+                  <button className={styleMode === "animated" ? "active" : ""} onClick={() => setStyleMode("animated")} type="button">Animated</button>
+                  <button className={styleMode === "realistic" ? "active" : ""} onClick={() => setStyleMode("realistic")} type="button">Hyper Realistic</button>
+                </div>
+                <div className="kv-style-grid">
+                  {visibleStylePresets.map((style) => (
+                    <button className={selectedStyleId === style.id ? "active" : ""} key={style.id} onClick={() => chooseStyle(style)} type="button">
+                      <span className={`kv-style-thumb ${style.thumbnail}`} />
+                      <strong>{style.label}</strong>
+                      <small>{style.summary}</small>
+                    </button>
+                  ))}
+                </div>
+                <button className="kv-settings-upload" onClick={onOpenAttachmentPicker} type="button"><ImagePlus size={18} /> Upload image</button>
+              </>
+            ) : null}
+            {activeSettings === "avatar" ? (
+              <>
+                <div className="kv-settings-header compact">
+                  <h3>Avatar presenter</h3>
+                  <p>Choose how a presenter appears in your video.</p>
+                </div>
+                <div className="kv-settings-segment" role="group" aria-label="Avatar mode">
+                  <button className={avatarMode === "none" ? "active" : ""} onClick={() => setAvatarMode("none")} type="button">None</button>
+                  <button className={avatarMode === "preset" ? "active" : ""} onClick={() => setAvatarMode("preset")} type="button">Preset</button>
+                  <button className={avatarMode === "custom" ? "active" : ""} onClick={() => setAvatarMode("custom")} type="button">Custom</button>
+                </div>
+                <div className="kv-avatar-panel">
+                  <strong>{avatarMode === "none" ? "No avatar scenes will be added." : avatarMode === "preset" ? "Presenter scenes can be added for training and demos." : "Clone yourself with a custom avatar."}</strong>
+                  <p>{avatarMode === "custom" ? "Custom avatar cloning is reserved for enterprise accounts. You can still upload reference media for the current project." : "Avatar can be used later for explainers, onboarding and course videos."}</p>
+                  <button onClick={onOpenAttachmentPicker} type="button"><Upload size={16} /> Upload presenter reference</button>
+                </div>
+              </>
+            ) : null}
+            {activeSettings === "voice" ? (
+              <>
+                <div className="kv-settings-header compact">
+                  <h3>Voice</h3>
+                  <p>试听后选择默认旁白音色，适合企业介绍、课程和产品视频。</p>
+                </div>
+                <label className="kv-voice-search"><Search size={16} /><input onChange={(event) => setVoiceQuery(event.target.value)} placeholder="Search voices..." value={voiceQuery} /></label>
+                <div className="kv-voice-enterprise"><span>Clone your voice</span><em>Enterprise</em></div>
+                <div className="kv-voice-enterprise"><span>Add custom voice ID</span><em>Enterprise</em></div>
+                <div className="kv-brief-voice-list">
+                  {filteredVoices.map((profile) => {
+                    const active = selectedVoice === profile.id;
+                    const playing = previewingVoice === profile.id;
+                    return (
+                      <article className={active ? "active" : ""} key={profile.id}>
+                        <button onClick={() => chooseVoice(profile.id)} type="button">
+                          <i>{profile.shortLabel.slice(0, 1)}</i>
+                          <span><strong>{profile.label}</strong><small>{profile.description}</small><em>{profile.useCase}</em></span>
+                        </button>
+                        <button aria-label={`试听 ${profile.label}`} disabled={Boolean(previewingVoice && !playing)} onClick={() => void toggleBriefVoicePreview(profile.id)} type="button">
+                          {playing && previewLoading ? <Loader2 className="kv-spin" size={15} /> : playing ? <Pause size={15} /> : <Play size={15} />}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+                {previewError ? <p className="kv-settings-error">{previewError}</p> : null}
+              </>
+            ) : null}
+            {activeSettings === "brand" ? (
+              <>
+                <div className="kv-settings-header compact">
+                  <h3>Brand kit</h3>
+                  <p>设置品牌标识、色彩和参考素材，让视频更稳定地贴合企业视觉。</p>
+                </div>
+                <div className="kv-brand-options">
+                  <button className={brandMode === "none" ? "active" : ""} onClick={() => setBrandMode("none")} type="button"><strong>None</strong><small>不叠加品牌标识</small></button>
+                  <button className={brandMode === "minimal" ? "active" : ""} onClick={() => setBrandMode("minimal")} type="button"><strong>Minimal</strong><small>轻量品牌角标与主色控制</small></button>
+                  <button className={brandMode === "uploaded" ? "active" : ""} onClick={() => { setBrandMode("uploaded"); onOpenAttachmentPicker(); }} type="button"><strong>Upload</strong><small>上传 Logo / 品牌参考图</small></button>
+                </div>
+                <button className="kv-settings-upload" onClick={onOpenAttachmentPicker} type="button"><ImagePlus size={18} /> Upload logo or brand image</button>
+              </>
+            ) : null}
+          </section>
         </div>
-        <div className="kv-side-panel">
-          <span className="kv-eyebrow">制作流程</span>
-          <ol className="kv-mini-steps">
-            <li>理解需求并完成脚本与分镜</li>
-            <li>为每个场景生成独立视觉素材</li>
-            <li>组合为可播放的动态预览</li>
-            <li>通过对话逐场景修改并保留版本</li>
-          </ol>
-        </div>
-      </aside>
+      ) : null}
     </div>
   );
 }
@@ -3982,7 +4275,8 @@ export function WorkspaceClient({
     language: "中文",
     style: "电影质感",
     motion: "camera",
-    videoTier: "economy"
+    videoTier: "economy",
+    narrationVoice: DEFAULT_NARRATION_VOICE
   });
   const [pendingVideoGeneration, setPendingVideoGeneration] = useState<{ sceneNumbers: number[] }>();
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
