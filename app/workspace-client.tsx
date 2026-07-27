@@ -85,6 +85,8 @@ type MediaGenerationResponse = {
   completedSceneNumbers?: number[];
   failedSceneNumbers?: number[];
 };
+
+const IMAGE_GENERATION_TIMEOUT_MS = 305_000;
 type InvalidRenderMedia = {
   sceneNumber: number;
   type: "visual" | "audio";
@@ -4161,7 +4163,7 @@ export function WorkspaceClient({
             sceneNumbers: missingImageSceneNumbers,
             quality: "standard"
           }),
-          signal: AbortSignal.timeout(125_000)
+          signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS)
         });
         const imageData = await imageResponse.json() as MediaGenerationResponse;
         if (imageData.project) {
@@ -4687,7 +4689,7 @@ export function WorkspaceClient({
             sceneNumbers: data.regeneration.imageSceneNumbers,
             quality: "standard"
           }),
-          signal: AbortSignal.timeout(125_000)
+          signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS)
         });
         const imageData = await imageResponse.json() as { project?: Project; error?: string };
         if (imageData.project) {
@@ -4849,7 +4851,7 @@ export function WorkspaceClient({
               sceneNumbers: regeneration.imageSceneNumbers,
               quality: "standard"
             }),
-            signal: AbortSignal.timeout(125_000)
+            signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS)
           });
           const imageData = await imageResponse.json() as { project?: Project; error?: string };
           if (imageData.project) {
@@ -5503,7 +5505,7 @@ export function WorkspaceClient({
           sceneNumbers,
           quality
         }),
-        signal: AbortSignal.timeout(125_000)
+        signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS)
       });
       const data = await response.json() as MediaGenerationResponse;
       if (data.project) setProject(data.project);

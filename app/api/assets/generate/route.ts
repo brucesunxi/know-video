@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { generateProjectSceneImages } from "@/lib/image-assets";
 import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/media-generation-result";
-import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
+import { loadCurrentProjectForEdit, loadProjectForRender, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import type { Scene } from "@/lib/types";
 
 const requestSchema = z.object({
@@ -80,6 +80,19 @@ export async function POST(request: Request) {
     replaceImages: true,
     sceneNumbers: body.sceneNumbers
   });
+  const persisted = await loadProjectForRender(body.projectId, body.versionId, user.id);
+  if (!persisted) {
+    return NextResponse.json({ error: "画面已经生成，但重新读取项目失败，请刷新后重试。" }, { status: 409 });
+  }
+  const persistedFailedTargets = imageFailedScenes(
+    persisted.currentVersion.scenes,
+    requestedSceneNumbers,
+    previousImageKeys
+  );
+  if (failedTargets.length === 0 && persistedFailedTargets.length > 0) {
+    console.error(`[image-assets] Persist verification failed for image scenes: ${persistedFailedTargets.map((scene) => scene.sceneNumber).join(",")}.`);
+  }
+  failedTargets = failedTargets.length > 0 ? failedTargets : persistedFailedTargets;
   const progress = mediaGenerationProgress(
     requestedSceneNumbers,
     failedTargets.map((scene) => scene.sceneNumber)
@@ -97,12 +110,12 @@ export async function POST(request: Request) {
       {
         error: mediaGenerationFailureMessage("画面", progress, messages[code]),
         code,
-        project: updated,
+        project: persisted,
         ...progress
       },
       { status: 502 }
     );
   }
 
-  return NextResponse.json({ project: updated, ...progress });
+  return NextResponse.json({ project: persisted, ...progress });
 }
