@@ -1944,7 +1944,7 @@ function Storyboard({
   const selectedMediaDiagnostics = scene ? sceneMediaDiagnosticItems(scene) : [];
   const [duration, setDuration] = useState(scene?.durationSeconds ?? 5);
   const [transitionKind, setTransitionKind] = useState<SceneTransitionKind>(scene?.style.transition?.kind ?? "auto");
-  const [transitionDuration, setTransitionDuration] = useState(scene?.style.transition?.durationSeconds ?? 0.5);
+  const [transitionDuration, setTransitionDuration] = useState(scene?.style.transition?.durationSeconds ?? 0.25);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [draggedSceneNumber, setDraggedSceneNumber] = useState<number>();
   const [dropTargetSceneNumber, setDropTargetSceneNumber] = useState<number>();
@@ -1954,7 +1954,7 @@ function Storyboard({
   useEffect(() => {
     setDuration(scene?.durationSeconds ?? 5);
     setTransitionKind(scene?.style.transition?.kind ?? "auto");
-    setTransitionDuration(scene?.style.transition?.durationSeconds ?? 0.5);
+    setTransitionDuration(scene?.style.transition?.durationSeconds ?? 0.25);
     setConfirmDelete(false);
   }, [scene?.id, scene?.durationSeconds, scene?.style.transition?.durationSeconds, scene?.style.transition?.kind]);
 
@@ -2094,7 +2094,7 @@ function Storyboard({
                   onChange={(event) => {
                     const nextKind = event.target.value as SceneTransitionKind;
                     setTransitionKind(nextKind);
-                    if (nextKind !== "cut" && transitionDuration < 0.2) setTransitionDuration(0.5);
+                    if (nextKind !== "cut" && transitionDuration < 0.2) setTransitionDuration(0.25);
                   }}
                   value={transitionKind}
                 >
@@ -2109,9 +2109,10 @@ function Storyboard({
                   onChange={(event) => setTransitionDuration(Number(event.target.value))}
                   value={transitionDuration}
                 >
-                  {![0.25, 0.5, 0.75, 1].includes(transitionDuration) ? (
+                  {![0.12, 0.25, 0.5, 0.75, 1].includes(transitionDuration) ? (
                     <option value={transitionDuration}>{transitionDuration} 秒</option>
                   ) : null}
+                  <option value="0.12">0.12 秒</option>
                   <option value="0.25">0.25 秒</option>
                   <option value="0.5">0.5 秒</option>
                   <option value="0.75">0.75 秒</option>
