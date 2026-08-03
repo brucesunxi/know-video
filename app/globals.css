@@ -1151,6 +1151,155 @@ html[data-theme="dark"] .kv-settings-modal {
   color: var(--text);
 }
 
+html[data-theme="dark"] .kv-home-sidebar {
+  background: #171c24;
+}
+
+html[data-theme="dark"] .kv-home-brand strong {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .kv-home-new,
+html[data-theme="dark"] .kv-home-menu button,
+html[data-theme="dark"] .kv-home-sidebar-bottom button,
+html[data-theme="dark"] .kv-home-search {
+  border-color: #303946;
+  background: #222934;
+  color: #d8dee8;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .kv-home-new:hover,
+html[data-theme="dark"] .kv-home-menu button:hover,
+html[data-theme="dark"] .kv-home-menu button.active {
+  border-color: #3f8f86;
+  background: #12312e;
+  color: #e9fffb;
+}
+
+html[data-theme="dark"] .kv-home-search input {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .kv-home-search input::placeholder {
+  color: #818b9a;
+}
+
+html[data-theme="dark"] .kv-home-sidebar-bottom button:first-child,
+html[data-theme="dark"] .kv-home-send {
+  background: #2dd4bf;
+  color: #06231f;
+}
+
+html[data-theme="dark"] .kv-home-composer {
+  border-color: #34404f;
+  background: rgba(23, 28, 36, 0.92);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+}
+
+html[data-theme="dark"] .kv-composer-settings button,
+html[data-theme="dark"] .kv-home-attachment-row button:not(.kv-home-send),
+html[data-theme="dark"] .kv-home-workflows button,
+html[data-theme="dark"] .kv-home-categories button,
+html[data-theme="dark"] .kv-home-advanced,
+html[data-theme="dark"] .kv-home-current-project {
+  border-color: #303946;
+  background: #222934;
+  color: #d8dee8;
+}
+
+html[data-theme="dark"] .kv-composer-settings button:hover,
+html[data-theme="dark"] .kv-home-workflows button:hover,
+html[data-theme="dark"] .kv-home-categories button:hover {
+  border-color: #3f8f86;
+  background: #263642;
+}
+
+html[data-theme="dark"] .kv-composer-settings i,
+html[data-theme="dark"] .kv-home-workflows i {
+  background: #10151c;
+  color: #9ff3e9;
+}
+
+html[data-theme="dark"] .kv-composer-settings small,
+html[data-theme="dark"] .kv-home-workflows small,
+html[data-theme="dark"] .kv-home-attachment-row span,
+html[data-theme="dark"] .kv-home-advanced summary {
+  color: #9aa5b5;
+}
+
+html[data-theme="dark"] .kv-home-categories button.active {
+  background: #2dd4bf;
+  color: #06231f;
+}
+
+html[data-theme="dark"] .kv-home-composer textarea {
+  background: transparent;
+  color: #e7ecf3;
+}
+
+html[data-theme="dark"] .kv-home-composer textarea::placeholder {
+  color: #8893a3;
+}
+
+html[data-theme="dark"] .kv-home-attachments li,
+html[data-theme="dark"] .kv-style-grid button,
+html[data-theme="dark"] .kv-settings-tabs,
+html[data-theme="dark"] .kv-settings-segment,
+html[data-theme="dark"] .kv-settings-upload,
+html[data-theme="dark"] .kv-avatar-panel,
+html[data-theme="dark"] .kv-brand-options button,
+html[data-theme="dark"] .kv-brief-voice-list article,
+html[data-theme="dark"] .kv-voice-search,
+html[data-theme="dark"] .kv-voice-enterprise {
+  border-color: #303946;
+  background: #222934;
+  color: #d8dee8;
+}
+
+html[data-theme="dark"] .kv-settings-header h3,
+html[data-theme="dark"] .kv-style-grid strong,
+html[data-theme="dark"] .kv-avatar-panel strong,
+html[data-theme="dark"] .kv-brand-options strong {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .kv-settings-header p,
+html[data-theme="dark"] .kv-style-grid small,
+html[data-theme="dark"] .kv-avatar-panel p,
+html[data-theme="dark"] .kv-brand-options small,
+html[data-theme="dark"] .kv-brief-voice-list small,
+html[data-theme="dark"] .kv-brief-voice-list em {
+  color: #9aa5b5;
+}
+
+html[data-theme="dark"] .kv-settings-tabs button.active,
+html[data-theme="dark"] .kv-settings-segment button.active,
+html[data-theme="dark"] .kv-style-grid button.active,
+html[data-theme="dark"] .kv-brand-options button.active,
+html[data-theme="dark"] .kv-brief-voice-list article.active {
+  border-color: #2dd4bf;
+  background: #12312e;
+  color: #e9fffb;
+  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.45);
+}
+
+html[data-theme="dark"] .kv-style-thumb {
+  border-color: #303946;
+}
+
+html[data-theme="dark"] .kv-credit-pill {
+  border-color: #7c5d19;
+  background: #2d2412;
+  color: #f6c65b;
+}
+
+html[data-theme="dark"] .kv-user-menu {
+  border-color: #285e58;
+  background: #12312e;
+  color: #bff8f0;
+}
+
 .kv-home-hero {
   display: grid;
   max-width: 960px;
