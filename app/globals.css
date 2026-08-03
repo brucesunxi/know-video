@@ -1603,12 +1603,115 @@ html[data-theme="dark"] .kv-user-menu {
     linear-gradient(135deg, #172033, #c8872b);
 }
 
+.kv-home-templates .phishing::before {
+  background:
+    linear-gradient(180deg, transparent 26%, rgba(0, 0, 0, 0.76)),
+    radial-gradient(circle at 72% 34%, rgba(239, 68, 68, 0.9), transparent 13%),
+    linear-gradient(135deg, #07262c, #164e63 54%, #0f172a);
+}
+
 .kv-home-templates .support::before {
   background:
     linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.65)),
     radial-gradient(circle at 25% 30%, #ffd6a7, transparent 24%),
     radial-gradient(circle at 76% 38%, #36cfc0, transparent 20%),
     #f3a66b;
+}
+
+.kv-home-templates .quarterly::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.7)),
+    linear-gradient(115deg, rgba(249, 115, 22, 0.86), transparent 42%),
+    radial-gradient(circle at 74% 28%, rgba(255, 255, 255, 0.92), transparent 9%),
+    linear-gradient(135deg, #3b1d1d, #64748b);
+}
+
+.kv-home-templates .policy::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.72)),
+    radial-gradient(circle at 22% 26%, #facc15, transparent 12%),
+    radial-gradient(circle at 77% 28%, #111827, transparent 10%),
+    conic-gradient(from 80deg at 50% 60%, #f59e0b, #1d4ed8, #991b1b, #f59e0b);
+}
+
+.kv-home-templates .rollout::before {
+  background:
+    linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.72)),
+    radial-gradient(circle at 62% 36%, rgba(45, 212, 191, 0.85), transparent 20%),
+    linear-gradient(135deg, #312e81, #0f766e);
+}
+
+.kv-home-templates .launch::before,
+.kv-home-templates .event::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.68)),
+    radial-gradient(circle at 76% 24%, #fb7185, transparent 20%),
+    radial-gradient(circle at 24% 42%, #fde047, transparent 18%),
+    linear-gradient(135deg, #7c2d12, #be123c);
+}
+
+.kv-home-templates .success::before,
+.kv-home-templates .testimonial::before {
+  background:
+    linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.68)),
+    radial-gradient(circle at 28% 32%, #86efac, transparent 19%),
+    radial-gradient(circle at 75% 36%, #38bdf8, transparent 20%),
+    linear-gradient(135deg, #064e3b, #1e3a8a);
+}
+
+.kv-home-templates .pitch::before,
+.kv-home-templates .compare::before,
+.kv-home-templates .renewal::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.74)),
+    radial-gradient(circle at 74% 28%, #fef3c7, transparent 15%),
+    linear-gradient(135deg, #111827, #4338ca 52%, #0f766e);
+}
+
+.kv-home-templates .concept::before,
+.kv-home-templates .tutorial::before,
+.kv-home-templates .doc::before {
+  background:
+    linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.7)),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.13) 0 2px, transparent 2px 28px),
+    linear-gradient(135deg, #334155, #0f766e 54%, #f59e0b);
+}
+
+.kv-home-templates .property::before,
+.kv-home-templates .community::before,
+.kv-home-templates .tour::before {
+  background:
+    linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.7)),
+    radial-gradient(circle at 72% 24%, #fed7aa, transparent 18%),
+    linear-gradient(135deg, #14532d, #0891b2 55%, #f97316);
+}
+
+.kv-home-templates .finance::before,
+.kv-home-templates .budget::before,
+.kv-home-templates .risk::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.74)),
+    radial-gradient(circle at 70% 30%, rgba(34, 197, 94, 0.76), transparent 14%),
+    linear-gradient(135deg, #0f172a, #155e75 52%, #365314);
+}
+
+.kv-home-templates .onboarding::before,
+.kv-home-templates .leadership::before,
+.kv-home-templates .course::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.7)),
+    radial-gradient(circle at 26% 34%, #c4b5fd, transparent 18%),
+    radial-gradient(circle at 76% 34%, #f9a8d4, transparent 17%),
+    linear-gradient(135deg, #3730a3, #0f766e);
+}
+
+.kv-home-templates .social::before,
+.kv-home-templates .countdown::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.72)),
+    radial-gradient(circle at 25% 25%, #f97316, transparent 18%),
+    radial-gradient(circle at 74% 32%, #22d3ee, transparent 18%),
+    linear-gradient(135deg, #111827, #be185d);
 }
 
 .kv-home-templates button::after {

@@ -8,7 +8,6 @@ import {
   ArrowRight,
   Bell,
   BookOpen,
-  Brush,
   Calendar,
   Check,
   Captions,
@@ -144,33 +143,10 @@ const promptExamples = [
   "做一个关于跨境电商库存管理 SaaS 的解释视频，目标客户是运营负责人。",
   "制作一个教育产品宣传视频，展示老师如何用 AI 快速生成课程内容。"
 ];
-type BriefSettingsPanel = "style" | "avatar" | "voice" | "brand";
+type BriefSettingsPanel = "avatar" | "voice" | "brand";
 type HomeDialog = "pricing" | "demo" | "help" | "notifications" | "workspace";
-type BriefStyleMode = "animated" | "realistic";
-type BriefStylePreset = {
-  id: string;
-  label: string;
-  mode: BriefStyleMode;
-  tone: GenerationOptions["style"];
-  summary: string;
-  thumbnail: string;
-};
 type BriefAvatarMode = "none" | "preset" | "custom";
 type BriefBrandKitMode = "none" | "minimal" | "uploaded";
-
-const stylePresets: BriefStylePreset[] = [
-  { id: "chalkboard", label: "Chalkboard", mode: "animated", tone: "温暖自然", summary: "手绘线条、教学感、适合课程解释", thumbnail: "kv-style-thumb-chalkboard" },
-  { id: "collage", label: "Collage", mode: "animated", tone: "明快有活力", summary: "拼贴卡片、轻量动效、适合社媒短片", thumbnail: "kv-style-thumb-collage" },
-  { id: "comic", label: "Comic Book", mode: "animated", tone: "明快有活力", summary: "漫画分格、强情绪、适合故事化介绍", thumbnail: "kv-style-thumb-comic" },
-  { id: "memphis", label: "Corporate Memphis", mode: "animated", tone: "极简高级", summary: "轻商务插画、干净友好、适合 SaaS", thumbnail: "kv-style-thumb-memphis" },
-  { id: "isometric", label: "Isometric", mode: "animated", tone: "极简高级", summary: "等距空间、流程结构清楚", thumbnail: "kv-style-thumb-isometric" },
-  { id: "pixel", label: "Pixel Art", mode: "animated", tone: "明快有活力", summary: "像素块面、适合游戏和少儿课程", thumbnail: "kv-style-thumb-pixel" },
-  { id: "construction", label: "Construction Realism", mode: "realistic", tone: "电影质感", summary: "工地现场、真实人物、暖色晨昏光", thumbnail: "kv-style-thumb-construction" },
-  { id: "cyber", label: "Cyber Realism", mode: "realistic", tone: "电影质感", summary: "深色控制台、数据屏幕、科技感", thumbnail: "kv-style-thumb-cyber" },
-  { id: "industrial", label: "Industrial Realism", mode: "realistic", tone: "电影质感", summary: "工厂设备、清洁产线、企业质感", thumbnail: "kv-style-thumb-industrial" },
-  { id: "medical", label: "Medical Realism", mode: "realistic", tone: "极简高级", summary: "明亮医疗空间、克制可信", thumbnail: "kv-style-thumb-medical" },
-  { id: "office", label: "Office Realism", mode: "realistic", tone: "极简高级", summary: "现代办公室、真实团队协作", thumbnail: "kv-style-thumb-office" }
-];
 
 const briefWorkflowCards = [
   { icon: BookOpen, title: "Explain a concept", detail: "把一个概念拆成清楚步骤" },
@@ -179,13 +155,62 @@ const briefWorkflowCards = [
   { icon: Users, title: "Train your team", detail: "教程、培训、流程说明" }
 ];
 
-const briefCategoryPills = ["Training", "Corporate", "Marketing", "Sales", "Tutorials & explainers", "Finance", "Education", "Social media"];
+const briefCategoryPills = ["Training", "Corporate", "Marketing", "Sales", "Tutorials & explainers", "Real estate", "Finance", "Learning & development", "Social media"] as const;
+type BriefCategory = typeof briefCategoryPills[number];
+type BriefTemplateCard = {
+  title: string;
+  detail: string;
+  className: string;
+  prompt: string;
+};
 
-const briefTemplateCards = [
-  { title: "库存预警解释片", detail: "跨境电商运营", className: "inventory", categories: ["Corporate", "Sales", "Finance"] },
-  { title: "安全培训短片", detail: "团队培训", className: "safety", categories: ["Training", "Education"] },
-  { title: "客户服务案例", detail: "品牌沟通", className: "support", categories: ["Marketing", "Social media", "Tutorials & explainers"] }
-];
+const briefTemplateCards: Record<BriefCategory, BriefTemplateCard[]> = {
+  Training: [
+    { title: "识别钓鱼邮件", detail: "安全意识培训", className: "phishing", prompt: "制作一个 30 秒企业安全培训视频，教员工识别钓鱼邮件：展示可疑发件人、链接风险、附件陷阱和正确上报动作。" },
+    { title: "工地安全简报", detail: "现场安全", className: "safety", prompt: "制作一个工地安全简报视频，讲清进入现场前检查、佩戴防护装备、高处作业提醒和紧急情况处理步骤。" },
+    { title: "处理不满客户", detail: "客服培训", className: "support", prompt: "生成一个客服培训视频，展示如何接住客户情绪、复述问题、给出解决方案并跟进结果，语气专业温和。" }
+  ],
+  Corporate: [
+    { title: "季度公司更新", detail: "经营汇报", className: "quarterly", prompt: "生成一个 45 秒季度公司更新视频，面向全员说明业务进展、关键数据、团队成果和下一季度重点方向。" },
+    { title: "政策变更通知", detail: "内部沟通", className: "policy", prompt: "制作一个政策变更说明视频，解释变更原因、影响范围、员工需要完成的动作和截止时间，表达清楚可信。" },
+    { title: "新工具上线", detail: "产品推广", className: "rollout", prompt: "生成一个新工具上线介绍视频，展示工具解决的问题、核心功能、使用场景和团队开始使用的下一步。" }
+  ],
+  Marketing: [
+    { title: "新品亮点短片", detail: "品牌营销", className: "launch", prompt: "制作一个 30 秒新品亮点短片，开头点出用户痛点，中段展示 3 个产品优势，结尾给出明确行动号召。" },
+    { title: "客户成功故事", detail: "案例传播", className: "success", prompt: "生成一个客户成功故事视频，展示客户原本的困难、使用产品后的变化、可量化成果和品牌可信度。" },
+    { title: "活动预热视频", detail: "转化引流", className: "event", prompt: "制作一个活动预热视频，用快节奏画面介绍活动主题、嘉宾或亮点、适合谁参加以及报名提醒。" }
+  ],
+  Sales: [
+    { title: "销售开场介绍", detail: "预约演示", className: "pitch", prompt: "生成一个销售开场视频，面向潜在客户说明常见问题、解决方案、核心卖点和预约演示的理由。" },
+    { title: "竞品替换说明", detail: "方案对比", className: "compare", prompt: "制作一个竞品替换说明视频，比较旧方案的限制、新方案的优势、迁移过程和客户能获得的收益。" },
+    { title: "续费价值回顾", detail: "客户经营", className: "renewal", prompt: "生成一个续费价值回顾视频，展示客户过去周期的使用成果、节省成本、关键成效和下一阶段建议。" }
+  ],
+  "Tutorials & explainers": [
+    { title: "解释一个概念", detail: "清楚步骤", className: "concept", prompt: "制作一个 30 秒概念解释视频，把一个复杂概念拆成 5 个易懂步骤，配合示意画面和简洁字幕。" },
+    { title: "功能使用教程", detail: "产品教学", className: "tutorial", prompt: "生成一个功能使用教程视频，从用户目标开始，展示入口、关键操作、结果反馈和常见注意事项。" },
+    { title: "文档变视频", detail: "资料提炼", className: "doc", prompt: "把一份说明文档改成 45 秒解释视频，自动提炼重点、拆分章节、生成旁白和清楚的画面提示。" }
+  ],
+  "Real estate": [
+    { title: "楼盘卖点介绍", detail: "项目推广", className: "property", prompt: "制作一个楼盘卖点介绍视频，展示区位、户型、配套、生活场景和预约看房行动号召。" },
+    { title: "社区生活方式", detail: "场景营销", className: "community", prompt: "生成一个社区生活方式短片，展示通勤、亲子、健身、商业配套和居住氛围，风格真实温暖。" },
+    { title: "房源快速导览", detail: "经纪人获客", className: "tour", prompt: "制作一个房源快速导览视频，按玄关、客厅、卧室、厨房和阳台顺序展示亮点，并加入看房邀约。" }
+  ],
+  Finance: [
+    { title: "经营数据解读", detail: "管理汇报", className: "finance", prompt: "生成一个经营数据解读视频，说明收入变化、成本压力、风险信号和管理层下一步行动建议。" },
+    { title: "预算审批说明", detail: "内部流程", className: "budget", prompt: "制作一个预算审批说明视频，讲清申请背景、费用构成、预期回报和审批人需要关注的风险。" },
+    { title: "风险预警解释", detail: "合规提醒", className: "risk", prompt: "生成一个风险预警解释视频，用清楚图表说明异常指标、可能原因、影响范围和处理建议。" }
+  ],
+  "Learning & development": [
+    { title: "新人入职路径", detail: "人才发展", className: "onboarding", prompt: "制作一个新人入职路径视频，展示第一周任务、关键联系人、学习资源和 30 天成长目标。" },
+    { title: "领导力微课", detail: "管理训练", className: "leadership", prompt: "生成一个领导力微课视频，讲清如何设定目标、给反馈、跟进执行和复盘团队结果。" },
+    { title: "课程章节预告", detail: "学习项目", className: "course", prompt: "制作一个课程章节预告视频，展示学习目标、章节结构、练习方式和完成后的能力收获。" }
+  ],
+  "Social media": [
+    { title: "社媒爆点短片", detail: "强开头", className: "social", prompt: "生成一个 20 秒社媒短视频，前 3 秒用强钩子抓注意力，中段展示冲突和亮点，结尾给出行动号召。" },
+    { title: "用户评价混剪", detail: "口碑传播", className: "testimonial", prompt: "制作一个用户评价混剪视频，把 3 条用户反馈变成快节奏短片，突出真实感、成果和品牌信任。" },
+    { title: "活动倒计时", detail: "限时转化", className: "countdown", prompt: "生成一个活动倒计时短视频，用清楚字幕、节奏感画面和限时提醒推动用户立即报名或购买。" }
+  ]
+};
 const transitionOptions: Array<{ value: SceneTransitionKind; label: string }> = [
   { value: "auto", label: "自动" },
   { value: "cut", label: "硬切" },
@@ -221,7 +246,6 @@ function generationSpecItems(options: GenerationOptions) {
     { label: "目标时长", value: `约 ${options.duration} 秒` },
     { label: "分镜策略", value: sceneLabel },
     { label: "旁白语言", value: options.language },
-    { label: "视觉风格", value: options.style },
     { label: "动态策略", value: motionLabel }
   ];
 }
@@ -1607,9 +1631,7 @@ function BriefScreen({
 }) {
   const reviewItems = generationReviewItems(prompt, options);
   const [activeSettings, setActiveSettings] = useState<BriefSettingsPanel>();
-  const [activeCategory, setActiveCategory] = useState(briefCategoryPills[0]);
-  const [styleMode, setStyleMode] = useState<BriefStyleMode>("realistic");
-  const [selectedStyleId, setSelectedStyleId] = useState("office");
+  const [activeCategory, setActiveCategory] = useState<BriefCategory>(briefCategoryPills[0]);
   const [avatarMode, setAvatarMode] = useState<BriefAvatarMode>("none");
   const [brandMode, setBrandMode] = useState<BriefBrandKitMode>("none");
   const [selectedVoice, setSelectedVoice] = useState<NarrationVoice>(options.narrationVoice ?? DEFAULT_NARRATION_VOICE);
@@ -1620,11 +1642,10 @@ function BriefScreen({
   const previewUrlsRef = useRef(new Map<NarrationVoice, string>());
   const previewAudioRef = useRef<HTMLAudioElement>();
   const previewAbortRef = useRef<AbortController>();
-  const selectedStyle = stylePresets.find((style) => style.id === selectedStyleId) ?? stylePresets[0];
+  const advancedSettingsRef = useRef<HTMLDetailsElement>(null);
   const selectedVoiceProfile = narrationVoiceProfile(selectedVoice);
   const filteredVoices = narrationVoiceProfiles.filter((profile) => `${profile.label} ${profile.useCase} ${profile.description}`.toLocaleLowerCase().includes(voiceQuery.trim().toLocaleLowerCase()));
-  const visibleStylePresets = stylePresets.filter((style) => style.mode === styleMode);
-  const visibleTemplateCards = briefTemplateCards.filter((card) => card.categories.includes(activeCategory));
+  const visibleTemplateCards = briefTemplateCards[activeCategory];
 
   useEffect(() => () => {
     previewAbortRef.current?.abort();
@@ -1694,14 +1715,21 @@ function BriefScreen({
     }
   }
 
-  function chooseStyle(style: BriefStylePreset) {
-    setSelectedStyleId(style.id);
-    onOptionsChange({ ...options, style: style.tone });
-  }
-
   function chooseVoice(voice: NarrationVoice) {
     setSelectedVoice(voice);
     onOptionsChange({ ...options, narrationVoice: voice });
+  }
+
+  function chooseCategory(category: BriefCategory) {
+    setActiveCategory(category);
+    onUseExample(briefTemplateCards[category][0].prompt);
+  }
+
+  function openAdvancedSettings() {
+    if (advancedSettingsRef.current) {
+      advancedSettingsRef.current.open = true;
+      advancedSettingsRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   }
 
   return (
@@ -1712,10 +1740,6 @@ function BriefScreen({
         <p>输入需求，Know Video 会规划脚本、分镜、画面、配音和可继续对话修改的版本。</p>
         <form className="kv-home-composer" onSubmit={onSubmit}>
           <div className="kv-composer-settings" role="toolbar" aria-label="视频生成设置">
-            <button onClick={() => setActiveSettings("style")} type="button">
-              <i><Brush size={18} /></i>
-              <span><strong>{selectedStyle.label}</strong><small>Style</small></span>
-            </button>
             <button onClick={() => setActiveSettings("avatar")} type="button">
               <i><User size={18} /></i>
               <span><strong>{avatarMode === "none" ? "None" : avatarMode === "preset" ? "Preset" : "Custom"}</strong><small>Avatar</small></span>
@@ -1736,7 +1760,7 @@ function BriefScreen({
           />
           <div className="kv-home-attachment-row">
             <div>
-              <button aria-label="高级设置" onClick={() => setActiveSettings("style")} type="button"><Settings size={18} /></button>
+              <button aria-label="高级设置" onClick={openAdvancedSettings} type="button"><Settings size={18} /></button>
               <button aria-label="上传参考素材" disabled={isBusy || attachments.length >= 6} onClick={onOpenAttachmentPicker} type="button"><Paperclip size={18} /></button>
               {attachments.length > 0 ? <span>{attachments.length} / 6 references</span> : null}
             </div>
@@ -1769,18 +1793,18 @@ function BriefScreen({
         </div>
         <div className="kv-home-categories">
           {briefCategoryPills.map((pill) => (
-            <button className={activeCategory === pill ? "active" : ""} key={pill} onClick={() => setActiveCategory(pill)} type="button">{pill}</button>
+            <button className={activeCategory === pill ? "active" : ""} key={pill} onClick={() => chooseCategory(pill)} type="button">{pill}</button>
           ))}
         </div>
         <div className="kv-home-templates">
           {visibleTemplateCards.map((card) => (
-            <button className={card.className} key={card.title} onClick={() => onUseExample(card.title === "库存预警解释片" ? promptExamples[1] : card.title === "安全培训短片" ? "制作一个企业安全培训短片，讲清常见风险、正确动作和团队协作要求。" : promptExamples[2])} type="button">
+            <button className={card.className} key={card.title} onClick={() => onUseExample(card.prompt)} type="button">
               <span>{card.title}</span>
               <small>{card.detail}</small>
             </button>
           ))}
         </div>
-        <details className="kv-home-advanced">
+        <details className="kv-home-advanced" ref={advancedSettingsRef}>
           <summary>生成参数</summary>
           <div className="kv-generation-options">
             <label>
@@ -1850,28 +1874,6 @@ function BriefScreen({
         }}>
           <section aria-modal="true" className={`kv-settings-modal ${activeSettings}`} role="dialog">
             <button aria-label="关闭设置" className="kv-settings-close" onClick={() => setActiveSettings(undefined)} type="button"><X size={18} /></button>
-            {activeSettings === "style" ? (
-              <>
-                <div className="kv-settings-header">
-                  <h3>Style Library</h3>
-                  <div className="kv-settings-tabs"><button className="active" disabled type="button">Styles</button><button onClick={() => setActiveSettings("brand")} type="button">Logos</button></div>
-                </div>
-                <div className="kv-settings-segment" role="group" aria-label="Style mode">
-                  <button className={styleMode === "animated" ? "active" : ""} onClick={() => setStyleMode("animated")} type="button">Animated</button>
-                  <button className={styleMode === "realistic" ? "active" : ""} onClick={() => setStyleMode("realistic")} type="button">Hyper Realistic</button>
-                </div>
-                <div className="kv-style-grid">
-                  {visibleStylePresets.map((style) => (
-                    <button className={selectedStyleId === style.id ? "active" : ""} key={style.id} onClick={() => chooseStyle(style)} type="button">
-                      <span className={`kv-style-thumb ${style.thumbnail}`} />
-                      <strong>{style.label}</strong>
-                      <small>{style.summary}</small>
-                    </button>
-                  ))}
-                </div>
-                <button className="kv-settings-upload" onClick={onOpenAttachmentPicker} type="button"><ImagePlus size={18} /> Upload image</button>
-              </>
-            ) : null}
             {activeSettings === "avatar" ? (
               <>
                 <div className="kv-settings-header compact">
