@@ -1390,6 +1390,113 @@ html[data-theme="dark"] .kv-user-menu {
   font-size: 12px;
 }
 
+.kv-template-reference-panel {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  margin-top: 18px;
+  text-align: left;
+}
+
+.kv-template-reference-panel > div {
+  display: grid;
+  gap: 3px;
+  color: #333;
+}
+
+.kv-template-reference-panel > div strong {
+  font-size: 14px;
+  font-weight: 820;
+}
+
+.kv-template-reference-panel > div span {
+  color: #555;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.kv-template-reference-card {
+  position: relative;
+  display: grid;
+  width: 106px;
+  height: 106px;
+  align-content: end;
+  overflow: hidden;
+  border: 1px solid #d8d8d6;
+  border-radius: 16px;
+  margin: 0;
+  padding: 10px;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+}
+
+.kv-template-reference-card::before,
+.kv-template-reference-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.kv-template-reference-card::before {
+  background:
+    linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.72)),
+    radial-gradient(circle at 78% 18%, rgba(255, 255, 255, 0.55), transparent 14%),
+    linear-gradient(135deg, #102238, #285b6a 52%, #f59e0b);
+}
+
+.kv-template-reference-card::after {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.16) 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.42;
+}
+
+.kv-template-reference-card label {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  left: 8px;
+}
+
+.kv-template-reference-card select {
+  max-width: 84px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.88);
+  color: #fff;
+  padding: 5px 20px 5px 9px;
+  font-size: 10px;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.kv-template-reference-card figcaption {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.kv-template-reference-card figcaption strong,
+.kv-template-reference-card figcaption small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv-template-reference-card figcaption strong {
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.kv-template-reference-card figcaption small {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 10px;
+}
+
 .kv-home-composer textarea {
   min-height: 112px;
   resize: vertical;
@@ -1582,6 +1689,11 @@ html[data-theme="dark"] .kv-user-menu {
   box-shadow: 0 14px 36px rgba(15, 23, 42, 0.12);
 }
 
+.kv-home-templates button.active {
+  border-color: #111;
+  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.12), 0 14px 36px rgba(15, 23, 42, 0.16);
+}
+
 .kv-home-templates button::before,
 .kv-home-templates button::after {
   content: "";
@@ -1596,21 +1708,24 @@ html[data-theme="dark"] .kv-user-menu {
     linear-gradient(135deg, #102238, #285b6a 52%, #f59e0b);
 }
 
-.kv-home-templates .safety::before {
+.kv-home-templates .safety::before,
+.kv-template-reference-card.safety::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.72)),
     repeating-linear-gradient(135deg, rgba(250, 204, 21, 0.9) 0 24px, rgba(30, 41, 59, 0.9) 24px 48px),
     linear-gradient(135deg, #172033, #c8872b);
 }
 
-.kv-home-templates .phishing::before {
+.kv-home-templates .phishing::before,
+.kv-template-reference-card.phishing::before {
   background:
     linear-gradient(180deg, transparent 26%, rgba(0, 0, 0, 0.76)),
     radial-gradient(circle at 72% 34%, rgba(239, 68, 68, 0.9), transparent 13%),
     linear-gradient(135deg, #07262c, #164e63 54%, #0f172a);
 }
 
-.kv-home-templates .support::before {
+.kv-home-templates .support::before,
+.kv-template-reference-card.support::before {
   background:
     linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.65)),
     radial-gradient(circle at 25% 30%, #ffd6a7, transparent 24%),
@@ -1618,7 +1733,8 @@ html[data-theme="dark"] .kv-user-menu {
     #f3a66b;
 }
 
-.kv-home-templates .quarterly::before {
+.kv-home-templates .quarterly::before,
+.kv-template-reference-card.quarterly::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.7)),
     linear-gradient(115deg, rgba(249, 115, 22, 0.86), transparent 42%),
@@ -1626,7 +1742,8 @@ html[data-theme="dark"] .kv-user-menu {
     linear-gradient(135deg, #3b1d1d, #64748b);
 }
 
-.kv-home-templates .policy::before {
+.kv-home-templates .policy::before,
+.kv-template-reference-card.policy::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.72)),
     radial-gradient(circle at 22% 26%, #facc15, transparent 12%),
@@ -1634,7 +1751,8 @@ html[data-theme="dark"] .kv-user-menu {
     conic-gradient(from 80deg at 50% 60%, #f59e0b, #1d4ed8, #991b1b, #f59e0b);
 }
 
-.kv-home-templates .rollout::before {
+.kv-home-templates .rollout::before,
+.kv-template-reference-card.rollout::before {
   background:
     linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.72)),
     radial-gradient(circle at 62% 36%, rgba(45, 212, 191, 0.85), transparent 20%),
@@ -1642,7 +1760,9 @@ html[data-theme="dark"] .kv-user-menu {
 }
 
 .kv-home-templates .launch::before,
-.kv-home-templates .event::before {
+.kv-home-templates .event::before,
+.kv-template-reference-card.launch::before,
+.kv-template-reference-card.event::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.68)),
     radial-gradient(circle at 76% 24%, #fb7185, transparent 20%),
@@ -1651,7 +1771,9 @@ html[data-theme="dark"] .kv-user-menu {
 }
 
 .kv-home-templates .success::before,
-.kv-home-templates .testimonial::before {
+.kv-home-templates .testimonial::before,
+.kv-template-reference-card.success::before,
+.kv-template-reference-card.testimonial::before {
   background:
     linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.68)),
     radial-gradient(circle at 28% 32%, #86efac, transparent 19%),
@@ -1661,7 +1783,10 @@ html[data-theme="dark"] .kv-user-menu {
 
 .kv-home-templates .pitch::before,
 .kv-home-templates .compare::before,
-.kv-home-templates .renewal::before {
+.kv-home-templates .renewal::before,
+.kv-template-reference-card.pitch::before,
+.kv-template-reference-card.compare::before,
+.kv-template-reference-card.renewal::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.74)),
     radial-gradient(circle at 74% 28%, #fef3c7, transparent 15%),
@@ -1670,7 +1795,10 @@ html[data-theme="dark"] .kv-user-menu {
 
 .kv-home-templates .concept::before,
 .kv-home-templates .tutorial::before,
-.kv-home-templates .doc::before {
+.kv-home-templates .doc::before,
+.kv-template-reference-card.concept::before,
+.kv-template-reference-card.tutorial::before,
+.kv-template-reference-card.doc::before {
   background:
     linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.7)),
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.13) 0 2px, transparent 2px 28px),
@@ -1679,7 +1807,10 @@ html[data-theme="dark"] .kv-user-menu {
 
 .kv-home-templates .property::before,
 .kv-home-templates .community::before,
-.kv-home-templates .tour::before {
+.kv-home-templates .tour::before,
+.kv-template-reference-card.property::before,
+.kv-template-reference-card.community::before,
+.kv-template-reference-card.tour::before {
   background:
     linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.7)),
     radial-gradient(circle at 72% 24%, #fed7aa, transparent 18%),
@@ -1688,7 +1819,10 @@ html[data-theme="dark"] .kv-user-menu {
 
 .kv-home-templates .finance::before,
 .kv-home-templates .budget::before,
-.kv-home-templates .risk::before {
+.kv-home-templates .risk::before,
+.kv-template-reference-card.finance::before,
+.kv-template-reference-card.budget::before,
+.kv-template-reference-card.risk::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.74)),
     radial-gradient(circle at 70% 30%, rgba(34, 197, 94, 0.76), transparent 14%),
@@ -1697,7 +1831,10 @@ html[data-theme="dark"] .kv-user-menu {
 
 .kv-home-templates .onboarding::before,
 .kv-home-templates .leadership::before,
-.kv-home-templates .course::before {
+.kv-home-templates .course::before,
+.kv-template-reference-card.onboarding::before,
+.kv-template-reference-card.leadership::before,
+.kv-template-reference-card.course::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.7)),
     radial-gradient(circle at 26% 34%, #c4b5fd, transparent 18%),
@@ -1706,7 +1843,9 @@ html[data-theme="dark"] .kv-user-menu {
 }
 
 .kv-home-templates .social::before,
-.kv-home-templates .countdown::before {
+.kv-home-templates .countdown::before,
+.kv-template-reference-card.social::before,
+.kv-template-reference-card.countdown::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.72)),
     radial-gradient(circle at 25% 25%, #f97316, transparent 18%),

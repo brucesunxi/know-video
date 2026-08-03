@@ -163,6 +163,13 @@ type BriefTemplateCard = {
   className: string;
   prompt: string;
 };
+type BriefTemplateRole = "style" | "ref" | "logo";
+
+const briefTemplateRoleLabels: Record<BriefTemplateRole, string> = {
+  style: "Style",
+  ref: "Ref",
+  logo: "Logo"
+};
 
 const briefTemplateCards: Record<BriefCategory, BriefTemplateCard[]> = {
   Training: [
@@ -286,12 +293,22 @@ function generationReviewItems(prompt: string, options: GenerationOptions) {
       tone: motionCount > 0 ? "working" : "ready"
     },
     {
-      label: "语言与风格",
-      value: `${options.language} · ${options.style}`,
-      detail: "脚本、旁白、画面提示词会按此规格统一",
+      label: "旁白语言",
+      value: options.language,
+      detail: "脚本和旁白会按此语言生成",
       tone: "ready"
     }
   ] as const;
+}
+
+function templatePromptForRole(template: BriefTemplateCard, role: BriefTemplateRole) {
+  if (role === "ref") {
+    return `${template.prompt}\n\n参考模板“${template.title}”这一页的内容结构、信息层级和叙事方式，但不要限制成固定视觉风格。`;
+  }
+  if (role === "logo") {
+    return `${template.prompt}\n\n把模板“${template.title}”中的品牌主体当作 Logo / 品牌标识来设计视频，围绕这个标识展开片头、字幕和结尾露出。`;
+  }
+  return `${template.prompt}\n\n参考模板“${template.title}”的整体视觉气质和画面节奏，但允许根据我的内容自动扩展成更合适的风格。`;
 }
 
 function elapsedGenerationLabel(startedAt?: number, now = Date.now()) {
@@ -1632,6 +1649,8 @@ function BriefScreen({
   const reviewItems = generationReviewItems(prompt, options);
   const [activeSettings, setActiveSettings] = useState<BriefSettingsPanel>();
   const [activeCategory, setActiveCategory] = useState<BriefCategory>(briefCategoryPills[0]);
+  const [selectedTemplate, setSelectedTemplate] = useState<BriefTemplateCard>();
+  const [selectedTemplateRole, setSelectedTemplateRole] = useState<BriefTemplateRole>("style");
   const [avatarMode, setAvatarMode] = useState<BriefAvatarMode>("none");
   const [brandMode, setBrandMode] = useState<BriefBrandKitMode>("none");
   const [selectedVoice, setSelectedVoice] = useState<NarrationVoice>(options.narrationVoice ?? DEFAULT_NARRATION_VOICE);
@@ -1722,7 +1741,21 @@ function BriefScreen({
 
   function chooseCategory(category: BriefCategory) {
     setActiveCategory(category);
-    onUseExample(briefTemplateCards[category][0].prompt);
+    const firstTemplate = briefTemplateCards[category][0];
+    setSelectedTemplate(firstTemplate);
+    setSelectedTemplateRole("style");
+    onUseExample(templatePromptForRole(firstTemplate, "style"));
+  }
+
+  function chooseTemplate(template: BriefTemplateCard) {
+    setSelectedTemplate(template);
+    setSelectedTemplateRole("style");
+    onUseExample(templatePromptForRole(template, "style"));
+  }
+
+  function chooseTemplateRole(role: BriefTemplateRole) {
+    setSelectedTemplateRole(role);
+    if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, role));
   }
 
   function openAdvancedSettings() {
@@ -1753,6 +1786,37 @@ function BriefScreen({
               <span><strong>{brandMode === "none" ? "None" : brandMode === "minimal" ? "Minimal" : "Uploaded"}</strong><small>Brand kit</small></span>
             </button>
           </div>
+          {selectedTemplate ? (
+            <div className="kv-template-reference-panel" aria-label="已选择的模板参考">
+              <div>
+                <strong>Images</strong>
+                <span>
+                  {selectedTemplateRole === "style"
+                    ? "作为整体观感和节奏参考。"
+                    : selectedTemplateRole === "ref"
+                      ? "参考这一页的内容结构和表达方式。"
+                      : "把它当作 Logo / 品牌标识来制作视频。"}
+                </span>
+              </div>
+              <figure className={`kv-template-reference-card ${selectedTemplate.className}`}>
+                <label>
+                  <select
+                    aria-label="模板素材角色"
+                    onChange={(event) => chooseTemplateRole(event.target.value as BriefTemplateRole)}
+                    value={selectedTemplateRole}
+                  >
+                    {Object.entries(briefTemplateRoleLabels).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </label>
+                <figcaption>
+                  <strong>{selectedTemplate.title}</strong>
+                  <small>{selectedTemplate.detail}</small>
+                </figcaption>
+              </figure>
+            </div>
+          ) : null}
           <textarea
             onChange={(event) => onPromptChange(event.target.value)}
             placeholder="Tell Know Video your explainer video idea"
@@ -1798,7 +1862,7 @@ function BriefScreen({
         </div>
         <div className="kv-home-templates">
           {visibleTemplateCards.map((card) => (
-            <button className={card.className} key={card.title} onClick={() => onUseExample(card.prompt)} type="button">
+            <button className={`${card.className}${selectedTemplate?.title === card.title ? " active" : ""}`} key={card.title} onClick={() => chooseTemplate(card)} type="button">
               <span>{card.title}</span>
               <small>{card.detail}</small>
             </button>
