@@ -552,6 +552,83 @@ function buildGlobalChineseFallbackPayload(
   };
 }
 
+function globalCharacterVisualStylePayload(version: ProjectVersion, request: string): EditPlanPayload | undefined {
+  const targets = globalEditTargetSceneNumbers(request, version.scenes.map((scene) => scene.sceneNumber));
+  const globalRequest = analyzeEditIntent(request, version.scenes.map((scene) => scene.sceneNumber)).global
+    || /(?:每个|所有|全部|全片|每一|各个).{0,8}(?:章节|场景|镜头|分镜|画面|人物|角色)/u.test(request);
+  const characterRequest = /(?:人物|角色|小朋友|孩子|学生|老师|主角|玩家|人设|形象)/u.test(request);
+  const animeRequest = /(?:动漫|动画|卡通|二次元|漫画|anime|cartoon)/iu.test(request);
+  if (!globalRequest || !characterRequest || !animeRequest || targets.length === 0) return undefined;
+
+  const targetSet = new Set(targets);
+  const scenes = version.scenes.filter((scene) => targetSet.has(scene.sceneNumber));
+  return {
+    summary: `将 ${scenes.length} 个目标场景中的人物统一改为动漫人物形象，并保持原有叙事与场景信息。`,
+    affectedScenes: scenes.map((scene) => scene.sceneNumber),
+    changes: scenes.map((scene) => {
+      const thumbnailTone = scene.style.theme.includes("light") ? "light" : "dark";
+      return {
+        sceneNumber: scene.sceneNumber,
+        status: "updated" as const,
+        before: {
+          title: scene.title,
+          voiceover: scene.voiceover,
+          narrationVoice: scene.style.narrationVoice,
+          thumbnailTone,
+          visualPrompt: scene.visualPrompt,
+          motionPrompt: scene.motionPrompt
+        },
+        after: {
+          title: scene.title,
+          voiceover: scene.voiceover,
+          narrationVoice: scene.style.narrationVoice,
+          thumbnailTone,
+          visualPrompt: [
+            scene.visualPrompt,
+            "Convert every visible human character into a polished anime/cartoon character design while preserving the same role, age impression, action, pose, scene environment, objects, composition, and story purpose.",
+            "Use expressive eyes, clean stylized linework, soft cinematic shading, cohesive character proportions, family-friendly animation aesthetics, and avoid photorealistic human faces."
+          ].join("\n"),
+          motionPrompt: scene.motionPrompt
+        },
+        regenerate: ["image", "thumbnail", "render"]
+      };
+    })
+  };
+}
+
+function globalCharacterVisualStyleEditPlan(params: {
+  request: string;
+  version: ProjectVersion;
+  editNumber: number;
+  productionSettings?: ReturnType<typeof productionSettingsFromRequest>;
+}): EditPlan | undefined {
+  const payload = globalCharacterVisualStylePayload(params.version, params.request);
+  if (!payload) return undefined;
+  const normalized = normalizeEditPayload(
+    payload,
+    params.version,
+    params.request,
+    false,
+    true,
+    false,
+    { preservePayloadScope: true }
+  );
+  return {
+    id: crypto.randomUUID(),
+    editNumber: params.editNumber,
+    baseVersionId: params.version.id,
+    status: "proposed",
+    userRequest: params.request,
+    summary: normalized.summary,
+    affectedScenes: normalized.affectedScenes,
+    changes: normalized.changes,
+    productionSettings: params.productionSettings && Object.keys(params.productionSettings).length > 0
+      ? params.productionSettings
+      : undefined,
+    createdAt: new Date().toISOString()
+  };
+}
+
 function buildGlobalChineseFallbackEditPlan(params: {
   request: string;
   version: ProjectVersion;
@@ -589,7 +666,7 @@ function buildGlobalChineseFallbackEditPlan(params: {
 }
 
 function getTextModel() {
-  const timeout = Math.min(30_000, Math.max(8_000, Number(process.env.AI_TEXT_TIMEOUT_MS) || 18_000));
+  const timeout = Math.min(90_000, Math.max(8_000, Number(process.env.AI_TEXT_TIMEOUT_MS) || 45_000));
   if (process.env.DEEPSEEK_API_KEY) {
     const configuredModel = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
     const model = configuredModel === "deepseek-v4-flash" ? configuredModel : "deepseek-v4-flash";
@@ -1410,6 +1487,15 @@ export async function createEditPlan(params: {
   const generatedClipRequest = requestsGeneratedClip(params.request);
   if (generatedClipRequest && intent.explicitSceneNumbers.length === 0 && !intent.global) {
     throw new Error("请指定要生成动态镜头的场景编号，例如“让第 2 场景动起来”；如需全部生成，请明确说“为全片生成动态镜头”。");
+  }
+  const globalCharacterStylePlan = globalCharacterVisualStyleEditPlan({
+    request: params.request,
+    version: params.version,
+    editNumber: params.editNumber,
+    productionSettings: requestedProductionSettings
+  });
+  if (globalCharacterStylePlan) {
+    return { editPlan: globalCharacterStylePlan, engine: "heuristic" };
   }
   const textModel = getTextModel();
   if (!textModel) {
