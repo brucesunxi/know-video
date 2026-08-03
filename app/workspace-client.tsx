@@ -1331,9 +1331,15 @@ function Shell({
           </header>
         ) : (
           <header className="kv-topbar">
-            <div>
-              <span className="kv-eyebrow">Know Video 智能视频工作室</span>
-              <h1>{headerTitle}</h1>
+            <div className="kv-topbar-title">
+              <button className="kv-home-return" onClick={onNewVideo} type="button">
+                <ArrowLeft size={16} />
+                返回首页
+              </button>
+              <div>
+                <span className="kv-eyebrow">Know Video 智能视频工作室</span>
+                <h1>{headerTitle}</h1>
+              </div>
             </div>
             <div className="kv-status-row">
               {statusBadges.map((badge) => (
