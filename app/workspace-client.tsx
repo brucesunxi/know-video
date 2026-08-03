@@ -145,6 +145,7 @@ const promptExamples = [
   "制作一个教育产品宣传视频，展示老师如何用 AI 快速生成课程内容。"
 ];
 type BriefSettingsPanel = "style" | "avatar" | "voice" | "brand";
+type HomeDialog = "pricing" | "demo" | "help" | "notifications" | "workspace";
 type BriefStyleMode = "animated" | "realistic";
 type BriefStylePreset = {
   id: string;
@@ -181,9 +182,9 @@ const briefWorkflowCards = [
 const briefCategoryPills = ["Training", "Corporate", "Marketing", "Sales", "Tutorials & explainers", "Finance", "Education", "Social media"];
 
 const briefTemplateCards = [
-  { title: "库存预警解释片", detail: "跨境电商运营", className: "inventory" },
-  { title: "安全培训短片", detail: "团队培训", className: "safety" },
-  { title: "客户服务案例", detail: "品牌沟通", className: "support" }
+  { title: "库存预警解释片", detail: "跨境电商运营", className: "inventory", categories: ["Corporate", "Sales", "Finance"] },
+  { title: "安全培训短片", detail: "团队培训", className: "safety", categories: ["Training", "Education"] },
+  { title: "客户服务案例", detail: "品牌沟通", className: "support", categories: ["Marketing", "Social media", "Tutorials & explainers"] }
 ];
 const transitionOptions: Array<{ value: SceneTransitionKind; label: string }> = [
   { value: "auto", label: "自动" },
@@ -1231,10 +1232,18 @@ function Shell({
   onOpenStudio: () => void;
 }) {
   const appRef = useRef<HTMLElement>(null);
+  const [homeDialog, setHomeDialog] = useState<HomeDialog>();
+  const [darkMode, setDarkMode] = useState(false);
   useEffect(() => {
     appRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [stage]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    return () => {
+      document.documentElement.removeAttribute("data-theme");
+    };
+  }, [darkMode]);
   const statusBadges = projectStatusBadges(project, source, stage);
   const headerTitle = stage === "brief"
     ? "用一句需求，完成一支视频"
@@ -1278,9 +1287,9 @@ function Shell({
               <small>Start a request to create the first video thread.</small>
             </div>
             <div className="kv-home-sidebar-bottom">
-              <button type="button"><CreditCard size={16} /> Pricing</button>
-              <button type="button"><Calendar size={16} /> Book a Demo</button>
-              <button aria-label="帮助" type="button"><HelpCircle size={16} /></button>
+              <button onClick={() => setHomeDialog("pricing")} type="button"><CreditCard size={16} /> Pricing</button>
+              <button onClick={() => setHomeDialog("demo")} type="button"><Calendar size={16} /> Book a Demo</button>
+              <button aria-label="帮助" onClick={() => setHomeDialog("help")} type="button"><HelpCircle size={16} /></button>
             </div>
           </div>
         ) : (
@@ -1303,15 +1312,15 @@ function Shell({
       <section className="kv-app" ref={appRef}>
         {stage === "brief" ? (
           <header className="kv-home-topbar">
-            <button className="kv-workspace-switcher" type="button">
+            <button className="kv-workspace-switcher" onClick={() => setHomeDialog("workspace")} type="button">
               <User size={16} />
               Personal
               <ChevronRight size={15} />
             </button>
             <div className="kv-home-top-actions">
               <span className="kv-credit-pill"><AlertCircle size={14} /> Free · 996 credits · Get more</span>
-              <button aria-label="夜间模式" type="button"><Moon size={18} /></button>
-              <button aria-label="通知" type="button"><Bell size={18} /></button>
+              <button aria-label={darkMode ? "浅色模式" : "夜间模式"} onClick={() => setDarkMode((enabled) => !enabled)} title={darkMode ? "浅色模式" : "夜间模式"} type="button"><Moon size={18} /></button>
+              <button aria-label="通知" onClick={() => setHomeDialog("notifications")} type="button"><Bell size={18} /></button>
               <div className="kv-user-menu">
                 {currentUser.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -1364,6 +1373,63 @@ function Shell({
           </header>
         )}
         {children}
+        {stage === "brief" && homeDialog ? (
+          <div className="kv-home-dialog-backdrop" role="presentation" onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setHomeDialog(undefined);
+          }}>
+            <section aria-modal="true" className="kv-home-dialog" role="dialog">
+              <button aria-label="关闭" className="kv-home-dialog-close" onClick={() => setHomeDialog(undefined)} type="button"><X size={18} /></button>
+              {homeDialog === "pricing" ? (
+                <>
+                  <span className="kv-eyebrow">Pricing</span>
+                  <h3>当前免费额度</h3>
+                  <div className="kv-home-dialog-grid">
+                    <span><strong>996</strong><small>剩余额度</small></span>
+                    <span><strong>5</strong><small>默认分镜</small></span>
+                    <span><strong>MP4</strong><small>可导出</small></span>
+                  </div>
+                  <p>正式计费页会包含文字生成、高清画面、动态镜头和 MP4 导出的额度说明。</p>
+                </>
+              ) : null}
+              {homeDialog === "demo" ? (
+                <>
+                  <span className="kv-eyebrow">Book a Demo</span>
+                  <h3>预约产品演示</h3>
+                  <p>可以把你的使用场景、公司名称和联系方式发给我们，我们会根据内容准备一套演示流程。</p>
+                  <a className="kv-home-dialog-action" href="mailto:support@know-video.app?subject=Know%20Video%20Demo%20Request">发送预约邮件</a>
+                </>
+              ) : null}
+              {homeDialog === "help" ? (
+                <>
+                  <span className="kv-eyebrow">Help</span>
+                  <h3>常用操作</h3>
+                  <ul>
+                    <li>首页输入一句需求即可生成脚本、分镜、画面和配音。</li>
+                    <li>进入工作室后，用右侧对话描述修改意图。</li>
+                    <li>素材缺失时，按页面提示补齐画面或配音后再导出 MP4。</li>
+                  </ul>
+                </>
+              ) : null}
+              {homeDialog === "notifications" ? (
+                <>
+                  <span className="kv-eyebrow">Notifications</span>
+                  <h3>通知中心</h3>
+                  <ul>
+                    <li>项目保存、导出完成和生成失败会在这里集中展示。</li>
+                    <li>当前没有新的未读通知。</li>
+                  </ul>
+                </>
+              ) : null}
+              {homeDialog === "workspace" ? (
+                <>
+                  <span className="kv-eyebrow">Workspace</span>
+                  <h3>Personal 工作区</h3>
+                  <p>当前项目会保存在你的个人工作区。团队工作区和成员权限将作为后续协作能力接入。</p>
+                </>
+              ) : null}
+            </section>
+          </div>
+        ) : null}
       </section>
     </main>
   );
@@ -1541,6 +1607,7 @@ function BriefScreen({
 }) {
   const reviewItems = generationReviewItems(prompt, options);
   const [activeSettings, setActiveSettings] = useState<BriefSettingsPanel>();
+  const [activeCategory, setActiveCategory] = useState(briefCategoryPills[0]);
   const [styleMode, setStyleMode] = useState<BriefStyleMode>("realistic");
   const [selectedStyleId, setSelectedStyleId] = useState("office");
   const [avatarMode, setAvatarMode] = useState<BriefAvatarMode>("none");
@@ -1557,6 +1624,7 @@ function BriefScreen({
   const selectedVoiceProfile = narrationVoiceProfile(selectedVoice);
   const filteredVoices = narrationVoiceProfiles.filter((profile) => `${profile.label} ${profile.useCase} ${profile.description}`.toLocaleLowerCase().includes(voiceQuery.trim().toLocaleLowerCase()));
   const visibleStylePresets = stylePresets.filter((style) => style.mode === styleMode);
+  const visibleTemplateCards = briefTemplateCards.filter((card) => card.categories.includes(activeCategory));
 
   useEffect(() => () => {
     previewAbortRef.current?.abort();
@@ -1700,10 +1768,12 @@ function BriefScreen({
           })}
         </div>
         <div className="kv-home-categories">
-          {briefCategoryPills.map((pill, index) => <button className={index === 0 ? "active" : ""} key={pill} type="button">{pill}</button>)}
+          {briefCategoryPills.map((pill) => (
+            <button className={activeCategory === pill ? "active" : ""} key={pill} onClick={() => setActiveCategory(pill)} type="button">{pill}</button>
+          ))}
         </div>
         <div className="kv-home-templates">
-          {briefTemplateCards.map((card) => (
+          {visibleTemplateCards.map((card) => (
             <button className={card.className} key={card.title} onClick={() => onUseExample(card.title === "库存预警解释片" ? promptExamples[1] : card.title === "安全培训短片" ? "制作一个企业安全培训短片，讲清常见风险、正确动作和团队协作要求。" : promptExamples[2])} type="button">
               <span>{card.title}</span>
               <small>{card.detail}</small>
@@ -1784,7 +1854,7 @@ function BriefScreen({
               <>
                 <div className="kv-settings-header">
                   <h3>Style Library</h3>
-                  <div className="kv-settings-tabs"><button className="active" type="button">Styles</button><button type="button">Logos</button></div>
+                  <div className="kv-settings-tabs"><button className="active" disabled type="button">Styles</button><button onClick={() => setActiveSettings("brand")} type="button">Logos</button></div>
                 </div>
                 <div className="kv-settings-segment" role="group" aria-label="Style mode">
                   <button className={styleMode === "animated" ? "active" : ""} onClick={() => setStyleMode("animated")} type="button">Animated</button>
@@ -1810,12 +1880,12 @@ function BriefScreen({
                 </div>
                 <div className="kv-settings-segment" role="group" aria-label="Avatar mode">
                   <button className={avatarMode === "none" ? "active" : ""} onClick={() => setAvatarMode("none")} type="button">None</button>
-                  <button className={avatarMode === "preset" ? "active" : ""} onClick={() => setAvatarMode("preset")} type="button">Preset</button>
-                  <button className={avatarMode === "custom" ? "active" : ""} onClick={() => setAvatarMode("custom")} type="button">Custom</button>
+                  <button disabled title="即将接入主持人镜头生成" type="button">Preset</button>
+                  <button disabled title="企业版将支持自定义数字人" type="button">Custom</button>
                 </div>
                 <div className="kv-avatar-panel">
-                  <strong>{avatarMode === "none" ? "No avatar scenes will be added." : avatarMode === "preset" ? "Presenter scenes can be added for training and demos." : "Clone yourself with a custom avatar."}</strong>
-                  <p>{avatarMode === "custom" ? "Custom avatar cloning is reserved for enterprise accounts. You can still upload reference media for the current project." : "Avatar can be used later for explainers, onboarding and course videos."}</p>
+                  <strong>No avatar scenes will be added.</strong>
+                  <p>主持人镜头和自定义数字人还未进入当前生成链路；可以先上传人物或风格参考素材，系统会作为画面参考使用。</p>
                   <button onClick={onOpenAttachmentPicker} type="button"><Upload size={16} /> Upload presenter reference</button>
                 </div>
               </>
@@ -1857,10 +1927,10 @@ function BriefScreen({
                 </div>
                 <div className="kv-brand-options">
                   <button className={brandMode === "none" ? "active" : ""} onClick={() => setBrandMode("none")} type="button"><strong>None</strong><small>不叠加品牌标识</small></button>
-                  <button className={brandMode === "minimal" ? "active" : ""} onClick={() => setBrandMode("minimal")} type="button"><strong>Minimal</strong><small>轻量品牌角标与主色控制</small></button>
+                  <button disabled title="品牌角标会在工作室的成片设置中接入" type="button"><strong>Minimal</strong><small>请在成片设置中添加 Logo</small></button>
                   <button className={brandMode === "uploaded" ? "active" : ""} onClick={() => { setBrandMode("uploaded"); onOpenAttachmentPicker(); }} type="button"><strong>Upload</strong><small>上传 Logo / 品牌参考图</small></button>
                 </div>
-                <button className="kv-settings-upload" onClick={onOpenAttachmentPicker} type="button"><ImagePlus size={18} /> Upload logo or brand image</button>
+                <button className="kv-settings-upload" onClick={() => { setBrandMode("uploaded"); onOpenAttachmentPicker(); }} type="button"><ImagePlus size={18} /> Upload logo or brand image</button>
               </>
             ) : null}
           </section>

@@ -16,6 +16,19 @@
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
+html[data-theme="dark"] {
+  --bg: #101318;
+  --surface: #171b22;
+  --surface-2: #202632;
+  --text: #e7ecf3;
+  --muted: #a8b2c1;
+  --faint: #778294;
+  --line: #2a3340;
+  --line-strong: #3b4656;
+  --ink: #f3f6fb;
+  --shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -981,6 +994,102 @@ button:disabled {
   padding: 0;
 }
 
+.kv-home-dialog-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 15, 24, 0.42);
+  padding: 20px;
+  backdrop-filter: blur(6px);
+}
+
+.kv-home-dialog {
+  position: relative;
+  display: grid;
+  width: min(520px, 100%);
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.kv-home-dialog h3,
+.kv-home-dialog p {
+  margin: 0;
+}
+
+.kv-home-dialog h3 {
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.kv-home-dialog p,
+.kv-home-dialog li {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.kv-home-dialog ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.kv-home-dialog-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  height: 34px;
+  width: 34px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.kv-home-dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kv-home-dialog-grid span {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 14px;
+}
+
+.kv-home-dialog-grid strong {
+  font-size: 22px;
+}
+
+.kv-home-dialog-grid small {
+  color: var(--muted);
+}
+
+.kv-home-dialog-action {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--surface);
+  padding: 10px 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .kv-credit-pill {
   display: inline-flex;
   align-items: center;
@@ -1003,6 +1112,43 @@ button:disabled {
     radial-gradient(circle, rgba(35, 35, 35, 0.18) 1px, transparent 1.8px) 0 0 / 58px 58px,
     radial-gradient(circle at 52% 28%, rgba(18, 183, 166, 0.08), transparent 25%),
     #fafafa;
+}
+
+html[data-theme="dark"] .kv-sidebar,
+html[data-theme="dark"] .kv-home-topbar,
+html[data-theme="dark"] .kv-topbar {
+  background: rgba(17, 21, 28, 0.94);
+}
+
+html[data-theme="dark"] .kv-home-topbar {
+  border-color: var(--line);
+}
+
+html[data-theme="dark"] .kv-brief-home {
+  background:
+    radial-gradient(circle, rgba(185, 197, 214, 0.16) 1px, transparent 1.8px) 0 0 / 58px 58px,
+    radial-gradient(circle at 52% 28%, rgba(18, 183, 166, 0.12), transparent 25%),
+    var(--bg);
+}
+
+html[data-theme="dark"] .kv-home-engine,
+html[data-theme="dark"] .kv-home-hero h2 {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .kv-home-hero > p,
+html[data-theme="dark"] .kv-home-list small,
+html[data-theme="dark"] .kv-home-list span {
+  color: var(--muted);
+}
+
+html[data-theme="dark"] .kv-home-composer,
+html[data-theme="dark"] .kv-workspace-switcher,
+html[data-theme="dark"] .kv-home-top-actions > button,
+html[data-theme="dark"] .kv-home-dialog,
+html[data-theme="dark"] .kv-settings-modal {
+  background: var(--surface);
+  color: var(--text);
 }
 
 .kv-home-hero {
