@@ -1285,15 +1285,15 @@ function Shell({
           </div>
         ) : (
           <>
-            <div className="kv-logo">K</div>
+            <button aria-label="返回首页" className="kv-logo kv-logo-button" onClick={onNewVideo} title="返回首页" type="button">K</button>
             <nav className="kv-nav">
-              <button aria-label="新建视频" onClick={onNewVideo} type="button">
+              <button aria-label="返回首页并新建视频" onClick={onNewVideo} title="返回首页" type="button">
                 <Plus size={18} />
               </button>
-              <button aria-label="视频工作室" className={stage === "studio" ? "active" : ""} disabled={source === "empty"} onClick={onOpenStudio} type="button">
+              <button aria-label="视频工作室" className={stage === "studio" ? "active" : ""} disabled={source === "empty"} onClick={onOpenStudio} title="视频工作室" type="button">
                 <Clapperboard size={18} />
               </button>
-              <button aria-label="项目列表" className={stage === "projects" ? "active" : ""} onClick={onOpenProjects} type="button">
+              <button aria-label="项目列表" className={stage === "projects" ? "active" : ""} onClick={onOpenProjects} title="项目列表" type="button">
                 <Layers3 size={18} />
               </button>
             </nav>

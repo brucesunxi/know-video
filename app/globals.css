@@ -78,6 +78,16 @@ button:disabled {
   font-weight: 800;
 }
 
+.kv-logo-button {
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
+.kv-logo-button:hover,
+.kv-logo-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
 .kv-nav {
   display: grid;
   gap: 12px;
