@@ -1760,9 +1760,7 @@ html[data-theme="dark"] .kv-user-menu {
 }
 
 .kv-home-templates .launch::before,
-.kv-home-templates .event::before,
-.kv-template-reference-card.launch::before,
-.kv-template-reference-card.event::before {
+.kv-template-reference-card.launch::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.68)),
     radial-gradient(circle at 76% 24%, #fb7185, transparent 20%),
@@ -1770,10 +1768,17 @@ html[data-theme="dark"] .kv-user-menu {
     linear-gradient(135deg, #7c2d12, #be123c);
 }
 
+.kv-home-templates .event::before,
+.kv-template-reference-card.event::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.68)),
+    radial-gradient(circle at 22% 24%, #fef3c7, transparent 14%),
+    radial-gradient(circle at 75% 34%, #c084fc, transparent 18%),
+    linear-gradient(135deg, #312e81, #db2777);
+}
+
 .kv-home-templates .success::before,
-.kv-home-templates .testimonial::before,
-.kv-template-reference-card.success::before,
-.kv-template-reference-card.testimonial::before {
+.kv-template-reference-card.success::before {
   background:
     linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.68)),
     radial-gradient(circle at 28% 32%, #86efac, transparent 19%),
@@ -1781,60 +1786,115 @@ html[data-theme="dark"] .kv-user-menu {
     linear-gradient(135deg, #064e3b, #1e3a8a);
 }
 
+.kv-home-templates .testimonial::before,
+.kv-template-reference-card.testimonial::before {
+  background:
+    linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.68)),
+    radial-gradient(circle at 25% 28%, #fef3c7, transparent 17%),
+    radial-gradient(circle at 72% 40%, #86efac, transparent 20%),
+    linear-gradient(135deg, #134e4a, #0f172a);
+}
+
 .kv-home-templates .pitch::before,
-.kv-home-templates .compare::before,
-.kv-home-templates .renewal::before,
-.kv-template-reference-card.pitch::before,
-.kv-template-reference-card.compare::before,
-.kv-template-reference-card.renewal::before {
+.kv-template-reference-card.pitch::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.74)),
     radial-gradient(circle at 74% 28%, #fef3c7, transparent 15%),
     linear-gradient(135deg, #111827, #4338ca 52%, #0f766e);
 }
 
+.kv-home-templates .compare::before,
+.kv-template-reference-card.compare::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.74)),
+    linear-gradient(90deg, rgba(14, 165, 233, 0.8) 0 49%, rgba(249, 115, 22, 0.8) 51%),
+    linear-gradient(135deg, #0f172a, #334155);
+}
+
+.kv-home-templates .renewal::before,
+.kv-template-reference-card.renewal::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.74)),
+    radial-gradient(circle at 70% 26%, #bbf7d0, transparent 15%),
+    linear-gradient(135deg, #14532d, #155e75);
+}
+
 .kv-home-templates .concept::before,
-.kv-home-templates .tutorial::before,
-.kv-home-templates .doc::before,
-.kv-template-reference-card.concept::before,
-.kv-template-reference-card.tutorial::before,
-.kv-template-reference-card.doc::before {
+.kv-template-reference-card.concept::before {
   background:
     linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.7)),
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.13) 0 2px, transparent 2px 28px),
     linear-gradient(135deg, #334155, #0f766e 54%, #f59e0b);
 }
 
+.kv-home-templates .tutorial::before,
+.kv-template-reference-card.tutorial::before {
+  background:
+    linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.7)),
+    radial-gradient(circle at 72% 32%, #60a5fa, transparent 19%),
+    linear-gradient(135deg, #f8fafc, #0f766e 48%, #1e293b);
+}
+
+.kv-home-templates .doc::before,
+.kv-template-reference-card.doc::before {
+  background:
+    linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.7)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.16) 0 2px, transparent 2px 30px),
+    linear-gradient(135deg, #475569, #f8fafc 42%, #0f172a);
+}
+
 .kv-home-templates .property::before,
-.kv-home-templates .community::before,
-.kv-home-templates .tour::before,
-.kv-template-reference-card.property::before,
-.kv-template-reference-card.community::before,
-.kv-template-reference-card.tour::before {
+.kv-template-reference-card.property::before {
   background:
     linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.7)),
     radial-gradient(circle at 72% 24%, #fed7aa, transparent 18%),
     linear-gradient(135deg, #14532d, #0891b2 55%, #f97316);
 }
 
+.kv-home-templates .community::before,
+.kv-template-reference-card.community::before {
+  background:
+    linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.7)),
+    radial-gradient(circle at 24% 30%, #bbf7d0, transparent 18%),
+    radial-gradient(circle at 72% 28%, #fed7aa, transparent 18%),
+    linear-gradient(135deg, #0f766e, #65a30d);
+}
+
+.kv-home-templates .tour::before,
+.kv-template-reference-card.tour::before {
+  background:
+    linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.7)),
+    radial-gradient(circle at 74% 30%, #fef3c7, transparent 16%),
+    linear-gradient(135deg, #1e293b, #92400e 55%, #f8fafc);
+}
+
 .kv-home-templates .finance::before,
-.kv-home-templates .budget::before,
-.kv-home-templates .risk::before,
-.kv-template-reference-card.finance::before,
-.kv-template-reference-card.budget::before,
-.kv-template-reference-card.risk::before {
+.kv-template-reference-card.finance::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.74)),
     radial-gradient(circle at 70% 30%, rgba(34, 197, 94, 0.76), transparent 14%),
     linear-gradient(135deg, #0f172a, #155e75 52%, #365314);
 }
 
+.kv-home-templates .budget::before,
+.kv-template-reference-card.budget::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.74)),
+    radial-gradient(circle at 72% 30%, rgba(251, 191, 36, 0.78), transparent 15%),
+    linear-gradient(135deg, #1f2937, #475569 52%, #0f766e);
+}
+
+.kv-home-templates .risk::before,
+.kv-template-reference-card.risk::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.74)),
+    radial-gradient(circle at 70% 30%, rgba(239, 68, 68, 0.86), transparent 15%),
+    radial-gradient(circle at 34% 44%, rgba(34, 197, 94, 0.42), transparent 20%),
+    linear-gradient(135deg, #020617, #7f1d1d);
+}
+
 .kv-home-templates .onboarding::before,
-.kv-home-templates .leadership::before,
-.kv-home-templates .course::before,
-.kv-template-reference-card.onboarding::before,
-.kv-template-reference-card.leadership::before,
-.kv-template-reference-card.course::before {
+.kv-template-reference-card.onboarding::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.7)),
     radial-gradient(circle at 26% 34%, #c4b5fd, transparent 18%),
@@ -1842,15 +1902,39 @@ html[data-theme="dark"] .kv-user-menu {
     linear-gradient(135deg, #3730a3, #0f766e);
 }
 
+.kv-home-templates .leadership::before,
+.kv-template-reference-card.leadership::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.7)),
+    radial-gradient(circle at 72% 32%, #bfdbfe, transparent 18%),
+    linear-gradient(135deg, #1e3a8a, #0f172a 58%, #64748b);
+}
+
+.kv-home-templates .course::before,
+.kv-template-reference-card.course::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.7)),
+    radial-gradient(circle at 26% 30%, #fde047, transparent 16%),
+    radial-gradient(circle at 72% 36%, #fb7185, transparent 18%),
+    linear-gradient(135deg, #7c3aed, #0891b2);
+}
+
 .kv-home-templates .social::before,
-.kv-home-templates .countdown::before,
-.kv-template-reference-card.social::before,
-.kv-template-reference-card.countdown::before {
+.kv-template-reference-card.social::before {
   background:
     linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.72)),
     radial-gradient(circle at 25% 25%, #f97316, transparent 18%),
     radial-gradient(circle at 74% 32%, #22d3ee, transparent 18%),
     linear-gradient(135deg, #111827, #be185d);
+}
+
+.kv-home-templates .countdown::before,
+.kv-template-reference-card.countdown::before {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(0, 0, 0, 0.72)),
+    radial-gradient(circle at 74% 30%, #fef08a, transparent 17%),
+    repeating-linear-gradient(135deg, rgba(248, 113, 113, 0.8) 0 18px, rgba(15, 23, 42, 0.8) 18px 36px),
+    linear-gradient(135deg, #111827, #be123c);
 }
 
 .kv-home-templates button::after {
@@ -1862,7 +1946,8 @@ html[data-theme="dark"] .kv-user-menu {
 }
 
 .kv-home-templates span,
-.kv-home-templates small {
+.kv-home-templates small,
+.kv-home-templates em {
   position: relative;
   z-index: 1;
 }
@@ -1874,6 +1959,14 @@ html[data-theme="dark"] .kv-user-menu {
 
 .kv-home-templates small {
   color: rgba(255, 255, 255, 0.78);
+}
+
+.kv-home-templates em {
+  margin-top: 7px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 760;
 }
 
 .kv-home-advanced {
@@ -2034,10 +2127,26 @@ html[data-theme="dark"] .kv-user-menu {
 }
 
 .kv-style-thumb {
+  position: relative;
   display: block;
-  height: 100px;
+  height: 120px;
+  overflow: hidden;
   border-bottom: 1px solid #d8d8d6;
   background: linear-gradient(135deg, #eef2f7, #ffffff);
+}
+
+.kv-style-count {
+  margin: 0 0 12px;
+  color: #777;
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.kv-style-thumb::before,
+.kv-style-thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
 }
 
 .kv-style-grid strong,
@@ -2059,17 +2168,178 @@ html[data-theme="dark"] .kv-user-menu {
   line-height: 1.35;
 }
 
-.kv-style-thumb-chalkboard { background: linear-gradient(135deg, #f7f7f1 0 40%, #ece7d6), linear-gradient(#222, #222); }
-.kv-style-thumb-collage { background: radial-gradient(circle at 30% 35%, #ffe082 0 14%, transparent 15%), radial-gradient(circle at 70% 48%, #80deea 0 16%, transparent 17%), #fbfbfb; }
-.kv-style-thumb-comic { background: radial-gradient(circle at 75% 28%, #fdd835 0 10%, transparent 11%), repeating-linear-gradient(135deg, #ffffff 0 10px, #f2f7ff 10px 20px); }
-.kv-style-thumb-memphis { background: radial-gradient(circle at 70% 32%, #86efac 0 12%, transparent 13%), radial-gradient(circle at 38% 60%, #f9a8d4 0 14%, transparent 15%), #fff; }
-.kv-style-thumb-isometric { background: linear-gradient(30deg, #dbeafe 12%, transparent 12% 88%, #dbeafe 88%), linear-gradient(150deg, #ccfbf1 12%, transparent 12% 88%, #ccfbf1 88%), #fff; }
-.kv-style-thumb-pixel { background: linear-gradient(90deg, #65a30d 25%, #22c55e 25% 50%, #f59e0b 50% 75%, #3b82f6 75%); background-size: 44px 44px; }
-.kv-style-thumb-construction { background: linear-gradient(135deg, #334155 0 38%, #f59e0b 39% 54%, #fde68a 55%); }
-.kv-style-thumb-cyber { background: radial-gradient(circle at 62% 40%, #22d3ee, transparent 18%), linear-gradient(135deg, #020617, #12315e); }
-.kv-style-thumb-industrial { background: linear-gradient(135deg, #e5e7eb, #94a3b8 45%, #f8fafc); }
-.kv-style-thumb-medical { background: radial-gradient(circle at 70% 28%, #e0f2fe, transparent 22%), linear-gradient(135deg, #ffffff, #e5f3ff); }
-.kv-style-thumb-office { background: linear-gradient(135deg, #e5e7eb, #ffffff 45%, #94a3b8); }
+.kv-style-thumb.style-chalkboard {
+  background:
+    radial-gradient(circle at 24% 32%, #f5d76e 0 2px, transparent 3px),
+    radial-gradient(circle at 68% 24%, #ff8a80 0 3px, transparent 4px),
+    linear-gradient(135deg, #0f3d35, #072f2a);
+}
+
+.kv-style-thumb.style-chalkboard::before {
+  inset: 18px 22px;
+  border: 2px dashed rgba(255, 244, 174, 0.72);
+  border-radius: 48% 52% 46% 54%;
+  transform: rotate(-12deg);
+}
+
+.kv-style-thumb.style-chalkboard::after {
+  inset: auto 20px 18px 22px;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fff, #facc15, #fb7185, #93c5fd);
+}
+
+.kv-style-thumb.style-simple-line {
+  background: #fffaf2;
+}
+
+.kv-style-thumb.style-simple-line::before {
+  inset: 30px 42px 20px;
+  border: 4px solid #263238;
+  border-top-color: transparent;
+  border-radius: 999px 999px 28px 28px;
+}
+
+.kv-style-thumb.style-simple-line::after {
+  inset: auto 28px 24px;
+  height: 24px;
+  border-top: 3px solid #14b8a6;
+  border-bottom: 3px solid #f97316;
+  transform: skewY(-8deg);
+}
+
+.kv-style-thumb.style-collage {
+  background: #f5f1e8;
+}
+
+.kv-style-thumb.style-collage::before {
+  inset: 20px 34px 24px 42px;
+  background: #f97316;
+  box-shadow: -42px 18px 0 #38bdf8, 44px 10px 0 #facc15, 12px -18px 0 #86efac;
+  transform: rotate(-8deg);
+}
+
+.kv-style-thumb.style-collage::after {
+  inset: 18px 24px;
+  border: 2px solid rgba(31, 41, 55, 0.12);
+  transform: rotate(4deg);
+}
+
+.kv-style-thumb.style-comic-book {
+  background:
+    radial-gradient(circle at 50% 50%, #fef08a 0 14%, transparent 15%),
+    repeating-radial-gradient(circle at 50% 50%, #ef4444 0 8px, #facc15 8px 16px);
+}
+
+.kv-style-thumb.style-comic-book::before {
+  inset: 24px 36px;
+  background: #fff;
+  clip-path: polygon(10% 0, 100% 20%, 78% 48%, 100% 80%, 18% 100%, 0 62%, 22% 42%);
+}
+
+.kv-style-thumb.style-comic-book::after {
+  inset: 40px 64px;
+  border-radius: 50%;
+  background: #111827;
+  box-shadow: 28px 16px 0 #111827;
+}
+
+.kv-style-thumb.style-memphis {
+  background: #fff;
+}
+
+.kv-style-thumb.style-memphis::before {
+  inset: 28px 60px 20px;
+  border-radius: 999px 999px 18px 18px;
+  background: #a7f3d0;
+  box-shadow: -46px 34px 0 #fde68a, 46px 18px 0 #bfdbfe;
+}
+
+.kv-style-thumb.style-memphis::after {
+  inset: auto 24px 20px;
+  height: 2px;
+  background: #94a3b8;
+}
+
+.kv-style-thumb.style-isometric {
+  background: #f8fbff;
+}
+
+.kv-style-thumb.style-isometric::before {
+  inset: 24px 36px 30px;
+  background:
+    linear-gradient(30deg, #93c5fd 0 34%, transparent 35%),
+    linear-gradient(150deg, #5eead4 0 34%, transparent 35%),
+    linear-gradient(30deg, transparent 62%, #f9a8d4 63%);
+  transform: skewY(-18deg);
+}
+
+.kv-style-thumb.style-isometric::after {
+  inset: 36px 76px 36px 56px;
+  background: #fde68a;
+  box-shadow: 36px 14px 0 #a7f3d0, -24px 20px 0 #c4b5fd;
+  transform: skewY(-18deg);
+}
+
+.kv-style-thumb.style-pixel-art {
+  image-rendering: pixelated;
+  background:
+    linear-gradient(90deg, #111827 0 25%, #7c3aed 25% 50%, #0891b2 50% 75%, #f59e0b 75%);
+  background-size: 44px 44px;
+}
+
+.kv-style-thumb.style-pixel-art::before {
+  inset: 28px 64px;
+  background: #22d3ee;
+  box-shadow: 22px 0 0 #22d3ee, 44px 0 0 #f472b6, 22px 22px 0 #facc15, 44px 22px 0 #facc15;
+}
+
+.kv-style-thumb.style-safety-poster {
+  background:
+    repeating-linear-gradient(135deg, #facc15 0 24px, #1f2937 24px 48px);
+}
+
+.kv-style-thumb.style-safety-poster::before {
+  inset: 26px 58px 30px;
+  border-radius: 16px;
+  background: #ef4444;
+  clip-path: polygon(50% 0, 100% 88%, 0 88%);
+}
+
+.kv-style-thumb.style-safety-poster::after {
+  inset: auto 0 0;
+  height: 44%;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.55));
+}
+
+.kv-style-thumb.style-cinematic-realism {
+  background:
+    radial-gradient(circle at 72% 28%, rgba(251, 191, 36, 0.78), transparent 18%),
+    linear-gradient(135deg, #111827, #374151 52%, #92400e);
+}
+
+.kv-style-thumb.style-cinematic-realism::before {
+  inset: 30px 92px 18px 42px;
+  border-radius: 999px 999px 24px 24px;
+  background: #f59e0b;
+  box-shadow: 58px 8px 0 #6b7280, 96px 18px 0 #1f2937;
+}
+
+.kv-style-thumb.style-product-ui {
+  background: linear-gradient(135deg, #0f172a, #0f766e);
+}
+
+.kv-style-thumb.style-product-ui::before {
+  inset: 24px 54px 30px;
+  border-radius: 10px;
+  background: #e0f2fe;
+  box-shadow: -36px 24px 0 #22d3ee, 42px 18px 0 #a7f3d0;
+}
+
+.kv-style-thumb.style-product-ui::after {
+  inset: 40px 78px 48px;
+  background: linear-gradient(90deg, #0f766e 0 32%, transparent 33% 42%, #38bdf8 43% 76%, transparent 77%);
+}
 
 .kv-settings-upload {
   display: inline-flex;

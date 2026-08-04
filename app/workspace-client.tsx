@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Bell,
   BookOpen,
+  Brush,
   Calendar,
   Check,
   Captions,
@@ -143,10 +144,33 @@ const promptExamples = [
   "做一个关于跨境电商库存管理 SaaS 的解释视频，目标客户是运营负责人。",
   "制作一个教育产品宣传视频，展示老师如何用 AI 快速生成课程内容。"
 ];
-type BriefSettingsPanel = "avatar" | "voice" | "brand";
+type BriefSettingsPanel = "style" | "avatar" | "voice" | "brand";
 type HomeDialog = "pricing" | "demo" | "help" | "notifications" | "workspace";
+type BriefVisualStyleMode = "animated" | "realistic";
+type BriefVisualStyle = {
+  id: string;
+  label: string;
+  mode: BriefVisualStyleMode;
+  tone: GenerationOptions["style"];
+  summary: string;
+  prompt: string;
+  thumbnail: string;
+};
 type BriefAvatarMode = "none" | "preset" | "custom";
 type BriefBrandKitMode = "none" | "minimal" | "uploaded";
+
+const briefVisualStyles: BriefVisualStyle[] = [
+  { id: "chalkboard", label: "黑板手绘", mode: "animated", tone: "温暖自然", summary: "粉笔线条、课堂感、适合概念讲解", prompt: "黑板手绘风格：深绿色黑板、粉笔线条、手绘箭头和逐步出现的课堂讲解感。", thumbnail: "chalkboard" },
+  { id: "simple-line", label: "简笔线稿", mode: "animated", tone: "温暖自然", summary: "少量颜色、人物简洁、信息很清楚", prompt: "简笔线稿风格：干净留白、细线人物、少量强调色和清晰步骤图解。", thumbnail: "simple-line" },
+  { id: "collage", label: "拼贴纸艺", mode: "animated", tone: "明快有活力", summary: "纸张纹理、层叠卡片、轻快转场", prompt: "拼贴纸艺风格：纸张纹理、剪贴层次、明亮色块和手作感转场。", thumbnail: "collage" },
+  { id: "comic-book", label: "漫画分格", mode: "animated", tone: "明快有活力", summary: "强情绪、粗描边、爆炸形强调", prompt: "漫画分格风格：粗描边、高饱和色、拟声爆炸形和强情绪人物表情。", thumbnail: "comic-book" },
+  { id: "memphis", label: "商务插画", mode: "animated", tone: "极简高级", summary: "SaaS 常用人物插画、柔和商务", prompt: "商务插画风格：现代办公室人物、柔和配色、圆润形状和轻量 SaaS 视觉语言。", thumbnail: "memphis" },
+  { id: "isometric", label: "等距场景", mode: "animated", tone: "极简高级", summary: "空间结构清楚、适合流程和系统", prompt: "等距场景风格：俯视等距空间、模块化建筑或界面、流程路径清楚。", thumbnail: "isometric" },
+  { id: "pixel-art", label: "像素游戏", mode: "animated", tone: "明快有活力", summary: "像素块面、游戏感、适合少儿和科技", prompt: "像素游戏风格：低分辨率像素块、霓虹色、游戏 UI 和复古动效。", thumbnail: "pixel-art" },
+  { id: "safety-poster", label: "安全警示插画", mode: "animated", tone: "电影质感", summary: "黄黑警示、风险符号、培训感强", prompt: "安全警示插画风格：高对比黄黑标识、风险符号、聚焦操作动作和培训海报感。", thumbnail: "safety-poster" },
+  { id: "cinematic-realism", label: "电影纪实", mode: "realistic", tone: "电影质感", summary: "真实人物、镜头光影、现场感", prompt: "电影纪实风格：真实人物、浅景深、自然光影、现场空间和稳定镜头语言。", thumbnail: "cinematic-realism" },
+  { id: "product-ui", label: "产品界面演示", mode: "realistic", tone: "极简高级", summary: "界面大屏、卡片高亮、SaaS 演示", prompt: "产品界面演示风格：清爽 UI、浮层卡片、功能高亮、数据面板和顺滑缩放转场。", thumbnail: "product-ui" }
+];
 
 const briefWorkflowCards = [
   { icon: BookOpen, title: "Explain a concept", detail: "把一个概念拆成清楚步骤" },
@@ -164,11 +188,45 @@ type BriefTemplateCard = {
   prompt: string;
 };
 type BriefTemplateRole = "style" | "ref" | "logo";
+type BriefTemplateStyle = {
+  styleId: string;
+  context: string;
+};
 
 const briefTemplateRoleLabels: Record<BriefTemplateRole, string> = {
   style: "Style",
   ref: "Ref",
   logo: "Logo"
+};
+
+const briefTemplateStyles: Record<string, BriefTemplateStyle> = {
+  phishing: { styleId: "safety-poster", context: "网络安全风险画面里加入钓鱼邮件、放大镜和警示标识。" },
+  safety: { styleId: "cinematic-realism", context: "工地现场要有真实光影、工人动作和安全装备细节。" },
+  support: { styleId: "simple-line", context: "用温和人物线稿表现客服、客户情绪和解决路径。" },
+  quarterly: { styleId: "cinematic-realism", context: "用会议室光影、真实团队和增长图表表现季度汇报。" },
+  policy: { styleId: "comic-book", context: "把政策变化做成强提醒的公告分格和时间节点。" },
+  rollout: { styleId: "product-ui", context: "突出新工具界面、功能卡片和用户操作路径。" },
+  launch: { styleId: "collage", context: "用拼贴色块和产品卖点卡片形成新品发布节奏。" },
+  success: { styleId: "cinematic-realism", context: "用真实客户故事、前后对比和可信数据建立信任。" },
+  event: { styleId: "comic-book", context: "用强烈标题、舞台光和倒计时制造活动期待。" },
+  pitch: { styleId: "product-ui", context: "用清晰界面、卖点高亮和演示路径提升说服力。" },
+  compare: { styleId: "isometric", context: "用等距模块和左右对比把新旧方案差异讲清楚。" },
+  renewal: { styleId: "product-ui", context: "用仪表盘、成果数字和时间线展示续费价值。" },
+  concept: { styleId: "chalkboard", context: "把复杂概念拆成黑板上的逐步推导。" },
+  tutorial: { styleId: "product-ui", context: "用真实产品界面和步骤高亮讲清操作方法。" },
+  doc: { styleId: "collage", context: "把文档页面、摘要卡片和重点标注拼贴成镜头。" },
+  property: { styleId: "cinematic-realism", context: "用真实空间光影和生活镜头突出楼盘质感。" },
+  community: { styleId: "collage", context: "用生活片段拼贴展现社区配套和居住氛围。" },
+  tour: { styleId: "isometric", context: "用等距户型和空间动线辅助房源导览。" },
+  finance: { styleId: "product-ui", context: "用深色数据面板和指标高亮呈现金融分析。" },
+  budget: { styleId: "isometric", context: "用模块化预算卡片、审批路径和资源流向解释预算。" },
+  risk: { styleId: "safety-poster", context: "用红色风险信号、雷达扫描和状态标识表达预警。" },
+  onboarding: { styleId: "simple-line", context: "用友好的线稿人物和路线图呈现新人路径。" },
+  leadership: { styleId: "chalkboard", context: "用教练课堂式框架、反馈模型和复盘要点讲管理方法。" },
+  course: { styleId: "pixel-art", context: "用游戏化像素任务、关卡和奖励表现课程成长。" },
+  social: { styleId: "comic-book", context: "用漫画爆点、大字钩子和强反差画面适配社媒。" },
+  testimonial: { styleId: "simple-line", context: "用简洁人物头像和评价卡片组成口碑混剪。" },
+  countdown: { styleId: "pixel-art", context: "用像素倒计时、限时提示和游戏 UI 制造紧迫感。" }
 };
 
 const briefTemplateCards: Record<BriefCategory, BriefTemplateCard[]> = {
@@ -301,14 +359,24 @@ function generationReviewItems(prompt: string, options: GenerationOptions) {
   ] as const;
 }
 
-function templatePromptForRole(template: BriefTemplateCard, role: BriefTemplateRole) {
+function visualStyleById(styleId: string) {
+  return briefVisualStyles.find((style) => style.id === styleId) ?? briefVisualStyles[0];
+}
+
+function templateStyleFor(template: BriefTemplateCard) {
+  const binding = briefTemplateStyles[template.className] ?? briefTemplateStyles.rollout;
+  return visualStyleById(binding.styleId);
+}
+
+function templatePromptForRole(template: BriefTemplateCard, role: BriefTemplateRole, selectedStyle = templateStyleFor(template)) {
+  const binding = briefTemplateStyles[template.className] ?? briefTemplateStyles.rollout;
   if (role === "ref") {
-    return `${template.prompt}\n\n参考模板“${template.title}”这一页的内容结构、信息层级和叙事方式，但不要限制成固定视觉风格。`;
+    return `${template.prompt}\n\n参考模板“${template.title}”这一页的内容结构、信息层级和叙事方式；它原本的视觉方向是“${selectedStyle.label}”，但这里不要被固定风格限制。`;
   }
   if (role === "logo") {
-    return `${template.prompt}\n\n把模板“${template.title}”中的品牌主体当作 Logo / 品牌标识来设计视频，围绕这个标识展开片头、字幕和结尾露出。`;
+    return `${template.prompt}\n\n把模板“${template.title}”中的品牌主体当作 Logo / 品牌标识来设计视频，围绕这个标识展开片头、字幕和结尾露出；画面可吸收“${selectedStyle.label}”的识别感。`;
   }
-  return `${template.prompt}\n\n参考模板“${template.title}”的整体视觉气质和画面节奏，但允许根据我的内容自动扩展成更合适的风格。`;
+  return `${template.prompt}\n\n应用模板“${template.title}”的 style：${selectedStyle.prompt} ${binding.context}`;
 }
 
 function elapsedGenerationLabel(startedAt?: number, now = Date.now()) {
@@ -1651,6 +1719,8 @@ function BriefScreen({
   const [activeCategory, setActiveCategory] = useState<BriefCategory>(briefCategoryPills[0]);
   const [selectedTemplate, setSelectedTemplate] = useState<BriefTemplateCard>();
   const [selectedTemplateRole, setSelectedTemplateRole] = useState<BriefTemplateRole>("style");
+  const [styleMode, setStyleMode] = useState<BriefVisualStyleMode>("animated");
+  const [selectedStyleId, setSelectedStyleId] = useState(briefVisualStyles[0].id);
   const [avatarMode, setAvatarMode] = useState<BriefAvatarMode>("none");
   const [brandMode, setBrandMode] = useState<BriefBrandKitMode>("none");
   const [selectedVoice, setSelectedVoice] = useState<NarrationVoice>(options.narrationVoice ?? DEFAULT_NARRATION_VOICE);
@@ -1665,6 +1735,8 @@ function BriefScreen({
   const selectedVoiceProfile = narrationVoiceProfile(selectedVoice);
   const filteredVoices = narrationVoiceProfiles.filter((profile) => `${profile.label} ${profile.useCase} ${profile.description}`.toLocaleLowerCase().includes(voiceQuery.trim().toLocaleLowerCase()));
   const visibleTemplateCards = briefTemplateCards[activeCategory];
+  const selectedVisualStyle = visualStyleById(selectedStyleId);
+  const visibleVisualStyles = briefVisualStyles.filter((style) => style.mode === styleMode);
 
   useEffect(() => () => {
     previewAbortRef.current?.abort();
@@ -1742,20 +1814,36 @@ function BriefScreen({
   function chooseCategory(category: BriefCategory) {
     setActiveCategory(category);
     const firstTemplate = briefTemplateCards[category][0];
+    const templateStyle = templateStyleFor(firstTemplate);
     setSelectedTemplate(firstTemplate);
     setSelectedTemplateRole("style");
-    onUseExample(templatePromptForRole(firstTemplate, "style"));
+    setSelectedStyleId(templateStyle.id);
+    setStyleMode(templateStyle.mode);
+    onOptionsChange({ ...options, style: templateStyle.tone });
+    onUseExample(templatePromptForRole(firstTemplate, "style", templateStyle));
   }
 
   function chooseTemplate(template: BriefTemplateCard) {
+    const templateStyle = templateStyleFor(template);
     setSelectedTemplate(template);
     setSelectedTemplateRole("style");
-    onUseExample(templatePromptForRole(template, "style"));
+    setSelectedStyleId(templateStyle.id);
+    setStyleMode(templateStyle.mode);
+    onOptionsChange({ ...options, style: templateStyle.tone });
+    onUseExample(templatePromptForRole(template, "style", templateStyle));
   }
 
   function chooseTemplateRole(role: BriefTemplateRole) {
     setSelectedTemplateRole(role);
-    if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, role));
+    if (selectedTemplate && role === "style") onOptionsChange({ ...options, style: selectedVisualStyle.tone });
+    if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, role, selectedVisualStyle));
+  }
+
+  function chooseVisualStyle(style: BriefVisualStyle) {
+    setSelectedStyleId(style.id);
+    setStyleMode(style.mode);
+    onOptionsChange({ ...options, style: style.tone });
+    if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, selectedTemplateRole, style));
   }
 
   function openAdvancedSettings() {
@@ -1773,6 +1861,10 @@ function BriefScreen({
         <p>输入需求，Know Video 会规划脚本、分镜、画面、配音和可继续对话修改的版本。</p>
         <form className="kv-home-composer" onSubmit={onSubmit}>
           <div className="kv-composer-settings" role="toolbar" aria-label="视频生成设置">
+            <button onClick={() => setActiveSettings("style")} type="button">
+              <i><Brush size={18} /></i>
+              <span><strong>{selectedVisualStyle.label}</strong><small>Style</small></span>
+            </button>
             <button onClick={() => setActiveSettings("avatar")} type="button">
               <i><User size={18} /></i>
               <span><strong>{avatarMode === "none" ? "None" : avatarMode === "preset" ? "Preset" : "Custom"}</strong><small>Avatar</small></span>
@@ -1792,7 +1884,7 @@ function BriefScreen({
                 <strong>Images</strong>
                 <span>
                   {selectedTemplateRole === "style"
-                    ? "作为整体观感和节奏参考。"
+                    ? `作为“${selectedVisualStyle.label}”整体观感和节奏参考。`
                     : selectedTemplateRole === "ref"
                       ? "参考这一页的内容结构和表达方式。"
                       : "把它当作 Logo / 品牌标识来制作视频。"}
@@ -1812,7 +1904,7 @@ function BriefScreen({
                 </label>
                 <figcaption>
                   <strong>{selectedTemplate.title}</strong>
-                  <small>{selectedTemplate.detail}</small>
+                  <small>{selectedVisualStyle.label}</small>
                 </figcaption>
               </figure>
             </div>
@@ -1865,6 +1957,7 @@ function BriefScreen({
             <button className={`${card.className}${selectedTemplate?.title === card.title ? " active" : ""}`} key={card.title} onClick={() => chooseTemplate(card)} type="button">
               <span>{card.title}</span>
               <small>{card.detail}</small>
+              <em>{templateStyleFor(card).label}</em>
             </button>
           ))}
         </div>
@@ -1938,6 +2031,28 @@ function BriefScreen({
         }}>
           <section aria-modal="true" className={`kv-settings-modal ${activeSettings}`} role="dialog">
             <button aria-label="关闭设置" className="kv-settings-close" onClick={() => setActiveSettings(undefined)} type="button"><X size={18} /></button>
+            {activeSettings === "style" ? (
+              <>
+                <div className="kv-settings-header">
+                  <h3>Style Library</h3>
+                  <div className="kv-settings-tabs"><button className="active" disabled type="button">Styles</button><button onClick={() => setActiveSettings("brand")} type="button">Logos</button></div>
+                </div>
+                <div className="kv-settings-segment" role="group" aria-label="Style mode">
+                  <button className={styleMode === "animated" ? "active" : ""} onClick={() => setStyleMode("animated")} type="button">Animated</button>
+                  <button className={styleMode === "realistic" ? "active" : ""} onClick={() => setStyleMode("realistic")} type="button">Hyper Realistic</button>
+                </div>
+                <p className="kv-style-count">{visibleVisualStyles.length} styles</p>
+                <div className="kv-style-grid">
+                  {visibleVisualStyles.map((style) => (
+                    <button className={selectedStyleId === style.id ? "active" : ""} key={style.id} onClick={() => chooseVisualStyle(style)} type="button">
+                      <span className={`kv-style-thumb style-${style.thumbnail}`} />
+                      <strong>{style.label}</strong>
+                      <small>{style.summary}</small>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
             {activeSettings === "avatar" ? (
               <>
                 <div className="kv-settings-header compact">
