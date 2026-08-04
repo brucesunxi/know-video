@@ -192,6 +192,7 @@ type BriefTemplateStyle = {
   styleId: string;
   context: string;
 };
+type BriefStyleSource = "auto" | "template" | "manual";
 
 const briefTemplateRoleLabels: Record<BriefTemplateRole, string> = {
   style: "Style",
@@ -361,6 +362,20 @@ function generationReviewItems(prompt: string, options: GenerationOptions) {
 
 function visualStyleById(styleId: string) {
   return briefVisualStyles.find((style) => style.id === styleId) ?? briefVisualStyles[0];
+}
+
+function inferVisualStyleForPrompt(value: string) {
+  const text = value.toLocaleLowerCase();
+  if (/安全|风险|预警|钓鱼|合规|工地|hazard|risk|safety|phishing/.test(text)) return visualStyleById("safety-poster");
+  if (/游戏|少儿|儿童|minecraft|像素|game|kids|pixel/.test(text)) return visualStyleById("pixel-art");
+  if (/课程|教学|解释|概念|培训|课堂|education|lesson|training|explain/.test(text)) return visualStyleById("chalkboard");
+  if (/客服|客户|服务|情绪|沟通|support|customer|service/.test(text)) return visualStyleById("simple-line");
+  if (/产品|saas|工具|界面|平台|软件|dashboard|app|ui/.test(text)) return visualStyleById("product-ui");
+  if (/地产|房源|楼盘|社区|空间|real estate|property|house/.test(text)) return visualStyleById("cinematic-realism");
+  if (/社媒|短视频|爆点|营销|活动|social|tiktok|reels|campaign/.test(text)) return visualStyleById("comic-book");
+  if (/流程|系统|架构|预算|审批|模块|process|workflow|system/.test(text)) return visualStyleById("isometric");
+  if (/品牌|新品|发布|宣传|launch|brand|promo/.test(text)) return visualStyleById("collage");
+  return visualStyleById("product-ui");
 }
 
 function templateStyleFor(template: BriefTemplateCard) {
@@ -1720,7 +1735,8 @@ function BriefScreen({
   const [selectedTemplate, setSelectedTemplate] = useState<BriefTemplateCard>();
   const [selectedTemplateRole, setSelectedTemplateRole] = useState<BriefTemplateRole>("style");
   const [styleMode, setStyleMode] = useState<BriefVisualStyleMode>("animated");
-  const [selectedStyleId, setSelectedStyleId] = useState(briefVisualStyles[0].id);
+  const [styleSource, setStyleSource] = useState<BriefStyleSource>("auto");
+  const [selectedStyleId, setSelectedStyleId] = useState(inferVisualStyleForPrompt(prompt).id);
   const [avatarMode, setAvatarMode] = useState<BriefAvatarMode>("none");
   const [brandMode, setBrandMode] = useState<BriefBrandKitMode>("none");
   const [selectedVoice, setSelectedVoice] = useState<NarrationVoice>(options.narrationVoice ?? DEFAULT_NARRATION_VOICE);
@@ -1735,7 +1751,8 @@ function BriefScreen({
   const selectedVoiceProfile = narrationVoiceProfile(selectedVoice);
   const filteredVoices = narrationVoiceProfiles.filter((profile) => `${profile.label} ${profile.useCase} ${profile.description}`.toLocaleLowerCase().includes(voiceQuery.trim().toLocaleLowerCase()));
   const visibleTemplateCards = briefTemplateCards[activeCategory];
-  const selectedVisualStyle = visualStyleById(selectedStyleId);
+  const inferredVisualStyle = inferVisualStyleForPrompt(prompt);
+  const selectedVisualStyle = styleSource === "auto" ? inferredVisualStyle : visualStyleById(selectedStyleId);
   const visibleVisualStyles = briefVisualStyles.filter((style) => style.mode === styleMode);
 
   useEffect(() => () => {
@@ -1811,12 +1828,23 @@ function BriefScreen({
     onOptionsChange({ ...options, narrationVoice: voice });
   }
 
+  function updatePrompt(value: string) {
+    onPromptChange(value);
+    if (styleSource === "auto") {
+      const inferred = inferVisualStyleForPrompt(value);
+      setSelectedStyleId(inferred.id);
+      setStyleMode(inferred.mode);
+      onOptionsChange({ ...options, style: inferred.tone });
+    }
+  }
+
   function chooseCategory(category: BriefCategory) {
     setActiveCategory(category);
     const firstTemplate = briefTemplateCards[category][0];
     const templateStyle = templateStyleFor(firstTemplate);
     setSelectedTemplate(firstTemplate);
     setSelectedTemplateRole("style");
+    setStyleSource("template");
     setSelectedStyleId(templateStyle.id);
     setStyleMode(templateStyle.mode);
     onOptionsChange({ ...options, style: templateStyle.tone });
@@ -1827,6 +1855,7 @@ function BriefScreen({
     const templateStyle = templateStyleFor(template);
     setSelectedTemplate(template);
     setSelectedTemplateRole("style");
+    setStyleSource("template");
     setSelectedStyleId(templateStyle.id);
     setStyleMode(templateStyle.mode);
     onOptionsChange({ ...options, style: templateStyle.tone });
@@ -1842,8 +1871,18 @@ function BriefScreen({
   function chooseVisualStyle(style: BriefVisualStyle) {
     setSelectedStyleId(style.id);
     setStyleMode(style.mode);
+    setStyleSource("manual");
     onOptionsChange({ ...options, style: style.tone });
     if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, selectedTemplateRole, style));
+  }
+
+  function chooseAutoStyle() {
+    const inferred = inferVisualStyleForPrompt(prompt);
+    setStyleSource("auto");
+    setSelectedStyleId(inferred.id);
+    setStyleMode(inferred.mode);
+    onOptionsChange({ ...options, style: inferred.tone });
+    if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, selectedTemplateRole, inferred));
   }
 
   function openAdvancedSettings() {
@@ -1863,7 +1902,7 @@ function BriefScreen({
           <div className="kv-composer-settings" role="toolbar" aria-label="视频生成设置">
             <button onClick={() => setActiveSettings("style")} type="button">
               <i><Brush size={18} /></i>
-              <span><strong>{selectedVisualStyle.label}</strong><small>Style</small></span>
+              <span><strong>{styleSource === "auto" ? `Auto · ${selectedVisualStyle.label}` : selectedVisualStyle.label}</strong><small>Style</small></span>
             </button>
             <button onClick={() => setActiveSettings("avatar")} type="button">
               <i><User size={18} /></i>
@@ -1910,7 +1949,7 @@ function BriefScreen({
             </div>
           ) : null}
           <textarea
-            onChange={(event) => onPromptChange(event.target.value)}
+            onChange={(event) => updatePrompt(event.target.value)}
             placeholder="Tell Know Video your explainer video idea"
             value={prompt}
           />
@@ -1955,9 +1994,8 @@ function BriefScreen({
         <div className="kv-home-templates">
           {visibleTemplateCards.map((card) => (
             <button className={`${card.className}${selectedTemplate?.title === card.title ? " active" : ""}`} key={card.title} onClick={() => chooseTemplate(card)} type="button">
-              <span>{card.title}</span>
-              <small>{card.detail}</small>
-              <em>{templateStyleFor(card).label}</em>
+              <span className="kv-template-scene" aria-hidden="true"><i /><b /><em /></span>
+              <span className="kv-template-copy"><strong>{card.title}</strong><small>{card.detail}</small><em>{templateStyleFor(card).label}</em></span>
             </button>
           ))}
         </div>
@@ -2041,11 +2079,15 @@ function BriefScreen({
                   <button className={styleMode === "animated" ? "active" : ""} onClick={() => setStyleMode("animated")} type="button">Animated</button>
                   <button className={styleMode === "realistic" ? "active" : ""} onClick={() => setStyleMode("realistic")} type="button">Hyper Realistic</button>
                 </div>
+                <button className={`kv-style-auto${styleSource === "auto" ? " active" : ""}`} onClick={chooseAutoStyle} type="button">
+                  <i>Auto</i>
+                  <span><strong>根据提示词自动选择</strong><small>当前判断：{inferredVisualStyle.label}</small></span>
+                </button>
                 <p className="kv-style-count">{visibleVisualStyles.length} styles</p>
                 <div className="kv-style-grid">
                   {visibleVisualStyles.map((style) => (
                     <button className={selectedStyleId === style.id ? "active" : ""} key={style.id} onClick={() => chooseVisualStyle(style)} type="button">
-                      <span className={`kv-style-thumb style-${style.thumbnail}`} />
+                      <span className={`kv-style-thumb style-${style.thumbnail}`} aria-hidden="true"><i /><b /><em /></span>
                       <strong>{style.label}</strong>
                       <small>{style.summary}</small>
                     </button>
