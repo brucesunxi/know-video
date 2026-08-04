@@ -9518,3 +9518,122 @@ html[data-theme="dark"] .kv-user-menu {
 .kv-style-thumb.style-product-ui {
   --kv-style-bg: linear-gradient(135deg, #0f172a 0%, #0f766e 100%);
 }
+
+/* Real visual references for templates and the style library. */
+.kv-home-templates button {
+  min-height: 196px;
+  padding: 18px;
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.kv-home-templates button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.18);
+}
+
+.kv-home-templates button::before {
+  background-image:
+    linear-gradient(180deg, rgba(4, 8, 15, 0.02) 34%, rgba(4, 8, 15, 0.32) 62%, rgba(4, 8, 15, 0.9) 100%),
+    var(--kv-template-image) !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: cover !important;
+  transition: transform 360ms ease;
+}
+
+.kv-home-templates button:hover::before {
+  transform: scale(1.025);
+}
+
+.kv-home-templates button::after {
+  display: none;
+}
+
+.kv-template-copy {
+  min-height: 160px;
+  gap: 4px;
+}
+
+.kv-home-templates .kv-template-copy::before {
+  display: none;
+}
+
+.kv-home-templates .kv-template-copy strong {
+  font-size: 18px;
+  line-height: 1.18;
+}
+
+.kv-home-templates .kv-template-copy small {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.kv-home-templates .kv-template-copy em {
+  margin-top: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(10, 15, 22, 0.48);
+  color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(9px);
+}
+
+.kv-template-reference-card::before {
+  background-image:
+    linear-gradient(180deg, transparent 24%, rgba(0, 0, 0, 0.78)),
+    var(--kv-template-image) !important;
+  background-position: center !important;
+  background-size: cover !important;
+}
+
+.kv-template-reference-card::after {
+  display: none;
+}
+
+:where(.kv-home-templates button, .kv-template-reference-card).phishing { --kv-template-image: url("/template-previews/phishing.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).safety { --kv-template-image: url("/template-previews/safety.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).support { --kv-template-image: url("/template-previews/support.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).quarterly { --kv-template-image: url("/template-previews/quarterly.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).policy { --kv-template-image: url("/template-previews/policy.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).rollout { --kv-template-image: url("/template-previews/rollout.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).launch { --kv-template-image: url("/template-previews/launch.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).success { --kv-template-image: url("/template-previews/success.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).event { --kv-template-image: url("/template-previews/event.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).pitch { --kv-template-image: url("/template-previews/pitch.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).compare { --kv-template-image: url("/template-previews/compare.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).renewal { --kv-template-image: url("/template-previews/renewal.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).concept { --kv-template-image: url("/template-previews/concept.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).tutorial { --kv-template-image: url("/template-previews/tutorial.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).doc { --kv-template-image: url("/template-previews/doc.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).property { --kv-template-image: url("/template-previews/property.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).community { --kv-template-image: url("/template-previews/community.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).tour { --kv-template-image: url("/template-previews/tour.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).finance { --kv-template-image: url("/template-previews/finance.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).budget { --kv-template-image: url("/template-previews/budget.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).risk { --kv-template-image: url("/template-previews/risk.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).onboarding { --kv-template-image: url("/template-previews/onboarding.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).leadership { --kv-template-image: url("/template-previews/leadership.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).course { --kv-template-image: url("/template-previews/course.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).social { --kv-template-image: url("/template-previews/social.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).testimonial { --kv-template-image: url("/template-previews/testimonial.webp"); }
+:where(.kv-home-templates button, .kv-template-reference-card).countdown { --kv-template-image: url("/template-previews/countdown.webp"); }
+
+.kv-style-thumb {
+  height: 126px;
+  background-image:
+    linear-gradient(180deg, transparent 54%, rgba(5, 10, 18, 0.28)),
+    var(--kv-style-image) !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: cover !important;
+}
+
+.kv-style-thumb.style-chalkboard { --kv-style-image: url("/template-previews/concept.webp"); }
+.kv-style-thumb.style-simple-line { --kv-style-image: url("/template-previews/support.webp"); }
+.kv-style-thumb.style-collage { --kv-style-image: url("/template-previews/launch.webp"); }
+.kv-style-thumb.style-comic-book { --kv-style-image: url("/template-previews/social.webp"); }
+.kv-style-thumb.style-memphis { --kv-style-image: url("/template-previews/onboarding.webp"); }
+.kv-style-thumb.style-isometric { --kv-style-image: url("/template-previews/tour.webp"); }
+.kv-style-thumb.style-pixel-art { --kv-style-image: url("/template-previews/course.webp"); }
+.kv-style-thumb.style-safety-poster { --kv-style-image: url("/template-previews/phishing.webp"); }
+.kv-style-thumb.style-cinematic-realism { --kv-style-image: url("/template-previews/property.webp"); }
+.kv-style-thumb.style-product-ui { --kv-style-image: url("/template-previews/rollout.webp"); }
