@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, ClipboardEvent as ReactClipboardEvent, DragEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PlayerRef } from "@remotion/player";
 import {
   AlertCircle,
@@ -950,6 +950,30 @@ function fileSizeLabel(value: unknown) {
   return `${(bytes / 1_000_000).toFixed(bytes >= 10_000_000 ? 0 : 1)} MB`;
 }
 
+function normalizeClipboardFile(file: File | null, index: number) {
+  if (!file) return undefined;
+  if (file.name.trim()) return file;
+  const extension = file.type === "image/png"
+    ? "png"
+    : file.type === "image/jpeg"
+      ? "jpg"
+      : file.type === "image/webp"
+        ? "webp"
+        : file.type === "video/mp4"
+          ? "mp4"
+          : file.type === "video/webm"
+            ? "webm"
+            : file.type === "audio/wav" || file.type === "audio/x-wav"
+              ? "wav"
+              : file.type === "audio/mpeg"
+                ? "mp3"
+                : "asset";
+  return new File([file], `pasted-reference-${index + 1}.${extension}`, {
+    type: file.type,
+    lastModified: file.lastModified || Date.now()
+  });
+}
+
 function decimalSecondsLabel(value: unknown) {
   const seconds = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
@@ -1707,6 +1731,7 @@ function BriefScreen({
   onPromptChange,
   onOptionsChange,
   onOpenAttachmentPicker,
+  onAddAttachments,
   onRemoveAttachment,
   onUseExample,
   onSubmit,
@@ -1722,6 +1747,7 @@ function BriefScreen({
   onPromptChange: (value: string) => void;
   onOptionsChange: (value: GenerationOptions) => void;
   onOpenAttachmentPicker: () => void;
+  onAddAttachments: (files: File[]) => void;
   onRemoveAttachment: (index: number) => void;
   onUseExample: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -1744,6 +1770,7 @@ function BriefScreen({
   const [previewingVoice, setPreviewingVoice] = useState<NarrationVoice>();
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string>();
+  const [composerDragActive, setComposerDragActive] = useState(false);
   const previewUrlsRef = useRef(new Map<NarrationVoice, string>());
   const previewAudioRef = useRef<HTMLAudioElement>();
   const previewAbortRef = useRef<AbortController>();
@@ -1885,6 +1912,42 @@ function BriefScreen({
     if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, selectedTemplateRole, inferred));
   }
 
+  function removeTemplateReference() {
+    setSelectedTemplate(undefined);
+    setSelectedTemplateRole("style");
+    if (styleSource === "template") setStyleSource("manual");
+  }
+
+  function clipboardFiles(event: ReactClipboardEvent<HTMLElement>) {
+    return Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item, index) => normalizeClipboardFile(item.getAsFile(), index))
+      .filter((file): file is File => Boolean(file));
+  }
+
+  function handleIncomingFiles(files: File[]) {
+    if (files.length === 0 || isBusy) return;
+    if (activeSettings === "brand" && files.some((file) => file.type.startsWith("image/"))) {
+      setBrandMode("uploaded");
+    }
+    onAddAttachments(files);
+  }
+
+  function handlePasteFiles(event: ReactClipboardEvent<HTMLElement>) {
+    const files = clipboardFiles(event);
+    if (files.length === 0) return;
+    event.preventDefault();
+    handleIncomingFiles(files);
+  }
+
+  function handleDropFiles(event: DragEvent<HTMLElement>) {
+    const files = Array.from(event.dataTransfer.files);
+    setComposerDragActive(false);
+    if (files.length === 0) return;
+    event.preventDefault();
+    handleIncomingFiles(files);
+  }
+
   function openAdvancedSettings() {
     if (advancedSettingsRef.current) {
       advancedSettingsRef.current.open = true;
@@ -1898,7 +1961,26 @@ function BriefScreen({
         <span className="kv-home-engine">Idea to Video Engine</span>
         <h2>Generate polished videos from one request</h2>
         <p>输入需求，Know Video 会规划脚本、分镜、画面、配音和可继续对话修改的版本。</p>
-        <form className="kv-home-composer" onSubmit={onSubmit}>
+        <form
+          className={`kv-home-composer${composerDragActive ? " is-dragging" : ""}`}
+          onDragEnter={(event) => {
+            if (isBusy || event.dataTransfer.types.includes("Files") === false) return;
+            event.preventDefault();
+            setComposerDragActive(true);
+          }}
+          onDragLeave={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+            setComposerDragActive(false);
+          }}
+          onDragOver={(event) => {
+            if (isBusy || event.dataTransfer.types.includes("Files") === false) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+          }}
+          onDrop={handleDropFiles}
+          onPaste={handlePasteFiles}
+          onSubmit={onSubmit}
+        >
           <div className="kv-composer-settings" role="toolbar" aria-label="视频生成设置">
             <button onClick={() => setActiveSettings("style")} type="button">
               <i><Brush size={18} /></i>
@@ -1930,6 +2012,7 @@ function BriefScreen({
                 </span>
               </div>
               <figure className={`kv-template-reference-card ${selectedTemplate.className}`}>
+                <button aria-label="移除模板参考" className="kv-template-reference-remove" disabled={isBusy} onClick={removeTemplateReference} title="移除模板参考" type="button"><X size={13} /></button>
                 <label>
                   <select
                     aria-label="模板素材角色"
@@ -2067,7 +2150,18 @@ function BriefScreen({
         <div className="kv-settings-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setActiveSettings(undefined);
         }}>
-          <section aria-modal="true" className={`kv-settings-modal ${activeSettings}`} role="dialog">
+          <section
+            aria-modal="true"
+            className={`kv-settings-modal ${activeSettings}`}
+            onDragOver={(event) => {
+              if (isBusy || event.dataTransfer.types.includes("Files") === false) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+            }}
+            onDrop={handleDropFiles}
+            onPaste={handlePasteFiles}
+            role="dialog"
+          >
             <button aria-label="关闭设置" className="kv-settings-close" onClick={() => setActiveSettings(undefined)} type="button"><X size={18} /></button>
             {activeSettings === "style" ? (
               <>
@@ -3128,6 +3222,7 @@ function ProductionSettingsPanel({
   uploadType,
   onChange,
   onUpload,
+  onUploadFile,
   onRemove
 }: {
   settings: ProductionSettings;
@@ -3139,6 +3234,7 @@ function ProductionSettingsPanel({
   uploadType?: "logo" | "music";
   onChange: (settings: Partial<ProductionSettings>) => void;
   onUpload: (type: "logo" | "music") => void;
+  onUploadFile: (type: "logo" | "music", file: File) => void;
   onRemove: (type: "logo" | "music") => void;
 }) {
   const [musicVolume, setMusicVolume] = useState(settings.musicVolume);
@@ -3148,6 +3244,44 @@ function ProductionSettingsPanel({
 
   useEffect(() => setMusicVolume(settings.musicVolume), [settings.musicVolume]);
   useEffect(() => setLogoSize(settings.logoSize), [settings.logoSize]);
+
+  function productionClipboardFiles(event: ReactClipboardEvent<HTMLElement>) {
+    return Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item, index) => normalizeClipboardFile(item.getAsFile(), index))
+      .filter((file): file is File => Boolean(file));
+  }
+
+  function firstProductionFile(type: "logo" | "music", files: File[]) {
+    return files.find((file) => type === "logo"
+      ? ["image/png", "image/jpeg", "image/webp"].includes(file.type)
+      : ["audio/mpeg", "audio/wav", "audio/x-wav"].includes(file.type));
+  }
+
+  function handleProductionFiles(type: "logo" | "music", files: File[]) {
+    const file = firstProductionFile(type, files);
+    if (!file || isBusy) return false;
+    onUploadFile(type, file);
+    return true;
+  }
+
+  function productionDropHandlers(type: "logo" | "music") {
+    return {
+      onDragOver: (event: DragEvent<HTMLDivElement>) => {
+        if (isBusy || event.dataTransfer.types.includes("Files") === false) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      },
+      onDrop: (event: DragEvent<HTMLDivElement>) => {
+        const handled = handleProductionFiles(type, Array.from(event.dataTransfer.files));
+        if (handled) event.preventDefault();
+      },
+      onPaste: (event: ReactClipboardEvent<HTMLDivElement>) => {
+        const handled = handleProductionFiles(type, productionClipboardFiles(event));
+        if (handled) event.preventDefault();
+      }
+    };
+  }
 
   return (
     <section className="kv-production-panel">
@@ -3228,7 +3362,7 @@ function ProductionSettingsPanel({
         </div>
         <div className="kv-production-control">
           <div className="kv-production-control-title"><Music2 size={17} /><strong>背景音乐</strong></div>
-          <div className="kv-production-asset-row">
+          <div className="kv-production-asset-row" tabIndex={0} {...productionDropHandlers("music")}>
             <div><strong>{String(music?.metadata?.name ?? "尚未添加")}</strong><span>{music ? fileSizeLabel(music.metadata?.size) : "MP3 或 WAV"}</span></div>
             <button disabled={isBusy} onClick={() => onUpload("music")} type="button">
               {uploadType === "music" ? <Loader2 className="kv-spin" size={15} /> : <Upload size={15} />}
@@ -3267,7 +3401,7 @@ function ProductionSettingsPanel({
         </div>
         <div className="kv-production-control">
           <div className="kv-production-control-title"><ImagePlus size={17} /><strong>品牌 Logo</strong></div>
-          <div className="kv-production-asset-row">
+          <div className="kv-production-asset-row" tabIndex={0} {...productionDropHandlers("logo")}>
             <div><strong>{String(logo?.metadata?.name ?? "尚未添加")}</strong><span>{logo ? fileSizeLabel(logo.metadata?.size) : "透明 PNG 效果最佳"}</span></div>
             <button disabled={isBusy} onClick={() => onUpload("logo")} type="button">
               {uploadType === "logo" ? <Loader2 className="kv-spin" size={15} /> : <Upload size={15} />}
@@ -3966,6 +4100,7 @@ function StudioScreen({
   onToggleProduction,
   onUpdateProduction,
   onUploadProduction,
+  onUploadProductionFile,
   onRemoveProduction,
   onMutateScene,
   onSaveScene,
@@ -4026,6 +4161,7 @@ function StudioScreen({
   onToggleProduction: () => void;
   onUpdateProduction: (settings: Partial<ProductionSettings>) => void;
   onUploadProduction: (type: "logo" | "music") => void;
+  onUploadProductionFile: (type: "logo" | "music", file: File) => void;
   onRemoveProduction: (type: "logo" | "music") => void;
   onMutateScene: (mutation: SceneStructureMutation) => void;
   onSaveScene: (sceneNumber: number, edits: SceneTextEdits) => void;
@@ -4457,6 +4593,7 @@ function StudioScreen({
             onChange={onUpdateProduction}
             onRemove={onRemoveProduction}
             onUpload={onUploadProduction}
+            onUploadFile={onUploadProductionFile}
             settings={filmSettings}
             uploadProgress={uploadProgress}
             uploadType={productionUploadType}
@@ -4863,9 +5000,7 @@ export function WorkspaceClient({
     window.setTimeout(() => setStage("studio"), 350);
   }
 
-  function selectBriefAttachments(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
+  function addBriefAttachmentFiles(files: File[]) {
     if (files.length === 0) return;
     const valid: File[] = [];
     for (const file of files) {
@@ -4879,6 +5014,7 @@ export function WorkspaceClient({
       }
       valid.push(file);
     }
+    if (valid.length > 0) setErrorMessage(undefined);
     setBriefAttachments((current) => {
       const combined = [...current];
       for (const file of valid) {
@@ -4889,6 +5025,12 @@ export function WorkspaceClient({
       if (combined.length > 6) setErrorMessage("一次最多添加 6 个参考素材。");
       return combined.slice(0, 6);
     });
+  }
+
+  function selectBriefAttachments(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    addBriefAttachmentFiles(files);
   }
 
   function selectChatAttachments(event: ChangeEvent<HTMLInputElement>) {
@@ -5923,11 +6065,7 @@ export function WorkspaceClient({
     }
   }
 
-  async function uploadProductionAsset(type: "logo" | "music", event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
+  async function uploadProductionAssetFile(type: "logo" | "music", file: File) {
     setIsBusy(true);
     setBusyAction("uploading-asset");
     setProductionUploadType(type);
@@ -6000,6 +6138,13 @@ export function WorkspaceClient({
       setProductionUploadType(undefined);
       setUploadProgress(undefined);
     }
+  }
+
+  async function uploadProductionAsset(type: "logo" | "music", event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    await uploadProductionAssetFile(type, file);
   }
 
   async function removeProductionAsset(type: "logo" | "music") {
@@ -6478,6 +6623,7 @@ export function WorkspaceClient({
           isBusy={isBusy}
           onOpenStudio={() => setStage("studio")}
           onOpenAttachmentPicker={() => briefFileInputRef.current?.click()}
+          onAddAttachments={addBriefAttachmentFiles}
           onOptionsChange={setGenerationOptions}
           onPromptChange={setBriefPrompt}
           onRemoveAttachment={(index) => setBriefAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index))}
@@ -6565,6 +6711,7 @@ export function WorkspaceClient({
           onToggleProduction={toggleProduction}
           onUpdateProduction={(settings) => void updateProductionSettingsAction(settings)}
           onUploadProduction={(type) => (type === "logo" ? logoInputRef : musicInputRef).current?.click()}
+          onUploadProductionFile={(type, file) => void uploadProductionAssetFile(type, file)}
           onRemoveProduction={(type) => void removeProductionAsset(type)}
           onMutateScene={(mutation) => void mutateSceneStructure(mutation)}
           onSaveScene={saveSceneEdits}

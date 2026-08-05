@@ -1341,6 +1341,12 @@ html[data-theme="dark"] .kv-user-menu {
   box-shadow: 0 24px 70px rgba(16, 24, 40, 0.12);
 }
 
+.kv-home-composer.is-dragging {
+  border-color: #111;
+  background: #fbfbfa;
+  box-shadow: 0 24px 70px rgba(16, 24, 40, 0.14), inset 0 0 0 2px rgba(17, 17, 17, 0.08);
+}
+
 .kv-composer-settings {
   display: flex;
   flex-wrap: wrap;
@@ -1457,6 +1463,25 @@ html[data-theme="dark"] .kv-user-menu {
   z-index: 2;
   top: 8px;
   left: 8px;
+}
+
+.kv-template-reference-remove {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.82);
+  color: #fff;
+}
+
+.kv-template-reference-remove:hover,
+.kv-template-reference-remove:focus-visible {
+  background: rgba(17, 17, 17, 0.96);
 }
 
 .kv-template-reference-card select {
@@ -5256,6 +5281,11 @@ html[data-theme="dark"] .kv-user-menu {
 .kv-production-asset-row {
   min-width: 0;
   gap: 8px;
+}
+
+.kv-production-asset-row:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 3px;
 }
 
 .kv-production-asset-row > div {
