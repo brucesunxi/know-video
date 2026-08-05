@@ -1369,6 +1369,7 @@ function busyActionLabel(action?: BusyAction) {
 }
 
 function projectStatusBadges(project: Project, source: Source, stage: Stage) {
+  if (stage === "projects") return [];
   if (stage === "generating") {
     return [
       { label: "正在创建新项目", tone: "working" },
@@ -6739,7 +6740,18 @@ export function WorkspaceClient({
       const data = await response.json() as { deleted?: boolean; error?: string };
       if (!response.ok || !data.deleted) throw new Error(data.error || "项目删除失败。");
       setProjects((current) => current.filter((item) => item.id !== projectId));
-      if (project.id === projectId) window.location.assign("/");
+      if (project.id === projectId) {
+        setProjectSource("empty");
+        setMessages([]);
+        setPendingPlan(undefined);
+        setVersions([]);
+        setVersionPreview(undefined);
+        setRenderJobs([]);
+        setInvalidRenderMedia([]);
+        setGenerationIssues([]);
+        setActiveRenderJobId(undefined);
+      }
+      setStage("projects");
       return true;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "项目删除失败。");
