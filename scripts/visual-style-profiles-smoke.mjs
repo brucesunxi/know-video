@@ -9,7 +9,7 @@ const profileOutput = ts.transpileModule(profileSource, {
 }).outputText;
 const module = { exports: {} };
 vm.runInNewContext(profileOutput, { module, exports: module.exports, require: () => ({}) });
-const { visualStyleDirection, visualStyleProfile, visualStyleProfiles } = module.exports;
+const { exactVisualStyleDirection, visualStyleDirection, visualStyleProfile, visualStyleProfiles } = module.exports;
 
 const styles = ["电影质感", "极简高级", "明快有活力", "温暖自然"];
 const palettes = styles.map((style) => visualStyleProfile(style).palette.join(","));
@@ -19,12 +19,17 @@ assert.match(visualStyleDirection("极简高级"), /minimalist|negative space|so
 assert.match(visualStyleDirection("明快有活力"), /energetic|high-key|accent colors|rhythmic/i);
 assert.match(visualStyleDirection("温暖自然"), /warm|window light|human-centered|wood/i);
 assert.equal(Object.keys(visualStyleProfiles).length, 4);
+assert.match(exactVisualStyleDirection({ visualStyleId: "pixel-art", visualStyleLabel: "像素游戏" }), /STRICT 2D PIXEL ART ONLY/);
+assert.match(exactVisualStyleDirection({ visualStyleId: "chalkboard" }), /chalk drawing only/i);
 
 const aiVideo = fs.readFileSync(new URL("../lib/ai-video.ts", import.meta.url), "utf8");
 const videoBrain = fs.readFileSync(new URL("../lib/video-brain.ts", import.meta.url), "utf8");
 assert.match(aiVideo, /visualStyleDirection\(options\.style\)/);
+assert.match(aiVideo, /visualStyleId: options\?\.visualStyleId/);
+assert.match(aiVideo, /exactVisualStyleDirection\(options\)/);
 assert.match(aiVideo, /visualBible:[\s\S]*palette: profile\.palette[\s\S]*lighting: profile\.lighting[\s\S]*cameraLanguage: profile\.cameraLanguage/);
 assert.match(videoBrain, /visualStyleProfile\(options\.style\)/);
+assert.match(videoBrain, /visualStyleId: options\?\.visualStyleId/);
 assert.match(videoBrain, /theme: `\$\{profile\.label\} · \$\{profile\.artDirection\}`/);
 assert.doesNotMatch(videoBrain, /theme: "统一电影纪实风格"/);
 

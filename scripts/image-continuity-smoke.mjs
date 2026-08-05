@@ -19,11 +19,24 @@ const attachmentOutput = ts.transpileModule(attachmentSource, {
 }).outputText;
 const attachmentModule = { exports: {} };
 vm.runInNewContext(attachmentOutput, { module: attachmentModule, exports: attachmentModule.exports });
+const styleSource = fs.readFileSync(new URL("../lib/visual-style-profiles.ts", import.meta.url), "utf8");
+const styleOutput = ts.transpileModule(styleSource, {
+  compilerOptions: {
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022
+  }
+}).outputText;
+const styleModule = { exports: {} };
+vm.runInNewContext(styleOutput, { module: styleModule, exports: styleModule.exports, require: () => ({}) });
 const module = { exports: {} };
 vm.runInNewContext(output, {
   module,
   exports: module.exports,
-  require: (specifier) => specifier === "@/lib/attachment-context" ? attachmentModule.exports : {}
+  require: (specifier) => {
+    if (specifier === "@/lib/attachment-context") return attachmentModule.exports;
+    if (specifier === "@/lib/visual-style-profiles") return styleModule.exports;
+    return {};
+  }
 });
 const { enforceTextFreeImagePrompt, normalizeVisualRevisionInstruction, projectVisualIdentity, sceneImagePrompt, sceneRequiresPremiumImage, sceneVisualDiversityDirection, stableImageSeed } = module.exports;
 
@@ -76,6 +89,23 @@ assert.match(prompt, /absolutely no words, letters, numbers/);
 assert.match(prompt, /video renderer will add all readable titles/);
 assert.doesNotMatch(prompt, /Use little or no text/);
 
+const pixelScene = {
+  ...scene,
+  style: {
+    ...scene.style,
+    visualStyleId: "pixel-art",
+    visualStyleLabel: "像素游戏",
+    visualStylePrompt: "低分辨率像素块、霓虹色、游戏 UI 和复古动效。"
+  }
+};
+const pixelPrompt = sceneImagePrompt(pixelScene, {
+  ...project,
+  currentVersion: { ...project.currentVersion, scenes: [pixelScene] }
+}, []);
+assert.match(pixelPrompt, /STRICT 2D PIXEL ART ONLY/);
+assert.match(pixelPrompt, /No voxels, no low-poly 3D/);
+assert.match(pixelPrompt, /FINAL STYLE CHECK/);
+
 const revision = normalizeVisualRevisionInstruction("  主体更突出，  背景更简洁。\n不要出现文字。  ");
 assert.equal(revision, "主体更突出， 背景更简洁。 不要出现文字。");
 const revisionPrompt = sceneImagePrompt(scene, project, ["current"], revision);
@@ -121,7 +151,7 @@ const minecraftPrompt = sceneImagePrompt(minecraftScene, minecraftProject, []);
 assert.match(minecraftPrompt, /COURSE \/ GAME SEMANTIC FIDELITY/);
 assert.match(minecraftPrompt, /not five repeated landscapes/);
 assert.match(minecraftPrompt, /logic and experimentation beat/);
-assert.match(minecraftPrompt, /generic voxel sandbox aesthetic/);
+assert.match(minecraftPrompt, /scene's locked rendering style/);
 assert.match(minecraftPrompt, /generic voxel sandbox building game|方块沙盒创作游戏/);
 assert.match(minecraftPrompt, /do not depict identifiable real children/i);
 assert.doesNotMatch(minecraftPrompt, /Minecraft/);

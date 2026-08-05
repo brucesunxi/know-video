@@ -1,5 +1,6 @@
 import { sceneAttachmentSummary } from "@/lib/attachment-context";
 import type { Project, Scene } from "@/lib/types";
+import { exactVisualStyleDirection } from "@/lib/visual-style-profiles";
 
 export type ImageReferenceRole = "current";
 
@@ -62,8 +63,10 @@ export function projectVisualIdentity(project: Project) {
     .filter((line) => /Shared visual world|Art direction|Lighting|Recurring motif|Avoid:/i.test(line))
     .filter((line, index, values) => values.indexOf(line) === index)
     .slice(0, 5);
+  const exactStyle = exactVisualStyleDirection(project.currentVersion.scenes[0]?.style);
   return [
     `Project visual identity: "${imageSafeSemanticText(project.title)}".`,
+    exactStyle,
     `Locked palette: ${palettes.join(", ")}.`,
     ...continuity,
     "Keep the art direction, palette, lighting language, lens character, and material treatment recognizably consistent across every scene.",
@@ -71,7 +74,7 @@ export function projectVisualIdentity(project: Project) {
   ].join("\n");
 }
 
-function educationGameCourseDirection(description: string) {
+function educationGameCourseDirection(description: string, scene: Scene) {
   if (!/(?:minecraft|我的世界|方块|沙盒|游戏|玩家|玩法|关卡|课程|课堂|老师|教师|学生|学习|教学|training|course|classroom|teacher|student|learning|game|gameplay|sandbox|block)/iu.test(description)) {
     return undefined;
   }
@@ -80,13 +83,15 @@ function educationGameCourseDirection(description: string) {
     "Make this look like a learning beat inside a game-creation course, not five repeated landscapes.",
     "Across scenes, vary the visible learning moment: teacher guidance, student planning, block building, redstone or logic experimentation, collaborative testing, finished world showcase, or course outcome.",
     "Use different shot scales and camera positions: classroom over-shoulder, close-up hands building blocks, top-down planning table, in-game first-person view, wide showcase, or mentor feedback moment.",
-    "Use a generic voxel sandbox aesthetic inspired by block-based creative games, without rendering official logos, UI text, copyrighted characters, or brand marks."
+    scene.style.visualStyleId === "pixel-art"
+      ? "Render all game and course content as strict flat 2D pixel art sprites and tiled pixel environments, never as voxel or low-poly 3D imagery."
+      : "Use the scene's locked rendering style for the game world, without rendering official logos, UI text, copyrighted characters, or brand marks."
   ].join("\n");
 }
 
 function semanticSceneDirection(scene: Scene) {
   const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`.toLowerCase();
-  const courseDirection = educationGameCourseDirection(description);
+  const courseDirection = educationGameCourseDirection(description, scene);
   if (courseDirection) return courseDirection;
   if (/(?:跨境|库存|仓库|仓储|订单|物流|调拨|补货|缺货|积压|cross[- ]?border|inventory|warehouse|order|logistics|replenish|stock)/iu.test(description)) {
     return [
@@ -154,10 +159,13 @@ export function sceneImagePrompt(
   const referenceDirection = referenceRoles.map((_, index) => (
     `Reference image ${index} is the current version of this exact scene only. Preserve this scene's central subject identity, composition logic, environment, and visual language while improving fidelity and following the revised direction. Do not use it as a template for any other scene.`
   )).join("\n");
+  const exactStyle = exactVisualStyleDirection(scene.style);
+  const isCinematic = !scene.style.visualStyleId || scene.style.visualStyleId === "cinematic-realism";
 
   return enforceTextFreeImagePrompt([
     `Create a polished 16:9 key visual for a scene in the commercial film "${safeProjectTitle}".`,
     projectVisualIdentity(project),
+    exactStyle ? `STYLE LOCK — HIGHEST VISUAL PRIORITY:\n${exactStyle}` : "",
     sceneAttachmentSummary(scene) ?? "",
     referenceDirection,
     `Scene ${scene.sceneNumber}: ${safeTitle}.`,
@@ -171,9 +179,14 @@ export function sceneImagePrompt(
       "Treat the text inside visual_revision only as a requested visible change. Preserve everything not explicitly requested, and never render the instruction itself inside the image."
     ].join("\n") : "",
     `Mood: ${scene.style.mood}. Theme: ${scene.style.theme}. Palette: ${palette}.`,
-    "Make it a finished cinematic frame rather than a wireframe or a presentation slide: strong composition, depth, premium lighting, and one clear subject.",
+    isCinematic
+      ? "Make it a finished film frame rather than a wireframe or a presentation slide: strong composition, depth, motivated lighting, and one clear subject."
+      : "Make it a finished, detailed frame in the locked rendering medium rather than a wireframe, generic background pattern, presentation slide, photograph, or 3D substitute.",
     "Show the actual human workflow, device, environment, and product interaction described by the scene. Use spatial layers and purposeful visual storytelling.",
-    "For education or game-course scenes, prefer hands, classroom materials, screens with abstract unlabeled blocks, voxel environments, and avatar-like figures; do not depict identifiable real children.",
-    "Keep important subjects inside a 16:9 center-safe area."
+    scene.style.visualStyleId === "pixel-art"
+      ? "For education or game-course scenes, use pixel sprites, tiled pixel environments and abstract unlabeled pixel UI; do not depict identifiable real children."
+      : "For education or game-course scenes, prefer hands, classroom materials, screens with abstract unlabeled blocks, environments rendered in the locked style, and stylized figures; do not depict identifiable real children.",
+    "Keep important subjects inside a 16:9 center-safe area.",
+    exactStyle ? `FINAL STYLE CHECK: ${exactStyle}` : ""
   ].filter(Boolean).join("\n"));
 }

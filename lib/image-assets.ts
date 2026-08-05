@@ -15,6 +15,7 @@ import { GeneratedImageQualityError, normalizeGeneratedImage } from "@/lib/image
 import { mediaAssetStatus } from "@/lib/generation-resume";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
+import { exactVisualStyleDirection } from "@/lib/visual-style-profiles";
 
 function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
   if (hasCloudflareAI()) return undefined;
@@ -48,9 +49,10 @@ function buildBrandSafeImagePrompt(scene: Scene, project: Project) {
   return enforceTextFreeImagePrompt([
     `Create a brand-safe 16:9 cinematic key visual for the commercial film "${imageSafeSemanticText(project.title)}".`,
     projectVisualIdentity(project),
+    exactVisualStyleDirection(scene.style),
     `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
     `Scene meaning: ${imageSafeSemanticText(scene.voiceover)} ${imageSafeSemanticText(scene.visualPrompt)}`,
-    `Use a brand-neutral educational or commercial metaphor built from architecture, light, layered materials, objects, devices, voxel-like blocks when relevant, and purposeful motion.`,
+    "Use a brand-neutral educational or commercial scene with concrete subject matter and purposeful action, rendered only in the locked style above.",
     `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
     "Premium commercial art direction, strong depth, one clear focal point, refined lighting, and generous negative space.",
     "Do not depict identifiable people, faces, children, weapons, conflict, politics, medical content, dashboards, presentation slides, floating UI cards, protected characters, official game logos, or brand marks."
@@ -62,10 +64,11 @@ function buildUltraSafeSceneImagePrompt(scene: Scene, project: Project) {
     "Create a safe 16:9 educational commercial background plate.",
     `Topic: ${imageSafeSemanticText(project.title)}.`,
     `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
+    exactVisualStyleDirection(scene.style),
     `Meaning to visualize: ${imageSafeSemanticText(scene.voiceover)}.`,
     semanticFallbackComposition(scene),
     `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
-    "Use only abstract learning objects, clean studio lighting, hands-free product props, geometric paths, neutral voxel blocks, empty desks, and environment details.",
+    "Use safe scene-specific learning objects, product props, paths and environment details, all rendered only in the locked style above.",
     "No recognizable brands, logos, readable text, real minors, faces, copyrighted characters, weapons, harm, conflict, or sensitive content."
   ].join("\n"));
 }
@@ -288,7 +291,7 @@ async function generateSceneImage(
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
     const attemptPrompt = enforceTextFreeImagePrompt(qualityAttempt === 0
       ? prompt
-      : `${prompt}\nQuality correction: produce a fully resolved, information-rich cinematic frame with clear subject separation, detailed materials, and meaningful foreground, midground, and background. Avoid empty gradients or featureless surfaces.`);
+      : `${prompt}\nQuality correction: produce a fully resolved, information-rich frame in the exact locked rendering medium, with clear subject separation and meaningful foreground, midground, and background. Do not switch to photography, 3D, voxel, low-poly, or another illustration style. Avoid empty gradients or featureless surfaces.`);
     let generatedBody: Buffer;
     let generatedModel: string;
     let effectivePrompt = attemptPrompt;

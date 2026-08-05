@@ -32,7 +32,7 @@ import { buildEditPlanFromRequest, generateProjectFromPrompt } from "@/lib/video
 import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 import { parseModelJson } from "@/lib/model-json";
 import { estimateNarrationSeconds } from "@/lib/speech-timing";
-import { visualStyleDirection, visualStyleProfile } from "@/lib/visual-style-profiles";
+import { exactVisualStyleDirection, visualStyleDirection, visualStyleProfile } from "@/lib/visual-style-profiles";
 import type { EditPlan, GenerationOptions, ProductionAssetChange, ProductionSettings, Project, ProjectVersion, Scene, SceneStructureMutation } from "@/lib/types";
 
 type AiEngine = "deepseek-flash" | "openai" | "heuristic";
@@ -984,7 +984,10 @@ function normalizeStoryboard(
     durationSeconds: scene.durationSeconds,
     style: {
       ...scene.style,
-      palette: treatment.visualBible.palette
+      palette: treatment.visualBible.palette,
+      visualStyleId: options?.visualStyleId,
+      visualStyleLabel: options?.visualStyleLabel,
+      visualStylePrompt: options?.visualStylePrompt
     },
     assets: []
   }));
@@ -1019,7 +1022,7 @@ async function createTreatment(
     ? `Required language for workingTitle, all scene titles, narration, and visible text: ${options.language}.`
     : "Infer the language from the user's request.";
   const styleDirection = options
-    ? `Required overall visual style: ${options.style}. Use this exact style bible and make it visibly different from the other presets: ${visualStyleDirection(options.style)}`
+    ? `Required overall visual style: ${options.style}. ${exactVisualStyleDirection(options)} Use this exact style bible and make it visibly different from the other presets: ${visualStyleDirection(options.style)}`
     : "Infer an appropriate visual style from the user's request.";
   const averageSceneSeconds = targetDuration / sceneCount;
   const narrationBudgetDirection = options?.language === "英文"

@@ -99,6 +99,8 @@ type MediaGenerationResponse = {
 };
 
 const IMAGE_GENERATION_TIMEOUT_MS = 305_000;
+const AUDIO_GENERATION_TIMEOUT_MS = 305_000;
+const AUTOMATIC_MEDIA_REPAIR_ATTEMPTS = 3;
 type InvalidRenderMedia = {
   sceneNumber: number;
   type: "visual" | "audio";
@@ -375,6 +377,16 @@ function generationReviewItems(prompt: string, options: GenerationOptions) {
 
 function visualStyleById(styleId: string) {
   return briefVisualStyles.find((style) => style.id === styleId) ?? briefVisualStyles[0];
+}
+
+function optionsWithVisualStyle(options: GenerationOptions, style: BriefVisualStyle): GenerationOptions {
+  return {
+    ...options,
+    style: style.tone,
+    visualStyleId: style.id,
+    visualStyleLabel: style.label,
+    visualStylePrompt: style.prompt
+  };
 }
 
 function inferVisualStyleForPrompt(value: string) {
@@ -1900,7 +1912,7 @@ function BriefScreen({
       const inferred = inferVisualStyleForPrompt(value);
       setSelectedStyleId(inferred.id);
       setStyleMode(inferred.mode);
-      onOptionsChange({ ...options, style: inferred.tone });
+      onOptionsChange(optionsWithVisualStyle(options, inferred));
     }
   }
 
@@ -1913,7 +1925,7 @@ function BriefScreen({
     setStyleSource("template");
     setSelectedStyleId(templateStyle.id);
     setStyleMode(templateStyle.mode);
-    onOptionsChange({ ...options, style: templateStyle.tone });
+    onOptionsChange(optionsWithVisualStyle(options, templateStyle));
     onUseExample(templatePromptForRole(firstTemplate, "style", templateStyle));
   }
 
@@ -1924,13 +1936,13 @@ function BriefScreen({
     setStyleSource("template");
     setSelectedStyleId(templateStyle.id);
     setStyleMode(templateStyle.mode);
-    onOptionsChange({ ...options, style: templateStyle.tone });
+    onOptionsChange(optionsWithVisualStyle(options, templateStyle));
     onUseExample(templatePromptForRole(template, "style", templateStyle));
   }
 
   function chooseTemplateRole(role: BriefTemplateRole) {
     setSelectedTemplateRole(role);
-    if (selectedTemplate && role === "style") onOptionsChange({ ...options, style: selectedVisualStyle.tone });
+    if (selectedTemplate && role === "style") onOptionsChange(optionsWithVisualStyle(options, selectedVisualStyle));
     if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, role, selectedVisualStyle));
   }
 
@@ -1969,7 +1981,7 @@ function BriefScreen({
     setStyleSource(draftStyleSource);
     setSelectedStyleId(style.id);
     setStyleMode(style.mode);
-    onOptionsChange({ ...options, style: style.tone });
+    onOptionsChange(optionsWithVisualStyle(options, style));
     onUseExample(promptWithStyle(style));
     setActiveSettings(undefined);
   }
@@ -1984,7 +1996,7 @@ function BriefScreen({
       setStyleSource("auto");
       setSelectedStyleId(inferred.id);
       setStyleMode(inferred.mode);
-      onOptionsChange({ ...options, style: inferred.tone });
+      onOptionsChange(optionsWithVisualStyle(options, inferred));
     }
   }
 
@@ -1993,7 +2005,7 @@ function BriefScreen({
     setStyleSource("auto");
     setSelectedStyleId(inferred.id);
     setStyleMode(inferred.mode);
-    onOptionsChange({ ...options, style: inferred.tone });
+    onOptionsChange(optionsWithVisualStyle(options, inferred));
   }
 
   function clipboardFiles(event: ReactClipboardEvent<HTMLElement>) {
@@ -4843,6 +4855,9 @@ export function WorkspaceClient({
     sceneCount: "auto",
     language: "中文",
     style: "电影质感",
+    visualStyleId: "cinematic-realism",
+    visualStyleLabel: "电影纪实",
+    visualStylePrompt: "电影纪实风格：真实人物、浅景深、自然光影、现场空间和稳定镜头语言。",
     motion: "camera",
     videoTier: "economy",
     narrationVoice: DEFAULT_NARRATION_VOICE
@@ -5012,10 +5027,13 @@ export function WorkspaceClient({
       }
     ]);
 
-    const missingImageSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "image");
-    if (missingImageSceneNumbers.length > 0) {
+    let missingImageSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "image");
+    let imageFailureReason = "场景画面生成失败。";
+    for (let attempt = 0; attempt < AUTOMATIC_MEDIA_REPAIR_ATTEMPTS && missingImageSceneNumbers.length > 0; attempt += 1) {
       setProgress(64);
-      setGenerationStatus(resumeMissingOnly ? "正在补齐尚未完成的场景画面" : "正在生成统一风格的场景画面");
+      setGenerationStatus(attempt === 0
+        ? resumeMissingOnly ? "正在补齐尚未完成的场景画面" : "正在生成统一风格的场景画面"
+        : `正在自动补齐 ${missingImageSceneNumbers.length} 个缺失画面（第 ${attempt + 1} 次）`);
       try {
         const imageResponse = await fetch("/api/assets/generate", {
           method: "POST",
@@ -5033,22 +5051,24 @@ export function WorkspaceClient({
           generatedProject = imageData.project;
           setProject(generatedProject);
         }
-        if (!imageResponse.ok || (imageData.failedSceneNumbers?.length ?? 0) > 0) {
-          warnings.push(imageData.error || "部分场景画面生成失败。");
-          const failed = imageData.failedSceneNumbers?.length ? imageData.failedSceneNumbers : missingImageSceneNumbers;
-          issues.push(...failed.map((sceneNumber) => ({ sceneNumber, type: "visual" as const, reason: imageData.error || "场景画面生成失败" })));
-        }
+        if (!imageResponse.ok) imageFailureReason = imageData.error || imageFailureReason;
       } catch (error) {
-        const reason = requestErrorMessage(error, "场景画面生成失败。");
-        warnings.push(reason);
-        issues.push(...missingImageSceneNumbers.map((sceneNumber) => ({ sceneNumber, type: "visual" as const, reason })));
+        imageFailureReason = requestErrorMessage(error, imageFailureReason);
       }
+      missingImageSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "image");
+    }
+    if (missingImageSceneNumbers.length > 0) {
+      warnings.push(imageFailureReason);
+      issues.push(...missingImageSceneNumbers.map((sceneNumber) => ({ sceneNumber, type: "visual" as const, reason: imageFailureReason })));
     }
 
-    const missingAudioSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "audio");
-    if (missingAudioSceneNumbers.length > 0) {
+    let missingAudioSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "audio");
+    let audioFailureReason = "场景配音生成失败。";
+    for (let attempt = 0; attempt < AUTOMATIC_MEDIA_REPAIR_ATTEMPTS && missingAudioSceneNumbers.length > 0; attempt += 1) {
       setProgress(84);
-      setGenerationStatus(resumeMissingOnly ? "正在补齐尚未完成的自然配音" : "正在生成自然配音");
+      setGenerationStatus(attempt === 0
+        ? resumeMissingOnly ? "正在补齐尚未完成的自然配音" : "正在生成自然配音"
+        : `正在自动补齐 ${missingAudioSceneNumbers.length} 段缺失配音（第 ${attempt + 1} 次）`);
       try {
         const audioResponse = await fetch("/api/assets/audio/generate", {
           method: "POST",
@@ -5058,23 +5078,28 @@ export function WorkspaceClient({
             versionId: generatedProject.currentVersion.id,
             sceneNumbers: missingAudioSceneNumbers
           }),
-          signal: AbortSignal.timeout(125_000)
+          signal: AbortSignal.timeout(AUDIO_GENERATION_TIMEOUT_MS)
         });
         const audioData = await audioResponse.json() as MediaGenerationResponse;
         if (audioData.project) {
           generatedProject = audioData.project;
           setProject(generatedProject);
         }
-        if (!audioResponse.ok || (audioData.failedSceneNumbers?.length ?? 0) > 0) {
-          warnings.push(audioData.error || "部分场景配音生成失败。");
-          const failed = audioData.failedSceneNumbers?.length ? audioData.failedSceneNumbers : missingAudioSceneNumbers;
-          issues.push(...failed.map((sceneNumber) => ({ sceneNumber, type: "audio" as const, reason: audioData.error || "场景配音生成失败" })));
-        }
+        if (!audioResponse.ok) audioFailureReason = audioData.error || audioFailureReason;
       } catch (error) {
-        const reason = requestErrorMessage(error, "场景配音生成失败。");
-        warnings.push(reason);
-        issues.push(...missingAudioSceneNumbers.map((sceneNumber) => ({ sceneNumber, type: "audio" as const, reason })));
+        audioFailureReason = requestErrorMessage(error, audioFailureReason);
       }
+      missingAudioSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "audio");
+    }
+    if (missingAudioSceneNumbers.length > 0) {
+      warnings.push(audioFailureReason);
+      issues.push(...missingAudioSceneNumbers.map((sceneNumber) => ({ sceneNumber, type: "audio" as const, reason: audioFailureReason })));
+    }
+
+    if (missingImageSceneNumbers.length > 0 || missingAudioSceneNumbers.length > 0) {
+      setProject(generatedProject);
+      setGenerationIssues(issues);
+      throw new Error(`系统自动补齐素材后仍有 ${missingImageSceneNumbers.length} 个画面和 ${missingAudioSceneNumbers.length} 段配音未完成。本次任务不会被标记为生成完成，系统会保留进度并在恢复任务时继续补齐。`);
     }
 
     if (options.motion === "key-scenes") {

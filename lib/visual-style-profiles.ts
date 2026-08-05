@@ -76,3 +76,27 @@ export function visualStyleDirection(style?: GenerationOptions["style"]) {
     `Avoid: ${profile.avoid}.`
   ].join(" ");
 }
+
+const exactVisualStyleContracts: Record<string, string> = {
+  chalkboard: "2D chalk drawing only: hand-drawn powdery chalk strokes on a dark green or charcoal board, imperfect diagrams and arrows, no photography, no 3D rendering, no glossy materials.",
+  "simple-line": "2D minimal line illustration only: clean thin outlines, simplified human figures, generous white space and very limited flat accent colors, no photography, no 3D volume, no painterly shading.",
+  collage: "2D paper collage only: visibly cut paper edges, layered printed textures, torn shapes and handcrafted depth, no photorealistic scene, no smooth 3D objects.",
+  "comic-book": "2D comic-book illustration only: bold ink contours, halftone texture, graphic panels, dramatic expressions and flat high-contrast color, no photography or 3D render.",
+  memphis: "2D contemporary business illustration only: friendly simplified people, crisp vector-like forms, soft flat colors and restrained geometric accents, no photography or 3D render.",
+  isometric: "2D isometric illustration only: consistent 30-degree axonometric geometry, modular spaces and objects, clean flat shading, no perspective photography or cinematic lens effects.",
+  "pixel-art": "STRICT 2D PIXEL ART ONLY: visibly square hard-edged pixels, deliberately low-resolution sprite design, limited indexed-color palette, pixel-stepped diagonals, retro game environments and UI-like iconography. No voxels, no low-poly 3D, no smooth gradients, no photorealism, no cinematic lens blur, no anti-aliased illustration.",
+  "safety-poster": "2D safety-training poster illustration only: bold simplified figures, clear action silhouettes, high-contrast warning colors and instructional composition, no photography and no glossy 3D render.",
+  "cinematic-realism": "Photorealistic live-action commercial frame: believable people and locations, natural materials, motivated cinematic lighting, real lens depth and documentary detail; no cartoon, vector art or game rendering.",
+  "product-ui": "Polished product interface demonstration: credible screen layouts, clean device and UI surfaces, precise information hierarchy and restrained dimensional highlights; no unrelated cinematic environment or decorative abstract art."
+};
+
+export function exactVisualStyleDirection(input?: Pick<GenerationOptions, "visualStyleId" | "visualStyleLabel" | "visualStylePrompt">) {
+  if (!input?.visualStyleId && !input?.visualStylePrompt) return "";
+  const contract = input.visualStyleId ? exactVisualStyleContracts[input.visualStyleId] : undefined;
+  return [
+    `Locked rendering style: ${input.visualStyleLabel || input.visualStyleId || "custom"}.`,
+    contract ?? input.visualStylePrompt,
+    input.visualStylePrompt ? `User-selected style definition: ${input.visualStylePrompt}` : "",
+    "Apply this exact rendering medium to every character, object, environment, light effect, and transition in every scene. Scene content may change, but the rendering medium must not drift or be substituted."
+  ].filter(Boolean).join(" ");
+}

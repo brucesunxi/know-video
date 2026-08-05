@@ -279,11 +279,19 @@ function localizedFallbackDirection(
   scene: Scene,
   index: number,
   chinese: boolean,
-  style?: GenerationOptions["style"],
+  options?: GenerationOptions,
   prompt = ""
 ): Scene {
-  if (!chinese) return scene;
-  const profile = visualStyleProfile(style);
+  if (!chinese) return {
+    ...scene,
+    style: {
+      ...scene.style,
+      visualStyleId: options?.visualStyleId,
+      visualStyleLabel: options?.visualStyleLabel,
+      visualStylePrompt: options?.visualStylePrompt
+    }
+  };
+  const profile = visualStyleProfile(options?.style);
   const subject = scene.title.replace(/[：:]/g, "").trim();
   const briefSubject = extractBriefSubject(prompt, true);
   const domain = detectBriefDomain(prompt);
@@ -332,7 +340,10 @@ function localizedFallbackDirection(
       ...scene.style,
       theme: `${profile.label} · ${profile.artDirection}`,
       palette: profile.palette,
-      mood: index === 0 ? "专注而充满期待" : index === visualDirections.length - 1 ? "从容而坚定" : "清晰而富有推进感"
+      mood: index === 0 ? "专注而充满期待" : index === visualDirections.length - 1 ? "从容而坚定" : "清晰而富有推进感",
+      visualStyleId: options?.visualStyleId,
+      visualStyleLabel: options?.visualStyleLabel,
+      visualStylePrompt: options?.visualStylePrompt
     }
   };
 }
@@ -354,7 +365,7 @@ function applyFallbackConstraints(
       sceneNumber: index + 1,
       durationSeconds: durations[index],
       voiceover: fitFallbackNarration(scene, durations[index], chinese)
-    }, index, chinese, options?.style, prompt));
+    }, index, chinese, options, prompt));
 }
 
 function visualConceptSuffix(prompt: string, chinese: boolean) {

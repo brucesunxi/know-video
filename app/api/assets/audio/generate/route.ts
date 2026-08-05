@@ -14,7 +14,7 @@ const requestSchema = z.object({
   narrationVoice: z.string().refine(isNarrationVoice).optional()
 });
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 function audioFailedScenes(
   scenes: Scene[],
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
         error: mediaGenerationFailureMessage(
           "配音",
           progress,
-          "请重试失败场景；系统会按自然语速自动延长对应镜头。"
+          "系统将只针对失败场景继续自动补齐，不会把未完成项目标记为可导出。"
         ),
         project: updated,
         ...progress

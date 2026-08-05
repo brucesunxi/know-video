@@ -46,6 +46,9 @@ export type GenerationOptions = {
   sceneCount: "auto" | "3" | "5" | "6";
   language: "中文" | "英文";
   style: "电影质感" | "极简高级" | "明快有活力" | "温暖自然";
+  visualStyleId?: string;
+  visualStyleLabel?: string;
+  visualStylePrompt?: string;
   motion: "camera" | "key-scenes";
   videoTier: VideoGenerationTier;
   narrationVoice?: NarrationVoice;
@@ -91,6 +94,9 @@ export type Scene = {
     theme: string;
     palette: string[];
     mood: string;
+    visualStyleId?: string;
+    visualStyleLabel?: string;
+    visualStylePrompt?: string;
     narrationVoice?: NarrationVoice;
     production?: Partial<ProductionSettings>;
     transition?: { kind: SceneTransitionKind; durationSeconds: number };
