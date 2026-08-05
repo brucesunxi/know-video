@@ -407,6 +407,14 @@ function templatePromptForRole(template: BriefTemplateCard, role: BriefTemplateR
   return `${template.prompt}\n\n应用模板“${template.title}”的 style：${selectedStyle.prompt} ${binding.context}`;
 }
 
+function withoutBriefReferenceInstruction(value: string) {
+  return value
+    .replace(/\n\n应用模板“[^”]+”的 style：.+$/u, "")
+    .replace(/\n\n参考模板“[^”]+”这一页的内容结构、信息层级和叙事方式；.+$/u, "")
+    .replace(/\n\n把模板“[^”]+”中的品牌主体当作 Logo \/ 品牌标识来设计视频，.+$/u, "")
+    .trimEnd();
+}
+
 function elapsedGenerationLabel(startedAt?: number, now = Date.now()) {
   if (!startedAt || startedAt > now) return "刚刚开始";
   const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
@@ -1967,9 +1975,17 @@ function BriefScreen({
   }
 
   function removeTemplateReference() {
+    const nextPrompt = withoutBriefReferenceInstruction(prompt);
     setSelectedTemplate(undefined);
     setSelectedTemplateRole("style");
-    if (styleSource === "template") setStyleSource("manual");
+    onPromptChange(nextPrompt);
+    if (styleSource === "template") {
+      const inferred = inferVisualStyleForPrompt(nextPrompt);
+      setStyleSource("auto");
+      setSelectedStyleId(inferred.id);
+      setStyleMode(inferred.mode);
+      onOptionsChange({ ...options, style: inferred.tone });
+    }
   }
 
   function removeStyleReference() {
