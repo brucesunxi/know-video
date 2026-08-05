@@ -1763,6 +1763,8 @@ function BriefScreen({
   const [styleMode, setStyleMode] = useState<BriefVisualStyleMode>("animated");
   const [styleSource, setStyleSource] = useState<BriefStyleSource>("auto");
   const [selectedStyleId, setSelectedStyleId] = useState(inferVisualStyleForPrompt(prompt).id);
+  const [draftStyleSource, setDraftStyleSource] = useState<BriefStyleSource>("auto");
+  const [draftStyleId, setDraftStyleId] = useState(inferVisualStyleForPrompt(prompt).id);
   const [avatarMode, setAvatarMode] = useState<BriefAvatarMode>("none");
   const [brandMode, setBrandMode] = useState<BriefBrandKitMode>("none");
   const [selectedVoice, setSelectedVoice] = useState<NarrationVoice>(options.narrationVoice ?? DEFAULT_NARRATION_VOICE);
@@ -1780,6 +1782,7 @@ function BriefScreen({
   const visibleTemplateCards = briefTemplateCards[activeCategory];
   const inferredVisualStyle = inferVisualStyleForPrompt(prompt);
   const selectedVisualStyle = styleSource === "auto" ? inferredVisualStyle : visualStyleById(selectedStyleId);
+  const draftVisualStyle = draftStyleSource === "auto" ? inferredVisualStyle : visualStyleById(draftStyleId);
   const visibleVisualStyles = briefVisualStyles.filter((style) => style.mode === styleMode);
 
   useEffect(() => () => {
@@ -1787,6 +1790,14 @@ function BriefScreen({
     previewAudioRef.current?.pause();
     previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
+
+  useEffect(() => {
+    if (activeSettings !== "style") return;
+    const currentStyle = styleSource === "auto" ? inferredVisualStyle : visualStyleById(selectedStyleId);
+    setDraftStyleSource(styleSource);
+    setDraftStyleId(currentStyle.id);
+    setStyleMode(currentStyle.mode);
+  }, [activeSettings]);
 
   async function toggleBriefVoicePreview(voice: NarrationVoice) {
     if (previewingVoice === voice) {
@@ -1895,21 +1906,44 @@ function BriefScreen({
     if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, role, selectedVisualStyle));
   }
 
-  function chooseVisualStyle(style: BriefVisualStyle) {
-    setSelectedStyleId(style.id);
+  function draftVisualStyleChoice(style: BriefVisualStyle) {
+    setDraftStyleId(style.id);
     setStyleMode(style.mode);
-    setStyleSource("manual");
-    onOptionsChange({ ...options, style: style.tone });
-    if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, selectedTemplateRole, style));
+    setDraftStyleSource("manual");
   }
 
-  function chooseAutoStyle() {
+  function draftAutoStyleChoice() {
     const inferred = inferVisualStyleForPrompt(prompt);
-    setStyleSource("auto");
-    setSelectedStyleId(inferred.id);
+    setDraftStyleSource("auto");
+    setDraftStyleId(inferred.id);
     setStyleMode(inferred.mode);
-    onOptionsChange({ ...options, style: inferred.tone });
-    if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, selectedTemplateRole, inferred));
+  }
+
+  function changeStyleMode(mode: BriefVisualStyleMode) {
+    setStyleMode(mode);
+    if (draftStyleSource === "auto") return;
+    if (visualStyleById(draftStyleId).mode === mode) return;
+    const firstStyle = briefVisualStyles.find((style) => style.mode === mode);
+    if (firstStyle) setDraftStyleId(firstStyle.id);
+  }
+
+  function promptWithStyle(style: BriefVisualStyle) {
+    if (selectedTemplate) return templatePromptForRole(selectedTemplate, selectedTemplateRole, style);
+    const styleInstruction = `应用“${style.label}”的 style：${style.prompt}`;
+    const trimmed = prompt.trim();
+    if (!trimmed) return styleInstruction;
+    const withoutPreviousStyle = trimmed.replace(/\n\n应用“[^”]+”的 style：.+$/u, "");
+    return `${withoutPreviousStyle}\n\n${styleInstruction}`;
+  }
+
+  function confirmVisualStyle() {
+    const style = draftStyleSource === "auto" ? inferVisualStyleForPrompt(prompt) : visualStyleById(draftStyleId);
+    setStyleSource(draftStyleSource);
+    setSelectedStyleId(style.id);
+    setStyleMode(style.mode);
+    onOptionsChange({ ...options, style: style.tone });
+    onUseExample(promptWithStyle(style));
+    setActiveSettings(undefined);
   }
 
   function removeTemplateReference() {
@@ -2170,22 +2204,32 @@ function BriefScreen({
                   <div className="kv-settings-tabs"><button className="active" disabled type="button">Styles</button><button onClick={() => setActiveSettings("brand")} type="button">Logos</button></div>
                 </div>
                 <div className="kv-settings-segment" role="group" aria-label="Style mode">
-                  <button className={styleMode === "animated" ? "active" : ""} onClick={() => setStyleMode("animated")} type="button">Animated</button>
-                  <button className={styleMode === "realistic" ? "active" : ""} onClick={() => setStyleMode("realistic")} type="button">Hyper Realistic</button>
+                  <button className={styleMode === "animated" ? "active" : ""} onClick={() => changeStyleMode("animated")} type="button">Animated</button>
+                  <button className={styleMode === "realistic" ? "active" : ""} onClick={() => changeStyleMode("realistic")} type="button">Hyper Realistic</button>
                 </div>
-                <button className={`kv-style-auto${styleSource === "auto" ? " active" : ""}`} onClick={chooseAutoStyle} type="button">
+                <button className={`kv-style-auto${draftStyleSource === "auto" ? " active" : ""}`} onClick={draftAutoStyleChoice} type="button">
                   <i>Auto</i>
-                  <span><strong>根据提示词自动选择</strong><small>当前判断：{inferredVisualStyle.label}</small></span>
+                  <span><strong>根据提示词自动选择</strong><small>当前待确认：{inferredVisualStyle.label}</small></span>
                 </button>
                 <p className="kv-style-count">{visibleVisualStyles.length} styles</p>
                 <div className="kv-style-grid">
-                  {visibleVisualStyles.map((style) => (
-                    <button className={selectedStyleId === style.id ? "active" : ""} key={style.id} onClick={() => chooseVisualStyle(style)} type="button">
-                      <span className={`kv-style-thumb style-${style.thumbnail}`} aria-hidden="true"><i /><b /><em /></span>
-                      <strong>{style.label}</strong>
-                      <small>{style.summary}</small>
-                    </button>
-                  ))}
+                  {visibleVisualStyles.map((style) => {
+                    const active = draftStyleSource !== "auto" && draftStyleId === style.id;
+                    return (
+                      <button aria-pressed={active} className={active ? "active" : ""} key={style.id} onClick={() => draftVisualStyleChoice(style)} type="button">
+                        <span className={`kv-style-thumb style-${style.thumbnail}`} aria-hidden="true"><i /><b /><em /></span>
+                        <span className="kv-style-card-copy">
+                          <strong>{style.label}</strong>
+                          <small>{style.summary}</small>
+                        </span>
+                        {active ? <span className="kv-style-selected" aria-hidden="true"><Check size={15} /></span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="kv-settings-actions">
+                  <span>已选：{draftVisualStyle.label}</span>
+                  <button className="kv-primary" disabled={isBusy} onClick={confirmVisualStyle} type="button"><Check size={16} />确认应用</button>
                 </div>
               </>
             ) : null}

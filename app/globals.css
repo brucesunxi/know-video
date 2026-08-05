@@ -2858,6 +2858,7 @@ html[data-theme="dark"] .kv-user-menu {
 }
 
 .kv-style-grid button {
+  position: relative;
   display: grid;
   overflow: hidden;
   border: 1px solid #dddddc;
@@ -2866,6 +2867,61 @@ html[data-theme="dark"] .kv-user-menu {
   padding: 0;
   color: #222;
   text-align: left;
+}
+
+.kv-style-selected {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: #111827;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.24);
+}
+
+.kv-style-card-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.kv-settings-actions {
+  position: sticky;
+  z-index: 4;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px -2px -2px;
+  border-top: 1px solid #e7e7e5;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 14px 2px 2px;
+}
+
+.kv-settings-actions span {
+  overflow: hidden;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv-settings-actions .kv-primary {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 11px;
+  background: #111827;
+  color: #fff;
+  padding: 10px 14px;
+  font-weight: 820;
 }
 
 .kv-style-grid button.active {
