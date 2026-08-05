@@ -1248,6 +1248,7 @@ html[data-theme="dark"] .kv-settings-tabs,
 html[data-theme="dark"] .kv-settings-segment,
 html[data-theme="dark"] .kv-settings-upload,
 html[data-theme="dark"] .kv-avatar-panel,
+html[data-theme="dark"] .kv-language-options button,
 html[data-theme="dark"] .kv-brand-options button,
 html[data-theme="dark"] .kv-brief-voice-list article,
 html[data-theme="dark"] .kv-voice-search,
@@ -1260,6 +1261,7 @@ html[data-theme="dark"] .kv-voice-enterprise {
 html[data-theme="dark"] .kv-settings-header h3,
 html[data-theme="dark"] .kv-style-grid strong,
 html[data-theme="dark"] .kv-avatar-panel strong,
+html[data-theme="dark"] .kv-language-options strong,
 html[data-theme="dark"] .kv-brand-options strong {
   color: var(--text);
 }
@@ -1267,6 +1269,7 @@ html[data-theme="dark"] .kv-brand-options strong {
 html[data-theme="dark"] .kv-settings-header p,
 html[data-theme="dark"] .kv-style-grid small,
 html[data-theme="dark"] .kv-avatar-panel p,
+html[data-theme="dark"] .kv-language-options small,
 html[data-theme="dark"] .kv-brand-options small,
 html[data-theme="dark"] .kv-brief-voice-list small,
 html[data-theme="dark"] .kv-brief-voice-list em {
@@ -1276,6 +1279,7 @@ html[data-theme="dark"] .kv-brief-voice-list em {
 html[data-theme="dark"] .kv-settings-tabs button.active,
 html[data-theme="dark"] .kv-settings-segment button.active,
 html[data-theme="dark"] .kv-style-grid button.active,
+html[data-theme="dark"] .kv-language-options button.active,
 html[data-theme="dark"] .kv-brand-options button.active,
 html[data-theme="dark"] .kv-brief-voice-list article.active {
   border-color: #2dd4bf;
@@ -1404,21 +1408,27 @@ html[data-theme="dark"] .kv-user-menu {
   text-align: left;
 }
 
-.kv-template-reference-panel > div {
+.kv-template-reference-summary {
   display: grid;
   gap: 3px;
   color: #333;
 }
 
-.kv-template-reference-panel > div strong {
+.kv-template-reference-summary strong {
   font-size: 14px;
   font-weight: 820;
 }
 
-.kv-template-reference-panel > div span {
+.kv-template-reference-summary span {
   color: #555;
   font-size: 13px;
   line-height: 1.35;
+}
+
+.kv-template-reference-assets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .kv-template-reference-card {
@@ -1520,6 +1530,35 @@ html[data-theme="dark"] .kv-user-menu {
 .kv-template-reference-card figcaption small {
   color: rgba(255, 255, 255, 0.78);
   font-size: 10px;
+}
+
+.kv-style-reference-card {
+  align-content: stretch;
+  padding: 0;
+  background: #fff;
+  color: #222;
+}
+
+.kv-style-reference-card::before,
+.kv-style-reference-card::after {
+  content: none;
+}
+
+.kv-style-reference-card .kv-style-thumb {
+  height: 64px;
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+.kv-style-reference-card figcaption {
+  padding: 8px 10px 9px;
+}
+
+.kv-style-reference-card figcaption strong {
+  color: #222;
+}
+
+.kv-style-reference-card figcaption small {
+  color: #667085;
 }
 
 .kv-home-composer textarea {
@@ -3275,6 +3314,7 @@ html[data-theme="dark"] .kv-user-menu {
 }
 
 .kv-avatar-panel,
+.kv-language-options,
 .kv-brand-options,
 .kv-brief-voice-list {
   display: grid;
@@ -3307,6 +3347,61 @@ html[data-theme="dark"] .kv-user-menu {
   color: #fff;
   padding: 10px 12px;
   font-weight: 760;
+}
+
+.kv-language-options button {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #dddddc;
+  border-radius: 14px;
+  background: #f5f5f4;
+  padding: 12px;
+  color: #333;
+  text-align: left;
+}
+
+.kv-language-options button.active {
+  border-color: #111;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #111;
+}
+
+.kv-language-options i {
+  display: grid;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: #111827;
+  color: #fff;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 840;
+}
+
+.kv-language-options span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.kv-language-options strong,
+.kv-language-options small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv-language-options strong {
+  color: #222;
+  font-size: 14px;
+  font-weight: 820;
+}
+
+.kv-language-options small {
+  color: #667085;
+  font-size: 12px;
 }
 
 .kv-voice-search {

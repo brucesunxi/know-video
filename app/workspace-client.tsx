@@ -27,6 +27,7 @@ import {
   History,
   Eye,
   ImagePlus,
+  Languages,
   Layers3,
   Loader2,
   LogOut,
@@ -144,7 +145,7 @@ const promptExamples = [
   "做一个关于跨境电商库存管理 SaaS 的解释视频，目标客户是运营负责人。",
   "制作一个教育产品宣传视频，展示老师如何用 AI 快速生成课程内容。"
 ];
-type BriefSettingsPanel = "style" | "avatar" | "voice" | "brand";
+type BriefSettingsPanel = "style" | "avatar" | "voice" | "language" | "brand";
 type HomeDialog = "pricing" | "demo" | "help" | "notifications" | "workspace";
 type BriefVisualStyleMode = "animated" | "realistic";
 type BriefVisualStyle = {
@@ -158,6 +159,18 @@ type BriefVisualStyle = {
 };
 type BriefAvatarMode = "none" | "preset" | "custom";
 type BriefBrandKitMode = "none" | "minimal" | "uploaded";
+type BriefLanguageOption = {
+  value: GenerationOptions["language"];
+  country: string;
+  code: string;
+  label: string;
+  detail: string;
+};
+
+const briefLanguageOptions: BriefLanguageOption[] = [
+  { value: "中文", country: "中国", code: "CN", label: "中文", detail: "中文旁白、字幕和画面文案" },
+  { value: "英文", country: "英国", code: "UK", label: "English", detail: "English narration, captions, and on-screen copy" }
+];
 
 const briefVisualStyles: BriefVisualStyle[] = [
   { id: "chalkboard", label: "黑板手绘", mode: "animated", tone: "温暖自然", summary: "粉笔线条、课堂感、适合概念讲解", prompt: "黑板手绘风格：深绿色黑板、粉笔线条、手绘箭头和逐步出现的课堂讲解感。", thumbnail: "chalkboard" },
@@ -1778,12 +1791,14 @@ function BriefScreen({
   const previewAbortRef = useRef<AbortController>();
   const advancedSettingsRef = useRef<HTMLDetailsElement>(null);
   const selectedVoiceProfile = narrationVoiceProfile(selectedVoice);
+  const selectedLanguageOption = briefLanguageOptions.find((item) => item.value === options.language) ?? briefLanguageOptions[0];
   const filteredVoices = narrationVoiceProfiles.filter((profile) => `${profile.label} ${profile.useCase} ${profile.description}`.toLocaleLowerCase().includes(voiceQuery.trim().toLocaleLowerCase()));
   const visibleTemplateCards = briefTemplateCards[activeCategory];
   const inferredVisualStyle = inferVisualStyleForPrompt(prompt);
   const selectedVisualStyle = styleSource === "auto" ? inferredVisualStyle : visualStyleById(selectedStyleId);
   const draftVisualStyle = draftStyleSource === "auto" ? inferredVisualStyle : visualStyleById(draftStyleId);
   const visibleVisualStyles = briefVisualStyles.filter((style) => style.mode === styleMode);
+  const showStyleReference = styleSource !== "auto" && styleSource !== "template";
 
   useEffect(() => () => {
     previewAbortRef.current?.abort();
@@ -1864,6 +1879,11 @@ function BriefScreen({
   function chooseVoice(voice: NarrationVoice) {
     setSelectedVoice(voice);
     onOptionsChange({ ...options, narrationVoice: voice });
+  }
+
+  function chooseLanguage(language: GenerationOptions["language"]) {
+    onOptionsChange({ ...options, language });
+    setActiveSettings(undefined);
   }
 
   function updatePrompt(value: string) {
@@ -1952,6 +1972,14 @@ function BriefScreen({
     if (styleSource === "template") setStyleSource("manual");
   }
 
+  function removeStyleReference() {
+    const inferred = inferVisualStyleForPrompt(prompt);
+    setStyleSource("auto");
+    setSelectedStyleId(inferred.id);
+    setStyleMode(inferred.mode);
+    onOptionsChange({ ...options, style: inferred.tone });
+  }
+
   function clipboardFiles(event: ReactClipboardEvent<HTMLElement>) {
     return Array.from(event.clipboardData.items)
       .filter((item) => item.kind === "file")
@@ -2028,41 +2056,63 @@ function BriefScreen({
               <i><Mic2 size={18} /></i>
               <span><strong>{selectedVoiceProfile.shortLabel}</strong><small>Voice</small></span>
             </button>
+            <button onClick={() => setActiveSettings("language")} type="button">
+              <i><Languages size={18} /></i>
+              <span><strong>{selectedLanguageOption.code} · {selectedLanguageOption.label}</strong><small>Language</small></span>
+            </button>
             <button onClick={() => setActiveSettings("brand")} type="button">
               <i><Palette size={18} /></i>
               <span><strong>{brandMode === "none" ? "None" : brandMode === "minimal" ? "Minimal" : "Uploaded"}</strong><small>Brand kit</small></span>
             </button>
           </div>
-          {selectedTemplate ? (
+          {selectedTemplate || showStyleReference ? (
             <div className="kv-template-reference-panel" aria-label="已选择的模板参考">
-              <div>
+              <div className="kv-template-reference-summary">
                 <strong>Images</strong>
                 <span>
-                  {selectedTemplateRole === "style"
-                    ? `作为“${selectedVisualStyle.label}”整体观感和节奏参考。`
-                    : selectedTemplateRole === "ref"
-                      ? "参考这一页的内容结构和表达方式。"
-                      : "把它当作 Logo / 品牌标识来制作视频。"}
+                  {selectedTemplate
+                    ? showStyleReference
+                      ? `参考模板结构，并把“${selectedVisualStyle.label}”作为类型图片和整体视觉参考。`
+                      : selectedTemplateRole === "style"
+                        ? `作为“${selectedVisualStyle.label}”整体观感和节奏参考。`
+                        : selectedTemplateRole === "ref"
+                          ? "参考这一页的内容结构和表达方式。"
+                          : "把它当作 Logo / 品牌标识来制作视频。"
+                    : `已把“${selectedVisualStyle.label}”作为类型图片和整体视觉参考。`}
                 </span>
               </div>
-              <figure className={`kv-template-reference-card ${selectedTemplate.className}`}>
-                <button aria-label="移除模板参考" className="kv-template-reference-remove" disabled={isBusy} onClick={removeTemplateReference} title="移除模板参考" type="button"><X size={13} /></button>
-                <label>
-                  <select
-                    aria-label="模板素材角色"
-                    onChange={(event) => chooseTemplateRole(event.target.value as BriefTemplateRole)}
-                    value={selectedTemplateRole}
-                  >
-                    {Object.entries(briefTemplateRoleLabels).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                </label>
-                <figcaption>
-                  <strong>{selectedTemplate.title}</strong>
-                  <small>{selectedVisualStyle.label}</small>
-                </figcaption>
-              </figure>
+              <div className="kv-template-reference-assets">
+                {selectedTemplate ? (
+                  <figure className={`kv-template-reference-card ${selectedTemplate.className}`}>
+                    <button aria-label="移除模板参考" className="kv-template-reference-remove" disabled={isBusy} onClick={removeTemplateReference} title="移除模板参考" type="button"><X size={13} /></button>
+                    <label>
+                      <select
+                        aria-label="模板素材角色"
+                        onChange={(event) => chooseTemplateRole(event.target.value as BriefTemplateRole)}
+                        value={selectedTemplateRole}
+                      >
+                        {Object.entries(briefTemplateRoleLabels).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <figcaption>
+                      <strong>{selectedTemplate.title}</strong>
+                      <small>{selectedTemplateRole === "style" ? selectedVisualStyle.label : briefTemplateRoleLabels[selectedTemplateRole]}</small>
+                    </figcaption>
+                  </figure>
+                ) : null}
+                {showStyleReference ? (
+                  <figure className="kv-template-reference-card kv-style-reference-card">
+                    <button aria-label="移除 Style 参考" className="kv-template-reference-remove" disabled={isBusy} onClick={removeStyleReference} title="移除 Style 参考" type="button"><X size={13} /></button>
+                    <span className={`kv-style-thumb style-${selectedVisualStyle.thumbnail}`} aria-hidden="true"><i /><b /><em /></span>
+                    <figcaption>
+                      <strong>{selectedVisualStyle.label}</strong>
+                      <small>Style</small>
+                    </figcaption>
+                  </figure>
+                ) : null}
+              </div>
             </div>
           ) : null}
           <textarea
@@ -2140,8 +2190,8 @@ function BriefScreen({
             <label>
               <span>旁白语言</span>
               <select onChange={(event) => onOptionsChange({ ...options, language: event.target.value as GenerationOptions["language"] })} value={options.language}>
-                <option value="中文">中文</option>
-                <option value="英文">英文</option>
+                <option value="中文">中国 · 中文</option>
+                <option value="英文">英国 · English</option>
               </select>
             </label>
             <label>
@@ -2278,6 +2328,28 @@ function BriefScreen({
                   })}
                 </div>
                 {previewError ? <p className="kv-settings-error">{previewError}</p> : null}
+              </>
+            ) : null}
+            {activeSettings === "language" ? (
+              <>
+                <div className="kv-settings-header compact">
+                  <h3>Language</h3>
+                  <p>选择视频的旁白、字幕和画面文案语言。</p>
+                </div>
+                <div className="kv-language-options">
+                  {briefLanguageOptions.map((language) => (
+                    <button
+                      className={options.language === language.value ? "active" : ""}
+                      key={language.value}
+                      onClick={() => chooseLanguage(language.value)}
+                      type="button"
+                    >
+                      <i>{language.code}</i>
+                      <span><strong>{language.label}</strong><small>{language.country} · {language.detail}</small></span>
+                      {options.language === language.value ? <Check size={17} /> : null}
+                    </button>
+                  ))}
+                </div>
               </>
             ) : null}
             {activeSettings === "brand" ? (
