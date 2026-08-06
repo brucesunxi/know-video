@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, ClipboardEvent as ReactClipboardEvent, DragEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, ClipboardEvent as ReactClipboardEvent, createContext, DragEvent, FormEvent, PointerEvent as ReactPointerEvent, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { PlayerRef } from "@remotion/player";
 import {
   AlertCircle,
@@ -23,6 +23,7 @@ import {
   Film,
   FolderOpen,
   GripVertical,
+  Globe2,
   HelpCircle,
   History,
   Eye,
@@ -82,6 +83,21 @@ import type { ChatMessage, EditChange, EditPlan, GenerationOptions, GenerationRe
 
 type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
+type UiLanguage = "zh-CN" | "en";
+const UI_LANGUAGE_STORAGE_KEY = "know-video:ui-language";
+const UiLanguageContext = createContext<{
+  language: UiLanguage;
+  setLanguage: (language: UiLanguage) => void;
+}>({ language: "zh-CN", setLanguage: () => undefined });
+
+function useUiCopy() {
+  const { language, setLanguage } = useContext(UiLanguageContext);
+  return {
+    language,
+    setLanguage,
+    text: (chinese: string, english: string) => language === "zh-CN" ? chinese : english
+  };
+}
 type Engine = "ai" | "heuristic";
 type StudioView = "preview" | "storyboard";
 type AuthUser = {
@@ -1413,6 +1429,7 @@ function Shell({
   onOpenProjects: () => void;
   onOpenStudio: () => void;
 }) {
+  const { language, setLanguage, text } = useUiCopy();
   const appRef = useRef<HTMLElement>(null);
   const [homeDialog, setHomeDialog] = useState<HomeDialog>();
   const [darkMode, setDarkMode] = useState(false);
@@ -1427,13 +1444,40 @@ function Shell({
     };
   }, [darkMode]);
   const statusBadges = projectStatusBadges(project, source, stage);
+  const localizedStatusBadge = (label: string) => {
+    if (language === "zh-CN") return label;
+    const fixed: Record<string, string> = {
+      "正在创建新项目": "Creating project",
+      "生成进度自动保存": "Progress autosaved",
+      "项目已保存": "Project saved",
+      "尚未创建项目": "No project yet",
+      "本地预览": "Local preview",
+      "等待分镜": "Waiting for scenes",
+      "可导出 MP4": "MP4 ready",
+      "需补齐素材": "Assets incomplete"
+    };
+    const sceneCount = label.match(/^(\d+) 个分镜$/u);
+    return sceneCount ? `${sceneCount[1]} scenes` : fixed[label] ?? label;
+  };
   const headerTitle = stage === "brief"
-    ? "用一句需求，完成一支视频"
+    ? text("用一句需求，完成一支视频", "Create a video from one request")
     : stage === "projects"
-      ? "我的视频项目"
+      ? text("我的视频项目", "My video projects")
       : stage === "generating"
-        ? "新视频制作中"
+        ? text("新视频制作中", "Creating a new video")
         : project.title;
+  const languageToggle = (
+    <button
+      aria-label={text("切换为英文界面", "Switch interface to Chinese")}
+      className="kv-ui-language-toggle"
+      onClick={() => setLanguage(language === "zh-CN" ? "en" : "zh-CN")}
+      title={text("界面语言：中文", "Interface language: English")}
+      type="button"
+    >
+      <Globe2 size={16} />
+      <span>{language === "zh-CN" ? "EN" : "中文"}</span>
+    </button>
+  );
 
   return (
     <main className={`kv-shell${stage === "brief" ? " kv-shell-brief" : ""}`}>
@@ -1446,31 +1490,31 @@ function Shell({
             </div>
             <button className="kv-home-new" onClick={onNewVideo} type="button">
               <MessageSquareText size={17} />
-              New video
+              {text("新建视频", "New video")}
             </button>
             <label className="kv-home-search">
               <Search size={16} />
               <input placeholder="Search..." />
             </label>
             <nav className="kv-home-menu">
-              <button className="active" onClick={onNewVideo} type="button"><Plus size={16} /> Create</button>
-              <button onClick={onOpenProjects} type="button"><Layers3 size={16} /> Gallery</button>
+              <button className="active" onClick={onNewVideo} type="button"><Plus size={16} /> {text("创作", "Create")}</button>
+              <button onClick={onOpenProjects} type="button"><Layers3 size={16} /> {text("项目库", "Gallery")}</button>
             </nav>
             <div className="kv-home-list">
-              <span>Projects</span>
+              <span>{text("项目", "Projects")}</span>
               {source !== "empty" && project.currentVersion.scenes.length > 0 ? (
                 <button onClick={onOpenStudio} type="button">{project.title}</button>
               ) : (
-                <small>No projects yet</small>
+                <small>{text("暂无项目", "No projects yet")}</small>
               )}
             </div>
             <div className="kv-home-list">
-              <span>Your chats</span>
-              <small>Start a request to create the first video thread.</small>
+              <span>{text("你的对话", "Your chats")}</span>
+              <small>{text("输入需求，开始创建第一支视频。", "Start a request to create the first video thread.")}</small>
             </div>
             <div className="kv-home-sidebar-bottom">
-              <button onClick={() => setHomeDialog("pricing")} type="button"><CreditCard size={16} /> Pricing</button>
-              <button onClick={() => setHomeDialog("demo")} type="button"><Calendar size={16} /> Book a Demo</button>
+              <button onClick={() => setHomeDialog("pricing")} type="button"><CreditCard size={16} /> {text("价格", "Pricing")}</button>
+              <button onClick={() => setHomeDialog("demo")} type="button"><Calendar size={16} /> {text("预约演示", "Book a Demo")}</button>
               <button aria-label="帮助" onClick={() => setHomeDialog("help")} type="button"><HelpCircle size={16} /></button>
             </div>
           </div>
@@ -1478,13 +1522,13 @@ function Shell({
           <>
             <button aria-label="返回首页" className="kv-logo kv-logo-button" onClick={onNewVideo} title="返回首页" type="button">K</button>
             <nav className="kv-nav">
-              <button aria-label="返回首页并新建视频" onClick={onNewVideo} title="返回首页" type="button">
+              <button aria-label={text("返回首页并新建视频", "Return home and create a video")} onClick={onNewVideo} title={text("返回首页", "Home")} type="button">
                 <Plus size={18} />
               </button>
-              <button aria-label="视频工作室" className={stage === "studio" ? "active" : ""} disabled={source === "empty"} onClick={onOpenStudio} title="视频工作室" type="button">
+              <button aria-label={text("视频工作室", "Video studio")} className={stage === "studio" ? "active" : ""} disabled={source === "empty"} onClick={onOpenStudio} title={text("视频工作室", "Video studio")} type="button">
                 <Clapperboard size={18} />
               </button>
-              <button aria-label="项目列表" className={stage === "projects" ? "active" : ""} onClick={onOpenProjects} title="项目列表" type="button">
+              <button aria-label={text("项目列表", "Project gallery")} className={stage === "projects" ? "active" : ""} onClick={onOpenProjects} title={text("项目列表", "Project gallery")} type="button">
                 <Layers3 size={18} />
               </button>
             </nav>
@@ -1500,6 +1544,7 @@ function Shell({
               <ChevronRight size={15} />
             </button>
             <div className="kv-home-top-actions">
+              {languageToggle}
               <span className="kv-credit-pill"><AlertCircle size={14} /> Free · 996 credits · Get more</span>
               <button aria-label={darkMode ? "浅色模式" : "夜间模式"} onClick={() => setDarkMode((enabled) => !enabled)} title={darkMode ? "浅色模式" : "夜间模式"} type="button"><Moon size={18} /></button>
               <button aria-label="通知" onClick={() => setHomeDialog("notifications")} type="button"><Bell size={18} /></button>
@@ -1525,7 +1570,7 @@ function Shell({
             <div className="kv-topbar-title">
               <button className="kv-home-return" onClick={onNewVideo} type="button">
                 <ArrowLeft size={16} />
-                返回首页
+                {text("返回首页", "Back home")}
               </button>
               <div>
                 <span className="kv-eyebrow">Know Video 智能视频工作室</span>
@@ -1533,8 +1578,9 @@ function Shell({
               </div>
             </div>
             <div className="kv-status-row">
+              {languageToggle}
               {statusBadges.map((badge) => (
-                <span className={badge.tone} key={`${badge.tone}-${badge.label}`}>{badge.label}</span>
+                <span className={badge.tone} key={`${badge.tone}-${badge.label}`}>{localizedStatusBadge(badge.label)}</span>
               ))}
               <div className="kv-user-menu">
                 {currentUser.avatarUrl ? (
@@ -1653,35 +1699,36 @@ function ProjectLibrary({
   actionBusy: boolean;
   errorMessage?: string;
 }) {
+  const { text } = useUiCopy();
   const [renamingId, setRenamingId] = useState<string>();
   const [renameValue, setRenameValue] = useState("");
   const [deleteCandidate, setDeleteCandidate] = useState<ProjectListItem>();
   const filtered = projects.filter((item) => item.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const statusLabel: Record<ProjectListItem["status"], string> = {
-    draft: "草稿",
-    planning: "规划中",
-    rendering: "渲染中",
-    ready: "可播放",
-    failed: "需处理"
+    draft: text("草稿", "Draft"),
+    planning: text("规划中", "Planning"),
+    rendering: text("渲染中", "Rendering"),
+    ready: text("可播放", "Ready"),
+    failed: text("需处理", "Needs attention")
   };
 
   return (
     <div className="kv-projects-page">
       <div className="kv-projects-heading">
         <div>
-          <span className="kv-eyebrow">项目库</span>
-          <h2>继续创作，或开始一支新视频</h2>
-          <p>所有脚本、分镜、素材、对话和历史版本都保存在各自项目中。</p>
+          <span className="kv-eyebrow">{text("项目库", "Gallery")}</span>
+          <h2>{text("继续创作，或开始一支新视频", "Continue creating or start a new video")}</h2>
+          <p>{text("所有脚本、分镜、素材、对话和历史版本都保存在各自项目中。", "Scripts, storyboards, assets, conversations, and version history are saved inside each project.")}</p>
         </div>
         <button className="kv-primary" onClick={onCreate} type="button">
           <Plus size={18} />
-          新建视频
+          {text("新建视频", "New video")}
         </button>
       </div>
       <div className="kv-project-search">
         <Search size={18} />
-        <input aria-label="搜索项目" onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索视频项目" value={query} />
-        <span>{filtered.length} 个项目</span>
+        <input aria-label={text("搜索项目", "Search projects")} onChange={(event) => onQueryChange(event.target.value)} placeholder={text("搜索视频项目", "Search video projects")} value={query} />
+        <span>{text(`${filtered.length} 个项目`, `${filtered.length} projects`)}</span>
       </div>
       {errorMessage ? <div className="kv-inline-error" role="alert"><AlertCircle size={18} />{errorMessage}</div> : null}
       {isLoading ? (
@@ -1689,8 +1736,8 @@ function ProjectLibrary({
       ) : filtered.length === 0 ? (
         <div className="kv-project-empty">
           <FolderOpen size={28} />
-          <h3>{query ? "没有匹配的项目" : "还没有视频项目"}</h3>
-          <p>{query ? "换一个关键词试试。" : "从一句需求开始创建你的第一支视频。"}</p>
+          <h3>{query ? text("没有匹配的项目", "No matching projects") : text("还没有视频项目", "No video projects yet")}</h3>
+          <p>{query ? text("换一个关键词试试。", "Try another search term.") : text("从一句需求开始创建你的第一支视频。", "Create your first video from a single request.")}</p>
         </div>
       ) : (
         <div className="kv-project-grid">
@@ -1727,7 +1774,7 @@ function ProjectLibrary({
               ) : (
                 <div className="kv-project-card-actions">
                   <button disabled={actionBusy} onClick={() => { setRenamingId(item.id); setRenameValue(item.title); }} title="重命名" type="button"><Pencil size={15} /></button>
-                  <button disabled={actionBusy} onClick={() => setDeleteCandidate(item)} title="删除项目" type="button"><Trash2 size={15} /></button>
+                  <button disabled={actionBusy} onClick={() => setDeleteCandidate(item)} title={text("删除项目", "Delete project")} type="button"><Trash2 size={15} /></button>
                 </div>
               )}
             </article>
@@ -1738,15 +1785,15 @@ function ProjectLibrary({
         <div className="kv-modal-backdrop" role="presentation">
           <section aria-labelledby="delete-project-title" aria-modal="true" className="kv-confirm-modal" role="dialog">
             <div className="kv-confirm-icon"><Trash2 size={20} /></div>
-            <h3 id="delete-project-title">删除“{deleteCandidate.title}”？</h3>
-            <p>项目、全部版本、场景素材、对话记录和已导出视频都会永久删除。</p>
+            <h3 id="delete-project-title">{text(`删除“${deleteCandidate.title}”？`, `Delete “${deleteCandidate.title}”?`)}</h3>
+            <p>{text("项目、全部版本、场景素材、对话记录和已导出视频都会永久删除。", "The project, all versions, scene assets, conversations, and exported videos will be permanently deleted.")}</p>
             <div>
-              <button disabled={actionBusy} onClick={() => setDeleteCandidate(undefined)} type="button">取消</button>
+              <button disabled={actionBusy} onClick={() => setDeleteCandidate(undefined)} type="button">{text("取消", "Cancel")}</button>
               <button className="danger" disabled={actionBusy} onClick={async () => {
                 if (await onDelete(deleteCandidate.id)) setDeleteCandidate(undefined);
               }} type="button">
                 {actionBusy ? <Loader2 className="kv-spin" size={16} /> : <Trash2 size={16} />}
-                确认删除
+                {text("确认删除", "Delete")}
               </button>
             </div>
           </section>
@@ -1789,6 +1836,7 @@ function BriefScreen({
   hasCurrentProject: boolean;
   errorMessage?: string;
 }) {
+  const { text } = useUiCopy();
   const reviewItems = generationReviewItems(prompt, options);
   const [activeSettings, setActiveSettings] = useState<BriefSettingsPanel>();
   const [activeCategory, setActiveCategory] = useState<BriefCategory>(briefCategoryPills[0]);
@@ -2049,9 +2097,9 @@ function BriefScreen({
   return (
     <div className="kv-brief kv-brief-home">
       <section className="kv-home-hero">
-        <span className="kv-home-engine">Idea to Video Engine</span>
-        <h2>Generate polished videos from one request</h2>
-        <p>输入需求，Know Video 会规划脚本、分镜、画面、配音和可继续对话修改的版本。</p>
+        <span className="kv-home-engine">{text("创意视频引擎", "Idea to Video Engine")}</span>
+        <h2>{text("一句需求，生成完整视频", "Generate polished videos from one request")}</h2>
+        <p>{text("输入需求，Know Video 会规划脚本、分镜、画面、配音和可继续对话修改的版本。", "Describe what you need. Know Video plans the script, storyboard, visuals, narration, and an editable first version.")}</p>
         <form
           className={`kv-home-composer${composerDragActive ? " is-dragging" : ""}`}
           onDragEnter={(event) => {
@@ -2075,23 +2123,23 @@ function BriefScreen({
           <div className="kv-composer-settings" role="toolbar" aria-label="视频生成设置">
             <button onClick={() => setActiveSettings("style")} type="button">
               <i><Brush size={18} /></i>
-              <span><strong>{styleSource === "auto" ? `Auto · ${selectedVisualStyle.label}` : selectedVisualStyle.label}</strong><small>Style</small></span>
+              <span><strong>{styleSource === "auto" ? `${text("自动", "Auto")} · ${selectedVisualStyle.label}` : selectedVisualStyle.label}</strong><small>{text("风格", "Style")}</small></span>
             </button>
             <button onClick={() => setActiveSettings("avatar")} type="button">
               <i><User size={18} /></i>
-              <span><strong>{avatarMode === "none" ? "None" : avatarMode === "preset" ? "Preset" : "Custom"}</strong><small>Avatar</small></span>
+              <span><strong>{avatarMode === "none" ? text("无", "None") : avatarMode === "preset" ? text("预设", "Preset") : text("自定义", "Custom")}</strong><small>{text("数字人", "Avatar")}</small></span>
             </button>
             <button onClick={() => setActiveSettings("voice")} type="button">
               <i><Mic2 size={18} /></i>
-              <span><strong>{selectedVoiceProfile.shortLabel}</strong><small>Voice</small></span>
+              <span><strong>{selectedVoiceProfile.shortLabel}</strong><small>{text("音色", "Voice")}</small></span>
             </button>
             <button onClick={() => setActiveSettings("language")} type="button">
               <i><Languages size={18} /></i>
-              <span><strong>{selectedLanguageOption.code} · {selectedLanguageOption.label}</strong><small>Language</small></span>
+              <span><strong>{selectedLanguageOption.code} · {selectedLanguageOption.label}</strong><small>{text("旁白语言", "Narration")}</small></span>
             </button>
             <button onClick={() => setActiveSettings("brand")} type="button">
               <i><Palette size={18} /></i>
-              <span><strong>{brandMode === "none" ? "None" : brandMode === "minimal" ? "Minimal" : "Uploaded"}</strong><small>Brand kit</small></span>
+              <span><strong>{brandMode === "none" ? text("无", "None") : brandMode === "minimal" ? text("简洁", "Minimal") : text("已上传", "Uploaded")}</strong><small>{text("品牌", "Brand kit")}</small></span>
             </button>
           </div>
           {selectedTemplate || showStyleReference ? (
@@ -2146,7 +2194,7 @@ function BriefScreen({
           ) : null}
           <textarea
             onChange={(event) => updatePrompt(event.target.value)}
-            placeholder="Tell Know Video your explainer video idea"
+            placeholder={text("描述你想制作的视频", "Tell Know Video your explainer video idea")}
             value={prompt}
           />
           <div className="kv-home-attachment-row">
@@ -2196,44 +2244,44 @@ function BriefScreen({
           ))}
         </div>
         <details className="kv-home-advanced" ref={advancedSettingsRef}>
-          <summary>生成参数</summary>
+          <summary>{text("生成参数", "Generation settings")}</summary>
           <div className="kv-generation-options">
             <label>
-              <span>视频时长</span>
+              <span>{text("视频时长", "Video length")}</span>
               <select onChange={(event) => onOptionsChange({ ...options, duration: event.target.value as GenerationOptions["duration"] })} value={options.duration}>
-                <option value="15">约 15 秒</option>
-                <option value="30">约 30 秒</option>
-                <option value="45">约 45 秒</option>
-                <option value="60">约 60 秒</option>
+                <option value="15">{text("约 15 秒", "About 15 seconds")}</option>
+                <option value="30">{text("约 30 秒", "About 30 seconds")}</option>
+                <option value="45">{text("约 45 秒", "About 45 seconds")}</option>
+                <option value="60">{text("约 60 秒", "About 60 seconds")}</option>
               </select>
             </label>
             <label>
-              <span>场景数量</span>
+              <span>{text("场景数量", "Scene count")}</span>
               <select onChange={(event) => onOptionsChange({ ...options, sceneCount: event.target.value as GenerationOptions["sceneCount"] })} value={options.sceneCount}>
-                <option value="auto">自动规划</option>
-                <option value="3">3 个场景</option>
-                <option value="5">5 个场景</option>
-                <option value="6">6 个场景</option>
+                <option value="auto">{text("自动规划", "Auto")}</option>
+                <option value="3">{text("3 个场景", "3 scenes")}</option>
+                <option value="5">{text("5 个场景", "5 scenes")}</option>
+                <option value="6">{text("6 个场景", "6 scenes")}</option>
               </select>
             </label>
             <label>
-              <span>旁白语言</span>
+              <span>{text("旁白语言", "Narration language")}</span>
               <select onChange={(event) => onOptionsChange({ ...options, language: event.target.value as GenerationOptions["language"] })} value={options.language}>
                 <option value="中文">中国 · 中文</option>
                 <option value="英文">英国 · English</option>
               </select>
             </label>
             <label>
-              <span>动态方式</span>
+              <span>{text("动态方式", "Motion")}</span>
               <select onChange={(event) => onOptionsChange({ ...options, motion: event.target.value as GenerationOptions["motion"] })} value={options.motion}>
-                <option value="camera">智能运镜（低成本）</option>
-                <option value="key-scenes">生成关键动态镜头（额外计费）</option>
+                <option value="camera">{text("智能运镜（低成本）", "Smart camera motion (low cost)")}</option>
+                <option value="key-scenes">{text("生成关键动态镜头（额外计费）", "Generate key video shots (additional cost)")}</option>
               </select>
             </label>
           </div>
           <GenerationSpecStrip options={options} />
           <div className="kv-generation-review" aria-label="生成前审阅清单">
-            <strong>生成前审阅</strong>
+            <strong>{text("生成前审阅", "Pre-generation review")}</strong>
             <div>
               {reviewItems.map((item) => (
                 <span className={item.tone} key={item.label}>
@@ -2362,8 +2410,8 @@ function BriefScreen({
             {activeSettings === "language" ? (
               <>
                 <div className="kv-settings-header compact">
-                  <h3>Language</h3>
-                  <p>选择视频的旁白、字幕和画面文案语言。</p>
+                  <h3>{text("旁白语言", "Narration language")}</h3>
+                  <p>{text("只控制视频的旁白、字幕和画面文案；页面界面语言请使用右上角的中英切换。", "Controls narration, captions, and on-screen copy only. Use the switch in the top-right corner to change the interface language.")}</p>
                 </div>
                 <div className="kv-language-options">
                   {briefLanguageOptions.map((language) => (
@@ -3830,6 +3878,7 @@ function ChatPanel({
   onApply: () => void;
   onCancel: () => void;
 }) {
+  const { text } = useUiCopy();
   const logRef = useRef<HTMLDivElement>(null);
   const visualSceneNumbers = pendingPlan ? editPlanVisualSceneNumbers(pendingPlan) : [];
   const previewedSceneNumbers = pendingPlan ? visualSceneNumbers.filter((sceneNumber) => {
@@ -3840,7 +3889,7 @@ function ChatPanel({
     ? pendingPlan.changes.length + (pendingPlan.projectTitle ? 1 : 0) + productionAssetChangeLabels(pendingPlan).length + productionSettingLabels(pendingPlan.productionSettings).length + editPlanOperations(pendingPlan).length
     : 0;
   const visualPreviewState = { total: visualSceneNumbers.length, ready: previewedSceneNumbers.length };
-  const applyLabel = pendingPlan ? planApplyLabel(pendingPlan, visualPreviewState) : "应用修改";
+  const applyLabel = pendingPlan ? planApplyLabel(pendingPlan, visualPreviewState) : text("应用修改", "Apply changes");
   const checklist = pendingPlan ? planReviewChecklist(pendingPlan, visualPreviewState) : [];
   const requestTrail = pendingPlan ? planRequestTrail(pendingPlan) : undefined;
   const coverageState = pendingPlan ? planCoverageState(pendingPlan, scenes) : undefined;
@@ -3862,8 +3911,8 @@ function ChatPanel({
     <aside className="kv-chat" id="kv-chat-panel">
       <header>
         <div>
-          <span className="kv-eyebrow">对话式改片</span>
-          <h3>告诉我你想怎么改</h3>
+          <span className="kv-eyebrow">{text("对话式改片", "Conversational editing")}</span>
+          <h3>{text("告诉我你想怎么改", "Tell me what to change")}</h3>
         </div>
         <PanelRightOpen size={20} />
       </header>
@@ -3882,13 +3931,13 @@ function ChatPanel({
         {pendingPlan ? (
           <section className="kv-review-plan">
             <div className="kv-strip-heading">
-              <h3>确认修改方案</h3>
-              <span>{planModificationCount} 项修改</span>
+              <h3>{text("确认修改方案", "Review edit plan")}</h3>
+              <span>{text(`${planModificationCount} 项修改`, `${planModificationCount} changes`)}</span>
             </div>
             <div className="kv-plan-state" role="status">
               <div>
                 <Clock3 size={16} />
-                <strong>方案待确认，当前视频还没有被改动</strong>
+                <strong>{text("方案待确认，当前视频还没有被改动", "Plan awaiting approval. The video has not changed yet.")}</strong>
               </div>
               <p>{applyBlocker ?? "确认后才会创建新版本并生成受影响素材；继续输入会先调整这个方案。"}</p>
               <div className="kv-plan-state-grid">
@@ -4012,7 +4061,7 @@ function ChatPanel({
                 {isBusy ? <Loader2 className="kv-spin" size={16} /> : <Check size={16} />}
                 {applyBlocker ? "先修正方案" : applyLabel}
               </button>
-              <button onClick={onCancel} type="button">取消</button>
+              <button onClick={onCancel} type="button">{text("取消", "Cancel")}</button>
             </div>
           </section>
         ) : null}
@@ -4034,7 +4083,7 @@ function ChatPanel({
               {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Check size={15} />}
               {applyBlocker ? "先修正方案" : applyLabel}
             </button>
-            <button disabled={isBusy} onClick={onCancel} type="button">取消方案</button>
+            <button disabled={isBusy} onClick={onCancel} type="button">{text("取消方案", "Cancel plan")}</button>
           </div>
         </div>
       ) : null}
@@ -4058,11 +4107,11 @@ function ChatPanel({
       ) : null}
       <form className="kv-chat-form" onSubmit={onSubmit}>
         <button
-          aria-label="添加参考图片、视频或音频"
+          aria-label={text("添加参考图片、视频或音频", "Add a reference image, video, or audio file")}
           className="kv-chat-attach"
           disabled={isBusy || Boolean(pendingPlan)}
           onClick={onOpenAttachmentPicker}
-          title={pendingPlan ? "请先应用或取消当前方案，再添加新的参考素材" : "添加参考素材"}
+          title={pendingPlan ? text("请先应用或取消当前方案，再添加新的参考素材", "Apply or cancel the current plan before adding references") : text("添加参考素材", "Add references")}
           type="button"
         >
           <Paperclip size={18} />
@@ -4075,7 +4124,7 @@ function ChatPanel({
             event.currentTarget.form?.requestSubmit();
           }}
           onChange={(event) => onInput(event.target.value)}
-          placeholder={pendingPlan ? "继续调整当前方案，输入补充要求…" : "描述你想修改的场景、旁白或整体风格…"}
+          placeholder={pendingPlan ? text("继续调整当前方案，输入补充要求…", "Add instructions to refine the current plan…") : text("描述你想修改的场景、旁白或整体风格…", "Describe changes to scenes, narration, or the overall style…")}
           value={input}
         />
         <button className="kv-chat-send" disabled={isBusy || (input.trim().length === 0 && attachments.length === 0)} type="submit">
@@ -4313,6 +4362,7 @@ function StudioScreen({
   onSaveScene: (sceneNumber: number, edits: SceneTextEdits) => void;
   onVoiceChange: (sceneNumbers: number[], voice: NarrationVoice) => void;
 }) {
+  const { text } = useUiCopy();
   const playerRef = useRef<PlayerRef>(null);
   const toolMenuRef = useRef<HTMLDivElement>(null);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
@@ -4405,11 +4455,11 @@ function StudioScreen({
           <div className="kv-tabs">
             <button className={view === "preview" ? "active" : ""} onClick={() => onViewChange("preview")} type="button">
               <Film size={16} />
-              动态预览
+              {text("动态预览", "Preview")}
             </button>
             <button className={view === "storyboard" ? "active" : ""} onClick={() => onViewChange("storyboard")} type="button">
               <Layers3 size={16} />
-              分镜板
+              {text("分镜板", "Storyboard")}
             </button>
           </div>
           <div className="kv-actions">
@@ -4419,11 +4469,11 @@ function StudioScreen({
               type="button"
             >
               <MessageSquareText size={16} />
-              对话改片
+              {text("对话改片", "Edit with chat")}
             </button>
             <button className="kv-enhance-action" disabled={isBusy} onClick={() => onEnhanceScene(selectedScene)} type="button">
               <Sparkles size={16} />
-              高清画面
+              {text("高清画面", "Enhance image")}
             </button>
             <button
               className="kv-video-action"
@@ -4432,7 +4482,7 @@ function StudioScreen({
               type="button"
             >
               <Clapperboard size={16} />
-              {scene?.assets.some((asset) => asset.type === "clip" && asset.url) ? "重做动态" : "生成动态"}
+              {scene?.assets.some((asset) => asset.type === "clip" && asset.url) ? text("重做动态", "Regenerate motion") : text("生成动态", "Generate motion")}
             </button>
             <div className="kv-tool-menu-wrap" ref={toolMenuRef}>
               <button
@@ -4443,35 +4493,35 @@ function StudioScreen({
                 type="button"
               >
                 <MoreHorizontal size={17} />
-                工具
+                {text("工具", "Tools")}
               </button>
               {toolMenuOpen ? (
                 <div aria-label="工作室工具" className="kv-tool-menu" id="kv-studio-tool-menu" role="menu">
-                  <span>项目</span>
+                  <span>{text("项目", "Project")}</span>
                   <button className={assetsOpen ? "active" : ""} disabled={isBusy} onClick={() => runTool(onToggleAssets)} role="menuitem" type="button">
                     {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <ImagePlus size={16} />}
-                    {uploadProgress !== undefined ? `上传 ${uploadProgress}%` : "素材库"}
+                    {uploadProgress !== undefined ? text(`上传 ${uploadProgress}%`, `Uploading ${uploadProgress}%`) : text("素材库", "Assets")}
                   </button>
                   <button className={productionOpen ? "active" : ""} disabled={isBusy} onClick={() => runTool(onToggleProduction)} role="menuitem" type="button">
                     <SlidersHorizontal size={16} />
-                    成片设置
+                    {text("成片设置", "Production settings")}
                   </button>
                   <button className={versionsOpen ? "active" : ""} onClick={() => runTool(onToggleVersions)} role="menuitem" type="button">
                     <History size={16} />
-                    版本历史
+                    {text("版本历史", "Version history")}
                   </button>
                   <button className={exportsOpen ? "active" : ""} onClick={() => runTool(onToggleExports)} role="menuitem" type="button">
                     <FileVideo2 size={16} />
-                    导出记录
+                    {text("导出记录", "Export history")}
                   </button>
-                  <span>生成</span>
+                  <span>{text("生成", "Generate")}</span>
                   <button disabled={isBusy} onClick={() => runTool(() => onRegenerate(missingSceneNumbers.length > 0 ? missingSceneNumbers : undefined))} role="menuitem" type="button">
                     <RefreshCcw size={16} />
-                    {missingSceneNumbers.length > 0 ? `补齐 ${missingSceneNumbers.length} 个画面` : "重做全部画面"}
+                    {missingSceneNumbers.length > 0 ? text(`补齐 ${missingSceneNumbers.length} 个画面`, `Complete ${missingSceneNumbers.length} images`) : text("重做全部画面", "Regenerate all images")}
                   </button>
                   <button disabled={isBusy} onClick={() => runTool(() => onRegenerateAudio(missingAudioSceneNumbers.length > 0 ? missingAudioSceneNumbers : [selectedScene]))} role="menuitem" type="button">
                     <Mic2 size={16} />
-                    {missingAudioSceneNumbers.length > 0 ? `补齐 ${missingAudioSceneNumbers.length} 段配音` : "重做本场景配音"}
+                    {missingAudioSceneNumbers.length > 0 ? text(`补齐 ${missingAudioSceneNumbers.length} 段配音`, `Complete ${missingAudioSceneNumbers.length} narrations`) : text("重做本场景配音", "Regenerate scene narration")}
                   </button>
                 </div>
               ) : null}
@@ -4821,6 +4871,7 @@ export function WorkspaceClient({
   const [project, setProject] = useState(initialProject);
   const [projectSource, setProjectSource] = useState<Source>(source);
   const [stage, setStage] = useState<Stage>(initialPendingPlan ? "studio" : "brief");
+  const [uiLanguage, setUiLanguage] = useState<UiLanguage>("zh-CN");
   const [briefPrompt, setBriefPrompt] = useState("");
   const [briefAttachments, setBriefAttachments] = useState<File[]>([]);
   const [chatAttachments, setChatAttachments] = useState<File[]>([]);
@@ -4877,6 +4928,20 @@ export function WorkspaceClient({
   const recoveringRenderRef = useRef<string>();
   const recoveringGenerationRef = useRef(false);
   const cancelledRenderIdsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
+    if (stored === "zh-CN" || stored === "en") {
+      setUiLanguage(stored);
+      document.documentElement.lang = stored;
+    }
+  }, []);
+
+  function changeUiLanguage(language: UiLanguage) {
+    setUiLanguage(language);
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, language);
+    document.documentElement.lang = language;
+  }
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);
 
@@ -6763,6 +6828,7 @@ export function WorkspaceClient({
   }
 
   return (
+    <UiLanguageContext.Provider value={{ language: uiLanguage, setLanguage: changeUiLanguage }}>
     <Shell
       currentUser={currentUser}
       onNewVideo={resetToBrief}
@@ -6931,5 +6997,6 @@ export function WorkspaceClient({
         </div>
       ) : null}
     </Shell>
+    </UiLanguageContext.Provider>
   );
 }

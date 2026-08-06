@@ -994,6 +994,29 @@ button:disabled {
   padding: 0;
 }
 
+.kv-home-top-actions > .kv-ui-language-toggle,
+.kv-status-row > .kv-ui-language-toggle {
+  width: auto;
+  min-width: 68px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #d9e1e8;
+  border-radius: 12px;
+  background: #fff;
+  color: #273448;
+  padding: 0 12px;
+  font-weight: 760;
+}
+
+html[data-theme="dark"] .kv-ui-language-toggle {
+  border-color: #394351;
+  background: #222934;
+  color: #eef3f8;
+}
+
 .kv-home-dialog-backdrop {
   position: fixed;
   z-index: 90;
