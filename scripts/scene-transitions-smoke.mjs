@@ -18,10 +18,14 @@ const base = {
   style: { theme: "dark", palette: ["#000", "#fff"], mood: "focused" }
 };
 
-assert.deepEqual(plain(resolvedSceneTransition(base)), { kind: "zoom", durationSeconds: 0.2 });
+assert.deepEqual(plain(resolvedSceneTransition(base)), { kind: "zoom", durationSeconds: 0.7 });
 assert.deepEqual(plain(resolvedSceneTransition({ ...base, style: { ...base.style, transition: { kind: "wipe", durationSeconds: 0.75 } } })), { kind: "wipe", durationSeconds: 0.75 });
 assert.deepEqual(plain(resolvedSceneTransition({ ...base, style: { ...base.style, transition: { kind: "cut", durationSeconds: 1 } } })), { kind: "cut", durationSeconds: 0 });
-assert.equal(boundedTransitionFrames({ scene: base, fps: 30, previousSceneFrames: 180, sceneFrames: 180 }), 6);
+assert.equal(boundedTransitionFrames({ scene: base, fps: 30, previousSceneFrames: 180, sceneFrames: 180 }), 21);
+assert.deepEqual(plain(resolvedSceneTransition({
+  ...base,
+  style: { ...base.style, transition: { kind: "auto", durationSeconds: 0.9 } }
+})), { kind: "zoom", durationSeconds: 0.9 });
 assert.equal(boundedTransitionFrames({ scene: { ...base, style: { ...base.style, transition: { kind: "dissolve", durationSeconds: 1 } } }, fps: 30, previousSceneFrames: 30, sceneFrames: 24 }), 8);
 assert.equal(boundedTransitionFrames({ scene: { ...base, style: { ...base.style, transition: { kind: "cut", durationSeconds: 0 } } }, fps: 30, previousSceneFrames: 180, sceneFrames: 180 }), 0);
 

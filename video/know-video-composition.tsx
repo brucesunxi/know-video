@@ -6,6 +6,7 @@ import {
   Img,
   OffthreadVideo,
   Sequence,
+  Easing,
   interpolate,
   spring,
   useCurrentFrame
@@ -102,6 +103,7 @@ function visualLayerStyle({
 function transitionStyle(kind: ResolvedSceneTransitionKind, frame: number, transitionFrames: number, active: boolean) {
   if (!active || frame >= transitionFrames) return {};
   const progress = interpolate(frame, [0, transitionFrames], [0, 1], {
+    easing: Easing.inOut(Easing.cubic),
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp"
   });

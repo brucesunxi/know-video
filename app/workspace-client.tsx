@@ -2482,7 +2482,7 @@ function Storyboard({
   const selectedMediaDiagnostics = scene ? sceneMediaDiagnosticItems(scene) : [];
   const [duration, setDuration] = useState(scene?.durationSeconds ?? 5);
   const [transitionKind, setTransitionKind] = useState<SceneTransitionKind>(scene?.style.transition?.kind ?? "auto");
-  const [transitionDuration, setTransitionDuration] = useState(scene?.style.transition?.durationSeconds ?? 0.25);
+  const [transitionDuration, setTransitionDuration] = useState(scene?.style.transition?.durationSeconds ?? 0.65);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [draggedSceneNumber, setDraggedSceneNumber] = useState<number>();
   const [dropTargetSceneNumber, setDropTargetSceneNumber] = useState<number>();
@@ -2492,12 +2492,12 @@ function Storyboard({
   useEffect(() => {
     setDuration(scene?.durationSeconds ?? 5);
     setTransitionKind(scene?.style.transition?.kind ?? "auto");
-    setTransitionDuration(scene?.style.transition?.durationSeconds ?? 0.25);
+    setTransitionDuration(scene?.style.transition?.durationSeconds ?? 0.65);
     setConfirmDelete(false);
   }, [scene?.id, scene?.durationSeconds, scene?.style.transition?.durationSeconds, scene?.style.transition?.kind]);
 
   const savedTransitionKind = scene?.style.transition?.kind ?? "auto";
-  const savedTransitionDuration = scene?.style.transition?.durationSeconds ?? 0.5;
+  const savedTransitionDuration = scene?.style.transition?.durationSeconds ?? 0.65;
   const transitionChanged = transitionKind !== savedTransitionKind
     || (transitionKind !== "cut" && transitionDuration !== savedTransitionDuration);
 
@@ -2632,7 +2632,7 @@ function Storyboard({
                   onChange={(event) => {
                     const nextKind = event.target.value as SceneTransitionKind;
                     setTransitionKind(nextKind);
-                    if (nextKind !== "cut" && transitionDuration < 0.2) setTransitionDuration(0.25);
+                    if (nextKind !== "cut" && transitionDuration < 0.2) setTransitionDuration(0.65);
                   }}
                   value={transitionKind}
                 >
@@ -2647,14 +2647,15 @@ function Storyboard({
                   onChange={(event) => setTransitionDuration(Number(event.target.value))}
                   value={transitionDuration}
                 >
-                  {![0.12, 0.25, 0.5, 0.75, 1].includes(transitionDuration) ? (
+                  {![0.25, 0.5, 0.65, 0.75, 1, 1.2].includes(transitionDuration) ? (
                     <option value={transitionDuration}>{transitionDuration} 秒</option>
                   ) : null}
-                  <option value="0.12">0.12 秒</option>
                   <option value="0.25">0.25 秒</option>
                   <option value="0.5">0.5 秒</option>
+                  <option value="0.65">0.65 秒 · 自然</option>
                   <option value="0.75">0.75 秒</option>
                   <option value="1">1 秒</option>
+                  <option value="1.2">1.2 秒 · 舒缓</option>
                 </select>
               </label>
               <button

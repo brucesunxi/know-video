@@ -79,13 +79,13 @@ const pacedScenes = [
 ];
 assert.equal(effectiveSceneDurationSeconds(pacedScenes[0], false), 3.6);
 assert.equal(effectiveSceneDurationSeconds(pacedScenes[1], true), 5.16);
-assert.equal(effectiveVersionDurationSeconds({ durationSeconds: 12, scenes: pacedScenes }), 8.56);
-assert.equal(productionDurationInFrames({ durationSeconds: 12, scenes: pacedScenes }, 30), 257);
+assert.equal(effectiveVersionDurationSeconds({ durationSeconds: 12, scenes: pacedScenes }), 8.11);
+assert.equal(productionDurationInFrames({ durationSeconds: 12, scenes: pacedScenes }, 30), 243);
 assert.deepEqual(plain(productionSceneTimeline({ durationSeconds: 12, scenes: pacedScenes }, 30)), {
   sceneFrames: [108, 155],
-  transitionFrames: [0, 6],
-  sceneStartFrames: [0, 102],
-  totalFrames: 257
+  transitionFrames: [0, 20],
+  sceneStartFrames: [0, 88],
+  totalFrames: 243
 });
 assert.equal(effectiveSceneDurationSeconds({ durationSeconds: 6, style: {}, assets: [] }, false), 6);
 assert.equal(effectiveSceneDurationSeconds({

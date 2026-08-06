@@ -67,9 +67,9 @@ export function effectiveSceneDurationSeconds(scene: Scene, isLastScene = false)
   const narrationEnd = audibleEnd ?? audioDuration;
   if (!narrationEnd) return plannedDuration;
 
-  // Cut promptly once speech ends. Keep only a tiny buffer for the last syllable
-  // so scene switches feel brisk instead of lingering between beats.
-  const holdSeconds = isLastScene ? 0.16 : 0.08;
+  // Leave a short visual breath after narration so transitions do not land on
+  // the final syllable. The closing scene gets a slightly longer resolve.
+  const holdSeconds = isLastScene ? 0.32 : 0.18;
   const pacedDuration = Math.ceil((narrationEnd + holdSeconds) * 100) / 100;
   return Math.max(narrationEnd + 0.08, Math.min(plannedDuration, pacedDuration));
 }

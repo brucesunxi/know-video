@@ -2,6 +2,15 @@ import type { Scene, SceneTransitionKind } from "@/lib/types";
 
 export type ResolvedSceneTransitionKind = Exclude<SceneTransitionKind, "auto">;
 
+const DEFAULT_TRANSITION_SECONDS: Record<ResolvedSceneTransitionKind, number> = {
+  cut: 0,
+  dissolve: 0.65,
+  wipe: 0.55,
+  "push-left": 0.6,
+  "push-right": 0.6,
+  zoom: 0.7
+};
+
 function inferredTransitionKind(scene: Pick<Scene, "motionPrompt" | "sceneNumber">): ResolvedSceneTransitionKind {
   const direction = String(scene.motionPrompt ?? "").toLowerCase();
   if (direction.includes("wipe") || direction.includes("遮罩") || direction.includes("擦除")) return "wipe";
@@ -20,14 +29,14 @@ export function resolvedSceneTransition(scene: Pick<Scene, "motionPrompt" | "sce
   const kind = !configured || configured.kind === "auto"
     ? inferredTransitionKind(scene)
     : configured.kind;
-  const requestedDuration = Number(
-    !configured || configured.kind === "auto"
-      ? 0.18
-      : configured.durationSeconds
-  );
+  const configuredDuration = Number(configured?.durationSeconds);
+  const requestedDuration = Number.isFinite(configuredDuration) && configuredDuration > 0
+    ? configuredDuration
+    : DEFAULT_TRANSITION_SECONDS[kind];
+  const minimumDuration = configured?.kind && configured.kind !== "auto" ? 0.2 : 0.45;
   return {
     kind,
-    durationSeconds: kind === "cut" ? 0 : Math.min(1.2, Math.max(0.2, requestedDuration))
+    durationSeconds: kind === "cut" ? 0 : Math.min(1.2, Math.max(minimumDuration, requestedDuration))
   };
 }
 
