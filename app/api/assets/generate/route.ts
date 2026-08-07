@@ -5,12 +5,14 @@ import { generateProjectSceneImages } from "@/lib/image-assets";
 import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/media-generation-result";
 import { loadCurrentProjectForEdit, loadProjectForRender, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import type { Scene } from "@/lib/types";
+import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
 
 const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
   versionId: z.string().min(1).max(200),
   sceneNumbers: z.array(z.number().int().positive()).optional(),
-  quality: z.enum(["standard", "premium"]).default("standard")
+  quality: z.enum(["standard", "premium"]).default("standard"),
+  billingRequestId: z.string().uuid().optional()
 });
 
 export const maxDuration = 300;
@@ -97,6 +99,44 @@ export async function POST(request: Request) {
     requestedSceneNumbers,
     failedTargets.map((scene) => scene.sceneNumber)
   );
+  const completedScenes = persisted.currentVersion.scenes.filter((scene) => progress.completedSceneNumbers.includes(scene.sceneNumber));
+  const completedImageKeys = completedScenes
+    .map((scene) => scene.assets.find((asset) => asset.type === "image" && asset.url)?.r2Key)
+    .filter((key): key is string => Boolean(key));
+  const imageResourceType = body.quality === "premium" ? "image_premium" : "image_standard";
+  if (progress.completedSceneNumbers.length > 0) {
+    await recordUsageEvent({
+      userId: user.id,
+      projectId: body.projectId,
+      versionId: body.versionId,
+      resourceType: imageResourceType,
+      quantity: progress.completedSceneNumbers.length,
+      idempotencyKey: body.billingRequestId
+        ? `${imageResourceType}:${body.billingRequestId}`
+        : billingIdempotencyKey(imageResourceType, [body.projectId, body.versionId, ...completedImageKeys]),
+      status: "settled",
+      metadata: {
+        requestedSceneNumbers,
+        completedSceneNumbers: progress.completedSceneNumbers,
+        failedSceneNumbers: progress.failedSceneNumbers,
+        quality: body.quality,
+        assetKeys: completedImageKeys
+      }
+    });
+  } else {
+    await recordUsageEvent({
+      userId: user.id,
+      projectId: body.projectId,
+      versionId: body.versionId,
+      resourceType: imageResourceType,
+      quantity: requestedSceneNumbers.length,
+      idempotencyKey: body.billingRequestId
+        ? `${imageResourceType}:${body.billingRequestId}`
+        : billingIdempotencyKey(imageResourceType, [body.projectId, body.versionId, "released", ...requestedSceneNumbers]),
+      status: "released",
+      metadata: { requestedSceneNumbers, failedSceneNumbers: progress.failedSceneNumbers, quality: body.quality }
+    });
+  }
 
   if (failedTargets.length > 0) {
     const messages = {

@@ -68,6 +68,12 @@ npm run db:seed
 
 `db:init` applies the schema. `db:seed` inserts the demo Know Video project used by the current editor screen.
 
+## Product And Engineering Documents
+
+- [Architecture](docs/architecture.md)
+- [Usage-based billing and margin policy](docs/usage-based-billing.md)
+- [Render worker contract](docs/worker-contract.md)
+
 The app reads from Neon when `DATABASE_URL` is configured. If no project exists or the database is unavailable, it falls back to mock data so the UI still runs.
 
 ## API Routes

@@ -3,13 +3,15 @@ import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { CandidateImageError, generateSceneImageCandidate } from "@/lib/image-candidates";
 import { loadCurrentProjectForEdit } from "@/lib/project-mutations";
+import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
 
 const schema = z.object({
   projectId: z.string().uuid(),
   versionId: z.string().uuid(),
   sceneNumber: z.number().int().positive(),
   instruction: z.string().trim().max(600).optional().default(""),
-  quality: z.enum(["standard", "premium"]).default("standard")
+  quality: z.enum(["standard", "premium"]).default("standard"),
+  billingRequestId: z.string().uuid().optional()
 });
 
 export const maxDuration = 120;
@@ -24,6 +26,24 @@ export async function POST(request: Request) {
       quality: body.quality,
       sceneNumber: body.sceneNumber,
       instruction: body.instruction
+    });
+    const resourceType = body.quality === "premium" ? "image_premium" : "image_standard";
+    await recordUsageEvent({
+      userId: user.id,
+      projectId: body.projectId,
+      versionId: body.versionId,
+      resourceType,
+      quantity: 1,
+      idempotencyKey: body.billingRequestId
+        ? `${resourceType}:${body.billingRequestId}`
+        : billingIdempotencyKey(resourceType, [body.projectId, body.versionId, "candidate", result.candidate.r2Key]),
+      status: "settled",
+      metadata: {
+        sceneNumber: body.sceneNumber,
+        quality: body.quality,
+        candidate: true,
+        assetKey: result.candidate.r2Key
+      }
     });
     return NextResponse.json(result);
   } catch (error) {

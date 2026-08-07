@@ -6,12 +6,14 @@ import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/me
 import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import type { Scene } from "@/lib/types";
 import { isNarrationVoice } from "@/lib/voice-profiles";
+import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
 
 const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
   versionId: z.string().min(1).max(200),
   sceneNumbers: z.array(z.number().int().positive()).optional(),
-  narrationVoice: z.string().refine(isNarrationVoice).optional()
+  narrationVoice: z.string().refine(isNarrationVoice).optional(),
+  billingRequestId: z.string().uuid().optional()
 });
 
 export const maxDuration = 300;
@@ -81,6 +83,52 @@ export async function POST(request: Request) {
     failed.map((scene) => scene.sceneNumber)
   );
   console.info(`[audio-assets] Voice generation completed ${progress.completedSceneNumbers.length}/${progress.requestedSceneNumbers.length}; failed scenes: ${progress.failedSceneNumbers.join(",") || "none"}.`);
+  const completedScenes = updated.currentVersion.scenes.filter((scene) => progress.completedSceneNumbers.includes(scene.sceneNumber));
+  const completedAudio = completedScenes
+    .map((scene) => scene.assets.find((asset) => asset.type === "audio" && asset.url))
+    .filter((asset) => Boolean(asset));
+  const completedAudioKeys = completedAudio.map((asset) => asset?.r2Key).filter((key): key is string => Boolean(key));
+  const completedAudioSeconds = completedScenes.reduce((sum, scene) => {
+    const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
+    const duration = Number(audio?.metadata?.actualDurationSeconds ?? scene.durationSeconds);
+    return sum + (Number.isFinite(duration) && duration > 0 ? duration : scene.durationSeconds);
+  }, 0);
+  if (completedAudioSeconds > 0) {
+    await recordUsageEvent({
+      userId: user.id,
+      projectId: body.projectId,
+      versionId: body.versionId,
+      resourceType: "speech",
+      quantity: completedAudioSeconds,
+      idempotencyKey: body.billingRequestId
+        ? `speech:${body.billingRequestId}`
+        : billingIdempotencyKey("speech", [body.projectId, body.versionId, ...completedAudioKeys]),
+      status: "settled",
+      metadata: {
+        requestedSceneNumbers,
+        completedSceneNumbers: progress.completedSceneNumbers,
+        failedSceneNumbers: progress.failedSceneNumbers,
+        narrationVoice: body.narrationVoice,
+        assetKeys: completedAudioKeys
+      }
+    });
+  } else {
+    await recordUsageEvent({
+      userId: user.id,
+      projectId: body.projectId,
+      versionId: body.versionId,
+      resourceType: "speech",
+      quantity: Math.max(1, requestedSceneNumbers.reduce((sum, sceneNumber) => {
+        const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === sceneNumber);
+        return sum + (scene?.durationSeconds ?? 0);
+      }, 0)),
+      idempotencyKey: body.billingRequestId
+        ? `speech:${body.billingRequestId}`
+        : billingIdempotencyKey("speech", [body.projectId, body.versionId, "released", ...requestedSceneNumbers]),
+      status: "released",
+      metadata: { requestedSceneNumbers, failedSceneNumbers: progress.failedSceneNumbers, narrationVoice: body.narrationVoice }
+    });
+  }
 
   if (failed.length > 0) {
     return NextResponse.json(

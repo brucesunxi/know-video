@@ -5,13 +5,15 @@ import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/me
 import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import { generateProjectSceneClips } from "@/lib/video-assets";
 import { videoGenerationEstimate } from "@/lib/video-cost-policy";
+import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
 
 const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
   versionId: z.string().min(1).max(200),
   sceneNumbers: z.array(z.number().int().positive()).length(1),
   tier: z.enum(["economy", "balanced"]),
-  costConsent: z.literal(true)
+  costConsent: z.literal(true),
+  billingRequestId: z.string().uuid().optional()
 });
 
 export const maxDuration = 300;
@@ -79,6 +81,30 @@ export async function POST(request: Request) {
     body.sceneNumbers,
     failed.map((scene) => scene.sceneNumber)
   );
+  const videoResourceType = body.tier === "economy" ? "video_economy_3s" : "video_balanced_3s";
+  const completedClipKeys = result.project.currentVersion.scenes
+    .filter((scene) => progress.completedSceneNumbers.includes(scene.sceneNumber))
+    .map((scene) => scene.assets.find((asset) => asset.type === "clip" && asset.url)?.r2Key)
+    .filter((key): key is string => Boolean(key));
+  await recordUsageEvent({
+    userId: user.id,
+    projectId: body.projectId,
+    versionId: body.versionId,
+    resourceType: videoResourceType,
+    quantity: Math.max(1, progress.completedSceneNumbers.length || body.sceneNumbers.length),
+    idempotencyKey: body.billingRequestId
+      ? `${videoResourceType}:${body.billingRequestId}`
+      : billingIdempotencyKey(videoResourceType, [body.projectId, body.versionId, progress.completedSceneNumbers.length ? "settled" : "released", ...body.sceneNumbers, ...completedClipKeys]),
+    status: progress.completedSceneNumbers.length > 0 ? "settled" : "released",
+    actualCostUsd: progress.completedSceneNumbers.length > 0 ? estimate.estimatedUsd * progress.completedSceneNumbers.length : undefined,
+    metadata: {
+      tier: body.tier,
+      requestedSceneNumbers: body.sceneNumbers,
+      completedSceneNumbers: progress.completedSceneNumbers,
+      failedSceneNumbers: progress.failedSceneNumbers,
+      assetKeys: completedClipKeys
+    }
+  });
   if (failed.length > 0) {
     const errorCode = videoFailureCode(result.failures);
     return NextResponse.json({

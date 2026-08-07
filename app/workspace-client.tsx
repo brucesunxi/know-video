@@ -5193,6 +5193,7 @@ export function WorkspaceClient({
           body: JSON.stringify({
             projectId: generatedProject.id,
             versionId: generatedProject.currentVersion.id,
+            billingRequestId: crypto.randomUUID(),
             sceneNumbers: missingImageSceneNumbers,
             quality: "standard"
           }),
@@ -5228,6 +5229,7 @@ export function WorkspaceClient({
           body: JSON.stringify({
             projectId: generatedProject.id,
             versionId: generatedProject.currentVersion.id,
+            billingRequestId: crypto.randomUUID(),
             sceneNumbers: missingAudioSceneNumbers
           }),
           signal: AbortSignal.timeout(AUDIO_GENERATION_TIMEOUT_MS)
@@ -5731,6 +5733,7 @@ export function WorkspaceClient({
           body: JSON.stringify({
             projectId: updatedProject.id,
             versionId: updatedProject.currentVersion.id,
+            billingRequestId: crypto.randomUUID(),
             sceneNumbers: data.regeneration.imageSceneNumbers,
             quality: "standard"
           }),
@@ -5756,6 +5759,7 @@ export function WorkspaceClient({
           body: JSON.stringify({
             projectId: updatedProject.id,
             versionId: updatedProject.currentVersion.id,
+            billingRequestId: crypto.randomUUID(),
             sceneNumbers: data.regeneration.audioSceneNumbers
           }),
           signal: AbortSignal.timeout(125_000)
@@ -5893,6 +5897,7 @@ export function WorkspaceClient({
             body: JSON.stringify({
               projectId: updatedProject.id,
               versionId: updatedProject.currentVersion.id,
+              billingRequestId: crypto.randomUUID(),
               sceneNumbers: regeneration.imageSceneNumbers,
               quality: "standard"
             }),
@@ -5917,6 +5922,7 @@ export function WorkspaceClient({
             body: JSON.stringify({
               projectId: updatedProject.id,
               versionId: updatedProject.currentVersion.id,
+              billingRequestId: crypto.randomUUID(),
               sceneNumbers: regeneration.audioSceneNumbers
             }),
             signal: AbortSignal.timeout(125_000)
@@ -6550,6 +6556,7 @@ export function WorkspaceClient({
         body: JSON.stringify({
           projectId: project.id,
           versionId: project.currentVersion.id,
+          billingRequestId: crypto.randomUUID(),
           sceneNumbers,
           quality
         }),
@@ -6591,6 +6598,7 @@ export function WorkspaceClient({
         body: JSON.stringify({
           projectId: project.id,
           versionId: project.currentVersion.id,
+          billingRequestId: crypto.randomUUID(),
           sceneNumber,
           instruction,
           quality: "standard"
@@ -6631,6 +6639,7 @@ export function WorkspaceClient({
         body: JSON.stringify({
           projectId: project.id,
           versionId: project.currentVersion.id,
+          billingRequestId: crypto.randomUUID(),
           sceneNumbers,
           narrationVoice
         }),
@@ -6674,6 +6683,7 @@ export function WorkspaceClient({
         body: JSON.stringify({
           projectId: updatedProject.id,
           versionId: updatedProject.currentVersion.id,
+          billingRequestId: crypto.randomUUID(),
           sceneNumbers: [sceneNumber],
           tier,
           costConsent: true

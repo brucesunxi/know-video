@@ -19,6 +19,7 @@ import { persistGeneratedProject } from "@/lib/project-mutations";
 import { getProjectSnapshot, listProjects } from "@/lib/project-store";
 import { getFromR2, headR2Object, readR2Prefix } from "@/lib/r2";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
+import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
 
 const referenceAssetSchema = z.object({
   key: z.string().min(1).max(800),
@@ -209,6 +210,36 @@ export async function POST(request: Request) {
     });
     if (requestId) {
       await completeGenerationRequest({ id: requestId, projectId: persisted.project.id, engine });
+    }
+    await recordUsageEvent({
+      userId: user.id,
+      projectId: persisted.project.id,
+      versionId: persisted.project.currentVersion.id,
+      resourceType: "storyboard_plan",
+      quantity: 1,
+      idempotencyKey: requestId
+        ? `storyboard_plan:${requestId}`
+        : billingIdempotencyKey("storyboard_plan", [persisted.project.id, persisted.project.currentVersion.id]),
+      status: "settled",
+      metadata: {
+        engine,
+        sceneCount: persisted.project.currentVersion.scenes.length,
+        promptCharacters: body.prompt.length
+      }
+    });
+    if (Object.keys(analyses).length > 0) {
+      await recordUsageEvent({
+        userId: user.id,
+        projectId: persisted.project.id,
+        versionId: persisted.project.currentVersion.id,
+        resourceType: "vision_analysis",
+        quantity: Object.keys(analyses).length,
+        idempotencyKey: requestId
+          ? `vision_analysis:${requestId}`
+          : billingIdempotencyKey("vision_analysis", [persisted.project.id, ...Object.keys(analyses).sort()]),
+        status: "settled",
+        metadata: { analyzedReferenceKeys: Object.keys(analyses).sort() }
+      });
     }
     return NextResponse.json({ ...persisted, engine: publicEngine(engine) });
   } catch (error) {

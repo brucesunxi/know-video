@@ -16,6 +16,7 @@ import {
 import { referenceAssetInputSchema, validateAndAnalyzeReferenceAssets, validateReferenceRelationships } from "@/lib/reference-asset-processing";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import type { ChatMessage, ProjectVersion } from "@/lib/types";
+import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
 
 const requestSchema = z.object({
   request: z.string().trim().min(1).max(4000),
@@ -129,6 +130,18 @@ export async function POST(request: Request) {
           userId: user.id,
           userRequest: body.request
         });
+        await recordUsageEvent({
+          userId: user.id,
+          projectId: body.projectId,
+          versionId: body.versionId,
+          resourceType: "edit_plan",
+          quantity: 1,
+          idempotencyKey: body.requestId
+            ? `edit_plan:${body.requestId}`
+            : billingIdempotencyKey("edit_plan", [body.projectId, body.versionId, "restore", restored.project.currentVersion.id]),
+          status: "settled",
+          metadata: { engine: result.engine, directAction: "restore-parent-version" }
+        });
         return NextResponse.json({
           action: "version-restored",
           project: restored.project,
@@ -165,6 +178,30 @@ export async function POST(request: Request) {
           { id: crypto.randomUUID(), role: "assistant", type: "text", content: responseText, versionId: body.versionId }
         ];
       }
+      await recordUsageEvent({
+        userId: user.id,
+        projectId: body.projectId,
+        versionId: body.versionId,
+        resourceType: "edit_plan",
+        quantity: 1,
+        idempotencyKey: body.requestId
+          ? `edit_plan:${body.requestId}`
+          : billingIdempotencyKey("edit_plan", [body.projectId, body.versionId, "candidate-plan", candidateResult.candidate.id]),
+        status: "settled",
+        metadata: { engine: result.engine, directAction: "visual-candidate", sceneNumber: candidateIntent.sceneNumber }
+      });
+      await recordUsageEvent({
+        userId: user.id,
+        projectId: body.projectId,
+        versionId: body.versionId,
+        resourceType: "image_standard",
+        quantity: 1,
+        idempotencyKey: body.requestId
+          ? `image_standard:${body.requestId}`
+          : billingIdempotencyKey("image_standard", [body.projectId, body.versionId, "candidate", candidateResult.candidate.r2Key]),
+        status: "settled",
+        metadata: { candidate: true, sceneNumber: candidateIntent.sceneNumber, assetKey: candidateResult.candidate.r2Key }
+      });
       return NextResponse.json({
         action: "visual-candidate",
         candidateIntent,
@@ -201,6 +238,18 @@ export async function POST(request: Request) {
         editPlan,
         engine
       });
+      await recordUsageEvent({
+        userId: user.id,
+        projectId: body.projectId,
+        versionId: body.versionId,
+        resourceType: "edit_plan",
+        quantity: 1,
+        idempotencyKey: body.requestId
+          ? `edit_plan:${body.requestId}`
+          : billingIdempotencyKey("edit_plan", [body.projectId, body.versionId, persisted.editPlan.id]),
+        status: "settled",
+        metadata: { engine, refinement: Boolean(existingPlan), affectedScenes: editPlan.affectedScenes }
+      });
       return NextResponse.json({ ...persisted, engine: publicEngine(engine) });
     } catch (error) {
       const message = error instanceof Error ? error.message : "修改方案保存失败。";
@@ -211,6 +260,18 @@ export async function POST(request: Request) {
     }
   }
 
+  await recordUsageEvent({
+    userId: user.id,
+    projectId: body.projectId,
+    versionId: body.versionId,
+    resourceType: "edit_plan",
+    quantity: 1,
+    idempotencyKey: body.requestId
+      ? `edit_plan:${body.requestId}`
+      : billingIdempotencyKey("edit_plan", [body.projectId, body.versionId, editPlan.id]),
+    status: "settled",
+    metadata: { engine, refinement: Boolean(existingPlan), affectedScenes: editPlan.affectedScenes }
+  });
   return NextResponse.json({
     editPlan,
     engine: publicEngine(engine),
