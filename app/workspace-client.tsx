@@ -1621,7 +1621,10 @@ function Shell({
             </button>
             <div className="kv-home-top-actions">
               {languageToggle}
-              <span className="kv-credit-pill"><AlertCircle size={14} /> {text("免费版 · 996 点数 · 获取更多", "Free · 996 credits · Get more")}</span>
+              <button className="kv-credit-pill" onClick={() => setHomeDialog("pricing")} type="button">
+                <CreditCard size={14} />
+                {text("按量计费 · 查看价格", "Usage billing · View pricing")}
+              </button>
               <button aria-label={darkMode ? "浅色模式" : "夜间模式"} onClick={() => setDarkMode((enabled) => !enabled)} title={darkMode ? "浅色模式" : "夜间模式"} type="button"><Moon size={18} /></button>
               <button aria-label={text("通知", "Notifications")} onClick={() => setHomeDialog("notifications")} type="button"><Bell size={18} /></button>
               <div className="kv-user-menu">
@@ -1686,13 +1689,13 @@ function Shell({
               {homeDialog === "pricing" ? (
                 <>
                   <span className="kv-eyebrow">{text("价格", "Pricing")}</span>
-                  <h3>{text("当前免费额度", "Current free allowance")}</h3>
+                  <h3>{text("按实际用量结算", "Pay for actual usage")}</h3>
                   <div className="kv-home-dialog-grid">
-                    <span><strong>996</strong><small>{text("剩余额度", "Credits left")}</small></span>
-                    <span><strong>5</strong><small>{text("默认分镜", "Default scenes")}</small></span>
-                    <span><strong>MP4</strong><small>{text("可导出", "Export ready")}</small></span>
+                    <span><strong>100</strong><small>{text("点数 = ¥1", "credits = ¥1")}</small></span>
+                    <span><strong>{text("成功", "Success")}</strong><small>{text("任务才计量", "tasks are metered")}</small></span>
+                    <span><strong>MP4</strong><small>{text("合成已包含", "render included")}</small></span>
                   </div>
-                  <p>{text("正式计费页会包含文字生成、高清画面、动态镜头和 MP4 导出的额度说明。", "The full pricing page will explain usage for scripts, enhanced images, generated motion, and MP4 exports.")}</p>
+                  <p>{text("当前处于用量计量阶段：成功完成的脚本、画面、配音和动态镜头会记录实际用量，失败任务不计量。账户充值与余额扣减上线后，这里才会显示真实可用点数。", "Usage metering is currently active: completed scripts, images, narration, and motion clips are recorded, while failed tasks are not metered. A real available balance will appear here once wallet funding and credit settlement launch.")}</p>
                 </>
               ) : null}
               {homeDialog === "demo" ? (

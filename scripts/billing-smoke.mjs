@@ -62,6 +62,11 @@ const estimateRoute = fs.readFileSync(new URL("../app/api/billing/estimate/route
 assert.match(estimateRoute, /requireCurrentUser/);
 assert.match(estimateRoute, /estimateBilling/);
 
+const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
+assert.doesNotMatch(workspace, /996/);
+assert.match(workspace, /按量计费 · 查看价格/);
+assert.match(workspace, /账户充值与余额扣减上线后/);
+
 for (const route of [
   "../app/api/projects/route.ts",
   "../app/api/edit-plan/route.ts",

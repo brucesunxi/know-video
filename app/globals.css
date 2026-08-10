@@ -1139,6 +1139,12 @@ html[data-theme="dark"] .kv-ui-language-toggle {
   padding: 8px 12px;
   font-size: 13px;
   font-weight: 760;
+  cursor: pointer;
+}
+
+.kv-credit-pill:hover {
+  border-color: #f5ad2f;
+  background: #fff2d6;
 }
 
 .kv-brief-home {
