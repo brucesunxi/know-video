@@ -10,6 +10,7 @@ const output = ts.transpileModule(source, {
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports, require: () => ({}) });
 const { parsePendingGenerationSession, PENDING_GENERATION_MAX_AGE_MS } = module.exports;
+assert.equal(PENDING_GENERATION_MAX_AGE_MS, 24 * 60 * 60 * 1000);
 
 const now = 1_800_000_000_000;
 const valid = {

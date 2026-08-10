@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "生成任务标识无效。" }, { status: 400 });
   }
-  const generation = await getGenerationRequest(parsed.data);
+  const generation = await getGenerationRequest(parsed.data, user.id);
   if (!generation) {
     return NextResponse.json({ error: "没有找到生成任务。" }, { status: 404 });
   }

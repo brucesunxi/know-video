@@ -136,6 +136,8 @@ alter table render_jobs
 
 create table if not exists generation_requests (
   id uuid primary key,
+  user_id uuid references users(id) on delete cascade,
+  prompt text,
   request_fingerprint text not null,
   status text not null check (status in ('pending', 'ready', 'failed')),
   project_id uuid references projects(id) on delete set null,
@@ -145,6 +147,12 @@ create table if not exists generation_requests (
   updated_at timestamptz not null default now()
 );
 
+alter table generation_requests
+  add column if not exists user_id uuid references users(id) on delete cascade;
+
+alter table generation_requests
+  add column if not exists prompt text;
+
 create index if not exists project_versions_project_id_idx on project_versions(project_id);
 create index if not exists projects_user_id_updated_idx on projects(user_id, updated_at desc);
 create index if not exists scenes_version_id_idx on scenes(version_id);
@@ -153,6 +161,7 @@ create index if not exists edit_plans_project_id_idx on edit_plans(project_id);
 create index if not exists render_jobs_version_id_idx on render_jobs(version_id);
 create index if not exists render_jobs_version_status_idx on render_jobs(version_id, status, created_at desc);
 create index if not exists generation_requests_status_updated_idx on generation_requests(status, updated_at desc);
+create index if not exists generation_requests_user_status_updated_idx on generation_requests(user_id, status, updated_at desc);
 
 create table if not exists pricing_rules (
   id uuid primary key default uuid_generate_v4(),

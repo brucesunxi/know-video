@@ -79,7 +79,7 @@ import {
 } from "@/lib/voice-profiles";
 import { VIDEO_FPS } from "@/video/config";
 import { VIDEO_GENERATION_DURATION_SECONDS, VIDEO_GENERATION_TIERS, videoGenerationEstimateLabel } from "@/lib/video-cost-policy";
-import type { ChatMessage, EditChange, EditPlan, GenerationOptions, GenerationReferenceAsset, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, GenerationOptions, GenerationReferenceAsset, GenerationTaskListItem, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
@@ -1337,7 +1337,13 @@ function requestErrorMessage(error: unknown, fallback: string) {
 
 function readPendingGenerationSession() {
   try {
-    return parsePendingGenerationSession(window.sessionStorage.getItem(PENDING_GENERATION_STORAGE_KEY));
+    const persistent = parsePendingGenerationSession(window.localStorage.getItem(PENDING_GENERATION_STORAGE_KEY));
+    if (persistent) return persistent;
+    const legacy = parsePendingGenerationSession(window.sessionStorage.getItem(PENDING_GENERATION_STORAGE_KEY));
+    if (legacy) {
+      window.localStorage.setItem(PENDING_GENERATION_STORAGE_KEY, JSON.stringify(legacy));
+    }
+    return legacy;
   } catch {
     return undefined;
   }
@@ -1345,7 +1351,7 @@ function readPendingGenerationSession() {
 
 function savePendingGenerationSession(session: PendingGenerationSession) {
   try {
-    window.sessionStorage.setItem(PENDING_GENERATION_STORAGE_KEY, JSON.stringify(session));
+    window.localStorage.setItem(PENDING_GENERATION_STORAGE_KEY, JSON.stringify(session));
   } catch {
     // Generation still works when browser storage is unavailable; only refresh recovery is disabled.
   }
@@ -1353,6 +1359,7 @@ function savePendingGenerationSession(session: PendingGenerationSession) {
 
 function clearPendingGenerationSession() {
   try {
+    window.localStorage.removeItem(PENDING_GENERATION_STORAGE_KEY);
     window.sessionStorage.removeItem(PENDING_GENERATION_STORAGE_KEY);
   } catch {
     // Ignore unavailable browser storage.
@@ -1758,6 +1765,7 @@ function GenerationSpecStrip({ options }: { options: GenerationOptions }) {
 
 function ProjectLibrary({
   projects,
+  generationTasks,
   query,
   isLoading,
   onQueryChange,
@@ -1769,6 +1777,7 @@ function ProjectLibrary({
   errorMessage
 }: {
   projects: ProjectListItem[];
+  generationTasks: GenerationTaskListItem[];
   query: string;
   isLoading: boolean;
   onQueryChange: (value: string) => void;
@@ -1784,6 +1793,7 @@ function ProjectLibrary({
   const [renameValue, setRenameValue] = useState("");
   const [deleteCandidate, setDeleteCandidate] = useState<ProjectListItem>();
   const filtered = projects.filter((item) => item.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const filteredTasks = generationTasks.filter((item) => (item.prompt ?? "").toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const statusLabel: Record<ProjectListItem["status"], string> = {
     draft: text("草稿", "Draft"),
     planning: text("规划中", "Planning"),
@@ -1808,19 +1818,38 @@ function ProjectLibrary({
       <div className="kv-project-search">
         <Search size={18} />
         <input aria-label={text("搜索项目", "Search projects")} onChange={(event) => onQueryChange(event.target.value)} placeholder={text("搜索视频项目", "Search video projects")} value={query} />
-        <span>{text(`${filtered.length} 个项目`, `${filtered.length} projects`)}</span>
+        <span>{text(`${filtered.length + filteredTasks.length} 条记录`, `${filtered.length + filteredTasks.length} records`)}</span>
       </div>
       {errorMessage ? <div className="kv-inline-error" role="alert"><AlertCircle size={18} />{errorMessage}</div> : null}
       {isLoading ? (
         <div className="kv-project-empty"><Loader2 className="kv-spin" size={24} /><p>{text("正在读取项目...", "Loading projects...")}</p></div>
-      ) : filtered.length === 0 ? (
+      ) : filtered.length === 0 && filteredTasks.length === 0 ? (
         <div className="kv-project-empty">
           <FolderOpen size={28} />
           <h3>{query ? text("没有匹配的项目", "No matching projects") : text("还没有视频项目", "No video projects yet")}</h3>
           <p>{query ? text("换一个关键词试试。", "Try another search term.") : text("从一句需求开始创建你的第一支视频。", "Create your first video from a single request.")}</p>
         </div>
       ) : (
-        <div className="kv-project-grid">
+        <>
+          {filteredTasks.length > 0 ? (
+            <div className="kv-generation-task-list" aria-label={text("生成任务记录", "Generation task history")}>
+              {filteredTasks.map((task) => (
+                <article className={task.status} key={task.id}>
+                  <span className="kv-generation-task-icon">
+                    {task.status === "pending" ? <Loader2 className="kv-spin" size={18} /> : <AlertCircle size={18} />}
+                  </span>
+                  <div>
+                    <strong>{task.prompt || text("未命名视频生成任务", "Untitled video generation")}</strong>
+                    <p>{task.status === "pending"
+                      ? text("正在后台生成脚本与分镜，关闭页面不会中断。", "Generating the script and storyboard in the background. Closing this page will not interrupt it.")
+                      : task.error || text("生成没有完成，请重新提交。", "Generation did not finish. Please submit it again.")}</p>
+                  </div>
+                  <small>{task.status === "pending" ? text("生成中", "Generating") : text("生成失败", "Failed")} · {new Date(task.updatedAt).toLocaleString(text("zh-CN", "en-US"), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
+                </article>
+              ))}
+            </div>
+          ) : null}
+          {filtered.length > 0 ? <div className="kv-project-grid">
           {filtered.map((item) => (
             <article className="kv-project-card" key={item.id}>
               <button className="kv-project-open" disabled={actionBusy || renamingId === item.id} onClick={() => onOpen(item.id)} type="button">
@@ -1859,7 +1888,8 @@ function ProjectLibrary({
               )}
             </article>
           ))}
-        </div>
+          </div> : null}
+        </>
       )}
       {deleteCandidate ? (
         <div className="kv-modal-backdrop" role="presentation">
@@ -5005,6 +5035,7 @@ export function WorkspaceClient({
   });
   const [pendingVideoGeneration, setPendingVideoGeneration] = useState<{ sceneNumbers: number[] }>();
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [generationTasks, setGenerationTasks] = useState<GenerationTaskListItem[]>([]);
   const [projectQuery, setProjectQuery] = useState("");
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectActionBusy, setProjectActionBusy] = useState(false);
@@ -5161,6 +5192,7 @@ export function WorkspaceClient({
     setProject(generatedProject);
     setProjectSource("database");
     setProjects([]);
+    setGenerationTasks([]);
     setVersions([]);
     setRenderJobs([]);
     setInvalidRenderMedia([]);
@@ -6819,9 +6851,10 @@ export function WorkspaceClient({
     setProjectsLoading(true);
     try {
       const response = await fetch("/api/projects", { cache: "no-store" });
-      const data = await response.json() as { projects?: ProjectListItem[]; error?: string };
+      const data = await response.json() as { projects?: ProjectListItem[]; generationRequests?: GenerationTaskListItem[]; error?: string };
       if (!response.ok) throw new Error(data.error || "项目列表读取失败。");
       setProjects(data.projects ?? []);
+      setGenerationTasks(data.generationRequests ?? []);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "项目列表读取失败。");
     } finally {
@@ -6990,6 +7023,7 @@ export function WorkspaceClient({
           onQueryChange={setProjectQuery}
           onRename={renameProject}
           projects={projects}
+          generationTasks={generationTasks}
           query={projectQuery}
         />
       ) : null}

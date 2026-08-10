@@ -1,7 +1,7 @@
 import type { GenerationOptions } from "@/lib/types";
 
 export const PENDING_GENERATION_STORAGE_KEY = "know-video:pending-generation";
-export const PENDING_GENERATION_MAX_AGE_MS = 15 * 60 * 1000;
+export const PENDING_GENERATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export type PendingGenerationSession = {
   requestId: string;

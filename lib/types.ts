@@ -182,6 +182,14 @@ export type ProjectListItem = {
   thumbnailUrl?: string;
 };
 
+export type GenerationTaskListItem = {
+  id: string;
+  status: "pending" | "failed";
+  prompt?: string;
+  error?: string;
+  updatedAt: string;
+};
+
 export type EditChange = {
   sceneNumber: number;
   status: "updated" | "added" | "deleted" | "unchanged";

@@ -7,6 +7,9 @@ import ts from "typescript";
 const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
 const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const source = fs.readFileSync(new URL("../lib/generation-requests.ts", import.meta.url), "utf8");
+const projectsRoute = fs.readFileSync(new URL("../app/api/projects/route.ts", import.meta.url), "utf8");
+const generationRoute = fs.readFileSync(new URL("../app/api/projects/generation/route.ts", import.meta.url), "utf8");
+const schema = fs.readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8");
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
@@ -24,6 +27,15 @@ vm.runInNewContext(output, {
 const { generationRequestFingerprint } = module.exports;
 assert.match(source, /failGenerationRequest\(id: string, error =/);
 assert.match(source, /safeError/);
+assert.match(source, /userId: string/);
+assert.match(source, /where id = \$\{id\} and user_id = \$\{userId\}/);
+assert.match(source, /listIncompleteGenerationRequests/);
+assert.match(source, /interval '15 minutes'/);
+assert.match(projectsRoute, /after\(\(\) => runBackgroundGeneration/);
+assert.match(projectsRoute, /return NextResponse\.json\(\{ status: "pending", requestId \}, \{ status: 202 \}\)/);
+assert.match(projectsRoute, /listIncompleteGenerationRequests\(user\.id\)/);
+assert.match(generationRoute, /getGenerationRequest\(parsed\.data, user\.id\)/);
+assert.match(schema, /generation_requests \([\s\S]*?user_id uuid references users\(id\)/);
 const options = {
   duration: "30",
   sceneCount: "5",
@@ -60,6 +72,9 @@ assert.match(workspace, /动态成本/);
 assert.match(workspace, /最高预估/);
 assert.match(workspace, /costConsent: true/);
 assert.match(workspace, /billingRequestId: crypto\.randomUUID\(\)/);
+assert.match(workspace, /window\.localStorage\.setItem\(PENDING_GENERATION_STORAGE_KEY/);
+assert.match(workspace, /generationRequests\?: GenerationTaskListItem\[\]/);
+assert.match(workspace, /关闭页面不会中断/);
 assert.match(workspace, /setPendingVideoGeneration/);
 assert.match(workspace, /约 \$\{secondsPerScene\} 秒\/幕/);
 assert.match(workspace, /label: "旁白语言"/);

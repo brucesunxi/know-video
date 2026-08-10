@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { createStoryboardProject } from "@/lib/ai-video";
@@ -13,13 +13,15 @@ import {
   claimGenerationRequest,
   completeGenerationRequest,
   failGenerationRequest,
-  generationRequestFingerprint
+  generationRequestFingerprint,
+  listIncompleteGenerationRequests
 } from "@/lib/generation-requests";
 import { persistGeneratedProject } from "@/lib/project-mutations";
 import { getProjectSnapshot, listProjects } from "@/lib/project-store";
 import { getFromR2, headR2Object, readR2Prefix } from "@/lib/r2";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
+import { hasDatabaseUrl } from "@/lib/db";
 
 const referenceAssetSchema = z.object({
   key: z.string().min(1).max(800),
@@ -85,7 +87,11 @@ export const maxDuration = 300;
 export async function GET() {
   try {
     const user = await requireCurrentUser();
-    return NextResponse.json({ projects: await listProjects(user.id) });
+    const [projects, generationRequests] = await Promise.all([
+      listProjects(user.id),
+      listIncompleteGenerationRequests(user.id)
+    ]);
+    return NextResponse.json({ projects, generationRequests });
   } catch (error) {
     if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     throw error;
@@ -109,43 +115,17 @@ function publicGenerationError(error: unknown) {
   return "视频脚本和分镜生成没有完成，请重试。";
 }
 
-export async function POST(request: Request) {
-  let requestId: string | undefined;
-  let uploadedReferenceKeys: string[] = [];
-  try {
-    const user = await requireCurrentUser();
-    const body = requestSchema.parse(await request.json());
-    requestId = body.requestId;
-    uploadedReferenceKeys = requestId
-      ? body.referenceAssets
-        .map((reference) => reference.key)
-        .filter((key) => key.startsWith(`uploads/generation/${requestId}/`))
-      : [];
-    if (requestId) {
-      const claim = await claimGenerationRequest({
-        id: requestId,
-        fingerprint: generationRequestFingerprint(body.prompt, body.options, body.referenceAssets)
-      });
-      if (claim.conflict) {
-        return NextResponse.json({ error: "生成任务标识与当前需求不匹配，请重新提交。" }, { status: 409 });
-      }
-      if (!claim.claimed && claim.record?.status === "pending") {
-        return NextResponse.json({ status: "pending", requestId }, { status: 202 });
-      }
-      if (!claim.claimed && claim.record?.status === "failed") {
-        return NextResponse.json({ status: "failed", error: claim.record.error || "视频项目生成失败，请重试。" }, { status: 409 });
-      }
-      if (!claim.claimed && claim.record?.status === "ready" && claim.record.projectId) {
-        const snapshot = await getProjectSnapshot(claim.record.projectId, user.id);
-        if (!snapshot) throw new Error("生成任务已经完成，但项目读取失败。");
-        return NextResponse.json({
-          project: snapshot.project,
-          messages: snapshot.messages,
-          engine: publicEngine(claim.record.engine || "ai"),
-          recovered: true
-        });
-      }
-    }
+type ProjectGenerationInput = z.infer<typeof requestSchema>;
+
+function uploadedReferenceKeys(body: ProjectGenerationInput) {
+  if (!body.requestId) return [];
+  return body.referenceAssets
+    .map((reference) => reference.key)
+    .filter((key) => key.startsWith(`uploads/generation/${body.requestId}/`));
+}
+
+async function generateAndPersistProject(body: ProjectGenerationInput, userId: string) {
+  const requestId = body.requestId;
     const validatedReferences = await Promise.all(body.referenceAssets.map(async (reference) => {
       if (!requestId || !reference.key.startsWith(`uploads/generation/${requestId}/`)) {
         throw new Error("参考素材上传路径无效。");
@@ -206,13 +186,13 @@ export async function POST(request: Request) {
       prompt: body.prompt,
       project,
       engine,
-      userId: user.id
+      userId
     });
     if (requestId) {
       await completeGenerationRequest({ id: requestId, projectId: persisted.project.id, engine });
     }
     await recordUsageEvent({
-      userId: user.id,
+      userId,
       projectId: persisted.project.id,
       versionId: persisted.project.currentVersion.id,
       resourceType: "storyboard_plan",
@@ -229,7 +209,7 @@ export async function POST(request: Request) {
     });
     if (Object.keys(analyses).length > 0) {
       await recordUsageEvent({
-        userId: user.id,
+        userId,
         projectId: persisted.project.id,
         versionId: persisted.project.currentVersion.id,
         resourceType: "vision_analysis",
@@ -241,7 +221,68 @@ export async function POST(request: Request) {
         metadata: { analyzedReferenceKeys: Object.keys(analyses).sort() }
       });
     }
-    return NextResponse.json({ ...persisted, engine: publicEngine(engine) });
+    return { ...persisted, engine: publicEngine(engine) };
+}
+
+async function failBackgroundGeneration(body: ProjectGenerationInput, error: unknown) {
+  const keys = uploadedReferenceKeys(body);
+  if (keys.length > 0) {
+    await deleteUnreferencedStorageObjects(keys).catch((cleanupError) => {
+      console.error("[projects] Unable to clean unused generation references:", cleanupError);
+    });
+  }
+  if (body.requestId) {
+    await failGenerationRequest(body.requestId, publicGenerationError(error)).catch(() => undefined);
+  }
+  console.error("[projects] Unable to create video project:", error);
+}
+
+async function runBackgroundGeneration(body: ProjectGenerationInput, userId: string) {
+  try {
+    await generateAndPersistProject(body, userId);
+  } catch (error) {
+    await failBackgroundGeneration(body, error);
+  }
+}
+
+export async function POST(request: Request) {
+  let body: ProjectGenerationInput | undefined;
+  try {
+    const user = await requireCurrentUser();
+    body = requestSchema.parse(await request.json());
+    const requestId = body.requestId;
+    if (requestId) {
+      const claim = await claimGenerationRequest({
+        id: requestId,
+        userId: user.id,
+        prompt: body.prompt,
+        fingerprint: generationRequestFingerprint(body.prompt, body.options, body.referenceAssets)
+      });
+      if (claim.conflict) {
+        return NextResponse.json({ error: "生成任务标识与当前需求不匹配，请重新提交。" }, { status: 409 });
+      }
+      if (!claim.claimed && claim.record?.status === "pending") {
+        return NextResponse.json({ status: "pending", requestId }, { status: 202 });
+      }
+      if (!claim.claimed && claim.record?.status === "failed") {
+        return NextResponse.json({ status: "failed", error: claim.record.error || "视频项目生成失败，请重试。" }, { status: 409 });
+      }
+      if (!claim.claimed && claim.record?.status === "ready" && claim.record.projectId) {
+        const snapshot = await getProjectSnapshot(claim.record.projectId, user.id);
+        if (!snapshot) throw new Error("生成任务已经完成，但项目读取失败。");
+        return NextResponse.json({
+          project: snapshot.project,
+          messages: snapshot.messages,
+          engine: publicEngine(claim.record.engine || "ai"),
+          recovered: true
+        });
+      }
+      if (hasDatabaseUrl()) {
+        after(() => runBackgroundGeneration(body!, user.id));
+        return NextResponse.json({ status: "pending", requestId }, { status: 202 });
+      }
+    }
+    return NextResponse.json(await generateAndPersistProject(body, user.id));
   } catch (error) {
     if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     if (error instanceof z.ZodError) {
@@ -250,13 +291,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (uploadedReferenceKeys.length > 0) {
-      await deleteUnreferencedStorageObjects(uploadedReferenceKeys).catch((cleanupError) => {
-        console.error("[projects] Unable to clean unused generation references:", cleanupError);
-      });
-    }
-    if (requestId) await failGenerationRequest(requestId, publicGenerationError(error)).catch(() => undefined);
-    console.error("[projects] Unable to create video project:", error);
+    if (body) await failBackgroundGeneration(body, error);
     return NextResponse.json(
       { error: publicGenerationError(error) },
       { status: 502 }

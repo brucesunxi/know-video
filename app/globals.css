@@ -1355,6 +1355,26 @@ html[data-theme="dark"] .kv-credit-pill {
   color: #f6c65b;
 }
 
+html[data-theme="dark"] .kv-generation-task-list article {
+  border-color: #285e58;
+  background: #102825;
+}
+
+html[data-theme="dark"] .kv-generation-task-list article.failed {
+  border-color: #6e3b39;
+  background: #2d1d1d;
+}
+
+html[data-theme="dark"] .kv-generation-task-icon {
+  background: #173d38;
+  color: #73e2d3;
+}
+
+html[data-theme="dark"] .kv-generation-task-list article.failed .kv-generation-task-icon {
+  background: #4a2725;
+  color: #ffaaa1;
+}
+
 html[data-theme="dark"] .kv-user-menu {
   border-color: #285e58;
   background: #12312e;
@@ -3661,6 +3681,66 @@ html[data-theme="dark"] .kv-user-menu {
 .kv-project-search span {
   font-size: 13px;
   font-weight: 750;
+}
+
+.kv-generation-task-list {
+  display: grid;
+  gap: 10px;
+  padding-top: 22px;
+}
+
+.kv-generation-task-list article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #a7e5dc;
+  border-radius: 8px;
+  background: #f2fffc;
+  padding: 14px 16px;
+}
+
+.kv-generation-task-list article.failed {
+  border-color: #f2c3bd;
+  background: #fff7f5;
+}
+
+.kv-generation-task-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  background: #d8f7f1;
+  color: #0f766e;
+}
+
+.kv-generation-task-list article.failed .kv-generation-task-icon {
+  background: #fee5e2;
+  color: #b42318;
+}
+
+.kv-generation-task-list strong,
+.kv-generation-task-list p {
+  overflow-wrap: anywhere;
+}
+
+.kv-generation-task-list strong {
+  display: block;
+  line-height: 1.35;
+}
+
+.kv-generation-task-list p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.kv-generation-task-list small {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .kv-project-grid {
@@ -8801,6 +8881,15 @@ html[data-theme="dark"] .kv-user-menu {
 
   .kv-project-grid {
     grid-template-columns: 1fr;
+  }
+
+  .kv-generation-task-list article {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .kv-generation-task-list small {
+    grid-column: 2;
+    white-space: normal;
   }
 
   .kv-brief-main {
