@@ -67,6 +67,11 @@ assert.doesNotMatch(workspace, /996/);
 assert.match(workspace, /按量计费 · 查看价格/);
 assert.match(workspace, /账户充值与余额扣减上线后/);
 
+const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+assert.match(styles, /\.kv-home-top-actions > \.kv-credit-pill \{[\s\S]*?width: auto;[\s\S]*?white-space: nowrap;/);
+assert.match(styles, /\.kv-home-dialog-grid small \{[\s\S]*?overflow-wrap: anywhere;/);
+assert.match(styles, /@media \(max-width: 920px\) and \(min-width: 761px\)/);
+
 for (const route of [
   "../app/api/projects/route.ts",
   "../app/api/edit-plan/route.ts",

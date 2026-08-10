@@ -1009,6 +1009,15 @@ button:disabled {
   padding: 0;
 }
 
+.kv-home-top-actions > .kv-credit-pill {
+  width: auto;
+  min-width: 0;
+  height: 40px;
+  justify-content: flex-start;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
 .kv-home-top-actions > .kv-ui-language-toggle,
 .kv-status-row > .kv-ui-language-toggle {
   width: auto;
@@ -1101,6 +1110,7 @@ html[data-theme="dark"] .kv-ui-language-toggle {
 
 .kv-home-dialog-grid span {
   display: grid;
+  min-width: 0;
   gap: 4px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1110,10 +1120,13 @@ html[data-theme="dark"] .kv-ui-language-toggle {
 
 .kv-home-dialog-grid strong {
   font-size: 22px;
+  line-height: 1.15;
 }
 
 .kv-home-dialog-grid small {
   color: var(--muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .kv-home-dialog-action {
@@ -8545,6 +8558,23 @@ html[data-theme="dark"] .kv-user-menu {
   }
 }
 
+@media (max-width: 920px) and (min-width: 761px) {
+  .kv-shell-brief .kv-home-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .kv-shell-brief .kv-home-top-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .kv-shell-brief .kv-user-menu {
+    margin-left: auto;
+  }
+}
+
 @media (max-width: 760px) {
   .kv-chat-draft-note {
     align-items: stretch;
@@ -8622,9 +8652,14 @@ html[data-theme="dark"] .kv-user-menu {
     flex-wrap: wrap;
   }
 
-  .kv-credit-pill {
+  .kv-home-top-actions > .kv-credit-pill {
+    flex: 1 0 100%;
     width: 100%;
     justify-content: center;
+  }
+
+  .kv-home-dialog-grid {
+    grid-template-columns: 1fr;
   }
 
   .kv-brief-home {
