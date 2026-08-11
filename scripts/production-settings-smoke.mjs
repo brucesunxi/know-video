@@ -79,14 +79,16 @@ const pacedScenes = [
 ];
 assert.equal(effectiveSceneDurationSeconds(pacedScenes[0], false), 3.6);
 assert.equal(effectiveSceneDurationSeconds(pacedScenes[1], true), 5.16);
-assert.equal(effectiveVersionDurationSeconds({ durationSeconds: 12, scenes: pacedScenes }), 8.11);
-assert.equal(productionDurationInFrames({ durationSeconds: 12, scenes: pacedScenes }, 30), 243);
-assert.deepEqual(plain(productionSceneTimeline({ durationSeconds: 12, scenes: pacedScenes }, 30)), {
-  sceneFrames: [108, 155],
+assert.equal(effectiveVersionDurationSeconds({ durationSeconds: 12, scenes: pacedScenes }), 8.76);
+assert.equal(productionDurationInFrames({ durationSeconds: 12, scenes: pacedScenes }, 30), 263);
+const pacedTimeline = productionSceneTimeline({ durationSeconds: 12, scenes: pacedScenes }, 30);
+assert.deepEqual(plain(pacedTimeline), {
+  sceneFrames: [128, 155],
   transitionFrames: [0, 20],
-  sceneStartFrames: [0, 88],
-  totalFrames: 243
+  sceneStartFrames: [0, 108],
+  totalFrames: 263
 });
+assert.ok(pacedTimeline.sceneStartFrames[1] >= Math.ceil(3.42 * 30));
 assert.equal(effectiveSceneDurationSeconds({ durationSeconds: 6, style: {}, assets: [] }, false), 6);
 assert.equal(effectiveSceneDurationSeconds({
   durationSeconds: 4,
@@ -97,8 +99,8 @@ assert.equal(effectiveSceneDurationSeconds({
 assert.match(workspace, /function productionSummaryItems/);
 assert.match(workspace, /function productionImpactChecks/);
 assert.match(workspace, /covered\.length === 0 && productionSettingLabels\(plan\.productionSettings\)\.length > 0[\s\S]*if \(intent\.global\)/);
-assert.match(workspace, /aria-label="成片输出摘要"/);
-assert.match(workspace, /aria-label="成片设置导出影响"/);
+assert.match(workspace, /aria-label=\{text\("成片输出摘要", "Production output summary"\)\}/);
+assert.match(workspace, /aria-label=\{text\("成片设置导出影响", "Production settings export impact"\)\}/);
 assert.match(workspace, /导出影响预览/);
 assert.match(workspace, /这些设置会直接进入播放器预览和 MP4 合成/);
 assert.match(workspace, /字幕层/);

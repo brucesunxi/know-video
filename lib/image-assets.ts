@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import sharp from "sharp";
-import { generateCloudflareImage, hasCloudflareAI } from "@/lib/cloudflare-ai";
+import { detectCloudflareImageText, generateCloudflareImage, hasCloudflareAI } from "@/lib/cloudflare-ai";
 import { sceneReferenceAssets } from "@/lib/attachment-context";
 import { getOptionalEnv } from "@/lib/env";
 import {
@@ -211,6 +211,32 @@ type ImageReference = {
   r2Key: string;
 };
 
+async function generatedImageContainsText(body: Buffer) {
+  try {
+    if (hasCloudflareAI()) return (await detectCloudflareImageText(body)).hasText;
+
+    const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
+    const response = await client.chat.completions.create({
+      model: getOptionalEnv("OPENAI_VISION_MODEL") || "gpt-4o-mini",
+      temperature: 0,
+      max_tokens: 8,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "text", text: "Inspect the entire image. Answer exactly TEXT_PRESENT if it contains any visible word, letter, number, caption, label, logo, watermark, signature, pseudo-writing, scrambled lettering, or writing-like glyph. Otherwise answer exactly TEXT_FREE." },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${body.toString("base64")}`, detail: "high" } }
+        ]
+      }]
+    } as never);
+    const verdict = response.choices[0]?.message?.content?.toUpperCase() ?? "";
+    if (verdict.includes("TEXT_PRESENT")) return true;
+    if (verdict.includes("TEXT_FREE")) return false;
+    throw new Error("Vision model returned an inconclusive text inspection");
+  } catch (error) {
+    throw new GeneratedImageQualityError("无法确认生成画面是否完全无文字。", { cause: error });
+  }
+}
+
 async function loadImageReference(asset: SceneAsset | undefined, role: ImageReference["role"]) {
   if (!asset?.r2Key) return undefined;
   try {
@@ -287,11 +313,11 @@ async function generateSceneImage(
   let model = "";
   let seed = baseSeed;
   let qualityMetadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"] | undefined;
-  for (let qualityAttempt = 0; qualityAttempt < 2; qualityAttempt += 1) {
+  for (let qualityAttempt = 0; qualityAttempt < 3; qualityAttempt += 1) {
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
     const attemptPrompt = enforceTextFreeImagePrompt(qualityAttempt === 0
       ? prompt
-      : `${prompt}\nQuality correction: produce a fully resolved, information-rich frame in the exact locked rendering medium, with clear subject separation and meaningful foreground, midground, and background. Do not switch to photography, 3D, voxel, low-poly, or another illustration style. Avoid empty gradients or featureless surfaces.`);
+      : `${prompt}\nQuality correction attempt ${qualityAttempt + 1}: the prior candidate was rejected. Rebuild the composition as a fully resolved, information-rich frame in the exact locked rendering medium. Remove every word, letter, number, logo, watermark, fake glyph, and writing-like mark; use blank surfaces and purely pictorial objects instead. Keep clear subject separation and meaningful foreground, midground, and background. Do not switch to photography, 3D, voxel, low-poly, or another illustration style. Avoid empty gradients or featureless surfaces.`);
     let generatedBody: Buffer;
     let generatedModel: string;
     let effectivePrompt = attemptPrompt;
@@ -335,13 +361,16 @@ async function generateSceneImage(
         generatedModel = imageModel();
       }
       const normalized = await normalizeGeneratedImage(generatedBody);
+      if (await generatedImageContainsText(normalized.body)) {
+        throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。");
+      }
       body = normalized.body;
       qualityMetadata = normalized.metadata;
       model = generatedModel;
       prompt = effectivePrompt;
       break;
     } catch (error) {
-      if (!(error instanceof GeneratedImageQualityError) || qualityAttempt === 1) throw error;
+      if (!(error instanceof GeneratedImageQualityError) || qualityAttempt === 2) throw error;
       console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation; retrying:`, error.message);
     }
   }

@@ -111,6 +111,17 @@ function localizedRuntimeLabel(value: string, language: UiLanguage) {
     "生成自然配音": "Generate narration",
     "生成关键动态镜头": "Generate key motion clips",
     "保存项目版本": "Save project version",
+    "正在理解视频需求": "Understanding your video request",
+    "正在规划脚本与分镜": "Planning the script and storyboard",
+    "正在恢复刷新前的视频生成任务": "Restoring the video generation task",
+    "正在等待后台完成脚本与分镜": "Waiting for the script and storyboard to finish",
+    "脚本与分镜仍在后台生成，正在自动恢复": "The script and storyboard are still generating. Recovery is in progress",
+    "连接超时，正在找回后台生成结果": "The connection timed out. Recovering the background generation result",
+    "正在生成统一风格的场景画面": "Generating consistently styled scene visuals",
+    "正在补齐尚未完成的场景画面": "Completing unfinished scene visuals",
+    "正在生成自然配音": "Generating natural narration",
+    "正在补齐尚未完成的自然配音": "Completing unfinished narration",
+    "正在保存可继续编辑的项目": "Saving an editable project",
     "正在规划修改方案": "Planning edit",
     "正在调整待确认方案": "Refining edit plan",
     "正在保存新版本并更新受影响素材": "Saving a new version and updating affected assets",
@@ -268,6 +279,18 @@ function localizedRuntimeLabel(value: string, language: UiLanguage) {
   if (elapsed) return `${elapsed[1]}m ${elapsed[2]}s`;
   const rendering = value.match(/^合成中 (\d+)%$/u);
   if (rendering) return `Rendering ${rendering[1]}%`;
+  const uploadingReference = value.match(/^正在上传参考素材 (\d+) \/ (\d+)$/u);
+  if (uploadingReference) return `Uploading reference ${uploadingReference[1]} / ${uploadingReference[2]}`;
+  const extractingPoster = value.match(/^正在提取“(.+)”的视觉关键帧$/u);
+  if (extractingPoster) return `Extracting a visual keyframe from “${extractingPoster[1]}”`;
+  const repairingVisuals = value.match(/^正在自动补齐 (\d+) 个缺失画面（第 (\d+) 次）$/u);
+  if (repairingVisuals) return `Automatically completing ${repairingVisuals[1]} missing visuals (attempt ${repairingVisuals[2]})`;
+  const repairingAudio = value.match(/^正在自动补齐 (\d+) 段缺失配音（第 (\d+) 次）$/u);
+  if (repairingAudio) return `Automatically completing ${repairingAudio[1]} missing narration tracks (attempt ${repairingAudio[2]})`;
+  const generatingSceneMotion = value.match(/^正在生成场景 (\d+) 的动态视频镜头$/u);
+  if (generatingSceneMotion) return `Generating the motion clip for scene ${generatingSceneMotion[1]}`;
+  const motionClip = value.match(/^(\d+) 个(经济动态|均衡动态)镜头$/u);
+  if (motionClip) return `${motionClip[1]} ${motionClip[2] === "经济动态" ? "economy" : "balanced"} motion clip${motionClip[1] === "1" ? "" : "s"}`;
   const completeness = value.match(/^画面 (\d+\/\d+) · 配音 (\d+\/\d+)$/u);
   if (completeness) return `Visuals ${completeness[1]} · Narration ${completeness[2]}`;
   const clips = value.match(/^(\d+) 个$/u);
@@ -394,6 +417,11 @@ const promptExamples = [
   "生成一个 30 秒的 AI 视频生成平台产品介绍视频，风格高级、节奏快、适合官网首屏。",
   "做一个关于跨境电商库存管理 SaaS 的解释视频，目标客户是运营负责人。",
   "制作一个教育产品宣传视频，展示老师如何用 AI 快速生成课程内容。"
+];
+const promptExamplesEnglish = [
+  "Create a polished 30-second product video for an AI video-generation platform, with a fast pace and visuals suitable for a website hero section.",
+  "Create an explainer video for a cross-border ecommerce inventory management SaaS product, aimed at operations leaders.",
+  "Create a promotional video for an education product showing how teachers can use AI to build course content quickly."
 ];
 type BriefSettingsPanel = "style" | "avatar" | "voice" | "language" | "brand";
 type HomeDialog = "pricing" | "demo" | "help" | "notifications" | "workspace";
@@ -565,6 +593,46 @@ const briefTemplateEnglish: Record<string, [string, string]> = {
   onboarding: ["Employee onboarding path", "Talent development"], leadership: ["Leadership micro-course", "Management training"], course: ["Course chapter preview", "Learning program"],
   social: ["Social hook video", "Strong opening"], testimonial: ["Customer testimonial montage", "Social proof"], countdown: ["Event countdown", "Limited-time conversion"]
 };
+const briefTemplatePromptEnglish: Record<string, string> = {
+  phishing: "Create a 30-second corporate security training video that teaches employees to spot phishing emails, including suspicious senders, risky links, malicious attachments, and the correct reporting action.",
+  safety: "Create a job-site safety briefing covering pre-entry checks, protective equipment, working-at-height reminders, and emergency response steps.",
+  support: "Create a customer service training video showing how to acknowledge frustration, restate the issue, offer a solution, and follow up in a professional and empathetic tone.",
+  quarterly: "Create a 45-second quarterly company update for all employees covering business progress, key metrics, team achievements, and next-quarter priorities.",
+  policy: "Create a policy-change explainer covering why the policy changed, who is affected, required employee actions, and the deadline in a clear and credible tone.",
+  rollout: "Create a new-tool launch video showing the problem it solves, its core features, relevant use cases, and the next step for team adoption.",
+  launch: "Create a 30-second product highlight video that opens with a customer pain point, presents three product benefits, and ends with a clear call to action.",
+  success: "Create a customer success story showing the original challenge, the change after adopting the product, measurable outcomes, and credible proof.",
+  event: "Create a fast-paced event teaser introducing the theme, speakers or highlights, target audience, and registration reminder.",
+  pitch: "Create a sales introduction video for prospects covering a common problem, the solution, key benefits, and a reason to book a demo.",
+  compare: "Create a competitive replacement video comparing the limitations of the old solution, the advantages of the new one, the migration process, and customer value.",
+  renewal: "Create a renewal value review highlighting results from the previous period, cost savings, key outcomes, and recommendations for the next phase.",
+  concept: "Create a 30-second concept explainer that breaks a complex idea into five easy steps supported by clear diagrams and concise captions.",
+  tutorial: "Create a product feature tutorial that begins with the user goal and shows the entry point, key actions, result, and common considerations.",
+  doc: "Turn an instructional document into a 45-second explainer by extracting the key points, organizing chapters, writing narration, and creating clear visual directions.",
+  property: "Create a property highlight video covering location, floor plan, amenities, lifestyle moments, and a call to book a viewing.",
+  community: "Create a warm, realistic community lifestyle video showing commuting, family life, fitness, nearby retail, and the overall living experience.",
+  tour: "Create a quick property tour moving through the entrance, living room, bedrooms, kitchen, and balcony, ending with an invitation to schedule a viewing.",
+  finance: "Create a business metrics explainer covering revenue changes, cost pressure, risk signals, and recommended management actions.",
+  budget: "Create a budget approval explainer covering the business need, cost breakdown, expected return, and risks reviewers should consider.",
+  risk: "Create a risk-alert explainer using clear charts to show abnormal indicators, likely causes, scope of impact, and recommended actions.",
+  onboarding: "Create an employee onboarding video showing first-week tasks, key contacts, learning resources, and 30-day growth goals.",
+  leadership: "Create a leadership micro-course explaining how to set goals, give feedback, follow through, and review team outcomes.",
+  course: "Create a course chapter preview showing learning objectives, chapter structure, practice format, and the skills learners will gain.",
+  social: "Create a 20-second social video with a strong hook in the first three seconds, a clear conflict and payoff, and a final call to action.",
+  testimonial: "Create a fast-paced testimonial montage that turns three customer quotes into a video emphasizing authenticity, outcomes, and brand trust.",
+  countdown: "Create an event countdown video with clear captions, rhythmic visuals, and limited-time urgency that drives immediate registration or purchase."
+};
+const briefTemplateContextEnglish: Record<string, string> = {
+  phishing: "Include phishing emails, a magnifier, and warning symbols in cybersecurity risk scenes.", safety: "Show authentic job-site lighting, worker actions, and protective equipment details.", support: "Use approachable line-art characters to show the agent, customer emotion, and resolution path.",
+  quarterly: "Use meeting-room lighting, a real team, and growth charts for the quarterly update.", policy: "Present policy changes as high-impact announcement panels with a clear timeline.", rollout: "Feature the product interface, capability cards, and user workflow.",
+  launch: "Build launch momentum with collage color blocks and product-benefit cards.", success: "Build trust through a realistic customer story, before-and-after contrast, and credible data.", event: "Use bold headlines, stage lighting, and a countdown to build anticipation.",
+  pitch: "Use a clear interface, highlighted benefits, and a guided demo path.", compare: "Use isometric modules and side-by-side comparisons to clarify old and new solutions.", renewal: "Use dashboards, outcome metrics, and a timeline to demonstrate renewal value.",
+  concept: "Break the complex concept into a step-by-step chalkboard explanation.", tutorial: "Use an authentic product interface and highlighted steps to explain each action.", doc: "Combine document pages, summary cards, and highlighted annotations into layered scenes.",
+  property: "Use authentic spatial lighting and lifestyle shots to emphasize property quality.", community: "Use a collage of everyday moments to show amenities and the community atmosphere.", tour: "Use an isometric floor plan and spatial path to support the property tour.",
+  finance: "Use dark data panels and highlighted metrics for the financial analysis.", budget: "Explain the budget with modular cards, an approval path, and resource flows.", risk: "Use red risk signals, radar scans, and status indicators for the alert.",
+  onboarding: "Use friendly line-art characters and a roadmap to present the onboarding journey.", leadership: "Use a coaching-class framework, feedback model, and review points for management training.", course: "Use gamified pixel missions, levels, and rewards to show learning progress.",
+  social: "Use comic-book impact, bold hooks, and high-contrast scenes for social media.", testimonial: "Build the testimonial montage from clean character portraits and quote cards.", countdown: "Use a pixel countdown, limited-time alerts, and game UI to create urgency."
+};
 const briefVisualStyleEnglish: Record<string, [string, string]> = {
   chalkboard: ["Chalkboard", "Chalk lines and a classroom feel for concept explainers"],
   "simple-line": ["Simple line art", "Minimal colors, simple characters, and clear information"],
@@ -576,6 +644,18 @@ const briefVisualStyleEnglish: Record<string, [string, string]> = {
   "safety-poster": ["Safety poster", "High-contrast warnings and training-focused visuals"],
   "cinematic-realism": ["Cinematic realism", "Real people, natural lighting, and an on-location feel"],
   "product-ui": ["Product UI demo", "Interface close-ups, feature highlights, and SaaS demos"]
+};
+const briefVisualStylePromptEnglish: Record<string, string> = {
+  chalkboard: "Chalkboard illustration style with a deep green board, chalk lines, hand-drawn arrows, and step-by-step classroom explanations.",
+  "simple-line": "Simple line-art style with generous whitespace, clean character outlines, restrained accent colors, and clear process diagrams.",
+  collage: "Paper-collage style with tactile textures, layered cutouts, bright color blocks, and handmade transitions.",
+  "comic-book": "Comic-book style with bold outlines, saturated colors, graphic impact shapes, and expressive characters.",
+  memphis: "Modern business illustration style with office characters, soft colors, rounded forms, and a lightweight SaaS visual language.",
+  isometric: "Isometric scene style with modular spaces, structured systems, and clearly visible process paths.",
+  "pixel-art": "Pixel-art style with low-resolution forms, neon accents, game UI elements, and retro motion.",
+  "safety-poster": "Safety-poster illustration style with high-contrast warning colors, risk symbols, clear actions, and a strong training focus.",
+  "cinematic-realism": "Cinematic documentary style with real people, shallow depth of field, natural lighting, authentic locations, and stable camera language.",
+  "product-ui": "Product UI demonstration style with clean interfaces, layered cards, feature highlights, data panels, and smooth zoom transitions."
 };
 const transitionOptions: Array<{ value: SceneTransitionKind; label: string }> = [
   { value: "auto", label: "自动" },
@@ -703,8 +783,21 @@ function templateStyleFor(template: BriefTemplateCard) {
   return visualStyleById(binding.styleId);
 }
 
-function templatePromptForRole(template: BriefTemplateCard, role: BriefTemplateRole, selectedStyle = templateStyleFor(template)) {
+function templatePromptForRole(template: BriefTemplateCard, role: BriefTemplateRole, selectedStyle = templateStyleFor(template), language: UiLanguage = "zh-CN") {
   const binding = briefTemplateStyles[template.className] ?? briefTemplateStyles.rollout;
+  if (language === "en") {
+    const prompt = briefTemplatePromptEnglish[template.className] ?? template.prompt;
+    const title = briefTemplateEnglish[template.className]?.[0] ?? template.title;
+    const styleLabel = briefVisualStyleEnglish[selectedStyle.id]?.[0] ?? selectedStyle.label;
+    const stylePrompt = briefVisualStylePromptEnglish[selectedStyle.id] ?? selectedStyle.prompt;
+    if (role === "ref") {
+      return `${prompt}\n\nUse the “${title}” template as a reference for content structure, information hierarchy, and narrative flow. Its original visual direction is “${styleLabel}”, but do not treat that style as a constraint.`;
+    }
+    if (role === "logo") {
+      return `${prompt}\n\nTreat the brand subject in the “${title}” template as the logo or brand mark. Build the opening, captions, and closing brand moments around it while borrowing the recognizable qualities of “${styleLabel}”.`;
+    }
+    return `${prompt}\n\nApply the “${title}” template style: ${stylePrompt} ${briefTemplateContextEnglish[template.className] ?? ""}`.trimEnd();
+  }
   if (role === "ref") {
     return `${template.prompt}\n\n参考模板“${template.title}”这一页的内容结构、信息层级和叙事方式；它原本的视觉方向是“${selectedStyle.label}”，但这里不要被固定风格限制。`;
   }
@@ -719,7 +812,23 @@ function withoutBriefReferenceInstruction(value: string) {
     .replace(/\n\n应用模板“[^”]+”的 style：.+$/u, "")
     .replace(/\n\n参考模板“[^”]+”这一页的内容结构、信息层级和叙事方式；.+$/u, "")
     .replace(/\n\n把模板“[^”]+”中的品牌主体当作 Logo \/ 品牌标识来设计视频，.+$/u, "")
+    .replace(/\n\nApply the “[^”]+” template style:.+$/u, "")
+    .replace(/\n\nUse the “[^”]+” template as a reference for content structure,.+$/u, "")
+    .replace(/\n\nTreat the brand subject in the “[^”]+” template as the logo or brand mark\..+$/u, "")
     .trimEnd();
+}
+
+function localizedGenerationPrompt(value: string, language: UiLanguage) {
+  if (language === "zh-CN" || !/\p{Script=Han}/u.test(value)) return value;
+  for (const templates of Object.values(briefTemplateCards)) {
+    for (const template of templates) {
+      if (!value.startsWith(template.prompt)) continue;
+      const role: BriefTemplateRole = value.includes("参考模板") ? "ref" : value.includes("Logo / 品牌标识") ? "logo" : "style";
+      const selectedStyle = briefVisualStyles.find((style) => value.includes(`“${style.label}”`) || value.includes(style.prompt)) ?? templateStyleFor(template);
+      return templatePromptForRole(template, role, selectedStyle, language);
+    }
+  }
+  return value;
 }
 
 function elapsedGenerationLabel(startedAt?: number, now = Date.now()) {
@@ -2105,6 +2214,7 @@ function ProjectLibrary({
   isLoading,
   onQueryChange,
   onOpen,
+  onOpenGeneration,
   onCreate,
   onRename,
   onDelete,
@@ -2117,6 +2227,7 @@ function ProjectLibrary({
   isLoading: boolean;
   onQueryChange: (value: string) => void;
   onOpen: (projectId: string) => void;
+  onOpenGeneration: (task: GenerationTaskListItem) => void;
   onCreate: () => void;
   onRename: (projectId: string, title: string) => Promise<boolean>;
   onDelete: (projectId: string) => Promise<boolean>;
@@ -2170,16 +2281,21 @@ function ProjectLibrary({
             <div className="kv-generation-task-list" aria-label={text("生成任务记录", "Generation task history")}>
               {filteredTasks.map((task) => (
                 <article className={task.status} key={task.id}>
-                  <span className="kv-generation-task-icon">
-                    {task.status === "pending" ? <Loader2 className="kv-spin" size={18} /> : <AlertCircle size={18} />}
-                  </span>
-                  <div>
-                    <strong>{task.prompt || text("未命名视频生成任务", "Untitled video generation")}</strong>
-                    <p>{task.status === "pending"
-                      ? text("正在后台生成脚本与分镜，关闭页面不会中断。", "Generating the script and storyboard in the background. Closing this page will not interrupt it.")
-                      : task.error || text("生成没有完成，请重新提交。", "Generation did not finish. Please submit it again.")}</p>
-                  </div>
-                  <small>{task.status === "pending" ? text("生成中", "Generating") : text("生成失败", "Failed")} · {new Date(task.updatedAt).toLocaleString(text("zh-CN", "en-US"), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
+                  <button className="kv-generation-task-open" onClick={() => onOpenGeneration(task)} type="button">
+                    <span className="kv-generation-task-icon">
+                      {task.status === "pending" ? <Loader2 className="kv-spin" size={18} /> : <AlertCircle size={18} />}
+                    </span>
+                    <span className="kv-generation-task-copy">
+                      <strong>{task.prompt ? localizedGenerationPrompt(task.prompt, language) : text("未命名视频生成任务", "Untitled video generation")}</strong>
+                      <span>{task.status === "pending"
+                        ? text("正在后台生成脚本与分镜，关闭页面不会中断。", "Generating the script and storyboard in the background. Closing this page will not interrupt it.")
+                        : localizedErrorMessage(task.error || text("生成没有完成，请重新提交。", "Generation did not finish. Please submit it again."), language)}</span>
+                    </span>
+                    <span className="kv-generation-task-action">
+                      <small>{task.status === "pending" ? text("生成中", "Generating") : text("生成失败", "Failed")} · {new Date(task.updatedAt).toLocaleString(text("zh-CN", "en-US"), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
+                      <b>{task.status === "pending" ? text("查看进度", "View progress") : text("检查并重试", "Review and retry")} <ArrowRight size={15} /></b>
+                    </span>
+                  </button>
                 </article>
               ))}
             </div>
@@ -2426,7 +2542,7 @@ function BriefScreen({
     setSelectedStyleId(templateStyle.id);
     setStyleMode(templateStyle.mode);
     onOptionsChange(optionsWithVisualStyle(options, templateStyle));
-    onUseExample(templatePromptForRole(firstTemplate, "style", templateStyle));
+    onUseExample(templatePromptForRole(firstTemplate, "style", templateStyle, language));
   }
 
   function chooseTemplate(template: BriefTemplateCard) {
@@ -2437,13 +2553,13 @@ function BriefScreen({
     setSelectedStyleId(templateStyle.id);
     setStyleMode(templateStyle.mode);
     onOptionsChange(optionsWithVisualStyle(options, templateStyle));
-    onUseExample(templatePromptForRole(template, "style", templateStyle));
+    onUseExample(templatePromptForRole(template, "style", templateStyle, language));
   }
 
   function chooseTemplateRole(role: BriefTemplateRole) {
     setSelectedTemplateRole(role);
     if (selectedTemplate && role === "style") onOptionsChange(optionsWithVisualStyle(options, selectedVisualStyle));
-    if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, role, selectedVisualStyle));
+    if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, role, selectedVisualStyle, language));
   }
 
   function draftVisualStyleChoice(style: BriefVisualStyle) {
@@ -2468,11 +2584,15 @@ function BriefScreen({
   }
 
   function promptWithStyle(style: BriefVisualStyle) {
-    if (selectedTemplate) return templatePromptForRole(selectedTemplate, selectedTemplateRole, style);
-    const styleInstruction = `应用“${style.label}”的 style：${style.prompt}`;
+    if (selectedTemplate) return templatePromptForRole(selectedTemplate, selectedTemplateRole, style, language);
+    const styleInstruction = language === "zh-CN"
+      ? `应用“${style.label}”的 style：${style.prompt}`
+      : `Apply the “${briefVisualStyleEnglish[style.id]?.[0] ?? style.label}” style: ${briefVisualStylePromptEnglish[style.id] ?? style.prompt}`;
     const trimmed = prompt.trim();
     if (!trimmed) return styleInstruction;
-    const withoutPreviousStyle = trimmed.replace(/\n\n应用“[^”]+”的 style：.+$/u, "");
+    const withoutPreviousStyle = trimmed
+      .replace(/\n\n应用“[^”]+”的 style：.+$/u, "")
+      .replace(/\n\nApply the “[^”]+” style:.+$/u, "");
     return `${withoutPreviousStyle}\n\n${styleInstruction}`;
   }
 
@@ -2674,7 +2794,10 @@ function BriefScreen({
           {briefWorkflowCards.map((card) => {
             const Icon = card.icon;
             return (
-              <button key={card.title} onClick={() => onUseExample(card.title === "Explain a concept" ? promptExamples[0] : card.title === "Turn a doc into video" ? promptExamples[1] : promptExamples[2])} type="button">
+              <button key={card.title} onClick={() => {
+                const examples = language === "zh-CN" ? promptExamples : promptExamplesEnglish;
+                onUseExample(card.title === "Explain a concept" ? examples[0] : card.title === "Turn a doc into video" ? examples[1] : examples[2]);
+              }} type="button">
                 <i><Icon size={18} /></i>
                 <span><strong>{language === "zh-CN" ? briefWorkflowLocalized[card.title]?.[0] : card.title}</strong><small>{language === "zh-CN" ? card.detail : briefWorkflowLocalized[card.title]?.[1]}</small></span>
               </button>
@@ -2935,7 +3058,7 @@ function GeneratingScreen({
       <div className="kv-section-heading centered">
         <span className="kv-pill">{text("正在制作", "Creating video")}</span>
         <h2>{localizedRuntimeLabel(status, language)}</h2>
-        <p>{prompt}</p>
+        <p>{localizedGenerationPrompt(prompt, language)}</p>
       </div>
       <div className="kv-progress">
         <div style={{ width: `${progress}%` }} />
@@ -7220,6 +7343,47 @@ export function WorkspaceClient({
     }
   }
 
+  async function openGenerationTask(task: GenerationTaskListItem) {
+    const prompt = task.prompt?.trim() ?? "";
+    if (task.status === "failed") {
+      setBriefPrompt(prompt);
+      setErrorMessage(task.error || "生成没有完成，请检查需求后重试。");
+      setStage("brief");
+      return;
+    }
+    if (recoveringGenerationRef.current) return;
+    const stored = readPendingGenerationSession();
+    const options = stored?.requestId === task.id ? stored.options : task.options ?? generationOptions;
+    const startedAt = stored?.requestId === task.id
+      ? stored.startedAt
+      : Number.isFinite(Date.parse(task.createdAt ?? task.updatedAt)) ? Date.parse(task.createdAt ?? task.updatedAt) : Date.now();
+    const resumablePrompt = prompt || (stored?.requestId === task.id ? stored.prompt : "");
+    recoveringGenerationRef.current = true;
+    setBriefPrompt(resumablePrompt);
+    setGenerationOptions(options);
+    setGenerationStartedAt(startedAt);
+    setProgress(36);
+    setGenerationStatus("正在等待后台完成脚本与分镜");
+    setErrorMessage(undefined);
+    setIsBusy(true);
+    setStage("generating");
+    savePendingGenerationSession({ requestId: task.id, prompt: resumablePrompt, options, startedAt });
+    try {
+      const data = await waitForGenerationRequest(task.id, () => {
+        setGenerationStatus("脚本与分镜仍在后台生成，正在自动恢复");
+      });
+      await continueGeneratedProject(data, options, true);
+    } catch (error) {
+      const message = requestErrorMessage(error, "生成进度读取失败，请稍后重试。");
+      if (/没有完成|没有找到|标识无效|数据不完整/.test(message)) clearPendingGenerationSession();
+      await openProjects();
+      setErrorMessage(message);
+    } finally {
+      recoveringGenerationRef.current = false;
+      setIsBusy(false);
+    }
+  }
+
   async function openProject(projectId: string) {
     setProjectsLoading(true);
     setErrorMessage(undefined);
@@ -7377,6 +7541,7 @@ export function WorkspaceClient({
           isLoading={projectsLoading}
           onCreate={resetToBrief}
           onDelete={deleteProject}
+          onOpenGeneration={(task) => void openGenerationTask(task)}
           onOpen={(projectId) => void openProject(projectId)}
           onQueryChange={setProjectQuery}
           onRename={renameProject}

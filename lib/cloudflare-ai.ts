@@ -2,7 +2,7 @@ import { getOptionalEnv } from "@/lib/env";
 import { assertUsableSpeechAudio } from "@/lib/audio-quality";
 import { isMp4Buffer, parseCloudflareVideoUrl } from "@/lib/cloudflare-video-response";
 import { parseCloudflareTranscript, type CloudflareTranscriptionResult } from "@/lib/cloudflare-transcription";
-import { parseCloudflareVisionDescription } from "@/lib/cloudflare-vision-response";
+import { parseCloudflareVisionDescription, parseImageTextPresence } from "@/lib/cloudflare-vision-response";
 import {
   VIDEO_GENERATION_DURATION_SECONDS,
   VIDEO_GENERATION_MODEL,
@@ -197,6 +197,37 @@ export async function analyzeCloudflareImage(body: Buffer) {
   const captionDescription = parseCloudflareVisionDescription(captionPayload);
   if (!captionDescription) throw new Error("AI vision service returned no description");
   return { description: captionDescription, model };
+}
+
+export async function detectCloudflareImageText(body: Buffer) {
+  const model = getOptionalEnv("CLOUDFLARE_VISION_MODEL") || DEFAULT_VISION_MODEL;
+  const normalized = await sharp(body)
+    .rotate()
+    .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
+    .toBuffer();
+  const response = await fetch(endpoint(model), {
+    method: "POST",
+    headers: {
+      ...authorizationHeaders(),
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      image: `data:image/jpeg;base64,${normalized.toString("base64")}`,
+      task: "query",
+      question: "Inspect the entire image, including screens, signs, clothing, objects, and background. Does it contain any visible word, letter, number, caption, label, logo, watermark, signature, pseudo-writing, scrambled lettering, or glyph that resembles writing? Answer exactly TEXT_PRESENT if any exists, otherwise answer exactly TEXT_FREE.",
+      reasoning: false,
+      temperature: 0,
+      max_tokens: 12,
+      stream: false
+    }),
+    signal: AbortSignal.timeout(35_000)
+  });
+  if (!response.ok) throw await responseError(response);
+  const payload = await response.json() as unknown;
+  const hasText = parseImageTextPresence(payload);
+  if (hasText === undefined) throw new Error("AI vision service returned an inconclusive text inspection");
+  return { hasText, model };
 }
 
 export async function transcribeCloudflareAudio(body: Buffer, language?: "zh" | "en") {

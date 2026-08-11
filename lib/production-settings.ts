@@ -88,7 +88,7 @@ export function productionSceneTimeline(version: ProjectVersion, fps: number) {
       totalFrames: fallbackTotalFrames
     };
   }
-  const sceneFrames = version.scenes.map((scene, index, scenes) => (
+  const contentSceneFrames = version.scenes.map((scene, index, scenes) => (
     Math.max(1, Math.round((
       effectiveSceneDurationSeconds(scene, index === scenes.length - 1) * fps
     ) / playbackRate))
@@ -98,9 +98,15 @@ export function productionSceneTimeline(version: ProjectVersion, fps: number) {
     : boundedTransitionFrames({
       scene,
       fps,
-      previousSceneFrames: sceneFrames[index - 1],
-      sceneFrames: sceneFrames[index]
+      previousSceneFrames: contentSceneFrames[index - 1],
+      sceneFrames: contentSceneFrames[index]
     }));
+  // Visual transitions overlap, narration must not. Extend the outgoing scene
+  // by the next transition so subtracting the visual overlap never advances
+  // the next scene's audio start time.
+  const sceneFrames = contentSceneFrames.map((frames, index) => (
+    frames + (transitionFrames[index + 1] ?? 0)
+  ));
   const sceneStartFrames = sceneFrames.map((_, index) => {
     if (index === 0) return 0;
     const elapsed = sceneFrames.slice(0, index).reduce((sum, frames) => sum + frames, 0);
@@ -121,20 +127,7 @@ export function effectiveVersionDurationSeconds(version: ProjectVersion) {
   const duration = version.scenes.reduce((total, scene, index) => (
     total + effectiveSceneDurationSeconds(scene, index === version.scenes.length - 1)
   ), 0);
-  const transitionOverlapSeconds = version.scenes.reduce((total, scene, index, scenes) => {
-    if (index === 0) return total;
-    const previousDuration = effectiveSceneDurationSeconds(scenes[index - 1], false);
-    const sceneDuration = effectiveSceneDurationSeconds(scene, index === scenes.length - 1);
-    return total + (
-      boundedTransitionFrames({
-        scene,
-        fps: 100,
-        previousSceneFrames: Math.round(previousDuration * 100),
-        sceneFrames: Math.round(sceneDuration * 100)
-      }) / 100
-    );
-  }, 0);
-  return Math.max(0.1, duration - transitionOverlapSeconds);
+  return Math.max(0.1, duration);
 }
 
 export function productionDurationInFrames(version: ProjectVersion, fps: number) {

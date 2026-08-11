@@ -8,9 +8,11 @@ export type GenerationRequestRecord = {
   id: string;
   status: GenerationRequestStatus;
   prompt?: string;
+  options?: GenerationOptions;
   projectId?: string;
   engine?: string;
   error?: string;
+  createdAt: string;
   updatedAt: string;
 };
 
@@ -18,11 +20,13 @@ type GenerationRequestRow = {
   id: string;
   user_id: string | null;
   prompt: string | null;
+  options_json: GenerationOptions | string | null;
   request_fingerprint: string;
   status: GenerationRequestStatus;
   project_id: string | null;
   engine: string | null;
   error: string | null;
+  created_at: Date | string;
   updated_at: Date | string;
 };
 
@@ -56,6 +60,10 @@ async function ensureGenerationRequestsSchema() {
         add column if not exists prompt text
       `;
       await sql`
+        alter table generation_requests
+        add column if not exists options_json jsonb
+      `;
+      await sql`
         create index if not exists generation_requests_status_updated_idx
         on generation_requests(status, updated_at desc)
       `;
@@ -72,13 +80,23 @@ async function ensureGenerationRequestsSchema() {
 }
 
 function toRecord(row: GenerationRequestRow): GenerationRequestRecord {
+  let options: GenerationOptions | undefined;
+  try {
+    options = typeof row.options_json === "string"
+      ? JSON.parse(row.options_json) as GenerationOptions
+      : row.options_json ?? undefined;
+  } catch {
+    options = undefined;
+  }
   return {
     id: row.id,
     status: row.status,
     prompt: row.prompt ?? undefined,
+    options,
     projectId: row.project_id ?? undefined,
     engine: row.engine ?? undefined,
     error: row.error ?? undefined,
+    createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString()
   };
 }
@@ -102,18 +120,19 @@ export async function claimGenerationRequest(input: {
   userId: string;
   fingerprint: string;
   prompt: string;
+  options?: GenerationOptions;
 }): Promise<{ claimed: boolean; record?: GenerationRequestRecord; conflict?: boolean }> {
   if (!hasDatabaseUrl()) return { claimed: true };
   await ensureGenerationRequestsSchema();
   const sql = getSql();
   const inserted = await sql`
-    insert into generation_requests (id, user_id, prompt, request_fingerprint, status)
-    values (${input.id}, ${input.userId}, ${input.prompt.trim().slice(0, 4000)}, ${input.fingerprint}, 'pending')
+    insert into generation_requests (id, user_id, prompt, options_json, request_fingerprint, status)
+    values (${input.id}, ${input.userId}, ${input.prompt.trim().slice(0, 4000)}, ${input.options ? JSON.stringify(input.options) : null}::jsonb, ${input.fingerprint}, 'pending')
     on conflict (id) do nothing
     returning id
   ` as Array<{ id: string }>;
   const rows = await sql`
-    select id, user_id, prompt, request_fingerprint, status, project_id, engine, error, updated_at
+    select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
     from generation_requests
     where id = ${input.id}
     limit 1
@@ -142,7 +161,7 @@ export async function getGenerationRequest(id: string, userId: string) {
       and updated_at < now() - interval '15 minutes'
   `;
   const rows = await sql`
-    select id, user_id, prompt, request_fingerprint, status, project_id, engine, error, updated_at
+    select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
     from generation_requests
     where id = ${id} and user_id = ${userId}
     limit 1
@@ -162,7 +181,7 @@ export async function listIncompleteGenerationRequests(userId: string) {
       and updated_at < now() - interval '15 minutes'
   `;
   const rows = await sql`
-    select id, user_id, prompt, request_fingerprint, status, project_id, engine, error, updated_at
+    select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
     from generation_requests
     where user_id = ${userId} and status in ('pending', 'failed')
     order by updated_at desc

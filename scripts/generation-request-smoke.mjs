@@ -31,11 +31,14 @@ assert.match(source, /userId: string/);
 assert.match(source, /where id = \$\{id\} and user_id = \$\{userId\}/);
 assert.match(source, /listIncompleteGenerationRequests/);
 assert.match(source, /interval '15 minutes'/);
+assert.match(source, /options_json jsonb/);
+assert.match(source, /options\?: GenerationOptions/);
 assert.match(projectsRoute, /after\(\(\) => runBackgroundGeneration/);
 assert.match(projectsRoute, /return NextResponse\.json\(\{ status: "pending", requestId \}, \{ status: 202 \}\)/);
 assert.match(projectsRoute, /listIncompleteGenerationRequests\(user\.id\)/);
 assert.match(generationRoute, /getGenerationRequest\(parsed\.data, user\.id\)/);
 assert.match(schema, /generation_requests \([\s\S]*?user_id uuid references users\(id\)/);
+assert.match(schema, /generation_requests \([\s\S]*?options_json jsonb/);
 const options = {
   duration: "30",
   sceneCount: "5",
@@ -64,7 +67,7 @@ assert.notEqual(first, withReference);
 assert.match(workspace, /function plannedSceneCount/);
 assert.match(workspace, /function generationReviewItems/);
 assert.match(workspace, /const reviewItems = generationReviewItems\(prompt, options\)/);
-assert.match(workspace, /aria-label="生成前审阅清单"/);
+assert.match(workspace, /aria-label=\{text\("生成前审阅清单", "Pre-generation review checklist"\)\}/);
 assert.match(workspace, /生成前审阅/);
 assert.match(workspace, /需求完整度/);
 assert.match(workspace, /分镜节奏/);
@@ -75,6 +78,12 @@ assert.match(workspace, /billingRequestId: crypto\.randomUUID\(\)/);
 assert.match(workspace, /window\.localStorage\.setItem\(PENDING_GENERATION_STORAGE_KEY/);
 assert.match(workspace, /generationRequests\?: GenerationTaskListItem\[\]/);
 assert.match(workspace, /关闭页面不会中断/);
+assert.match(workspace, /function openGenerationTask\(task: GenerationTaskListItem\)/);
+assert.match(workspace, /onOpenGeneration: \(task: GenerationTaskListItem\) => void/);
+assert.match(workspace, /查看进度/);
+assert.match(workspace, /localizedGenerationPrompt\(task\.prompt, language\)/);
+assert.match(workspace, /waitForGenerationRequest\(task\.id/);
+assert.match(workspace, /task\.options \?\? generationOptions/);
 assert.match(workspace, /setPendingVideoGeneration/);
 assert.match(workspace, /约 \$\{secondsPerScene\} 秒\/幕/);
 assert.match(workspace, /label: "旁白语言"/);
@@ -83,5 +92,7 @@ assert.match(styles, /\.kv-generation-review/);
 assert.match(styles, /\.kv-generation-review span\.attention/);
 assert.match(styles, /\.kv-generation-review span\.working/);
 assert.match(styles, /\.kv-generation-review b/);
+assert.match(styles, /\.kv-generation-task-open/);
+assert.match(styles, /\.kv-generation-task-action/);
 
 console.log("Generation request smoke checks passed.");

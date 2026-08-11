@@ -186,7 +186,9 @@ export type GenerationTaskListItem = {
   id: string;
   status: "pending" | "failed";
   prompt?: string;
+  options?: GenerationOptions;
   error?: string;
+  createdAt?: string;
   updatedAt: string;
 };
 

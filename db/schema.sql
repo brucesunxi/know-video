@@ -138,6 +138,7 @@ create table if not exists generation_requests (
   id uuid primary key,
   user_id uuid references users(id) on delete cascade,
   prompt text,
+  options_json jsonb,
   request_fingerprint text not null,
   status text not null check (status in ('pending', 'ready', 'failed')),
   project_id uuid references projects(id) on delete set null,
@@ -152,6 +153,9 @@ alter table generation_requests
 
 alter table generation_requests
   add column if not exists prompt text;
+
+alter table generation_requests
+  add column if not exists options_json jsonb;
 
 create index if not exists project_versions_project_id_idx on project_versions(project_id);
 create index if not exists projects_user_id_updated_idx on projects(user_id, updated_at desc);

@@ -7,7 +7,7 @@ const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "
 assert.match(workspace, /function elapsedGenerationLabel/);
 assert.match(workspace, /function generationSpecItems/);
 assert.match(workspace, /function GenerationSpecStrip/);
-assert.match(workspace, /stage === "generating"\s*\? "新视频制作中"/);
+assert.match(workspace, /stage === "generating"\s*\? text\("新视频制作中", "Creating a new video"\)/);
 assert.match(workspace, /label: "正在创建新项目"/);
 assert.match(workspace, /label: "生成进度自动保存"/);
 assert.match(workspace, /projectStatusBadges\(project, source, stage\)/);
@@ -17,7 +17,7 @@ assert.match(workspace, /setGenerationStartedAt\(pending\.startedAt\)/);
 assert.match(workspace, /const startedAt = Date\.now\(\)/);
 assert.match(workspace, /startedAt=\{generationStartedAt\}/);
 assert.match(workspace, /options=\{generationOptions\}/);
-assert.match(workspace, /aria-label="生成规格确认"/);
+assert.match(workspace, /aria-label=\{language === "zh-CN" \? "生成规格确认" : "Generation specification"\}/);
 assert.match(workspace, /目标时长/);
 assert.match(workspace, /分镜策略/);
 assert.match(workspace, /动态策略/);

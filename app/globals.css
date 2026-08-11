@@ -3902,14 +3902,10 @@ html[data-theme="dark"] .kv-user-menu {
 }
 
 .kv-generation-task-list article {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
   border: 1px solid #a7e5dc;
   border-radius: 8px;
   background: #f2fffc;
-  padding: 14px 16px;
+  overflow: hidden;
 }
 
 .kv-generation-task-list article.failed {
@@ -3932,8 +3928,31 @@ html[data-theme="dark"] .kv-user-menu {
   color: #b42318;
 }
 
+.kv-generation-task-open {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  padding: 14px 16px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kv-generation-task-open:hover {
+  background: rgba(15, 118, 110, 0.05);
+}
+
+.kv-generation-task-open:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: -2px;
+}
+
 .kv-generation-task-list strong,
-.kv-generation-task-list p {
+.kv-generation-task-copy > span {
   overflow-wrap: anywhere;
 }
 
@@ -3942,17 +3961,32 @@ html[data-theme="dark"] .kv-user-menu {
   line-height: 1.35;
 }
 
-.kv-generation-task-list p {
-  margin: 4px 0 0;
+.kv-generation-task-copy > span {
+  display: block;
+  margin-top: 4px;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
 }
 
-.kv-generation-task-list small {
+.kv-generation-task-action {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+}
+
+.kv-generation-task-action small {
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.kv-generation-task-action b {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #0f766e;
+  font-size: 13px;
 }
 
 .kv-project-grid {
@@ -9132,12 +9166,16 @@ html[data-theme="dark"] .kv-user-menu {
     grid-template-columns: 1fr;
   }
 
-  .kv-generation-task-list article {
+  .kv-generation-task-open {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .kv-generation-task-list small {
+  .kv-generation-task-action {
     grid-column: 2;
+    justify-items: start;
+  }
+
+  .kv-generation-task-action small {
     white-space: normal;
   }
 

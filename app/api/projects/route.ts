@@ -256,6 +256,7 @@ export async function POST(request: Request) {
         id: requestId,
         userId: user.id,
         prompt: body.prompt,
+        options: body.options,
         fingerprint: generationRequestFingerprint(body.prompt, body.options, body.referenceAssets)
       });
       if (claim.conflict) {

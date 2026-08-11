@@ -25,3 +25,11 @@ export function parseCloudflareVisionDescription(payload: unknown) {
   }
   return undefined;
 }
+
+export function parseImageTextPresence(payload: unknown) {
+  const description = parseCloudflareVisionDescription(payload)?.toUpperCase();
+  if (!description) return undefined;
+  if (/\bTEXT_PRESENT\b/u.test(description)) return true;
+  if (/\bTEXT_FREE\b/u.test(description)) return false;
+  return undefined;
+}

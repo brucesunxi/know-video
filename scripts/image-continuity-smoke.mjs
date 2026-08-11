@@ -84,9 +84,10 @@ assert.match(prompt, /Do not repeat the same layout/);
 assert.match(prompt, /Do not use it as a template for any other scene/);
 assert.match(prompt, /SCENE DIFFERENTIATION/);
 assert.match(prompt, /Style is only the rendering language/);
-assert.match(prompt, /TEXT-FREE BACKGROUND PLATE — HIGHEST PRIORITY/);
+assert.match(prompt, /TEXT-FREE BACKGROUND PLATE — ABSOLUTE HIGHEST PRIORITY/);
 assert.match(prompt, /absolutely no words, letters, numbers/);
 assert.match(prompt, /video renderer will add all readable titles/);
+assert.match(prompt, /inspect every pixel/);
 assert.doesNotMatch(prompt, /Use little or no text/);
 
 const pixelScene = {

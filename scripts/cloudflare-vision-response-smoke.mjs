@@ -9,7 +9,7 @@ const output = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports, require: () => ({}) });
-const { parseCloudflareVisionDescription } = module.exports;
+const { parseCloudflareVisionDescription, parseImageTextPresence } = module.exports;
 
 assert.equal(
   parseCloudflareVisionDescription({ answer: "  A player explores a neon game level.  " }),
@@ -26,5 +26,8 @@ assert.equal(
 assert.equal(parseCloudflareVisionDescription({ answer: "   ", result: {} }), undefined);
 assert.equal(parseCloudflareVisionDescription(undefined), undefined);
 assert.equal(parseCloudflareVisionDescription({ answer: "a".repeat(1_700) }).length, 1_600);
+assert.equal(parseImageTextPresence({ answer: "TEXT_PRESENT" }), true);
+assert.equal(parseImageTextPresence({ result: { answer: "TEXT_FREE" } }), false);
+assert.equal(parseImageTextPresence({ answer: "The image is unclear." }), undefined);
 
 console.log("Cloudflare vision response smoke checks passed.");

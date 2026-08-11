@@ -5,11 +5,13 @@ import { exactVisualStyleDirection } from "@/lib/visual-style-profiles";
 export type ImageReferenceRole = "current";
 
 export const TEXT_FREE_IMAGE_DIRECTION = [
-  "TEXT-FREE BACKGROUND PLATE — HIGHEST PRIORITY:",
+  "TEXT-FREE BACKGROUND PLATE — ABSOLUTE HIGHEST PRIORITY AND DELIVERY REQUIREMENT:",
   "Render absolutely no words, letters, numbers, captions, labels, typography, signatures, watermarks, logos, brand names, interface copy, or text-like glyphs anywhere in the image.",
   "Any screen, sign, poster, document, package, badge, button, chart, or interface must use only clean unlabeled geometry, blank surfaces, icons, color blocks, lines, and diagrams without characters.",
   "Do not invent pseudo-writing, scrambled lettering, lorem ipsum, fake Chinese characters, or decorative symbols that resemble text.",
-  "Names and written content mentioned above are semantic context only and must not be painted into the image. The video renderer will add all readable titles, captions, labels, and logos later."
+  "If an object normally contains writing, turn it away from camera, crop out its written area, or replace that area with a completely blank surface.",
+  "Names and written content mentioned above are semantic context only and must not be painted into the image. The video renderer will add all readable titles, captions, labels, and logos later.",
+  "Before finishing, inspect every pixel of the frame and remove all writing-like marks. A visually strong image containing even one character or fake glyph is invalid."
 ].join("\n");
 
 export function enforceTextFreeImagePrompt(prompt: string) {
@@ -65,7 +67,7 @@ export function projectVisualIdentity(project: Project) {
     .slice(0, 5);
   const exactStyle = exactVisualStyleDirection(project.currentVersion.scenes[0]?.style);
   return [
-    `Project visual identity: "${imageSafeSemanticText(project.title)}".`,
+    `Project subject for semantic context only: ${imageSafeSemanticText(project.title)}. Never display this title in the frame.`,
     exactStyle,
     `Locked palette: ${palettes.join(", ")}.`,
     ...continuity,
@@ -163,12 +165,12 @@ export function sceneImagePrompt(
   const isCinematic = !scene.style.visualStyleId || scene.style.visualStyleId === "cinematic-realism";
 
   return enforceTextFreeImagePrompt([
-    `Create a polished 16:9 key visual for a scene in the commercial film "${safeProjectTitle}".`,
+    `Create a polished, completely text-free 16:9 background plate for a commercial film about ${safeProjectTitle}.`,
     projectVisualIdentity(project),
     exactStyle ? `STYLE LOCK — HIGHEST VISUAL PRIORITY:\n${exactStyle}` : "",
     sceneAttachmentSummary(scene) ?? "",
     referenceDirection,
-    `Scene ${scene.sceneNumber}: ${safeTitle}.`,
+    `Scene ${scene.sceneNumber} semantic focus only, never a visible title: ${safeTitle}.`,
     `Visual direction: ${safeVisualPrompt}`,
     semanticSceneDirection(scene),
     sceneVisualDiversityDirection(scene, project.currentVersion.scenes.length),
