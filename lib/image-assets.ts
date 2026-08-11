@@ -214,7 +214,6 @@ type ImageReference = {
 async function generatedImageContainsText(body: Buffer) {
   try {
     if (hasCloudflareAI()) return (await detectCloudflareImageText(body)).hasText;
-
     const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
     const response = await client.chat.completions.create({
       model: getOptionalEnv("OPENAI_VISION_MODEL") || "gpt-4o-mini",
