@@ -228,6 +228,7 @@ function SceneFrame({
         <Freeze active={(currentFrame) => currentFrame > lastClipFrame} frame={lastClipFrame}>
           <OffthreadVideo
             muted
+            pauseWhenBuffering
             playbackRate={clipPlaybackRate}
             src={clip}
             style={visualLayerStyle({ motion, nativeVideo: true })}
@@ -349,7 +350,7 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
             durationInFrames={contentDurationInFrames}
             from={start}
             key={scene.id}
-            premountFor={VIDEO_FPS * 3}
+            premountFor={VIDEO_FPS * 4}
           >
             <SceneFrame
               captionsEnabled={settings.captionsEnabled}
@@ -384,7 +385,7 @@ export function KnowVideoComposition({ project }: KnowVideoCompositionProps) {
             durationInFrames={narrationFrames}
             from={sceneStartFrames[index]}
             key={`narration-${scene.id}`}
-            premountFor={VIDEO_FPS}
+            premountFor={VIDEO_FPS * 3}
           >
             <Audio
               pauseWhenBuffering

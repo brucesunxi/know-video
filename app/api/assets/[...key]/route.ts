@@ -20,9 +20,7 @@ export async function GET(
       status: asset.contentRange ? 206 : 200,
       headers: {
         "accept-ranges": "bytes",
-        "cache-control": asset.contentRange
-          ? "private, no-store"
-          : "public, max-age=31536000, immutable",
+        "cache-control": "public, max-age=31536000, immutable",
         "content-type": asset.contentType,
         vary: "range",
         ...(asset.contentLength ? { "content-length": String(asset.contentLength) } : {}),

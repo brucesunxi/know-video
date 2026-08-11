@@ -1,11 +1,13 @@
 "use client";
 
 import { Player, type PlayerRef } from "@remotion/player";
+import { prefetch } from "remotion";
 import { AlertCircle, FileVideo2, Loader2, RefreshCcw } from "lucide-react";
 import { forwardRef, useEffect, useState } from "react";
 import type { Project } from "@/lib/types";
 import { compositionRevision } from "@/lib/composition-revision";
 import { productionDurationInFrames } from "@/lib/production-settings";
+import { previewPreloadAssets } from "@/lib/preview-preload";
 import { KnowVideoComposition } from "@/video/know-video-composition";
 import { VIDEO_FPS, VIDEO_HEIGHT, VIDEO_WIDTH } from "@/video/config";
 
@@ -19,6 +21,18 @@ export const KnowVideoPlayer = forwardRef<PlayerRef, { project: Project; classNa
   const [renderedVideoFailed, setRenderedVideoFailed] = useState(false);
   const renderUrl = project.currentVersion.renderUrl;
   const previewRevision = compositionRevision(project.currentVersion);
+
+  useEffect(() => {
+    const handles = previewPreloadAssets(project).map((asset) => {
+      const handle = prefetch(asset.url, {
+        credentials: "same-origin",
+        logLevel: "warn"
+      });
+      void handle.waitUntilDone().catch(() => undefined);
+      return handle;
+    });
+    return () => handles.forEach((handle) => handle.free());
+  }, [previewRevision, project]);
 
   useEffect(() => {
     setUseRenderedVideo(false);
@@ -50,6 +64,7 @@ export const KnowVideoPlayer = forwardRef<PlayerRef, { project: Project; classNa
             controls
             onError={() => setRenderedVideoFailed(true)}
             playsInline
+            preload="auto"
             src={renderUrl}
           />
         )}
@@ -78,7 +93,7 @@ export const KnowVideoPlayer = forwardRef<PlayerRef, { project: Project; classNa
         clickToPlay
         doubleClickToFullscreen
         spaceKeyToPlayOrPause
-        bufferStateDelayInMilliseconds={250}
+        bufferStateDelayInMilliseconds={120}
         errorFallback={() => (
           <div className="kv-player-fallback" role="alert">
             <AlertCircle size={28} />
