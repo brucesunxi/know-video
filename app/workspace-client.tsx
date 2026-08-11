@@ -132,14 +132,203 @@ function localizedRuntimeLabel(value: string, language: UiLanguage) {
     "自动规划场景": "Auto-planned scenes",
     "全片智能运镜": "Smart camera motion",
     "中文": "Chinese",
-    "英文": "English"
+    "英文": "English",
+    "刚刚开始": "Just started",
+    "已完成": "Completed",
+    "等待中": "Queued",
+    "已取消": "Cancelled",
+    "失败": "Failed",
+    "还没有分镜": "No storyboard yet",
+    "素材完整，可继续预览或导出": "Assets complete. Ready to preview or export",
+    "MP4 已就绪": "MP4 ready",
+    "成片合成中": "Rendering video",
+    "可导出 MP4": "Ready to export MP4",
+    "等待分镜": "Waiting for storyboard",
+    "需补齐素材": "Assets incomplete",
+    "素材完整 · 已有动态镜头": "Assets complete · Motion ready",
+    "素材完整 · 可预览导出": "Assets complete · Ready to preview and export",
+    "缺画面": "Visual missing",
+    "缺配音": "Narration missing",
+    "画面": "Visual",
+    "配音": "Narration",
+    "动态": "Motion",
+    "可用于预览和导出": "Ready for preview and export",
+    "缺少图片或视频片段": "Image or video clip missing",
+    "旁白音频已就绪": "Narration audio ready",
+    "导出会静音或缺旁白": "Export will be silent or miss narration",
+    "已有动态镜头": "Motion clip ready",
+    "可基于画面生成": "Can be generated from the visual",
+    "先生成画面": "Generate the visual first",
+    "用于预览和 MP4 导出": "Used for preview and MP4 export",
+    "动态镜头优先播放": "Motion clip plays first",
+    "用于 MP4 导出": "Used for MP4 export",
+    "进入旁白音轨": "Added to the narration track",
+    "候选画面": "Candidate visual",
+    "不影响当前视频": "Does not affect the current video",
+    "封面素材": "Cover asset",
+    "当前画面": "Current visual",
+    "当前动态": "Current motion",
+    "当前配音": "Current narration",
+    "候选未采用": "Candidate not applied",
+    "辅助素材": "Supporting asset",
+    "预览和 MP4 导出会使用这张画面": "This visual is used for preview and MP4 export",
+    "预览和导出优先使用这个视频片段": "This video clip is preferred for preview and export",
+    "导出旁白音轨会使用这段音频": "This audio is used for the exported narration track",
+    "对比或采用前不会影响当前视频": "Does not affect the video until applied",
+    "不直接改变当前场景预览": "Does not directly change the scene preview",
+    "成片质检通过": "Video quality check passed",
+    "成片已生成": "Video generated",
+    "云端素材": "Cloud asset",
+    "标题": "Title",
+    "旁白": "Narration",
+    "配音音色": "Narration voice",
+    "画面方向": "Visual direction",
+    "镜头运动": "Camera motion",
+    "当前": "Current",
+    "修改后": "After changes",
+    "所选版本": "Selected version",
+    "当前版本": "Current version",
+    "新增": "Added",
+    "删除": "Removed",
+    "未变化": "Unchanged",
+    "已修改": "Modified",
+    "导出时长": "Export duration",
+    "字幕": "Captions",
+    "声音": "Audio",
+    "品牌": "Brand",
+    "字幕层": "Caption layer",
+    "背景音乐": "Background music",
+    "品牌 Logo": "Brand logo",
+    "字幕关闭": "Captions off",
+    "未添加背景音乐": "No background music",
+    "未添加 Logo": "No logo",
+    "未添加": "Not added",
+    "关闭": "Off",
+    "简洁": "Minimal",
+    "强调色": "Highlight",
+    "深色底": "Dark background",
+    "随旁白逐句显示": "Shown line by line with narration",
+    "画面不叠加字幕": "No captions over the visual",
+    "导出时自动混音": "Automatically mixed during export",
+    "仅保留旁白音轨": "Narration track only",
+    "导出时叠加到画面": "Overlaid on the exported video",
+    "不叠加品牌标识": "No brand mark overlay",
+    "导出画面会叠加逐句字幕。": "Line-by-line captions will appear in the export.",
+    "导出画面不会显示字幕。": "Captions will not appear in the export.",
+    "最终只保留旁白音轨。": "Only the narration track will remain.",
+    "导出画面会叠加品牌标识。": "The brand mark will be overlaid on the export.",
+    "最终画面不会叠加品牌标识。": "No brand mark will be overlaid.",
+    "清晰活力男声": "Clear energetic male",
+    "活力男声": "Energetic male",
+    "沉稳品牌男声": "Grounded brand male",
+    "品牌男声": "Brand male",
+    "专业商务女声": "Professional female",
+    "商务女声": "Business female",
+    "旁白偏长": "Narration is long",
+    "旁白偏短": "Narration is short",
+    "时长匹配": "Duration matched",
+    "试听加载失败。请稍后重试。": "Voice preview failed to load. Please try again later.",
+    "试听音频无法播放，请稍后重试。": "The voice preview could not be played. Please try again later.",
+    "视频片段": "Video clip",
+    "缩略图": "Thumbnail",
+    "成片": "Rendered video",
+    "应用并调整时间线": "Apply and update timeline",
+    "应用并生成素材": "Apply and generate assets",
+    "应用并重做素材": "Apply and regenerate assets",
+    "应用并创建版本": "Apply and create version",
+    "方案范围和原始需求不一致，请继续输入补充要求修正范围。": "The plan scope does not match the original request. Add a clarification to correct it.",
+    "中文化字段还没有全部通过，请继续输入“把所有场景都完整改成中文”。": "Some language fields still need review. Add a clarification to update every scene completely.",
+    "版本保护": "Version protection",
+    "创建可恢复新版本": "Create a restorable version",
+    "画面预览": "Visual preview",
+    "无需重做画面": "No visuals need regeneration",
+    "执行任务": "Tasks to run",
+    "成片影响": "Video impact",
+    "应用后需重新导出 MP4": "MP4 must be exported again after applying",
+    "素材更新后建议检查导出": "Review the export after assets update",
+    "现有成片不受影响": "Existing export is unaffected",
+    "继续调整待确认方案": "Continue refining the pending plan",
+    "发送后会先修改当前方案，不会直接改动视频。": "Sending will update the pending plan without changing the video.",
+    "AI 正在理解你的修改意图": "AI is interpreting your edit request",
+    "先生成可确认的修改方案": "Create a reviewable edit plan first",
+    "AI 会结合当前分镜和选中场景理解要求，再决定生成方案或候选素材。": "AI uses the storyboard and selected scene to decide whether to create a plan or candidate asset.",
+    "建议先重做提示中的异常画面或配音，再重新导出。": "Regenerate the flagged visual or narration, then export again.",
+    "建议重新打开当前项目，确认版本无误后再导出。": "Reopen the project, confirm the version, then export again.",
+    "建议稍等片刻后重新导出；如果连续失败，再检查导出记录里的错误信息。": "Wait briefly and export again. If it keeps failing, review the error in export history.",
+    "建议重新导出一次；如果仍失败，先确认所有场景都能正常播放预览。": "Export again. If it still fails, confirm that every scene plays correctly in preview."
   };
   if (labels[value]) return labels[value];
   const seconds = value.match(/^约 (\d+) 秒$/u);
   if (seconds) return `About ${seconds[1]} seconds`;
   const scenes = value.match(/^(\d+) 个场景$/u);
   if (scenes) return `${scenes[1]} scenes`;
+  const plainSeconds = value.match(/^(\d+(?:\.\d+)?) 秒$/u);
+  if (plainSeconds) return `${plainSeconds[1]} sec`;
+  const elapsed = value.match(/^(\d+) 分 (\d+) 秒$/u);
+  if (elapsed) return `${elapsed[1]}m ${elapsed[2]}s`;
+  const rendering = value.match(/^合成中 (\d+)%$/u);
+  if (rendering) return `Rendering ${rendering[1]}%`;
+  const completeness = value.match(/^画面 (\d+\/\d+) · 配音 (\d+\/\d+)$/u);
+  if (completeness) return `Visuals ${completeness[1]} · Narration ${completeness[2]}`;
+  const clips = value.match(/^(\d+) 个$/u);
+  if (clips) return `${clips[1]} clips`;
+  const narrationTiming = value.match(/^配音 (.+?)(?: \/ 场景 (.+))?$/u);
+  if (narrationTiming) return narrationTiming[2] ? `Narration ${narrationTiming[1]} / scene ${narrationTiming[2]}` : `Narration ${narrationTiming[1]}`;
+  const voice = value.match(/^音色 (.+)$/u);
+  if (voice) return `Voice ${labels[voice[1]] ?? voice[1]}`;
+  const source = value.match(/^来源 (.+)$/u);
+  if (source) return `Source ${source[1]}`;
+  const duration = value.match(/^时长 (.+?)(?: \/ 目标 (.+))?$/u);
+  if (duration) return duration[2] ? `Duration ${duration[1]} / target ${duration[2]}` : `Duration ${duration[1]}`;
+  const audioTracks = value.match(/^(\d+) 条音轨$/u);
+  if (audioTracks) return `${audioTracks[1]} audio tracks`;
+  const affectedScene = value.match(/^只影响场景 (\d+)$/u);
+  if (affectedScene) return `Only scene ${affectedScene[1]} is affected`;
+  const affectedScenes = value.match(/^影响场景 (.+)$/u);
+  if (affectedScenes) return `Affected scenes: ${affectedScenes[1].replaceAll("、", ", ")}`;
+  const allScenes = value.match(/^覆盖全片 (\d+) 个场景$/u);
+  if (allScenes) return `Covers all ${allScenes[1]} scenes`;
+  const previewReady = value.match(/^(\d+) 个真实预览已就绪$/u);
+  if (previewReady) return `${previewReady[1]} rendered previews ready`;
+  const previewMissing = value.match(/^(\d+) 个场景可先生成真实预览$/u);
+  if (previewMissing) return `${previewMissing[1]} scenes can generate rendered previews first`;
+  const sceneLocalized = value.match(/^(\d+)\/(\d+) 个目标场景(?:已完成中文化|通过中文字段检查)$/u);
+  if (sceneLocalized) return `${sceneLocalized[1]}/${sceneLocalized[2]} target scenes passed the language check`;
+  const sceneDuration = value.match(/^场景 (\d+) 调整为 (.+) 秒$/u);
+  if (sceneDuration) return `Set scene ${sceneDuration[1]} to ${sceneDuration[2]} sec`;
+  const sceneCandidate = value.match(/^场景 (\d+) 采用新的候选画面$/u);
+  if (sceneCandidate) return `Use the new candidate visual for scene ${sceneCandidate[1]}`;
+  const sceneMove = value.match(/^场景 (\d+) 向(前|后)移动一位$/u);
+  if (sceneMove) return `Move scene ${sceneMove[1]} one position ${sceneMove[2] === "前" ? "earlier" : "later"}`;
+  const sceneMoveTo = value.match(/^场景 (\d+) 移动到第 (\d+) 位$/u);
+  if (sceneMoveTo) return `Move scene ${sceneMoveTo[1]} to position ${sceneMoveTo[2]}`;
   return value;
+}
+
+function localizedErrorMessage(value: string, language: UiLanguage) {
+  if (language === "zh-CN") return value;
+  const translated = localizedRuntimeLabel(value, language);
+  return /\p{Script=Han}/u.test(translated)
+    ? "The request could not be completed. Please try again."
+    : translated;
+}
+
+function localizedVoiceCopy(profile: (typeof narrationVoiceProfiles)[number], language: UiLanguage) {
+  return language === "zh-CN"
+    ? {
+        label: profile.label,
+        shortLabel: profile.shortLabel,
+        description: profile.description,
+        useCase: profile.useCase,
+        sampleText: profile.sampleText
+      }
+    : {
+        label: profile.labelEn,
+        shortLabel: profile.shortLabelEn,
+        description: profile.descriptionEn,
+        useCase: profile.useCaseEn,
+        sampleText: profile.sampleTextEn
+      };
 }
 type Engine = "ai" | "heuristic";
 type StudioView = "preview" | "storyboard";
@@ -226,11 +415,14 @@ type BriefLanguageOption = {
   code: string;
   label: string;
   detail: string;
+  countryEn: string;
+  labelEn: string;
+  detailEn: string;
 };
 
 const briefLanguageOptions: BriefLanguageOption[] = [
-  { value: "中文", country: "中国", code: "CN", label: "中文", detail: "中文旁白、字幕和画面文案" },
-  { value: "英文", country: "英国", code: "UK", label: "English", detail: "English narration, captions, and on-screen copy" }
+  { value: "中文", country: "中国", code: "CN", label: "中文", detail: "中文旁白、字幕和画面文案", countryEn: "China", labelEn: "Chinese", detailEn: "Chinese narration, captions, and on-screen copy" },
+  { value: "英文", country: "英国", code: "UK", label: "English", detail: "英文旁白、字幕和画面文案", countryEn: "United Kingdom", labelEn: "English", detailEn: "English narration, captions, and on-screen copy" }
 ];
 
 const briefVisualStyles: BriefVisualStyle[] = [
@@ -395,6 +587,16 @@ const transitionOptions: Array<{ value: SceneTransitionKind; label: string }> = 
   { value: "wipe", label: "擦除" }
 ];
 
+const transitionEnglish: Record<SceneTransitionKind, string> = {
+  auto: "Auto",
+  cut: "Cut",
+  dissolve: "Dissolve",
+  "push-left": "Push left",
+  "push-right": "Push right",
+  zoom: "Zoom",
+  wipe: "Wipe"
+};
+
 const baseProgressSteps = [
   "解析视频目标",
   "拆分场景和镜头",
@@ -548,9 +750,9 @@ function renderJobStatus(job: RenderJob) {
   return "失败";
 }
 
-function renderJobTime(job: RenderJob) {
-  if (!job.createdAt) return "刚刚";
-  return new Date(job.createdAt).toLocaleString("zh-CN", {
+function renderJobTime(job: RenderJob, language: UiLanguage) {
+  if (!job.createdAt) return language === "zh-CN" ? "刚刚" : "Just now";
+  return new Date(job.createdAt).toLocaleString(language === "zh-CN" ? "zh-CN" : "en-US", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -1735,10 +1937,10 @@ function Shell({
                   <span>{currentUser.email.slice(0, 1).toUpperCase()}</span>
                 )}
                 <strong>{currentUser.name || currentUser.email}</strong>
-                <button aria-label="退出登录" onClick={async () => {
+                <button aria-label={text("退出登录", "Sign out")} onClick={async () => {
                   await fetch("/api/auth/logout", { method: "POST" });
                   window.location.assign("/");
-                }} title="退出登录" type="button">
+                }} title={text("退出登录", "Sign out")} type="button">
                   <LogOut size={15} />
                 </button>
               </div>
@@ -1769,10 +1971,10 @@ function Shell({
                   <span>{currentUser.email.slice(0, 1).toUpperCase()}</span>
                 )}
                 <strong>{currentUser.name || currentUser.email}</strong>
-                <button aria-label="退出登录" onClick={async () => {
+                <button aria-label={text("退出登录", "Sign out")} onClick={async () => {
                   await fetch("/api/auth/logout", { method: "POST" });
                   window.location.assign("/");
-                }} title="退出登录" type="button">
+                }} title={text("退出登录", "Sign out")} type="button">
                   <LogOut size={15} />
                 </button>
               </div>
@@ -1885,7 +2087,7 @@ function Shell({
 function GenerationSpecStrip({ options }: { options: GenerationOptions }) {
   const { language } = useUiCopy();
   return (
-    <div className="kv-generation-spec" aria-label="生成规格确认">
+    <div className="kv-generation-spec" aria-label={language === "zh-CN" ? "生成规格确认" : "Generation specification"}>
       {generationSpecItems(options).map((item) => (
         <span key={item.label}>
           <strong>{localizedRuntimeLabel(item.value, language)}</strong>
@@ -1921,7 +2123,7 @@ function ProjectLibrary({
   actionBusy: boolean;
   errorMessage?: string;
 }) {
-  const { text } = useUiCopy();
+  const { language, text } = useUiCopy();
   const [renamingId, setRenamingId] = useState<string>();
   const [renameValue, setRenameValue] = useState("");
   const [deleteCandidate, setDeleteCandidate] = useState<ProjectListItem>();
@@ -1953,7 +2155,7 @@ function ProjectLibrary({
         <input aria-label={text("搜索项目", "Search projects")} onChange={(event) => onQueryChange(event.target.value)} placeholder={text("搜索视频项目", "Search video projects")} value={query} />
         <span>{text(`${filtered.length + filteredTasks.length} 条记录`, `${filtered.length + filteredTasks.length} records`)}</span>
       </div>
-      {errorMessage ? <div className="kv-inline-error" role="alert"><AlertCircle size={18} />{errorMessage}</div> : null}
+      {errorMessage ? <div className="kv-inline-error" role="alert"><AlertCircle size={18} />{localizedErrorMessage(errorMessage, language)}</div> : null}
       {isLoading ? (
         <div className="kv-project-empty"><Loader2 className="kv-spin" size={24} /><p>{text("正在读取项目...", "Loading projects...")}</p></div>
       ) : filtered.length === 0 && filteredTasks.length === 0 ? (
@@ -1997,10 +2199,10 @@ function ProjectLibrary({
                   </div>
                   <p>{text(`${item.sceneCount} 个场景`, `${item.sceneCount} scenes`)} · {new Date(item.updatedAt).toLocaleDateString(text("zh-CN", "en-US"), { month: "short", day: "numeric" })}</p>
                   <small className={mediaCompletenessClass(item)}>
-                    {mediaCompletenessLabel(item)}
+                    {localizedRuntimeLabel(mediaCompletenessLabel(item), language)}
                   </small>
                   <small className={`kv-output-status ${outputReadiness(item).tone}`}>
-                    {outputReadiness(item).label}
+                    {localizedRuntimeLabel(outputReadiness(item).label, language)}
                   </small>
                 </div>
               </button>
@@ -2103,8 +2305,12 @@ function BriefScreen({
   const previewAbortRef = useRef<AbortController>();
   const advancedSettingsRef = useRef<HTMLDetailsElement>(null);
   const selectedVoiceProfile = narrationVoiceProfile(selectedVoice);
+  const selectedVoiceCopy = localizedVoiceCopy(selectedVoiceProfile, language);
   const selectedLanguageOption = briefLanguageOptions.find((item) => item.value === options.language) ?? briefLanguageOptions[0];
-  const filteredVoices = narrationVoiceProfiles.filter((profile) => `${profile.label} ${profile.useCase} ${profile.description}`.toLocaleLowerCase().includes(voiceQuery.trim().toLocaleLowerCase()));
+  const filteredVoices = narrationVoiceProfiles.filter((profile) => {
+    const copy = localizedVoiceCopy(profile, language);
+    return `${copy.label} ${copy.useCase} ${copy.description}`.toLocaleLowerCase().includes(voiceQuery.trim().toLocaleLowerCase());
+  });
   const visibleTemplateCards = briefTemplateCards[activeCategory];
   const inferredVisualStyle = inferVisualStyleForPrompt(prompt);
   const selectedVisualStyle = styleSource === "auto" ? inferredVisualStyle : visualStyleById(selectedStyleId);
@@ -2365,7 +2571,7 @@ function BriefScreen({
           onPaste={handlePasteFiles}
           onSubmit={onSubmit}
         >
-          <div className="kv-composer-settings" role="toolbar" aria-label="视频生成设置">
+          <div className="kv-composer-settings" role="toolbar" aria-label={text("视频生成设置", "Video generation settings")}>
             <button onClick={() => setActiveSettings("style")} type="button">
               <i><Brush size={18} /></i>
               <span><strong>{styleSource === "auto" ? `${text("自动", "Auto")} · ${styleLabel(selectedVisualStyle)}` : styleLabel(selectedVisualStyle)}</strong><small>{text("风格", "Style")}</small></span>
@@ -2376,11 +2582,11 @@ function BriefScreen({
             </button>
             <button onClick={() => setActiveSettings("voice")} type="button">
               <i><Mic2 size={18} /></i>
-              <span><strong>{selectedVoiceProfile.shortLabel}</strong><small>{text("音色", "Voice")}</small></span>
+              <span><strong>{selectedVoiceCopy.shortLabel}</strong><small>{text("音色", "Voice")}</small></span>
             </button>
             <button onClick={() => setActiveSettings("language")} type="button">
               <i><Languages size={18} /></i>
-              <span><strong>{selectedLanguageOption.code} · {selectedLanguageOption.label}</strong><small>{text("旁白语言", "Narration")}</small></span>
+              <span><strong>{selectedLanguageOption.code} · {language === "zh-CN" ? selectedLanguageOption.label : selectedLanguageOption.labelEn}</strong><small>{text("旁白语言", "Narration")}</small></span>
             </button>
             <button onClick={() => setActiveSettings("brand")} type="button">
               <i><Palette size={18} /></i>
@@ -2388,28 +2594,28 @@ function BriefScreen({
             </button>
           </div>
           {selectedTemplate || showStyleReference ? (
-            <div className="kv-template-reference-panel" aria-label="已选择的模板参考">
+            <div className="kv-template-reference-panel" aria-label={text("已选择的模板参考", "Selected template references")}>
               <div className="kv-template-reference-summary">
                 <strong>{text("图片", "Images")}</strong>
                 <span>
                   {selectedTemplate
                     ? showStyleReference
-                      ? `参考模板结构，并把“${selectedVisualStyle.label}”作为类型图片和整体视觉参考。`
+                      ? text(`参考模板结构，并把“${styleLabel(selectedVisualStyle)}”作为类型图片和整体视觉参考。`, `Use the template structure and “${styleLabel(selectedVisualStyle)}” as the visual style reference.`)
                       : selectedTemplateRole === "style"
-                        ? `作为“${selectedVisualStyle.label}”整体观感和节奏参考。`
+                        ? text(`作为“${styleLabel(selectedVisualStyle)}”整体观感和节奏参考。`, `Use this as a reference for the overall “${styleLabel(selectedVisualStyle)}” look and pacing.`)
                         : selectedTemplateRole === "ref"
-                          ? "参考这一页的内容结构和表达方式。"
-                          : "把它当作 Logo / 品牌标识来制作视频。"
-                    : `已把“${selectedVisualStyle.label}”作为类型图片和整体视觉参考。`}
+                          ? text("参考这一页的内容结构和表达方式。", "Reference this page's content structure and presentation.")
+                          : text("把它当作 Logo / 品牌标识来制作视频。", "Use it as the logo or brand identity for the video.")
+                    : text(`已把“${styleLabel(selectedVisualStyle)}”作为类型图片和整体视觉参考。`, `“${styleLabel(selectedVisualStyle)}” is the visual style reference.`)}
                 </span>
               </div>
               <div className="kv-template-reference-assets">
                 {selectedTemplate ? (
                   <figure className={`kv-template-reference-card ${selectedTemplate.className}`}>
-                    <button aria-label="移除模板参考" className="kv-template-reference-remove" disabled={isBusy} onClick={removeTemplateReference} title="移除模板参考" type="button"><X size={13} /></button>
+                    <button aria-label={text("移除模板参考", "Remove template reference")} className="kv-template-reference-remove" disabled={isBusy} onClick={removeTemplateReference} title={text("移除模板参考", "Remove template reference")} type="button"><X size={13} /></button>
                     <label>
                       <select
-                        aria-label="模板素材角色"
+                        aria-label={text("模板素材角色", "Template asset role")}
                         onChange={(event) => chooseTemplateRole(event.target.value as BriefTemplateRole)}
                         value={selectedTemplateRole}
                       >
@@ -2419,14 +2625,14 @@ function BriefScreen({
                       </select>
                     </label>
                     <figcaption>
-                      <strong>{selectedTemplate.title}</strong>
-                      <small>{selectedTemplateRole === "style" ? selectedVisualStyle.label : briefTemplateRoleLabels[selectedTemplateRole]}</small>
+                      <strong>{language === "zh-CN" ? selectedTemplate.title : briefTemplateEnglish[selectedTemplate.className]?.[0] ?? selectedTemplate.title}</strong>
+                      <small>{selectedTemplateRole === "style" ? styleLabel(selectedVisualStyle) : briefTemplateRoleLabels[selectedTemplateRole]}</small>
                     </figcaption>
                   </figure>
                 ) : null}
                 {showStyleReference ? (
                   <figure className="kv-template-reference-card kv-style-reference-card">
-                    <button aria-label="移除 Style 参考" className="kv-template-reference-remove" disabled={isBusy} onClick={removeStyleReference} title="移除 Style 参考" type="button"><X size={13} /></button>
+                    <button aria-label={text("移除 Style 参考", "Remove style reference")} className="kv-template-reference-remove" disabled={isBusy} onClick={removeStyleReference} title={text("移除 Style 参考", "Remove style reference")} type="button"><X size={13} /></button>
                     <span className={`kv-style-thumb style-${selectedVisualStyle.thumbnail}`} aria-hidden="true"><i /><b /><em /></span>
                     <figcaption>
                       <strong>{styleLabel(selectedVisualStyle)}</strong>
@@ -2444,21 +2650,21 @@ function BriefScreen({
           />
           <div className="kv-home-attachment-row">
             <div>
-              <button aria-label="高级设置" onClick={openAdvancedSettings} type="button"><Settings size={18} /></button>
-              <button aria-label="上传参考素材" disabled={isBusy || attachments.length >= 6} onClick={onOpenAttachmentPicker} type="button"><Paperclip size={18} /></button>
+              <button aria-label={text("高级设置", "Advanced settings")} onClick={openAdvancedSettings} type="button"><Settings size={18} /></button>
+              <button aria-label={text("上传参考素材", "Upload reference assets")} disabled={isBusy || attachments.length >= 6} onClick={onOpenAttachmentPicker} type="button"><Paperclip size={18} /></button>
               {attachments.length > 0 ? <span>{text(`${attachments.length} / 6 个参考素材`, `${attachments.length} / 6 references`)}</span> : null}
             </div>
-            <button aria-label="开始生成" className="kv-home-send" disabled={isBusy || prompt.trim().length < 4} type="submit">
+            <button aria-label={text("开始生成", "Generate video")} className="kv-home-send" disabled={isBusy || prompt.trim().length < 4} type="submit">
               {isBusy ? <Loader2 className="kv-spin" size={20} /> : <ArrowRight size={21} />}
             </button>
           </div>
           {attachments.length > 0 ? (
-            <ul className="kv-home-attachments" aria-label="已选择的参考素材">
+            <ul className="kv-home-attachments" aria-label={text("已选择的参考素材", "Selected reference assets")}>
               {attachments.map((file, index) => (
                 <li key={`${file.name}-${file.size}-${file.lastModified}`}>
                   <span title={file.name}>{file.name}</span>
                   <small>{file.type.startsWith("image/") ? "Image" : file.type.startsWith("video/") ? "Video" : "Audio"}</small>
-                  <button aria-label={`移除 ${file.name}`} disabled={isBusy} onClick={() => onRemoveAttachment(index)} type="button"><X size={13} /></button>
+                  <button aria-label={text(`移除 ${file.name}`, `Remove ${file.name}`)} disabled={isBusy} onClick={() => onRemoveAttachment(index)} type="button"><X size={13} /></button>
                 </li>
               ))}
             </ul>
@@ -2512,8 +2718,7 @@ function BriefScreen({
             <label>
               <span>{text("旁白语言", "Narration language")}</span>
               <select onChange={(event) => onOptionsChange({ ...options, language: event.target.value as GenerationOptions["language"] })} value={options.language}>
-                <option value="中文">中国 · 中文</option>
-                <option value="英文">英国 · English</option>
+                {briefLanguageOptions.map((option) => <option key={option.value} value={option.value}>{language === "zh-CN" ? `${option.country} · ${option.label}` : `${option.countryEn} · ${option.labelEn}`}</option>)}
               </select>
             </label>
             <label>
@@ -2525,15 +2730,15 @@ function BriefScreen({
             </label>
           </div>
           <GenerationSpecStrip options={options} />
-          <div className="kv-generation-review" aria-label="生成前审阅清单">
+          <div className="kv-generation-review" aria-label={text("生成前审阅清单", "Pre-generation review checklist")}>
             <strong>{text("生成前审阅", "Pre-generation review")}</strong>
             <div>
               {reviewItems.map((item) => (
                 <span className={item.tone} key={item.label}>
                   {item.tone === "attention" ? <AlertCircle size={14} /> : item.tone === "working" ? <Clock3 size={14} /> : <Check size={14} />}
-                  <small>{item.label}</small>
-                  <em>{item.value}</em>
-                  <b>{item.detail}</b>
+                  <small>{localizedRuntimeLabel(item.label, language)}</small>
+                  <em>{localizedRuntimeLabel(item.value, language)}</em>
+                  <b>{localizedRuntimeLabel(item.detail, language)}</b>
                 </span>
               ))}
             </div>
@@ -2542,12 +2747,12 @@ function BriefScreen({
         {errorMessage ? (
           <div className="kv-inline-error" role="alert">
             <AlertCircle size={18} />
-            <span>{errorMessage}</span>
+            <span>{localizedErrorMessage(errorMessage, language)}</span>
           </div>
         ) : null}
         {hasCurrentProject ? (
           <button className="kv-home-current-project" onClick={onOpenStudio} type="button">
-            继续编辑：{currentProject.title}
+            {text("继续编辑：", "Continue editing: ")}{currentProject.title}
             <ChevronRight size={16} />
           </button>
         ) : null}
@@ -2636,20 +2841,21 @@ function BriefScreen({
                   {filteredVoices.map((profile) => {
                     const active = selectedVoice === profile.id;
                     const playing = previewingVoice === profile.id;
+                    const profileCopy = localizedVoiceCopy(profile, language);
                     return (
                       <article className={active ? "active" : ""} key={profile.id}>
                         <button onClick={() => chooseVoice(profile.id)} type="button">
-                          <i>{profile.shortLabel.slice(0, 1)}</i>
-                          <span><strong>{profile.label}</strong><small>{profile.description}</small><em>{profile.useCase}</em></span>
+                          <i>{profileCopy.shortLabel.slice(0, 1)}</i>
+                          <span><strong>{profileCopy.label}</strong><small>{profileCopy.description}</small><em>{profileCopy.useCase}</em></span>
                         </button>
-                        <button aria-label={text(`试听 ${profile.label}`, `Preview ${profile.label}`)} disabled={Boolean(previewingVoice && !playing)} onClick={() => void toggleBriefVoicePreview(profile.id)} type="button">
+                        <button aria-label={text(`试听 ${profileCopy.label}`, `Preview ${profileCopy.label}`)} disabled={Boolean(previewingVoice && !playing)} onClick={() => void toggleBriefVoicePreview(profile.id)} type="button">
                           {playing && previewLoading ? <Loader2 className="kv-spin" size={15} /> : playing ? <Pause size={15} /> : <Play size={15} />}
                         </button>
                       </article>
                     );
                   })}
                 </div>
-                {previewError ? <p className="kv-settings-error">{previewError}</p> : null}
+                {previewError ? <p className="kv-settings-error">{localizedErrorMessage(previewError, language)}</p> : null}
               </>
             ) : null}
             {activeSettings === "language" ? (
@@ -2659,16 +2865,16 @@ function BriefScreen({
                   <p>{text("只控制视频的旁白、字幕和画面文案；页面界面语言请使用右上角的中英切换。", "Controls narration, captions, and on-screen copy only. Use the switch in the top-right corner to change the interface language.")}</p>
                 </div>
                 <div className="kv-language-options">
-                  {briefLanguageOptions.map((language) => (
+                  {briefLanguageOptions.map((option) => (
                     <button
-                      className={options.language === language.value ? "active" : ""}
-                      key={language.value}
-                      onClick={() => chooseLanguage(language.value)}
+                      className={options.language === option.value ? "active" : ""}
+                      key={option.value}
+                      onClick={() => chooseLanguage(option.value)}
                       type="button"
                     >
-                      <i>{language.code}</i>
-                      <span><strong>{language.label}</strong><small>{language.country} · {language.detail}</small></span>
-                      {options.language === language.value ? <Check size={17} /> : null}
+                      <i>{option.code}</i>
+                      <span><strong>{language === "zh-CN" ? option.label : option.labelEn}</strong><small>{language === "zh-CN" ? `${option.country} · ${option.detail}` : `${option.countryEn} · ${option.detailEn}`}</small></span>
+                      {options.language === option.value ? <Check size={17} /> : null}
                     </button>
                   ))}
                 </div>
@@ -2735,7 +2941,7 @@ function GeneratingScreen({
         <div style={{ width: `${progress}%` }} />
       </div>
       <div className="kv-generation-status-strip" role="status">
-        <span><strong>{elapsedGenerationLabel(startedAt, now)}</strong><small>{text("已用时间", "Elapsed")}</small></span>
+        <span><strong>{localizedRuntimeLabel(elapsedGenerationLabel(startedAt, now), language)}</strong><small>{text("已用时间", "Elapsed")}</small></span>
         <span><strong>{Math.min(activeIndex + 1, steps.length)} / {steps.length}</strong><small>{text("当前步骤", "Current step")}</small></span>
         <span><strong>{text("自动恢复", "Auto recovery")}</strong><small>{text("刷新后继续找回任务", "Resume after refresh")}</small></span>
       </div>
@@ -2771,7 +2977,7 @@ function Storyboard({
   onRegenerateAudio: (sceneNumbers?: number[]) => void;
   onGenerateClip: (sceneNumber: number) => void;
 }) {
-  const { text } = useUiCopy();
+  const { language, text } = useUiCopy();
   const scene = scenes.find((item) => item.sceneNumber === selectedScene) ?? scenes[0];
   const selectedMediaState = scene ? sceneMediaState(scene) : undefined;
   const selectedMediaDiagnostics = scene ? sceneMediaDiagnosticItems(scene) : [];
@@ -2865,14 +3071,14 @@ function Storyboard({
         <>
         <div className="kv-scene-readiness-card">
           <div>
-            <strong>S{scene.sceneNumber} · {sceneMediaStatusLabel(scene)}</strong>
+            <strong>S{scene.sceneNumber} · {localizedRuntimeLabel(sceneMediaStatusLabel(scene), language)}</strong>
             <span>{text("画面、配音齐全后才能稳定预览和导出；动态镜头可让关键场景更像真实视频。", "Complete visuals and narration for reliable preview and export. Motion clips make key scenes feel more like video.")}</span>
             <div className="kv-scene-media-diagnostics" aria-label={text("本场景素材诊断", "Scene asset diagnostics")}>
               {selectedMediaDiagnostics.map((item) => (
                 <span className={item.status} key={item.key}>
                   {item.status === "ready" ? <Check size={13} /> : item.status === "optional" ? <Clapperboard size={13} /> : <AlertCircle size={13} />}
-                  <strong>{item.label}</strong>
-                  <small>{item.detail}</small>
+                  <strong>{localizedRuntimeLabel(item.label, language)}</strong>
+                  <small>{localizedRuntimeLabel(item.detail, language)}</small>
                 </span>
               ))}
             </div>
@@ -2922,7 +3128,7 @@ function Storyboard({
                 <Sparkles size={15} />
                 <span>{text("进入转场", "Transition in")}</span>
                 <select
-                  aria-label={`场景 ${scene.sceneNumber} 进入转场`}
+                  aria-label={text(`场景 ${scene.sceneNumber} 进入转场`, `Scene ${scene.sceneNumber} transition in`)}
                   disabled={isBusy}
                   onChange={(event) => {
                     const nextKind = event.target.value as SceneTransitionKind;
@@ -2931,26 +3137,26 @@ function Storyboard({
                   }}
                   value={transitionKind}
                 >
-                  {transitionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  {transitionOptions.map((option) => <option key={option.value} value={option.value}>{language === "zh-CN" ? option.label : transitionEnglish[option.value]}</option>)}
                 </select>
               </label>
               <label className="kv-transition-control">
                 <span>{text("时长", "Duration")}</span>
                 <select
-                  aria-label={`场景 ${scene.sceneNumber} 转场时长`}
+                  aria-label={text(`场景 ${scene.sceneNumber} 转场时长`, `Scene ${scene.sceneNumber} transition duration`)}
                   disabled={isBusy || transitionKind === "cut"}
                   onChange={(event) => setTransitionDuration(Number(event.target.value))}
                   value={transitionDuration}
                 >
                   {![0.25, 0.5, 0.65, 0.75, 1, 1.2].includes(transitionDuration) ? (
-                    <option value={transitionDuration}>{transitionDuration} 秒</option>
+                    <option value={transitionDuration}>{text(`${transitionDuration} 秒`, `${transitionDuration} sec`)}</option>
                   ) : null}
-                  <option value="0.25">0.25 秒</option>
-                  <option value="0.5">0.5 秒</option>
-                  <option value="0.65">0.65 秒 · 自然</option>
-                  <option value="0.75">0.75 秒</option>
-                  <option value="1">1 秒</option>
-                  <option value="1.2">1.2 秒 · 舒缓</option>
+                  <option value="0.25">{text("0.25 秒", "0.25 sec")}</option>
+                  <option value="0.5">{text("0.5 秒", "0.5 sec")}</option>
+                  <option value="0.65">{text("0.65 秒 · 自然", "0.65 sec · Natural")}</option>
+                  <option value="0.75">{text("0.75 秒", "0.75 sec")}</option>
+                  <option value="1">{text("1 秒", "1 sec")}</option>
+                  <option value="1.2">{text("1.2 秒 · 舒缓", "1.2 sec · Relaxed")}</option>
                 </select>
               </label>
               <button
@@ -2973,7 +3179,7 @@ function Storyboard({
           <label className="kv-move-to-control">
             <span>{text("移到", "Move to")}</span>
             <select
-              aria-label={`场景 ${scene.sceneNumber} 目标位置`}
+              aria-label={text(`场景 ${scene.sceneNumber} 目标位置`, `Scene ${scene.sceneNumber} target position`)}
               disabled={isBusy}
               onChange={(event) => {
                 const targetSceneNumber = Number(event.target.value);
@@ -2987,20 +3193,20 @@ function Storyboard({
             </select>
           </label>
           <button
-            aria-label="拆分当前场景"
+            aria-label={text("拆分当前场景", "Split current scene")}
             disabled={isBusy || scenes.length >= 20 || scene.durationSeconds < 4 || scene.voiceover.trim().length < 8}
             onClick={() => onMutate({ operation: "split", sceneNumber: scene.sceneNumber })}
-            title="按旁白拆分为两个镜头"
+            title={text("按旁白拆分为两个镜头", "Split into two shots by narration")}
             type="button"
           ><Scissors size={16} /></button>
           <button
-            aria-label="与后一场景合并"
+            aria-label={text("与后一场景合并", "Merge with next scene")}
             disabled={isBusy || scene.sceneNumber === scenes.length || scene.durationSeconds + (scenes[scene.sceneNumber]?.durationSeconds ?? 0) > 20}
             onClick={() => onMutate({ operation: "merge-next", sceneNumber: scene.sceneNumber })}
-            title="与后一场景合并"
+            title={text("与后一场景合并", "Merge with next scene")}
             type="button"
           ><Combine size={16} /></button>
-          <button aria-label="复制场景" disabled={isBusy || scenes.length >= 20} onClick={() => onMutate({ operation: "duplicate", sceneNumber: scene.sceneNumber })} title="复制场景" type="button"><Copy size={16} /></button>
+          <button aria-label={text("复制场景", "Duplicate scene")} disabled={isBusy || scenes.length >= 20} onClick={() => onMutate({ operation: "duplicate", sceneNumber: scene.sceneNumber })} title={text("复制场景", "Duplicate scene")} type="button"><Copy size={16} /></button>
           {confirmDelete ? (
             <div className="kv-delete-confirm">
               <span>{text(`删除 S${scene.sceneNumber}？`, `Delete S${scene.sceneNumber}?`)}</span>
@@ -3018,7 +3224,7 @@ function Storyboard({
           const mediaState = sceneMediaState(scene);
           return (
           <button
-            aria-label={`场景 ${scene.sceneNumber} ${scene.title}，拖动可调整顺序`}
+            aria-label={text(`场景 ${scene.sceneNumber} ${scene.title}，拖动可调整顺序`, `Scene ${scene.sceneNumber} ${scene.title}. Drag to reorder`)}
             className={[
               scene.sceneNumber === selectedScene ? "active" : "",
               !mediaState.ready ? "needs-media" : "",
@@ -3047,7 +3253,7 @@ function Storyboard({
               onPointerDown={(event) => startPointerDrag(event, scene.sceneNumber)}
               onPointerMove={movePointerDrag}
               onPointerUp={finishPointerDrag}
-              title="拖动调整顺序"
+              title={text("拖动调整顺序", "Drag to reorder")}
             ><GripVertical size={15} /></span>
             {scenePreviewAsset(scene) ? (
               <span
@@ -3061,12 +3267,12 @@ function Storyboard({
             <strong>{scene.title}</strong>
             <small>{text(`${scene.durationSeconds} 秒`, `${scene.durationSeconds} sec`)}</small>
             <span className={`kv-scene-media-status ${mediaState.ready ? "ready" : "partial"}`}>
-              {sceneMediaStatusLabel(scene)}
+              {localizedRuntimeLabel(sceneMediaStatusLabel(scene), language)}
             </span>
-            <span className="kv-scene-asset-dots" aria-label={`场景 ${scene.sceneNumber} 素材状态`}>
+            <span className="kv-scene-asset-dots" aria-label={text(`场景 ${scene.sceneNumber} 素材状态`, `Scene ${scene.sceneNumber} asset status`)}>
               {sceneMediaDiagnosticItems(scene).map((item) => (
-                <i className={item.status} key={item.key} title={`${item.label}：${item.detail}`}>
-                  {item.label}
+                <i className={item.status} key={item.key} title={`${localizedRuntimeLabel(item.label, language)}: ${localizedRuntimeLabel(item.detail, language)}`}>
+                  {localizedRuntimeLabel(item.label, language)}
                 </i>
               ))}
             </span>
@@ -3093,7 +3299,7 @@ function ScenePanel({
   onSave: (sceneNumber: number, edits: SceneTextEdits) => void;
   onVoiceChange: (sceneNumbers: number[], voice: NarrationVoice) => void;
 }) {
-  const { text } = useUiCopy();
+  const { language, text } = useUiCopy();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<SceneTextEdits>({ title: "", voiceover: "", visualPrompt: "", motionPrompt: "" });
   const [selectedVoice, setSelectedVoice] = useState<NarrationVoice>(DEFAULT_NARRATION_VOICE);
@@ -3146,6 +3352,7 @@ function ScenePanel({
     ? scenes.some((item) => selectedVoice !== (item.style.narrationVoice ?? DEFAULT_NARRATION_VOICE))
     : Boolean(scene) && selectedVoice !== (scene?.style.narrationVoice ?? DEFAULT_NARRATION_VOICE);
   const voiceProfile = narrationVoiceProfile(selectedVoice);
+  const voiceCopy = localizedVoiceCopy(voiceProfile, language);
   const targetSceneNumbers = voiceScope === "all"
     ? scenes.map((item) => item.sceneNumber)
     : scene ? [scene.sceneNumber] : [];
@@ -3235,7 +3442,7 @@ function ScenePanel({
               <span><Volume2 size={15} /> {text("企业配音", "Narration voice")}</span>
               <p>{text("试听后可应用到当前场景或整片；应用时会重新生成配音。", "Preview a voice, then apply it to this scene or the full video. Narration will be regenerated.")}</p>
             </div>
-            <div aria-label="配音应用范围" className="kv-voice-scope" role="group">
+            <div aria-label={text("配音应用范围", "Narration scope")} className="kv-voice-scope" role="group">
               <button aria-pressed={voiceScope === "scene"} className={voiceScope === "scene" ? "active" : ""} onClick={() => setVoiceScope("scene")} type="button">{text("当前场景", "Current scene")}</button>
               <button aria-pressed={voiceScope === "all"} className={voiceScope === "all" ? "active" : ""} onClick={() => setVoiceScope("all")} type="button">{text("整片", "Full video")}</button>
             </div>
@@ -3244,6 +3451,7 @@ function ScenePanel({
             {narrationVoiceProfiles.map((profile) => {
               const active = selectedVoice === profile.id;
               const playing = previewingVoice === profile.id;
+              const profileCopy = localizedVoiceCopy(profile, language);
               return (
                 <article className={active ? "active" : ""} key={profile.id}>
                   <button
@@ -3254,15 +3462,15 @@ function ScenePanel({
                     type="button"
                   >
                     <i aria-hidden="true"><Mic2 size={16} /></i>
-                    <span><strong>{profile.label}</strong><small>{profile.description}</small></span>
-                    <em>{profile.useCase}</em>
+                    <span><strong>{profileCopy.label}</strong><small>{profileCopy.description}</small></span>
+                    <em>{profileCopy.useCase}</em>
                   </button>
                   <button
-                    aria-label={`${playing ? "停止" : "试听"}${profile.label}`}
+                    aria-label={playing ? text(`停止试听 ${profileCopy.label}`, `Stop previewing ${profileCopy.label}`) : text(`试听 ${profileCopy.label}`, `Preview ${profileCopy.label}`)}
                     className="kv-voice-preview"
                     disabled={isBusy || Boolean(previewingVoice && !playing)}
                     onClick={() => void toggleVoicePreview(profile.id)}
-                    title={`${playing ? "停止" : "试听"}${profile.label}`}
+                    title={playing ? text(`停止试听 ${profileCopy.label}`, `Stop previewing ${profileCopy.label}`) : text(`试听 ${profileCopy.label}`, `Preview ${profileCopy.label}`)}
                     type="button"
                   >
                     {playing && previewLoading ? <Loader2 className="kv-spin" size={15} /> : playing ? <Pause size={15} /> : <Play size={15} />}
@@ -3273,12 +3481,12 @@ function ScenePanel({
             })}
           </div>
           <div className="kv-voice-apply-row">
-            <p aria-live="polite">{previewError ?? `${voiceProfile.shortLabel} · ${voiceProfile.useCase}`}</p>
+            <p aria-live="polite">{previewError ? localizedErrorMessage(previewError, language) : `${voiceCopy.shortLabel} · ${voiceCopy.useCase}`}</p>
             <button
               className="kv-primary"
               disabled={isBusy || !voiceChanged || targetSceneNumbers.length === 0}
               onClick={() => onVoiceChange(targetSceneNumbers, selectedVoice)}
-              title={voiceProfile.description}
+              title={voiceCopy.description}
               type="button"
             >
               {isBusy ? <Loader2 className="kv-spin" size={16} /> : <Check size={16} />}
@@ -3344,6 +3552,7 @@ function ScenePanel({
 }
 
 function StoryboardBoard({ scenes }: { scenes: Scene[] }) {
+  const { text } = useUiCopy();
   return (
     <section className="kv-board">
       {scenes.map((scene) => {
@@ -3356,8 +3565,8 @@ function StoryboardBoard({ scenes }: { scenes: Scene[] }) {
               style={{ backgroundImage: `url("${image.url}")` }}
             />
           ) : scene.assets.some((asset) => asset.type === "clip" && asset.url)
-            ? <div className="kv-board-image empty clip"><FileVideo2 size={24} /><span>已使用视频片段</span></div>
-            : <div className="kv-board-image empty"><ImagePlus size={24} /><span>等待生成画面</span></div>}
+            ? <div className="kv-board-image empty clip"><FileVideo2 size={24} /><span>{text("已使用视频片段", "Video clip in use")}</span></div>
+            : <div className="kv-board-image empty"><ImagePlus size={24} /><span>{text("等待生成画面", "Waiting for visual")}</span></div>}
           <div>
             <span>S{scene.sceneNumber}</span>
             <strong>{scene.title}</strong>
@@ -3387,7 +3596,7 @@ function VisualCandidateComparison({
   onClose: () => void;
   onAdopt: (assetId: string) => void;
 }) {
-  const { text } = useUiCopy();
+  const { language, text } = useUiCopy();
   const candidates = scene.assets.filter((asset) => asset.type === "thumbnail" && asset.metadata?.candidate === true && asset.url);
   const currentImage = scene.assets.find((asset) => asset.type === "image" && asset.url);
   const initialIndex = Math.max(0, candidates.findIndex((asset) => asset.id === initialCandidateId));
@@ -3467,17 +3676,17 @@ function VisualCandidateComparison({
             <strong>{scene.title}</strong>
             <p>{compactText(String(selected.metadata?.candidateInstruction ?? scene.visualPrompt), scene.visualPrompt, 190)}</p>
           </div>
-          <div className="kv-visual-candidate-nav" aria-label="切换候选画面">
+          <div className="kv-visual-candidate-nav" aria-label={text("切换候选画面", "Switch candidate visual")}>
             <button aria-label={text("上一张候选画面", "Previous candidate")} disabled={candidates.length < 2} onClick={() => selectCandidate(-1)} title={text("上一张", "Previous")} type="button"><ArrowLeft size={17} /></button>
             <div>{candidates.map((candidate, index) => (
-              <button aria-label={`查看候选画面 ${index + 1}`} className={index === selectedIndex ? "active" : ""} key={candidate.id} onClick={() => setSelectedIndex(index)} type="button" />
+              <button aria-label={text(`查看候选画面 ${index + 1}`, `View candidate visual ${index + 1}`)} className={index === selectedIndex ? "active" : ""} key={candidate.id} onClick={() => setSelectedIndex(index)} type="button" />
             ))}</div>
             <button aria-label={text("下一张候选画面", "Next candidate")} disabled={candidates.length < 2} onClick={() => selectCandidate(1)} title={text("下一张", "Next")} type="button"><ArrowRight size={17} /></button>
           </div>
         </div>
         <footer>
-          <div className="kv-visual-adopt-impact" aria-label="采用候选后的影响">
-            {impactItems.map((item) => <span key={item}><Check size={13} />{item}</span>)}
+          <div className="kv-visual-adopt-impact" aria-label={text("采用候选后的影响", "Impact of applying candidate")}>
+            {impactItems.map((item) => <span key={item}><Check size={13} />{localizedRuntimeLabel(item, language)}</span>)}
           </div>
           <div className="kv-visual-compare-actions">
             <button disabled={isBusy} onClick={onClose} type="button">{text("继续比较", "Keep comparing")}</button>
@@ -3510,7 +3719,7 @@ function SceneAssetsPanel({
   onUpload: () => void;
   onRemove: (assetId: string) => void;
 }) {
-  const { text } = useUiCopy();
+  const { language, text } = useUiCopy();
   const assets = scene.assets.filter((asset) => ["image", "thumbnail", "clip", "audio"].includes(asset.type));
   const candidateCount = assets.filter((asset) => asset.type === "thumbnail" && asset.metadata?.candidate === true).length;
   const hasCurrentImage = assets.some((asset) => asset.type === "image" && asset.url);
@@ -3572,9 +3781,14 @@ function SceneAssetsPanel({
             placeholder={text("例如：保持人物和构图不变，改成明亮自然光，去掉画面中的文字。", "For example: keep the subject and composition, use bright natural light, and remove text from the image.")}
             value={candidateInstruction}
           />
-          <div className="kv-candidate-presets" aria-label="快捷视觉修改">
-            {["整体更明亮通透", "去掉画面内的文字", "突出主体，弱化背景", "增强电影级光影"].map((preset) => (
-              <button key={preset} onClick={() => setCandidateInstruction(preset)} type="button">{preset}</button>
+          <div className="kv-candidate-presets" aria-label={text("快捷视觉修改", "Quick visual changes")}>
+            {[
+              ["整体更明亮通透", "Brighter and more airy"],
+              ["去掉画面内的文字", "Remove text from the image"],
+              ["突出主体，弱化背景", "Emphasize the subject and soften the background"],
+              ["增强电影级光影", "Add cinematic lighting"]
+            ].map(([chinese, english]) => (
+              <button key={chinese} onClick={() => setCandidateInstruction(language === "zh-CN" ? chinese : english)} type="button">{text(chinese, english)}</button>
             ))}
           </div>
           <footer>
@@ -3604,34 +3818,34 @@ function SceneAssetsPanel({
               )}
               <div>
                 <strong>{String(asset.metadata?.name ?? (asset.type === "image" ? text("当前画面", "Current visual") : asset.type === "thumbnail" ? text("候选画面", "Candidate visual") : asset.type === "clip" ? text("视频片段", "Video clip") : text("场景配音", "Scene narration")))}</strong>
-                <span>{asset.type === "image" ? text("使用中", "In use") : asset.type === "thumbnail" ? text("可对比采用", "Available to compare") : asset.type === "clip" ? text("视频", "Video") : text("音频", "Audio")} · {fileSizeLabel(asset.metadata?.size)}</span>
-                <div className={`kv-asset-state ${stateBadge.tone}`} aria-label="素材采用状态">
-                  <small>{stateBadge.label}</small>
-                  <em>{stateBadge.detail}</em>
+                <span>{asset.type === "image" ? text("使用中", "In use") : asset.type === "thumbnail" ? text("可对比采用", "Available to compare") : asset.type === "clip" ? text("视频", "Video") : text("音频", "Audio")} · {localizedRuntimeLabel(fileSizeLabel(asset.metadata?.size), language)}</span>
+                <div className={`kv-asset-state ${stateBadge.tone}`} aria-label={text("素材采用状态", "Asset usage status")}>
+                  <small>{localizedRuntimeLabel(stateBadge.label, language)}</small>
+                  <em>{localizedRuntimeLabel(stateBadge.detail, language)}</em>
                 </div>
                 {usageItems.length > 0 ? (
-                  <div className="kv-asset-usage" aria-label="素材用途">
-                    {usageItems.map((item) => <small key={item}>{item}</small>)}
+                  <div className="kv-asset-usage" aria-label={text("素材用途", "Asset usage")}>
+                    {usageItems.map((item) => <small key={item}>{localizedRuntimeLabel(item, language)}</small>)}
                   </div>
                 ) : null}
                 {audioQualityItems.length > 0 ? (
-                  <div className="kv-asset-audio-quality" aria-label="配音质量信息">
-                    {audioQualityItems.map((item) => <small key={item}>{item}</small>)}
+                  <div className="kv-asset-audio-quality" aria-label={text("配音质量信息", "Narration quality information")}>
+                    {audioQualityItems.map((item) => <small key={item}>{localizedRuntimeLabel(item, language)}</small>)}
                   </div>
                 ) : null}
               </div>
               <div className="kv-asset-actions">
                 {asset.type === "thumbnail" && asset.metadata?.candidate === true ? (
-                  <button className="compare" disabled={isBusy} onClick={() => setComparisonId(asset.id)} title="与当前画面大图对比" type="button">
+                  <button className="compare" disabled={isBusy} onClick={() => setComparisonId(asset.id)} title={text("与当前画面大图对比", "Compare with current visual")} type="button">
                     <Eye size={15} />{text("对比", "Compare")}
                   </button>
                 ) : null}
                 {asset.type === "thumbnail" && asset.metadata?.candidate === true ? (
-                  <button className="adopt" disabled={isBusy} onClick={() => onAdoptCandidate(asset.id)} title="采用为当前画面并创建新版本" type="button">
+                  <button className="adopt" disabled={isBusy} onClick={() => onAdoptCandidate(asset.id)} title={text("采用为当前画面并创建新版本", "Use as current visual and create a new version")} type="button">
                     <Check size={15} />{text("采用", "Use")}
                   </button>
                 ) : null}
-                <button aria-label={`移除 ${String(asset.metadata?.name ?? asset.type)}`} className="remove" disabled={isBusy} onClick={() => onRemove(asset.id)} title="从当前版本移除" type="button">
+                <button aria-label={text(`移除 ${String(asset.metadata?.name ?? asset.type)}`, `Remove ${String(asset.metadata?.name ?? asset.type)}`)} className="remove" disabled={isBusy} onClick={() => onRemove(asset.id)} title={text("从当前版本移除", "Remove from current version")} type="button">
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -3681,7 +3895,7 @@ function ProductionSettingsPanel({
   onUploadFile: (type: "logo" | "music", file: File) => void;
   onRemove: (type: "logo" | "music") => void;
 }) {
-  const { text } = useUiCopy();
+  const { language, text } = useUiCopy();
   const [musicVolume, setMusicVolume] = useState(settings.musicVolume);
   const [logoSize, setLogoSize] = useState(settings.logoSize);
   const summary = productionSummaryItems({ settings, durationSeconds, logo, music });
@@ -3737,16 +3951,16 @@ function ProductionSettingsPanel({
         </div>
         <span>{text("预览与 MP4 同步", "Synced with preview and MP4")}</span>
       </div>
-      <div className="kv-production-summary" aria-label="成片输出摘要">
+      <div className="kv-production-summary" aria-label={text("成片输出摘要", "Production output summary")}>
         {summary.map((item) => (
           <span key={item.label}>
-            <small>{item.label}</small>
-            <strong>{item.value}</strong>
-            <em>{item.detail}</em>
+            <small>{localizedRuntimeLabel(item.label, language)}</small>
+            <strong>{localizedRuntimeLabel(item.value, language)}</strong>
+            <em>{localizedRuntimeLabel(item.detail, language)}</em>
           </span>
         ))}
       </div>
-      <div className="kv-production-impact" aria-label="成片设置导出影响">
+      <div className="kv-production-impact" aria-label={text("成片设置导出影响", "Production settings export impact")}>
         <div>
           <strong>{text("导出影响预览", "Export impact")}</strong>
           <span>{text("这些设置会直接进入播放器预览和 MP4 合成。", "These settings apply directly to the player preview and MP4 render.")}</span>
@@ -3756,9 +3970,9 @@ function ProductionSettingsPanel({
             <li className={item.status === "ready" ? "ready" : "muted"} key={item.label}>
               {item.status === "ready" ? <Check size={15} /> : <AlertCircle size={15} />}
               <span>
-                <small>{item.label}</small>
-                <strong>{item.value}</strong>
-                <em>{item.detail}</em>
+                <small>{localizedRuntimeLabel(item.label, language)}</small>
+                <strong>{localizedRuntimeLabel(item.value, language)}</strong>
+                <em>{localizedRuntimeLabel(item.detail, language)}</em>
               </span>
             </li>
           ))}
@@ -3776,7 +3990,7 @@ function ProductionSettingsPanel({
               type="checkbox"
             />
           </label>
-          <div className="kv-segmented" aria-label="字幕样式">
+          <div className="kv-segmented" aria-label={text("字幕样式", "Caption style")}>
             {(["minimal", "boxed", "highlight"] as const).map((style) => (
               <button
                 className={settings.captionStyle === style ? "active" : ""}
@@ -3792,7 +4006,7 @@ function ProductionSettingsPanel({
         </div>
         <div className="kv-production-control">
           <div className="kv-production-control-title"><SlidersHorizontal size={17} /><strong>{text("播放速度", "Playback speed")}</strong></div>
-          <div className="kv-segmented" aria-label="播放速度">
+          <div className="kv-segmented" aria-label={text("播放速度", "Playback speed")}>
             {([0.75, 1, 1.25, 1.5] as const).map((rate) => (
               <button
                 className={settings.playbackRate === rate ? "active" : ""}
@@ -3831,7 +4045,7 @@ function ProductionSettingsPanel({
           </label>
           <div className="kv-production-subcontrol">
             <span>{text("旁白时自动压低音乐", "Lower music under narration")}</span>
-            <div className="kv-segmented" aria-label="旁白音乐避让">
+            <div className="kv-segmented" aria-label={text("旁白音乐避让", "Narration music ducking")}>
               {(["off", "balanced", "strong"] as const).map((mode) => (
                 <button
                   className={settings.musicDucking === mode ? "active" : ""}
@@ -3878,6 +4092,7 @@ function ProductionSettingsPanel({
 }
 
 function PlanVisualDiff({ change, scene, editPlanId }: { change: EditChange; scene: Scene; editPlanId: string }) {
+  const { text } = useUiCopy();
   const image = scenePreviewAsset(scene);
   const preview = planPreviewAsset(scene, editPlanId);
   const visualRegeneration = change.regenerate.some((type) => ["image", "clip", "thumbnail"].includes(type));
@@ -3893,9 +4108,9 @@ function PlanVisualDiff({ change, scene, editPlanId }: { change: EditChange; sce
       : { backgroundColor: afterColor };
 
   return (
-    <div className="kv-plan-visual-diff" aria-label={`场景 ${change.sceneNumber} 画面对比`}>
+    <div className="kv-plan-visual-diff" aria-label={text(`场景 ${change.sceneNumber} 画面对比`, `Scene ${change.sceneNumber} visual comparison`)}>
       <figure>
-        <figcaption>当前画面</figcaption>
+        <figcaption>{text("当前画面", "Current visual")}</figcaption>
         <div
           className={`kv-plan-frame${image ? " has-image" : ""}`}
           style={image ? { backgroundImage: `url("${image.url}")` } : { backgroundColor: beforeColor }}
@@ -3905,21 +4120,21 @@ function PlanVisualDiff({ change, scene, editPlanId }: { change: EditChange; sce
       </figure>
       <ArrowRight aria-hidden="true" size={16} />
       <figure>
-        <figcaption>修改后</figcaption>
+        <figcaption>{text("修改后", "After changes")}</figcaption>
         <div
           className={`kv-plan-frame after${preview || canShowDraftTextPreview || (!visualRegeneration && image) ? " has-image" : ""}${afterIsLight && !preview ? " light" : ""}${canShowDraftTextPreview ? " text-preview" : ""}`}
           style={afterFrameStyle}
         >
-          {preview ? <span className="kv-plan-preview-ready"><Check size={13} />真实预览</span> : canShowDraftTextPreview ? (
+          {preview ? <span className="kv-plan-preview-ready"><Check size={13} />{text("真实预览", "Rendered preview")}</span> : canShowDraftTextPreview ? (
             <>
-              <span className="kv-plan-preview-ready draft"><Check size={13} />文字预览</span>
+              <span className="kv-plan-preview-ready draft"><Check size={13} />{text("文字预览", "Text preview")}</span>
               <strong>{change.after.title}</strong>
-              {visualRegeneration ? <small>可继续生成真实画面</small> : null}
+              {visualRegeneration ? <small>{text("可继续生成真实画面", "A rendered visual can still be generated")}</small> : null}
             </>
           ) : visualRegeneration ? (
-            <><ImagePlus size={18} /><strong>{change.after.title}</strong><small>确认后生成新画面</small></>
+            <><ImagePlus size={18} /><strong>{change.after.title}</strong><small>{text("确认后生成新画面", "Generate a new visual after approval")}</small></>
           ) : (
-            <><Check size={18} /><strong>沿用当前画面</strong></>
+            <><Check size={18} /><strong>{text("沿用当前画面", "Keep current visual")}</strong></>
           )}
         </div>
       </figure>
@@ -3928,29 +4143,35 @@ function PlanVisualDiff({ change, scene, editPlanId }: { change: EditChange; sce
 }
 
 function ChangeCard({ change, scene, editPlanId }: { change: EditChange; scene?: Scene; editPlanId: string }) {
+  const { language, text } = useUiCopy();
   const changedFields = [
     {
-      label: "标题",
+      key: "title",
+      label: text("标题", "Title"),
       before: change.before.title,
       after: change.after.title
     },
     {
-      label: "旁白",
+      key: "voiceover",
+      label: text("旁白", "Narration"),
       before: change.before.voiceover,
       after: change.after.voiceover
     },
     {
-      label: "配音音色",
+      key: "voice",
+      label: text("配音音色", "Voice"),
       before: narrationVoiceProfile(change.before.narrationVoice).label,
       after: narrationVoiceProfile(change.after.narrationVoice).label
     },
     {
-      label: "画面方向",
+      key: "visual",
+      label: text("画面方向", "Visual direction"),
       before: change.before.visualPrompt,
       after: change.after.visualPrompt
     },
     {
-      label: "镜头运动",
+      key: "motion",
+      label: text("镜头运动", "Camera motion"),
       before: change.before.motionPrompt,
       after: change.after.motionPrompt
     }
@@ -3960,13 +4181,13 @@ function ChangeCard({ change, scene, editPlanId }: { change: EditChange; scene?:
     <article className="kv-change">
       <div className="kv-change-heading">
         <div>
-          <strong>场景 {change.sceneNumber}</strong>
-          <span>{change.status === "updated" ? "已更新" : change.status === "added" ? "新增" : change.status === "deleted" ? "删除" : "未改动"}</span>
+          <strong>{text(`场景 ${change.sceneNumber}`, `Scene ${change.sceneNumber}`)}</strong>
+          <span>{change.status === "updated" ? text("已更新", "Updated") : change.status === "added" ? text("新增", "Added") : change.status === "deleted" ? text("删除", "Deleted") : text("未改动", "Unchanged")}</span>
         </div>
         {change.regenerate.length > 0 ? (
-          <div className="kv-regenerate-tags" aria-label="需要重新生成的素材">
+          <div className="kv-regenerate-tags" aria-label={text("需要重新生成的素材", "Assets to regenerate")}>
             {Array.from(new Set(change.regenerate)).map((type) => (
-              <span key={type}>{assetTypeLabel(type)}</span>
+              <span key={type}>{localizedRuntimeLabel(assetTypeLabel(type), language)}</span>
             ))}
           </div>
         ) : null}
@@ -3974,29 +4195,29 @@ function ChangeCard({ change, scene, editPlanId }: { change: EditChange; scene?:
       {scene ? <PlanVisualDiff change={change} editPlanId={editPlanId} scene={scene} /> : null}
       <div className="kv-change-diffs">
         {changedFields.map((field) => (
-          <section className={field.label === "旁白" ? "accent" : ""} key={field.label}>
+          <section className={field.key === "voiceover" ? "accent" : ""} key={field.key}>
             <span>{field.label}</span>
             <div className="kv-before-after">
               <div>
-                <small>当前</small>
-                <p>{compactText(field.before, "无", field.label === "画面方向" ? 110 : 88)}</p>
+                <small>{text("当前", "Current")}</small>
+                <p>{compactText(localizedRuntimeLabel(field.before ?? "", language), text("无", "None"), field.key === "visual" ? 110 : 88)}</p>
               </div>
               <ArrowRight aria-hidden="true" size={15} />
               <div>
-                <small>修改后</small>
-                <p>{compactText(field.after, "无", field.label === "画面方向" ? 110 : 88)}</p>
+                <small>{text("修改后", "After")}</small>
+                <p>{compactText(localizedRuntimeLabel(field.after ?? "", language), text("无", "None"), field.key === "visual" ? 110 : 88)}</p>
               </div>
             </div>
           </section>
         ))}
       </div>
       <details className="kv-change-details">
-        <summary>查看完整制作说明</summary>
+        <summary>{text("查看完整制作说明", "View full production instructions")}</summary>
         <dl>
-          <div><dt>标题</dt><dd>{change.after.title}</dd></div>
-          {change.after.voiceover ? <div><dt>旁白</dt><dd>{change.after.voiceover}</dd></div> : null}
-          <div><dt>画面方向</dt><dd>{change.after.visualPrompt}</dd></div>
-          {change.after.motionPrompt ? <div><dt>镜头运动</dt><dd>{change.after.motionPrompt}</dd></div> : null}
+          <div><dt>{text("标题", "Title")}</dt><dd>{change.after.title}</dd></div>
+          {change.after.voiceover ? <div><dt>{text("旁白", "Narration")}</dt><dd>{change.after.voiceover}</dd></div> : null}
+          <div><dt>{text("画面方向", "Visual direction")}</dt><dd>{change.after.visualPrompt}</dd></div>
+          {change.after.motionPrompt ? <div><dt>{text("镜头运动", "Camera motion")}</dt><dd>{change.after.motionPrompt}</dd></div> : null}
         </dl>
       </details>
     </article>
@@ -4014,6 +4235,7 @@ function StructureSceneCard({
   durationSeconds: number;
   willRegenerate?: boolean;
 }) {
+  const { text } = useUiCopy();
   const image = !willRegenerate ? scenePreviewAsset(scene) : undefined;
   return (
     <div
@@ -4022,23 +4244,24 @@ function StructureSceneCard({
     >
       {willRegenerate ? <ImagePlus size={16} /> : null}
       <strong>{title}</strong>
-      <span>{durationSeconds} 秒{willRegenerate ? " · 更新画面与配音" : ""}</span>
+      <span>{text(`${durationSeconds} 秒${willRegenerate ? " · 更新画面与配音" : ""}`, `${durationSeconds} sec${willRegenerate ? " · regenerate visual and narration" : ""}`)}</span>
     </div>
   );
 }
 
 function StructurePlanPreview({ mutation, scenes }: { mutation: SceneStructureMutation; scenes: Scene[] }) {
+  const { text } = useUiCopy();
   if (!mutation || !["split", "merge-next", "insert", "delete"].includes(mutation.operation)) return null;
   const source = scenes.find((scene) => scene.sceneNumber === mutation.sceneNumber);
   if (!source) return null;
 
   if (mutation.operation === "insert") {
     return (
-      <div className="kv-structure-preview" aria-label={`场景 ${mutation.sceneNumber} 新增场景预览`}>
-        <div><small>定位场景</small><StructureSceneCard durationSeconds={source.durationSeconds} scene={source} title={source.title} /></div>
+      <div className="kv-structure-preview" aria-label={text(`场景 ${mutation.sceneNumber} 新增场景预览`, `Scene ${mutation.sceneNumber} insertion preview`)}>
+        <div><small>{text("定位场景", "Anchor scene")}</small><StructureSceneCard durationSeconds={source.durationSeconds} scene={source} title={source.title} /></div>
         <ArrowRight aria-hidden="true" size={16} />
         <div>
-          <small>{mutation.placement === "before" ? "在此之前新增" : "在此之后新增"}</small>
+          <small>{mutation.placement === "before" ? text("在此之前新增", "Insert before") : text("在此之后新增", "Insert after")}</small>
           <StructureSceneCard durationSeconds={mutation.scene.durationSeconds} title={mutation.scene.title} willRegenerate />
         </div>
       </div>
@@ -4047,10 +4270,10 @@ function StructurePlanPreview({ mutation, scenes }: { mutation: SceneStructureMu
 
   if (mutation.operation === "delete") {
     return (
-      <div className="kv-structure-preview" aria-label={`场景 ${mutation.sceneNumber} 删除预览`}>
-        <div><small>当前</small><StructureSceneCard durationSeconds={source.durationSeconds} scene={source} title={source.title} /></div>
+      <div className="kv-structure-preview" aria-label={text(`场景 ${mutation.sceneNumber} 删除预览`, `Scene ${mutation.sceneNumber} deletion preview`)}>
+        <div><small>{text("当前", "Current")}</small><StructureSceneCard durationSeconds={source.durationSeconds} scene={source} title={source.title} /></div>
         <ArrowRight aria-hidden="true" size={16} />
-        <div><small>修改后</small><div className="kv-structure-removed">该场景将被删除，其余场景自动重新编号</div></div>
+        <div><small>{text("修改后", "After")}</small><div className="kv-structure-removed">{text("该场景将被删除，其余场景自动重新编号", "This scene will be deleted and the remaining scenes renumbered")}</div></div>
       </div>
     );
   }
@@ -4058,11 +4281,11 @@ function StructurePlanPreview({ mutation, scenes }: { mutation: SceneStructureMu
   if (mutation.operation === "split") {
     const split = sceneSplitPreview(source);
     return (
-      <div className="kv-structure-preview" aria-label={`场景 ${mutation.sceneNumber} 拆分预览`}>
-        <div><small>当前</small><StructureSceneCard durationSeconds={source.durationSeconds} scene={source} title={source.title} /></div>
+      <div className="kv-structure-preview" aria-label={text(`场景 ${mutation.sceneNumber} 拆分预览`, `Scene ${mutation.sceneNumber} split preview`)}>
+        <div><small>{text("当前", "Current")}</small><StructureSceneCard durationSeconds={source.durationSeconds} scene={source} title={source.title} /></div>
         <ArrowRight aria-hidden="true" size={16} />
         <div>
-          <small>拆分后</small>
+          <small>{text("拆分后", "After split")}</small>
           <div className="kv-structure-stack">
             <StructureSceneCard durationSeconds={split.first.durationSeconds} title={split.first.title} willRegenerate />
             <StructureSceneCard durationSeconds={split.second.durationSeconds} title={split.second.title} willRegenerate />
@@ -4075,9 +4298,9 @@ function StructurePlanPreview({ mutation, scenes }: { mutation: SceneStructureMu
   const next = scenes.find((scene) => scene.sceneNumber === mutation.sceneNumber + 1);
   if (!next) return null;
   return (
-    <div className="kv-structure-preview" aria-label={`场景 ${mutation.sceneNumber} 合并预览`}>
+    <div className="kv-structure-preview" aria-label={text(`场景 ${mutation.sceneNumber} 合并预览`, `Scene ${mutation.sceneNumber} merge preview`)}>
       <div>
-        <small>当前</small>
+        <small>{text("当前", "Current")}</small>
         <div className="kv-structure-stack">
           <StructureSceneCard durationSeconds={source.durationSeconds} scene={source} title={source.title} />
           <StructureSceneCard durationSeconds={next.durationSeconds} scene={next} title={next.title} />
@@ -4085,7 +4308,7 @@ function StructurePlanPreview({ mutation, scenes }: { mutation: SceneStructureMu
       </div>
       <ArrowRight aria-hidden="true" size={16} />
       <div>
-        <small>合并后</small>
+        <small>{text("合并后", "After merge")}</small>
         <StructureSceneCard
           durationSeconds={source.durationSeconds + next.durationSeconds}
           title={/\p{Script=Han}/u.test(source.title + next.title) ? `${source.title}与${next.title}` : `${source.title} + ${next.title}`}
@@ -4140,7 +4363,7 @@ function ChatPanel({
     ? pendingPlan.changes.length + (pendingPlan.projectTitle ? 1 : 0) + productionAssetChangeLabels(pendingPlan).length + productionSettingLabels(pendingPlan.productionSettings).length + editPlanOperations(pendingPlan).length
     : 0;
   const visualPreviewState = { total: visualSceneNumbers.length, ready: previewedSceneNumbers.length };
-  const applyLabel = pendingPlan ? planApplyLabel(pendingPlan, visualPreviewState) : text("应用修改", "Apply changes");
+  const applyLabel = pendingPlan ? localizedRuntimeLabel(planApplyLabel(pendingPlan, visualPreviewState), language) : text("应用修改", "Apply changes");
   const checklist = pendingPlan ? planReviewChecklist(pendingPlan, visualPreviewState) : [];
   const requestTrail = pendingPlan ? planRequestTrail(pendingPlan) : undefined;
   const coverageState = pendingPlan ? planCoverageState(pendingPlan, scenes) : undefined;
@@ -4173,8 +4396,8 @@ function ChatPanel({
             <p>{message.content}</p>
             {message.editPlan ? (
               <div className="kv-plan-summary">
-                <span>{message.editPlan.affectedScenes.length > 0 ? `影响场景：${message.editPlan.affectedScenes.join(", ")}` : "作用范围：全片设置"}</span>
-                <span>{uniqueRegenerate(message.editPlan) ? `重新生成：${uniqueRegenerate(message.editPlan)}` : "无需重做场景素材"}</span>
+                <span>{message.editPlan.affectedScenes.length > 0 ? text(`影响场景：${message.editPlan.affectedScenes.join(", ")}`, `Affected scenes: ${message.editPlan.affectedScenes.join(", ")}`) : text("作用范围：全片设置", "Scope: full-video settings")}</span>
+                <span>{uniqueRegenerate(message.editPlan) ? text(`重新生成：${uniqueRegenerate(message.editPlan)}`, `Regenerate: ${localizedRuntimeLabel(uniqueRegenerate(message.editPlan), language)}`) : text("无需重做场景素材", "No scene assets need regeneration")}</span>
               </div>
             ) : null}
           </div>
@@ -4190,41 +4413,41 @@ function ChatPanel({
                 <Clock3 size={16} />
                 <strong>{text("方案待确认，当前视频还没有被改动", "Plan awaiting approval. The video has not changed yet.")}</strong>
               </div>
-              <p>{applyBlocker ?? text("确认后才会创建新版本并生成受影响素材；继续输入会先调整这个方案。", "A new version and affected assets are created only after approval. More input will refine this plan first.")}</p>
+              <p>{applyBlocker ? localizedRuntimeLabel(applyBlocker, language) : text("确认后才会创建新版本并生成受影响素材；继续输入会先调整这个方案。", "A new version and affected assets are created only after approval. More input will refine this plan first.")}</p>
               <div className="kv-plan-state-grid">
-                <span><strong>{planScopeLabel(pendingPlan, scenes.length)}</strong><small>{text("作用范围", "Scope")}</small></span>
-                <span><strong>{planAssetWorkLabel(pendingPlan)}</strong><small>{text("确认后执行", "Runs after approval")}</small></span>
+                <span><strong>{localizedRuntimeLabel(planScopeLabel(pendingPlan, scenes.length), language)}</strong><small>{text("作用范围", "Scope")}</small></span>
+                <span><strong>{localizedRuntimeLabel(planAssetWorkLabel(pendingPlan), language)}</strong><small>{text("确认后执行", "Runs after approval")}</small></span>
               </div>
-              <div className="kv-plan-checklist" aria-label="执行前检查">
+              <div className="kv-plan-checklist" aria-label={text("执行前检查", "Preflight checks")}>
                 {checklist.map((item) => (
                   <span className={item.tone} key={item.label}>
                     <Check size={13} />
-                    <strong>{item.value}</strong>
-                    <small>{item.label}</small>
+                    <strong>{localizedRuntimeLabel(item.value, language)}</strong>
+                    <small>{localizedRuntimeLabel(item.label, language)}</small>
                   </span>
                 ))}
               </div>
               {coverageState ? (
-                <div className={`kv-plan-coverage ${coverageState.tone}`} aria-label="方案覆盖校验">
+                <div className={`kv-plan-coverage ${coverageState.tone}`} aria-label={text("方案覆盖校验", "Plan coverage check")}>
                   {coverageState.tone === "attention" ? <AlertCircle size={15} /> : <Check size={15} />}
                   <div>
-                    <strong>{coverageState.title}</strong>
-                    <span>{coverageState.detail}</span>
+                    <strong>{localizedRuntimeLabel(coverageState.title, language)}</strong>
+                    <span>{localizedRuntimeLabel(coverageState.detail, language)}</span>
                   </div>
                 </div>
               ) : null}
               {languageReview ? (
-                <div className={`kv-plan-language ${languageReview.ready ? "ready" : "attention"}`} aria-label="中文化字段校验">
+                <div className={`kv-plan-language ${languageReview.ready ? "ready" : "attention"}`} aria-label={text("语言字段校验", "Language field check")}>
                   <div>
                     {languageReview.ready ? <Check size={15} /> : <AlertCircle size={15} />}
                     <strong>{text("语言审阅", "Language review")}</strong>
-                    <span>{languageReview.summary}</span>
+                    <span>{localizedRuntimeLabel(languageReview.summary, language)}</span>
                   </div>
-                  <p>{languageReview.detail}</p>
+                  <p>{localizedRuntimeLabel(languageReview.detail, language)}</p>
                   <div>
                     {languageReview.sceneChecks.map((check) => (
                       <span className={check.ready ? "ready" : "attention"} key={check.sceneNumber}>
-                        场景 {check.sceneNumber}
+                        {text(`场景 ${check.sceneNumber}`, `Scene ${check.sceneNumber}`)}
                       </span>
                     ))}
                   </div>
@@ -4232,7 +4455,7 @@ function ChatPanel({
               ) : null}
             </div>
             {requestTrail ? (
-              <div className="kv-plan-request-trail" aria-label="方案对话脉络">
+              <div className="kv-plan-request-trail" aria-label={text("方案对话脉络", "Plan request history")}>
                 <div>
                   <MessageSquareText size={15} />
                   <strong>{text("方案脉络", "Request history")}</strong>
@@ -4251,13 +4474,13 @@ function ChatPanel({
             <p>{pendingPlan.summary}</p>
             {editPlanOperations(pendingPlan).length > 0 ? (
               <>
-                <div className="kv-structure-plan" aria-label="时间线结构修改">
+                <div className="kv-structure-plan" aria-label={text("时间线结构修改", "Timeline structure changes")}>
                   <Layers3 size={17} />
                   <div>
                     <strong>{text("时间线结构", "Timeline structure")}</strong>
                     {editPlanOperations(pendingPlan).map((operation, index) => (
                       <span key={`${operation.operation}-${operation.sceneId ?? operation.sceneNumber}-${index}`}>
-                        {index + 1}. {sceneStructureLabel(operation)}
+                        {index + 1}. {localizedRuntimeLabel(sceneStructureLabel(operation) ?? "", language)}
                       </span>
                     ))}
                   </div>
@@ -4272,19 +4495,19 @@ function ChatPanel({
               </>
             ) : null}
             {productionSettingLabels(pendingPlan.productionSettings).length > 0 ? (
-              <div className="kv-production-plan" aria-label="全片设置修改">
+              <div className="kv-production-plan" aria-label={text("全片设置修改", "Full-video setting changes")}>
                 <strong>{text("全片设置", "Full-video settings")}</strong>
-                <div>{productionSettingLabels(pendingPlan.productionSettings).map((label) => <span key={label}>{label}</span>)}</div>
+                <div>{productionSettingLabels(pendingPlan.productionSettings).map((label) => <span key={label}>{localizedRuntimeLabel(label, language)}</span>)}</div>
               </div>
             ) : null}
             {productionAssetChangeLabels(pendingPlan).length > 0 ? (
-              <div className="kv-production-plan" aria-label="全片素材修改">
+              <div className="kv-production-plan" aria-label={text("全片素材修改", "Full-video asset changes")}>
                 <strong>{text("全片素材", "Full-video assets")}</strong>
-                <div>{productionAssetChangeLabels(pendingPlan).map((label) => <span key={label}>{label}</span>)}</div>
+                <div>{productionAssetChangeLabels(pendingPlan).map((label) => <span key={label}>{localizedRuntimeLabel(label, language)}</span>)}</div>
               </div>
             ) : null}
             {pendingPlan.projectTitle ? (
-              <div className="kv-production-plan" aria-label="项目名称修改">
+              <div className="kv-production-plan" aria-label={text("项目名称修改", "Project name change")}>
                 <strong>{text("项目名称", "Project name")}</strong>
                 <div><span>{pendingPlan.projectTitle}</span></div>
               </div>
@@ -4327,31 +4550,31 @@ function ChatPanel({
         <div className="kv-chat-draft-note" role="note">
           <div>
             {applyBlocker ? <AlertCircle size={15} /> : <Check size={15} />}
-            <span>{applyBlocker ?? "正在审核修改方案。输入补充要求会继续改方案；点击应用才会真正改片。"}</span>
+            <span>{applyBlocker ? localizedRuntimeLabel(applyBlocker, language) : text("正在审核修改方案。输入补充要求会继续改方案；点击应用才会真正改片。", "Reviewing the edit plan. Additional input will refine it; the video changes only after you apply it.")}</span>
           </div>
           <div className="kv-chat-draft-actions">
             <button className="kv-primary" disabled={applyDisabled} onClick={onApply} type="button">
               {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Check size={15} />}
-              {applyBlocker ? "先修正方案" : applyLabel}
+              {applyBlocker ? text("先修正方案", "Fix plan first") : applyLabel}
             </button>
             <button disabled={isBusy} onClick={onCancel} type="button">{text("取消方案", "Cancel plan")}</button>
           </div>
         </div>
       ) : null}
-      <div className={`kv-chat-input-mode ${inputMode.tone}`} role="note" aria-label="发送后会发生什么">
+      <div className={`kv-chat-input-mode ${inputMode.tone}`} role="note" aria-label={text("发送后会发生什么", "What happens after sending")}>
         <MessageSquareText size={14} />
         <div>
-          <strong>{inputMode.title}</strong>
-          <span>{inputMode.detail}</span>
+          <strong>{localizedRuntimeLabel(inputMode.title, language)}</strong>
+          <span>{localizedRuntimeLabel(inputMode.detail, language)}</span>
         </div>
       </div>
       {attachments.length > 0 ? (
-        <div className="kv-chat-attachments" aria-label="本次修改的参考素材">
+        <div className="kv-chat-attachments" aria-label={text("本次修改的参考素材", "References for this edit")}>
           {attachments.map((file, index) => (
             <span key={`${file.name}-${file.size}-${file.lastModified}`}>
               <Paperclip size={13} />
               <strong title={file.name}>{file.name}</strong>
-              <button aria-label={`移除 ${file.name}`} disabled={isBusy} onClick={() => onRemoveAttachment(index)} type="button"><X size={13} /></button>
+              <button aria-label={text(`移除 ${file.name}`, `Remove ${file.name}`)} disabled={isBusy} onClick={() => onRemoveAttachment(index)} type="button"><X size={13} /></button>
             </span>
           ))}
         </div>
@@ -4399,6 +4622,7 @@ function versionSceneSignature(scene?: Scene) {
 }
 
 function VersionSceneSide({ label, scene }: { label: string; scene?: Scene }) {
+  const { text } = useUiCopy();
   const image = scene?.assets.find((asset) => asset.type === "image" && asset.url);
   const clip = scene?.assets.find((asset) => asset.type === "clip" && asset.url);
   return (
@@ -4410,13 +4634,14 @@ function VersionSceneSide({ label, scene }: { label: string; scene?: Scene }) {
       >
         {!image ? clip ? <FileVideo2 size={20} /> : <ImagePlus size={20} /> : null}
       </div>
-      <strong>{scene?.title ?? "没有这个场景"}</strong>
-      <small>{scene ? `${scene.durationSeconds} 秒` : "已删除"}</small>
+      <strong>{scene?.title ?? text("没有这个场景", "Scene not present")}</strong>
+      <small>{scene ? text(`${scene.durationSeconds} 秒`, `${scene.durationSeconds} sec`) : text("已删除", "Deleted")}</small>
     </div>
   );
 }
 
 function VersionComparison({ preview }: { preview: ProjectVersionPreview }) {
+  const { language, text } = useUiCopy();
   const count = Math.max(preview.version.scenes.length, preview.currentVersion.scenes.length);
   const selectedSummary = versionMediaSummary(preview.version);
   const currentSummary = versionMediaSummary(preview.currentVersion);
@@ -4433,41 +4658,41 @@ function VersionComparison({ preview }: { preview: ProjectVersionPreview }) {
   const restoreDeltaItems = versionRestoreDeltaItems(preview);
 
   return (
-    <section className="kv-version-comparison" aria-label="版本场景比较">
+    <section className="kv-version-comparison" aria-label={text("版本场景比较", "Version scene comparison")}>
       <div className="kv-version-comparison-summary">
         <div>
-          <span>所选版本</span>
-          <strong>{preview.version.scenes.length} 个场景 · {durationLabel(preview.version.durationSeconds)}</strong>
-          <small className={mediaCompletenessClass(selectedSummary)}>{mediaCompletenessLabel(selectedSummary)}</small>
-          <small>{versionOutputLabel(preview.version)}</small>
+          <span>{text("所选版本", "Selected version")}</span>
+          <strong>{text(`${preview.version.scenes.length} 个场景`, `${preview.version.scenes.length} scenes`)} · {localizedRuntimeLabel(durationLabel(preview.version.durationSeconds), language)}</strong>
+          <small className={mediaCompletenessClass(selectedSummary)}>{localizedRuntimeLabel(mediaCompletenessLabel(selectedSummary), language)}</small>
+          <small>{localizedRuntimeLabel(versionOutputLabel(preview.version), language)}</small>
         </div>
         <ArrowRight size={17} />
         <div>
-          <span>当前版本</span>
-          <strong>{preview.currentVersion.scenes.length} 个场景 · {durationLabel(preview.currentVersion.durationSeconds)}</strong>
-          <small className={mediaCompletenessClass(currentSummary)}>{mediaCompletenessLabel(currentSummary)}</small>
-          <small>{versionOutputLabel(preview.currentVersion)}</small>
+          <span>{text("当前版本", "Current version")}</span>
+          <strong>{text(`${preview.currentVersion.scenes.length} 个场景`, `${preview.currentVersion.scenes.length} scenes`)} · {localizedRuntimeLabel(durationLabel(preview.currentVersion.durationSeconds), language)}</strong>
+          <small className={mediaCompletenessClass(currentSummary)}>{localizedRuntimeLabel(mediaCompletenessLabel(currentSummary), language)}</small>
+          <small>{localizedRuntimeLabel(versionOutputLabel(preview.currentVersion), language)}</small>
         </div>
       </div>
-      <p>{sameVersion ? "这是当前版本的完整分镜快照。" : preview.changeSummary.description}</p>
+      <p>{sameVersion ? text("这是当前版本的完整分镜快照。", "This is the complete storyboard snapshot for the current version.") : localizedRuntimeLabel(preview.changeSummary.description, language)}</p>
       {!sameVersion ? (
-        <div className="kv-version-restore-impact" aria-label="恢复版本影响">
-          <strong>恢复前确认</strong>
+        <div className="kv-version-restore-impact" aria-label={text("恢复版本影响", "Version restore impact")}>
+          <strong>{text("恢复前确认", "Confirm before restoring")}</strong>
           <div>
             {restoreImpactItems.map((item) => (
               <span key={item}>
                 <Check size={13} />
-                {item}
+                {localizedRuntimeLabel(item, language)}
               </span>
             ))}
           </div>
-          <section className="kv-version-restore-delta" aria-label="恢复后变化摘要">
-            <strong>恢复后变化</strong>
+          <section className="kv-version-restore-delta" aria-label={text("恢复后变化摘要", "Changes after restoring")}>
+            <strong>{text("恢复后变化", "After restore")}</strong>
             <div>
               {restoreDeltaItems.map((item) => (
                 <span className={item.tone} key={item.label}>
-                  <small>{item.label}</small>
-                  <em>{item.value}</em>
+                  <small>{localizedRuntimeLabel(item.label, language)}</small>
+                  <em>{localizedRuntimeLabel(item.value, language)}</em>
                 </span>
               ))}
             </div>
@@ -4477,11 +4702,11 @@ function VersionComparison({ preview }: { preview: ProjectVersionPreview }) {
       <div className="kv-version-scene-diffs">
         {visibleRows.map((row) => (
           <article key={`${row.sceneNumber}-${row.before?.id ?? "new"}-${row.after?.id ?? "removed"}`}>
-            <header><strong>场景 {row.sceneNumber}</strong><span className={`status-${row.status}`}>{row.status}</span></header>
+            <header><strong>{text(`场景 ${row.sceneNumber}`, `Scene ${row.sceneNumber}`)}</strong><span className={`status-${row.status}`}>{localizedRuntimeLabel(row.status, language)}</span></header>
             <div>
-              <VersionSceneSide label="所选版本" scene={row.before} />
+              <VersionSceneSide label={text("所选版本", "Selected version")} scene={row.before} />
               <ArrowRight aria-hidden="true" size={16} />
-              <VersionSceneSide label="当前版本" scene={row.after} />
+              <VersionSceneSide label={text("当前版本", "Current version")} scene={row.after} />
             </div>
           </article>
         ))}
@@ -4747,7 +4972,7 @@ function StudioScreen({
                 {text("工具", "Tools")}
               </button>
               {toolMenuOpen ? (
-                <div aria-label="工作室工具" className="kv-tool-menu" id="kv-studio-tool-menu" role="menu">
+                <div aria-label={text("工作室工具", "Studio tools")} className="kv-tool-menu" id="kv-studio-tool-menu" role="menu">
                   <span>{text("项目", "Project")}</span>
                   <button className={assetsOpen ? "active" : ""} disabled={isBusy} onClick={() => runTool(onToggleAssets)} role="menuitem" type="button">
                     {uploadProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <ImagePlus size={16} />}
@@ -4973,17 +5198,17 @@ function StudioScreen({
                     <article className={`status-${job.status}`} key={job.id}>
                       <div className="kv-export-summary">
                         <strong>{job.versionLabel ?? text(`版本 ${job.versionId.slice(0, 8)}`, `Version ${job.versionId.slice(0, 8)}`)}</strong>
-                        <span>{renderJobStatus(job)}</span>
+                        <span>{localizedRuntimeLabel(renderJobStatus(job), language)}</span>
                       </div>
-                      <time>{renderJobTime(job)}</time>
-                      {qualityLabel ? <p className="kv-export-quality"><Check size={14} />{qualityLabel}</p> : null}
+                      <time>{renderJobTime(job, language)}</time>
+                      {qualityLabel ? <p className="kv-export-quality"><Check size={14} />{localizedRuntimeLabel(qualityLabel, language)}</p> : null}
                       {metadataItems.length > 0 ? (
-                        <div className="kv-export-metadata" aria-label="成片校验信息">
-                          {metadataItems.map((item) => <span key={item}>{item}</span>)}
+                        <div className="kv-export-metadata" aria-label={text("成片校验信息", "Video validation details")}>
+                          {metadataItems.map((item) => <span key={item}>{localizedRuntimeLabel(item, language)}</span>)}
                         </div>
                       ) : null}
                       {active ? (
-                        <div className="kv-export-progress" aria-label={`导出进度 ${job.progress}%`}>
+                        <div className="kv-export-progress" aria-label={text(`导出进度 ${job.progress}%`, `Export progress ${job.progress}%`)}>
                           <span style={{ width: `${Math.max(4, job.progress)}%` }} />
                         </div>
                       ) : null}
@@ -4991,7 +5216,7 @@ function StudioScreen({
                       {recoveryAdvice ? (
                         <div className="kv-export-recovery" role="note">
                           <AlertCircle size={14} />
-                          <span>{recoveryAdvice}</span>
+                          <span>{localizedRuntimeLabel(recoveryAdvice, language)}</span>
                         </div>
                       ) : null}
                       <div className="kv-export-actions">
@@ -5049,7 +5274,7 @@ function StudioScreen({
         {view === "preview" ? (
           <>
             {missingSceneNumbers.length === 0 ? (
-              <KnowVideoPlayer className="kv-remotion-player" project={project} ref={playerRef} />
+              <KnowVideoPlayer className="kv-remotion-player" project={project} ref={playerRef} uiLanguage={language} />
             ) : (
               <section className="kv-preview missing-image">
                 <div className="kv-missing-visual">
@@ -7112,8 +7337,8 @@ export function WorkspaceClient({
       {stage === "studio" && errorMessage ? (
         <div className="kv-global-error" role="alert">
           <AlertCircle size={18} />
-          <span>{errorMessage}</span>
-          <button aria-label="关闭错误提示" onClick={() => setErrorMessage(undefined)} type="button"><X size={16} /></button>
+          <span>{localizedErrorMessage(errorMessage, uiLanguage)}</span>
+          <button aria-label={uiLanguage === "zh-CN" ? "关闭错误提示" : "Dismiss error"} onClick={() => setErrorMessage(undefined)} type="button"><X size={16} /></button>
         </div>
       ) : null}
       {stage === "brief" ? (
@@ -7230,8 +7455,8 @@ export function WorkspaceClient({
         }} role="presentation">
           <section aria-labelledby="video-cost-title" aria-modal="true" className="kv-confirm-modal kv-cost-modal" role="dialog">
             <div className="kv-confirm-icon"><Film size={21} /></div>
-            <h3 id="video-cost-title">确认生成动态镜头</h3>
-            <p>场景 {pendingVideoGeneration.sceneNumbers.join("、")} 将调用付费视频模型。系统只提交一次 3 秒请求，失败不会自动重试。</p>
+            <h3 id="video-cost-title">{uiLanguage === "zh-CN" ? "确认生成动态镜头" : "Confirm motion generation"}</h3>
+            <p>{uiLanguage === "zh-CN" ? `场景 ${pendingVideoGeneration.sceneNumbers.join("、")} 将调用付费视频模型。系统只提交一次 3 秒请求，失败不会自动重试。` : `Scene ${pendingVideoGeneration.sceneNumbers.join(", ")} will use a paid video model. The system submits one 3-second request and will not retry automatically if it fails.`}</p>
             <div className="kv-cost-options">
               {(["economy", "balanced"] as const).map((tier) => (
                 <label className={generationOptions.videoTier === tier ? "selected" : ""} key={tier}>
@@ -7241,21 +7466,21 @@ export function WorkspaceClient({
                     onChange={() => setGenerationOptions((current) => ({ ...current, videoTier: tier }))}
                     type="radio"
                   />
-                  <span><strong>{VIDEO_GENERATION_TIERS[tier].label}</strong><small>{VIDEO_GENERATION_TIERS[tier].resolution} · 3 秒</small></span>
-                  <b>最高约 {videoGenerationEstimateLabel(tier)}</b>
+                  <span><strong>{uiLanguage === "zh-CN" ? VIDEO_GENERATION_TIERS[tier].label : tier === "economy" ? "Economy" : "Balanced"}</strong><small>{VIDEO_GENERATION_TIERS[tier].resolution} · {uiLanguage === "zh-CN" ? "3 秒" : "3 sec"}</small></span>
+                  <b>{uiLanguage === "zh-CN" ? "最高约" : "Up to"} {videoGenerationEstimateLabel(tier)}</b>
                 </label>
               ))}
             </div>
-            <p className="kv-cost-note">这是按当前公开价格计算的最高预估，不包含静态画面与配音的少量用量。动态镜头会自动适配当前场景时长。</p>
+            <p className="kv-cost-note">{uiLanguage === "zh-CN" ? "这是按当前公开价格计算的最高预估，不包含静态画面与配音的少量用量。动态镜头会自动适配当前场景时长。" : "This is the maximum estimate based on current public pricing. It excludes minor image and narration usage. Motion clips are fitted to the current scene duration."}</p>
             <div>
-              <button disabled={isBusy} onClick={() => setPendingVideoGeneration(undefined)} type="button">取消</button>
+              <button disabled={isBusy} onClick={() => setPendingVideoGeneration(undefined)} type="button">{uiLanguage === "zh-CN" ? "取消" : "Cancel"}</button>
               <button className="kv-cost-confirm" disabled={isBusy} onClick={() => {
                 const request = pendingVideoGeneration;
                 const tier = generationOptions.videoTier;
                 setPendingVideoGeneration(undefined);
                 void generateVideoClips(request.sceneNumbers, tier);
               }} type="button">
-                <Film size={16} />确认，最高 {videoGenerationEstimateLabel(generationOptions.videoTier)}
+                <Film size={16} />{uiLanguage === "zh-CN" ? "确认，最高" : "Confirm, up to"} {videoGenerationEstimateLabel(generationOptions.videoTier)}
               </button>
             </div>
           </section>

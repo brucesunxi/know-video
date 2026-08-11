@@ -22,7 +22,7 @@ assert.match(worker, /const outputMetadata = await inspectRenderedOutput/);
 assert.match(worker, /metadata: \{\s*quality: "passed"/);
 assert.match(workspace, /function renderJobQualityLabel/);
 assert.match(workspace, /function renderJobMetadataItems/);
-assert.match(workspace, /aria-label="成片校验信息"/);
+assert.match(workspace, /aria-label=\{text\("成片校验信息", "Video validation details"\)\}/);
 assert.match(styles, /\.kv-export-quality/);
 assert.match(styles, /\.kv-export-metadata/);
 

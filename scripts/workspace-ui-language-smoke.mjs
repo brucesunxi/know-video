@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
+const player = fs.readFileSync(new URL("../app/video-player.tsx", import.meta.url), "utf8");
+const voices = fs.readFileSync(new URL("../lib/voice-profiles.ts", import.meta.url), "utf8");
 const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
 assert.match(workspace, /type UiLanguage = "zh-CN" \| "en"/);
@@ -15,6 +17,16 @@ assert.match(workspace, /Switch interface to Chinese/);
 assert.match(workspace, /Controls narration, captions, and on-screen copy only/);
 assert.match(workspace, /Continue creating or start a new video/);
 assert.match(workspace, /Conversational editing/);
+assert.match(workspace, /localizedVoiceCopy\(selectedVoiceProfile, language\)/);
+assert.match(workspace, /selectedLanguageOption\.labelEn/);
+assert.match(workspace, /uiLanguage=\{language\}/);
+assert.match(player, /uiLanguage\?: "zh-CN" \| "en"/);
+assert.match(player, /Loading scene visuals and narration/);
+assert.match(voices, /labelEn: "Clear energetic male"/);
+assert.match(voices, /labelEn: "Grounded brand male"/);
+assert.match(voices, /labelEn: "Professional female"/);
+assert.doesNotMatch(workspace, /(?:aria-label|title|placeholder)="[^"]*[\u3400-\u9fff][^"]*"/u);
+assert.doesNotMatch(player, />\s*[^<{]*[\u3400-\u9fff][^<{]*</u);
 assert.match(styles, /\.kv-ui-language-toggle/);
 
 console.log("Workspace UI language smoke checks passed.");

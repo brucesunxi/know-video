@@ -9,6 +9,11 @@ export const narrationVoiceProfiles: Array<{
   description: string;
   useCase: string;
   sampleText: string;
+  labelEn: string;
+  shortLabelEn: string;
+  descriptionEn: string;
+  useCaseEn: string;
+  sampleTextEn: string;
   azureVoice: string;
   pitch: number;
   direction: string;
@@ -20,6 +25,11 @@ export const narrationVoiceProfiles: Array<{
     description: "自然利落、富有行动感，不使用汇报腔或独白腔",
     useCase: "游戏介绍 · 科技发布 · 功能演示",
     sampleText: "踏进新的世界，观察环境、选择路线，用自己的操作破解挑战。下一局，会由你创造出完全不同的结果。",
+    labelEn: "Clear energetic male",
+    shortLabelEn: "Energetic male",
+    descriptionEn: "Clear, natural, and action-oriented delivery",
+    useCaseEn: "Game intros · Tech launches · Product demos",
+    sampleTextEn: "Step into a new world, read the environment, choose your path, and solve each challenge through your own decisions.",
     azureVoice: "zh-CN-YunxiNeural",
     pitch: -1,
     direction: "Clear, energetic Mandarin male trailer narration. Natural and action-oriented, with varied emphasis and short clean pauses. Avoid corporate presentation, product-demo cadence, dramatic monologue, audiobook, radio-host or sales-hype delivery."
@@ -31,6 +41,11 @@ export const narrationVoiceProfiles: Array<{
     description: "稳重可信、克制有分量，强调企业价值",
     useCase: "公司介绍 · 企业服务 · 品牌叙事",
     sampleText: "从战略到执行，我们用可靠的自动化能力连接每一个业务环节，让增长更清晰，让决策更从容。",
+    labelEn: "Grounded brand male",
+    shortLabelEn: "Brand male",
+    descriptionEn: "Calm, credible, and focused on business value",
+    useCaseEn: "Company profiles · Enterprise services · Brand stories",
+    sampleTextEn: "From strategy to execution, reliable automation connects every part of the business and makes growth easier to understand.",
     azureVoice: "zh-CN-YunyangNeural",
     pitch: -3,
     direction: "Grounded Mandarin male corporate brand narration. Calm, credible and restrained, with clear emphasis on business value. Avoid dramatic monologue, documentary gravitas and exaggerated advertising tone."
@@ -42,6 +57,11 @@ export const narrationVoiceProfiles: Array<{
     description: "专业亲和、表达清楚，适合现代企业内容",
     useCase: "服务介绍 · 客户案例 · 品牌沟通",
     sampleText: "更简单的协作，更智能的流程，让每一次客户沟通都准确、自然，并且值得信赖。",
+    labelEn: "Professional female",
+    shortLabelEn: "Business female",
+    descriptionEn: "Warm, professional, and easy to understand",
+    useCaseEn: "Service intros · Customer stories · Brand communication",
+    sampleTextEn: "Simpler collaboration and smarter workflows make every customer conversation clear, natural, and trustworthy.",
     azureVoice: "zh-CN-XiaoxiaoNeural",
     pitch: 0,
     direction: "Professional Mandarin female business explainer. Warm, articulate and composed, with a modern corporate presentation cadence. Avoid intimate monologue, audiobook and overly cheerful customer-service delivery."
