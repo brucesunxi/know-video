@@ -210,3 +210,49 @@ create index if not exists usage_events_project_created_idx
   on usage_events(project_id, created_at desc);
 create index if not exists usage_events_resource_created_idx
   on usage_events(resource_type, created_at desc);
+
+create table if not exists credit_accounts (
+  user_id uuid primary key references users(id) on delete cascade,
+  available_credits bigint not null default 0 check (available_credits >= 0),
+  reserved_credits bigint not null default 0 check (reserved_credits >= 0),
+  lifetime_purchased bigint not null default 0,
+  lifetime_consumed bigint not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists credit_purchases (
+  id uuid primary key,
+  user_id uuid not null references users(id) on delete cascade,
+  pack_id text not null,
+  credits bigint not null check (credits > 0),
+  amount_usd_cents integer not null check (amount_usd_cents > 0),
+  status text not null check (status in ('pending', 'paid', 'failed', 'refunded')),
+  payment_provider text,
+  provider_checkout_id text unique,
+  provider_payment_id text,
+  created_at timestamptz not null default now(),
+  paid_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists credit_ledger (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references users(id) on delete cascade,
+  event_type text not null,
+  credits_delta bigint not null,
+  balance_after bigint not null check (balance_after >= 0),
+  source_id text not null unique,
+  metadata_json jsonb not null default '{}',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists credit_purchases_user_created_idx
+  on credit_purchases(user_id, created_at desc);
+create unique index if not exists credit_purchases_checkout_idx
+  on credit_purchases(provider_checkout_id);
+create unique index if not exists credit_purchases_payment_idx
+  on credit_purchases(provider_payment_id)
+  where provider_payment_id is not null;
+create index if not exists credit_ledger_user_created_idx
+  on credit_ledger(user_id, created_at desc);

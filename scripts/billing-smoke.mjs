@@ -64,8 +64,9 @@ assert.match(estimateRoute, /estimateBilling/);
 
 const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
 assert.doesNotMatch(workspace, /996/);
-assert.match(workspace, /按量计费 · 查看价格/);
-assert.match(workspace, /账户充值与余额扣减上线后/);
+assert.match(workspace, /Credits · 购买/);
+assert.match(workspace, /购买 Credits/);
+assert.match(workspace, /\/api\/billing\/account/);
 
 const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 assert.match(styles, /\.kv-home-top-actions > \.kv-credit-pill \{[\s\S]*?width: auto;[\s\S]*?white-space: nowrap;/);

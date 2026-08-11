@@ -1065,6 +1065,12 @@ html[data-theme="dark"] .kv-ui-language-toggle {
   box-shadow: var(--shadow);
 }
 
+.kv-home-dialog.pricing {
+  width: min(920px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+}
+
 .kv-home-dialog h3,
 .kv-home-dialog p {
   margin: 0;
@@ -1139,6 +1145,188 @@ html[data-theme="dark"] .kv-ui-language-toggle {
   padding: 10px 14px;
   font-weight: 700;
   text-decoration: none;
+}
+
+.kv-pricing-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding-right: 42px;
+}
+
+.kv-pricing-heading > div {
+  min-width: 0;
+}
+
+.kv-pricing-heading > span {
+  display: grid;
+  min-width: 130px;
+  gap: 3px;
+  text-align: right;
+}
+
+.kv-pricing-heading > span strong {
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.kv-pricing-heading > span small {
+  color: var(--muted);
+}
+
+.kv-credit-pack-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kv-credit-pack-grid article {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 18px;
+}
+
+.kv-credit-pack-grid article.featured {
+  border-color: #49bfb0;
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.2);
+}
+
+.kv-pack-badge {
+  position: absolute;
+  top: -10px;
+  right: 12px;
+  border-radius: 999px;
+  background: #0f766e;
+  color: #fff;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.kv-pack-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kv-pack-title > strong {
+  font-size: 16px;
+}
+
+.kv-pack-title b {
+  white-space: nowrap;
+  font-size: 21px;
+}
+
+.kv-pack-title b small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.kv-pack-credits {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.kv-pack-credits strong {
+  font-size: 31px;
+  line-height: 1;
+}
+
+.kv-pack-credits span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.kv-credit-pack-grid p {
+  min-height: 42px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.kv-credit-pack-grid ul {
+  align-content: start;
+  padding: 0;
+  list-style: none;
+}
+
+.kv-credit-pack-grid li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.kv-credit-pack-grid li svg {
+  margin-top: 1px;
+  color: #0f766e;
+}
+
+.kv-credit-pack-grid button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 7px;
+  background: var(--ink);
+  color: var(--surface);
+  padding: 10px 12px;
+  font-weight: 780;
+}
+
+.kv-credit-pack-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.kv-billing-config-note {
+  border-radius: 7px;
+  background: #fff8eb;
+  color: #9a5b08 !important;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.kv-billing-config-note.success {
+  background: #e9f9f3;
+  color: #08745f !important;
+}
+
+.kv-billing-config-note.error {
+  background: #fff0ee;
+  color: #b33a2e !important;
+}
+
+.kv-credit-usage-guide {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kv-credit-usage-guide strong {
+  color: var(--text);
+}
+
+.kv-credit-usage-guide span {
+  white-space: nowrap;
 }
 
 .kv-credit-pill {
@@ -1353,6 +1541,30 @@ html[data-theme="dark"] .kv-credit-pill {
   border-color: #7c5d19;
   background: #2d2412;
   color: #f6c65b;
+}
+
+html[data-theme="dark"] .kv-credit-pack-grid article {
+  border-color: #394351;
+  background: #1c222b;
+}
+
+html[data-theme="dark"] .kv-credit-pack-grid article.featured {
+  border-color: #3ab9aa;
+}
+
+html[data-theme="dark"] .kv-billing-config-note {
+  background: #2d2412;
+  color: #f6c65b !important;
+}
+
+html[data-theme="dark"] .kv-billing-config-note.success {
+  background: #102d27;
+  color: #65d7bd !important;
+}
+
+html[data-theme="dark"] .kv-billing-config-note.error {
+  background: #351b1c;
+  color: #ff9b91 !important;
 }
 
 html[data-theme="dark"] .kv-generation-task-list article {
@@ -8740,6 +8952,43 @@ html[data-theme="dark"] .kv-user-menu {
 
   .kv-home-dialog-grid {
     grid-template-columns: 1fr;
+  }
+
+  .kv-home-dialog-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .kv-home-dialog,
+  .kv-home-dialog.pricing {
+    width: 100%;
+    max-height: 90dvh;
+    border-radius: 16px 16px 0 0;
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .kv-pricing-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 38px;
+  }
+
+  .kv-pricing-heading > span {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .kv-credit-pack-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kv-credit-pack-grid p {
+    min-height: 0;
+  }
+
+  .kv-pack-credits strong {
+    font-size: 28px;
   }
 
   .kv-brief-home {

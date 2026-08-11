@@ -79,6 +79,7 @@ import {
 } from "@/lib/voice-profiles";
 import { VIDEO_FPS } from "@/video/config";
 import { VIDEO_GENERATION_DURATION_SECONDS, VIDEO_GENERATION_TIERS, videoGenerationEstimateLabel } from "@/lib/video-cost-policy";
+import { creditPacks, usdPrice } from "@/lib/billing/packs";
 import type { ChatMessage, EditChange, EditPlan, GenerationOptions, GenerationReferenceAsset, GenerationTaskListItem, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
@@ -1516,6 +1517,97 @@ function Shell({
   const appRef = useRef<HTMLElement>(null);
   const [homeDialog, setHomeDialog] = useState<HomeDialog>();
   const [darkMode, setDarkMode] = useState(false);
+  const [creditBalance, setCreditBalance] = useState<number>();
+  const [paymentsConfigured, setPaymentsConfigured] = useState<boolean>();
+  const [checkoutPackId, setCheckoutPackId] = useState<string>();
+  const [billingNotice, setBillingNotice] = useState<{ tone: "info" | "success" | "error"; message: string }>();
+  const loadCreditAccount = async () => {
+    const response = await fetch("/api/billing/account", { cache: "no-store" });
+    const data = await response.json().catch(() => ({})) as {
+      account?: { availableCredits: number };
+      paymentConfigured?: boolean;
+    };
+    if (!response.ok || !data.account) return;
+    setCreditBalance(data.account.availableCredits);
+    setPaymentsConfigured(data.paymentConfigured === true);
+  };
+  useEffect(() => {
+    void loadCreditAccount();
+  }, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const billingResult = params.get("billing");
+    const purchaseId = params.get("purchaseId");
+    if (!billingResult) return;
+    setHomeDialog("pricing");
+    window.history.replaceState({}, "", window.location.pathname);
+    if (billingResult === "cancelled") {
+      setBillingNotice({
+        tone: "info",
+        message: text("付款已取消，未产生费用。", "Payment was cancelled. You were not charged.")
+      });
+      return;
+    }
+    if (!purchaseId) return;
+    let stopped = false;
+    setBillingNotice({
+      tone: "info",
+      message: text("付款已提交，正在等待 Xendit 确认并更新余额…", "Payment submitted. Waiting for Xendit to confirm and update your balance…")
+    });
+    void (async () => {
+      for (let attempt = 0; attempt < 10 && !stopped; attempt += 1) {
+        const response = await fetch(`/api/billing/purchases/${encodeURIComponent(purchaseId)}`, { cache: "no-store" });
+        const data = await response.json().catch(() => ({})) as { purchase?: { status: string; credits: number } };
+        if (data.purchase?.status === "paid") {
+          await loadCreditAccount();
+          if (!stopped) setBillingNotice({
+            tone: "success",
+            message: text(
+              `${data.purchase.credits.toLocaleString("en-US")} credits 已到账。`,
+              `${data.purchase.credits.toLocaleString("en-US")} credits have been added.`
+            )
+          });
+          return;
+        }
+        if (data.purchase?.status === "failed") {
+          if (!stopped) setBillingNotice({
+            tone: "error",
+            message: text("付款未完成，余额没有变化。", "Payment was not completed. Your balance is unchanged.")
+          });
+          return;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+      }
+      if (!stopped) setBillingNotice({
+        tone: "info",
+        message: text("支付确认仍在处理中，确认完成后余额会自动更新。", "Payment confirmation is still processing. Your balance will update after confirmation.")
+      });
+    })();
+    return () => {
+      stopped = true;
+    };
+  }, []);
+  const startCreditCheckout = async (packId: string) => {
+    setCheckoutPackId(packId);
+    setBillingNotice(undefined);
+    try {
+      const response = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ packId })
+      });
+      const data = await response.json().catch(() => ({})) as { checkoutUrl?: string; error?: string };
+      if (!response.ok || !data.checkoutUrl) throw new Error(data.error || "Checkout could not be started.");
+      window.location.assign(data.checkoutUrl);
+    } catch (error) {
+      setCheckoutPackId(undefined);
+      setBillingNotice({
+        tone: "error",
+        message: text("暂时无法打开付款页面，请稍后重试。", "Unable to open checkout right now. Please try again.")
+      });
+      console.error(error);
+    }
+  };
   useEffect(() => {
     appRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -1561,7 +1653,6 @@ function Shell({
       <span>{language === "zh-CN" ? "EN" : "中文"}</span>
     </button>
   );
-
   return (
     <main className={`kv-shell${stage === "brief" ? " kv-shell-brief" : ""}`}>
       <aside className="kv-sidebar">
@@ -1630,7 +1721,9 @@ function Shell({
               {languageToggle}
               <button className="kv-credit-pill" onClick={() => setHomeDialog("pricing")} type="button">
                 <CreditCard size={14} />
-                {text("按量计费 · 查看价格", "Usage billing · View pricing")}
+                {creditBalance === undefined
+                  ? text("Credits · 购买", "Credits · Buy")
+                  : text(`${creditBalance.toLocaleString("en-US")} credits · 购买`, `${creditBalance.toLocaleString("en-US")} credits · Buy`)}
               </button>
               <button aria-label={darkMode ? "浅色模式" : "夜间模式"} onClick={() => setDarkMode((enabled) => !enabled)} title={darkMode ? "浅色模式" : "夜间模式"} type="button"><Moon size={18} /></button>
               <button aria-label={text("通知", "Notifications")} onClick={() => setHomeDialog("notifications")} type="button"><Bell size={18} /></button>
@@ -1691,18 +1784,58 @@ function Shell({
           <div className="kv-home-dialog-backdrop" role="presentation" onMouseDown={(event) => {
             if (event.target === event.currentTarget) setHomeDialog(undefined);
           }}>
-            <section aria-modal="true" className="kv-home-dialog" role="dialog">
+            <section aria-modal="true" className={`kv-home-dialog${homeDialog === "pricing" ? " pricing" : ""}`} role="dialog">
               <button aria-label={text("关闭", "Close")} className="kv-home-dialog-close" onClick={() => setHomeDialog(undefined)} type="button"><X size={18} /></button>
               {homeDialog === "pricing" ? (
                 <>
                   <span className="kv-eyebrow">{text("价格", "Pricing")}</span>
-                  <h3>{text("按实际用量结算", "Pay for actual usage")}</h3>
-                  <div className="kv-home-dialog-grid">
-                    <span><strong>100</strong><small>{text("点数 = ¥1", "credits = ¥1")}</small></span>
-                    <span><strong>{text("成功", "Success")}</strong><small>{text("任务才计量", "tasks are metered")}</small></span>
-                    <span><strong>MP4</strong><small>{text("合成已包含", "render included")}</small></span>
+                  <div className="kv-pricing-heading">
+                    <div>
+                      <h3>{text("购买 Credits", "Buy credits")}</h3>
+                      <p>{text("美元一次性付款，购买额度长期有效。仅对成功完成的生成结果计费。", "One-time payment in USD. Purchased credits do not expire, and only successful outputs are charged.")}</p>
+                    </div>
+                    <span><strong>{(creditBalance ?? 0).toLocaleString("en-US")}</strong><small>{text("当前余额", "Current balance")}</small></span>
                   </div>
-                  <p>{text("当前处于用量计量阶段：成功完成的脚本、画面、配音和动态镜头会记录实际用量，失败任务不计量。账户充值与余额扣减上线后，这里才会显示真实可用点数。", "Usage metering is currently active: completed scripts, images, narration, and motion clips are recorded, while failed tasks are not metered. A real available balance will appear here once wallet funding and credit settlement launch.")}</p>
+                  <div className="kv-credit-pack-grid">
+                    {creditPacks.map((pack) => (
+                      <article className={pack.featured ? "featured" : ""} key={pack.id}>
+                        {pack.featured ? <span className="kv-pack-badge">{text("最受欢迎", "Most popular")}</span> : null}
+                        <div className="kv-pack-title"><strong>{pack.name}</strong><b>{usdPrice(pack.priceUsdCents)} <small>USD</small></b></div>
+                        <div className="kv-pack-credits"><strong>{pack.credits.toLocaleString("en-US")}</strong><span>credits</span></div>
+                        <p>{text(
+                          pack.id === "starter" ? "适合体验完整视频工作流" : pack.id === "creator" ? "适合稳定创作与小型团队" : "适合持续批量生产",
+                          pack.description
+                        )}</p>
+                        <ul>
+                          <li><Check size={15} />{text(`最多约 ${pack.standardVideoEstimate} 支标准 30 秒视频`, `Up to about ${pack.standardVideoEstimate} standard 30-sec videos`)}</li>
+                          <li><Check size={15} />{text(`包含 ${pack.bonusCredits.toLocaleString("en-US")} 赠送 credits`, `Includes ${pack.bonusCredits.toLocaleString("en-US")} bonus credits`)}</li>
+                          <li><Check size={15} />{text("失败的生成任务不扣 credits", "Failed generation tasks use no credits")}</li>
+                        </ul>
+                        <button
+                          disabled={paymentsConfigured !== true || checkoutPackId !== undefined}
+                          onClick={() => void startCreditCheckout(pack.id)}
+                          type="button"
+                        >
+                          {checkoutPackId === pack.id ? <Loader2 className="kv-spin" size={16} /> : <CreditCard size={16} />}
+                          {checkoutPackId === pack.id
+                            ? text("正在打开…", "Opening…")
+                            : paymentsConfigured === true
+                              ? text(`购买 ${usdPrice(pack.priceUsdCents)}`, `Buy for ${usdPrice(pack.priceUsdCents)}`)
+                              : text("支付暂不可用", "Checkout unavailable")}
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                  {billingNotice ? <p aria-live="polite" className={`kv-billing-config-note ${billingNotice.tone}`}>{billingNotice.message}</p> : null}
+                  {paymentsConfigured === false ? <p className="kv-billing-config-note info">{text("Xendit 尚未配置完成，付款功能暂不可用。", "Xendit is not configured yet, so checkout is currently unavailable.")}</p> : null}
+                  <div className="kv-credit-usage-guide">
+                    <strong>{text("Credits 如何使用", "How credits are used")}</strong>
+                    <span>{text("标准画面 20", "Standard image 20")}</span>
+                    <span>{text("高清画面 80", "Premium image 80")}</span>
+                    <span>{text("旁白每秒 1", "Narration 1/sec")}</span>
+                    <span>{text("动态镜头 300 起", "Motion clip from 300")}</span>
+                    <span>{text("MP4 合成已包含", "MP4 render included")}</span>
+                  </div>
                 </>
               ) : null}
               {homeDialog === "demo" ? (
