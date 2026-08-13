@@ -12,7 +12,10 @@ vm.runInNewContext(output, {
   module,
   exports: module.exports,
   require: (specifier) => specifier === "@/lib/generation-resume"
-    ? { mediaAssetStatus: (scenes) => scenes.every((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type) && asset.url) && scene.assets.some((asset) => asset.type === "audio" && asset.url)) ? "ready" : "partial" }
+    ? {
+      sceneHasVisualAsset: (scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type) && asset.url),
+      mediaAssetStatus: (scenes) => scenes.every((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type) && asset.url) && scene.assets.some((asset) => asset.type === "audio" && asset.url)) ? "ready" : "partial"
+    }
     : {}
 });
 const { applySceneStructureMutation, applySceneStructureOperations } = module.exports;

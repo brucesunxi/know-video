@@ -16,6 +16,7 @@ import { musicMixEnvelope, type NarrationFrameRange } from "@/lib/audio-mix";
 import { clipDurationInFrames, resolvedClipPlaybackRate } from "@/lib/clip-timing";
 import { readableTextColor, sceneAccentColor } from "@/lib/color-contrast";
 import { activeNarrationCaption, narrationAudioPlaybackRate, narrationDurationInFrames } from "@/lib/narration-timing";
+import { isDeliverableVisualAsset } from "@/lib/generation-resume";
 import { productionAsset, productionSceneTimeline, productionSettings } from "@/lib/production-settings";
 import { resolvedSceneTransition, type ResolvedSceneTransitionKind } from "@/lib/scene-transitions";
 import { VIDEO_FPS } from "@/video/config";
@@ -192,7 +193,7 @@ function SceneFrame({
   const transition = resolvedSceneTransition(scene).kind;
   const accent = sceneAccentColor(scene.style.palette);
   const accentText = readableTextColor(accent);
-  const clipAsset = scene.assets.find((asset) => asset.type === "clip" && asset.url);
+  const clipAsset = scene.assets.find((asset) => asset.type === "clip" && isDeliverableVisualAsset(asset));
   const clip = clipAsset?.url;
   const clipPlaybackRate = clipAsset ? resolvedClipPlaybackRate({
     asset: clipAsset,
@@ -205,7 +206,7 @@ function SceneFrame({
   const lastClipFrame = declaredClipFrames
     ? Math.max(0, declaredClipFrames - 1)
     : Math.max(0, contentDurationInFrames - 1);
-  const image = scene.assets.find((asset) => asset.type === "image" && asset.url)?.url;
+  const image = scene.assets.find((asset) => asset.type === "image" && isDeliverableVisualAsset(asset))?.url;
   const narrationFrames = narrationDurationInFrames(scene, VIDEO_FPS, playbackRate, contentDurationInFrames);
   const caption = activeNarrationCaption(scene.voiceover, visualFrame, narrationFrames);
   const captionEntrance = caption ? interpolate(

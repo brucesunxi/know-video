@@ -2,7 +2,7 @@ import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { demoMessages, demoProject } from "@/lib/mock-data";
 import { editPlanSchema } from "@/lib/edit-plan-schema";
 import { getEphemeralProject, listEphemeralProjects } from "@/lib/ephemeral-project-store";
-import { mediaAssetStatus } from "@/lib/generation-resume";
+import { mediaAssetStatus, sceneHasVisualAsset } from "@/lib/generation-resume";
 import { assetUrlForKey } from "@/lib/r2";
 import type { ChatMessage, EditPlan, Project, ProjectListItem, ProjectVersion, Scene, SceneAsset } from "@/lib/types";
 
@@ -209,7 +209,7 @@ async function hydrateProjectSnapshot(projectRow: ProjectRow): Promise<ProjectSn
   }
 
   const scenes = sceneRows.map((scene) => toScene(scene, assetMap.get(scene.id) ?? []));
-  const visualCount = scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
+  const visualCount = scenes.filter(sceneHasVisualAsset).length;
   const audioCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio")).length;
   const mediaComplete = scenes.length > 0 && visualCount === scenes.length && audioCount === scenes.length;
   const assetStatus = mediaAssetStatus(scenes);
@@ -293,6 +293,8 @@ export async function listProjects(userId?: string): Promise<ProjectListItem[]> 
           from scene_assets visual_asset
           where visual_asset.scene_id = s.id
             and visual_asset.asset_type in ('image', 'clip')
+            and coalesce(visual_asset.metadata_json->>'source', '') <> 'fallback-image'
+            and coalesce(visual_asset.metadata_json->>'model', '') <> 'local-svg-fallback'
         )
       )::int as visual_count,
       count(distinct s.id) filter (
@@ -313,7 +315,10 @@ export async function listProjects(userId?: string): Promise<ProjectListItem[]> 
       (
         select sa.r2_key
         from scenes first_scene
-        join scene_assets sa on sa.scene_id = first_scene.id and sa.asset_type in ('image', 'clip')
+        join scene_assets sa on sa.scene_id = first_scene.id
+          and sa.asset_type in ('image', 'clip')
+          and coalesce(sa.metadata_json->>'source', '') <> 'fallback-image'
+          and coalesce(sa.metadata_json->>'model', '') <> 'local-svg-fallback'
         where first_scene.version_id = p.current_version_id
         order by first_scene.scene_number asc, sa.created_at desc
         limit 1
@@ -321,7 +326,10 @@ export async function listProjects(userId?: string): Promise<ProjectListItem[]> 
       (
         select sa.public_url
         from scenes first_scene
-        join scene_assets sa on sa.scene_id = first_scene.id and sa.asset_type in ('image', 'clip')
+        join scene_assets sa on sa.scene_id = first_scene.id
+          and sa.asset_type in ('image', 'clip')
+          and coalesce(sa.metadata_json->>'source', '') <> 'fallback-image'
+          and coalesce(sa.metadata_json->>'model', '') <> 'local-svg-fallback'
         where first_scene.version_id = p.current_version_id
         order by first_scene.scene_number asc, sa.created_at desc
         limit 1

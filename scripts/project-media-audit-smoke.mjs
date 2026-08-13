@@ -21,6 +21,12 @@ vm.runInNewContext(output, {
     };
     if (specifier === "@/lib/narration-fit") return { narrationComfortIssue: () => undefined };
     if (specifier === "@/lib/production-settings") return { productionSettingsFromScenes: () => ({ playbackRate: 1 }) };
+    if (specifier === "@/lib/generation-resume") return {
+      isDeliverableVisualAsset: (asset) => ["image", "clip"].includes(asset.type)
+        && Boolean(asset.url)
+        && asset.metadata?.source !== "fallback-image"
+        && asset.metadata?.model !== "local-svg-fallback"
+    };
     return {};
   }
 });
@@ -44,6 +50,16 @@ const scene = (sceneNumber, overrides = {}) => ({
 const project = (scenes) => ({ id: "project", currentVersion: { id: "version", scenes } });
 
 assert.equal(auditProjectMedia(project([scene(1)])).ready, true);
+
+const fallbackVisual = auditProjectMedia(project([scene(1, {
+  assets: [
+    { id: "fallback", type: "image", r2Key: "fallback", url: "/fallback", metadata: { source: "fallback-image", model: "local-svg-fallback" } },
+    { id: "audio", type: "audio", r2Key: "audio", url: "/audio", metadata: { actualDurationSeconds: 5.2 } }
+  ]
+})]));
+assert.equal(fallbackVisual.ready, false);
+assert.equal(fallbackVisual.errors[0].code, "missing-visual");
+assert.deepEqual(Array.from(fallbackVisual.repairVisualSceneNumbers), [1]);
 
 const legacy = auditProjectMedia(project([scene(1, {
   assets: [

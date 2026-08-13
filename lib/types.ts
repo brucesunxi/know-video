@@ -98,6 +98,7 @@ export type Scene = {
     visualStyleLabel?: string;
     visualStylePrompt?: string;
     narrationVoice?: NarrationVoice;
+    narrationLanguage?: "中文" | "英文";
     production?: Partial<ProductionSettings>;
     transition?: { kind: SceneTransitionKind; durationSeconds: number };
     referenceAssets?: GenerationReferenceAsset[];

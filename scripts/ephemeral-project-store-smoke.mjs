@@ -12,7 +12,11 @@ vm.runInNewContext(output, {
   module,
   exports: module.exports,
   require: (specifier) => specifier === "@/lib/generation-resume"
-    ? { mediaAssetStatus: (scenes) => scenes.every((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type) && asset.url) && scene.assets.some((asset) => asset.type === "audio" && asset.url)) ? "ready" : "partial" }
+    ? {
+      isDeliverableVisualAsset: (asset) => ["image", "clip"].includes(asset.type) && Boolean(asset.url),
+      sceneHasVisualAsset: (scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type) && asset.url),
+      mediaAssetStatus: (scenes) => scenes.every((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type) && asset.url) && scene.assets.some((asset) => asset.type === "audio" && asset.url)) ? "ready" : "partial"
+    }
     : {}
 });
 const { getEphemeralProject, listEphemeralProjects, saveEphemeralProject, updateEphemeralVersionScenes } = module.exports;

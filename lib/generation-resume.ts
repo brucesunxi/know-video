@@ -1,7 +1,14 @@
-import type { Scene } from "@/lib/types";
+import type { Scene, SceneAsset } from "@/lib/types";
+
+export function isDeliverableVisualAsset(asset: SceneAsset) {
+  if (!["image", "clip"].includes(asset.type) || !asset.url) return false;
+  const source = String(asset.metadata?.source ?? "").toLowerCase();
+  const model = String(asset.metadata?.model ?? "").toLowerCase();
+  return source !== "fallback-image" && model !== "local-svg-fallback";
+}
 
 export function sceneHasVisualAsset(scene: Scene) {
-  return scene.assets.some((asset) => ["image", "clip"].includes(asset.type) && Boolean(asset.url));
+  return scene.assets.some(isDeliverableVisualAsset);
 }
 
 export function sceneHasAudioAsset(scene: Scene) {

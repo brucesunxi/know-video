@@ -11,7 +11,7 @@ import {
   updateEphemeralVersionScenes
 } from "@/lib/ephemeral-project-store";
 import { applyEditPlanProductionAssets, attachEditPlanReferenceAssets } from "@/lib/generation-reference-assets";
-import { mediaAssetStatus } from "@/lib/generation-resume";
+import { mediaAssetStatus, sceneHasVisualAsset } from "@/lib/generation-resume";
 import { demoProject } from "@/lib/mock-data";
 import { initialVersionStatus, materializeNewProject } from "@/lib/project-creation";
 import { productionSettingsFromScenes } from "@/lib/production-settings";
@@ -330,7 +330,7 @@ export async function loadVersion(versionId: string): Promise<ProjectVersion | u
     style: scene.style_json as Scene["style"],
     assets: assetMap.get(scene.id) ?? []
   }));
-  const visualCount = hydratedScenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
+  const visualCount = hydratedScenes.filter(sceneHasVisualAsset).length;
   const audioCount = hydratedScenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio")).length;
   const mediaComplete = hydratedScenes.length > 0
     && visualCount === hydratedScenes.length
@@ -505,7 +505,12 @@ export async function persistGeneratedSceneAssets(
       count(*)::int as scene_count,
       count(*) filter (
         where exists (
-          select 1 from scene_assets sa where sa.scene_id = scenes.id and sa.asset_type in ('image', 'clip')
+          select 1
+          from scene_assets sa
+          where sa.scene_id = scenes.id
+            and sa.asset_type in ('image', 'clip')
+            and coalesce(sa.metadata_json->>'source', '') <> 'fallback-image'
+            and coalesce(sa.metadata_json->>'model', '') <> 'local-svg-fallback'
         )
       )::int as visual_count,
       count(*) filter (
@@ -1220,6 +1225,8 @@ export async function listProjectVersions(projectId: string, userId?: string): P
           from scene_assets visual_asset
           where visual_asset.scene_id = s.id
             and visual_asset.asset_type in ('image', 'clip')
+            and coalesce(visual_asset.metadata_json->>'source', '') <> 'fallback-image'
+            and coalesce(visual_asset.metadata_json->>'model', '') <> 'local-svg-fallback'
         )
       )::int as visual_count,
       count(s.id) filter (

@@ -1,5 +1,5 @@
 import type { Project, Scene, SceneAsset, SceneStructureMutation } from "@/lib/types";
-import { mediaAssetStatus } from "@/lib/generation-resume";
+import { mediaAssetStatus, sceneHasVisualAsset } from "@/lib/generation-resume";
 
 export type { SceneStructureMutation } from "@/lib/types";
 
@@ -13,7 +13,7 @@ function withoutProduction(scene: Scene) {
 }
 
 function mediaStatus(scenes: Scene[]) {
-  const visualCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image" || asset.type === "clip")).length;
+  const visualCount = scenes.filter(sceneHasVisualAsset).length;
   const audioCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio")).length;
   const ready = scenes.length > 0 && visualCount === scenes.length && audioCount === scenes.length;
   return {

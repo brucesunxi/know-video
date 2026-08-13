@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { getSql, hasDatabaseUrl } from "@/lib/db";
+import { getProjectGenerationOptions } from "@/lib/generation-requests";
 import { getProjectSnapshot } from "@/lib/project-store";
 import { deleteR2Objects } from "@/lib/r2";
 
@@ -32,7 +33,8 @@ export async function GET(
   if (!snapshot) {
     return NextResponse.json({ error: "项目不存在或已经被删除。" }, { status: 404 });
   }
-  return NextResponse.json(snapshot);
+  const generationOptions = await getProjectGenerationOptions(projectId, user.id);
+  return NextResponse.json({ ...snapshot, generationOptions });
 }
 
 export async function PATCH(

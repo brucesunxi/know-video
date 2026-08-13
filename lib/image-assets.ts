@@ -88,121 +88,6 @@ function isSafetyFiltered(error: unknown) {
   return (error as { code?: string }).code === "3030";
 }
 
-function safePalette(scene: Scene) {
-  const colors = scene.style.palette
-    .filter((color) => /^#[0-9a-f]{6}$/iu.test(color))
-    .slice(0, 4);
-  return [
-    colors[0] ?? "#0f172a",
-    colors[1] ?? "#14b8a6",
-    colors[2] ?? "#f59e0b",
-    colors[3] ?? "#e2e8f0"
-  ];
-}
-
-function fallbackVisualMotif(scene: Scene) {
-  const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`;
-  if (/(?:方块|沙盒|游戏|课程|编程|voxel|sandbox|game|course|programming)/iu.test(description)) return "voxel-course";
-  if (/(?:库存|仓库|物流|订单|跨境|inventory|warehouse|logistics|order)/iu.test(description)) return "operations-map";
-  if (/(?:gate|检查点|证据|责任|审批|风险|追溯|governance|evidence|approval|risk|trace)/iu.test(description)) return "gate-system";
-  return "commercial-abstract";
-}
-
-function fallbackSceneSvg(scene: Scene) {
-  const [base, accent, warm, pale] = safePalette(scene);
-  const sceneOffset = Math.max(0, scene.sceneNumber - 1) * 54;
-  const motif = fallbackVisualMotif(scene);
-  const grid = Array.from({ length: 10 }, (_, index) => {
-    const x = 90 + index * 120;
-    return `<path d="M ${x} 96 V 624" stroke="${pale}" stroke-opacity="0.10" stroke-width="2"/>`;
-  }).join("");
-  const horizontal = Array.from({ length: 5 }, (_, index) => {
-    const y = 140 + index * 96;
-    return `<path d="M 80 ${y} H 1200" stroke="${pale}" stroke-opacity="0.10" stroke-width="2"/>`;
-  }).join("");
-  const nodes = {
-    "voxel-course": `
-      <g transform="translate(${170 + sceneOffset * 0.35} 170)">
-        <rect x="0" y="210" width="210" height="118" rx="14" fill="${accent}" opacity="0.78"/>
-        <rect x="240" y="140" width="150" height="150" rx="12" fill="${warm}" opacity="0.82"/>
-        <rect x="420" y="235" width="108" height="108" rx="10" fill="${pale}" opacity="0.72"/>
-        <rect x="570" y="90" width="210" height="180" rx="18" fill="${accent}" opacity="0.30"/>
-        <path d="M120 210 C260 94 406 330 570 180" stroke="${warm}" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.78"/>
-        <circle cx="120" cy="210" r="18" fill="${pale}" opacity="0.9"/>
-        <circle cx="570" cy="180" r="18" fill="${warm}" opacity="0.9"/>
-      </g>`,
-    "operations-map": `
-      <g transform="translate(${155 + sceneOffset * 0.22} 160)">
-        <path d="M110 310 C285 160 428 390 610 210 S870 168 1020 300" stroke="${accent}" stroke-width="9" stroke-linecap="round" fill="none" opacity="0.75"/>
-        ${[0, 1, 2, 3, 4].map((index) => {
-          const x = [88, 310, 530, 770, 988][index];
-          const y = [270, 150, 330, 180, 260][index];
-          return `<rect x="${x}" y="${y}" width="110" height="86" rx="12" fill="${index % 2 ? warm : pale}" opacity="${index % 2 ? 0.76 : 0.66}"/>`;
-        }).join("")}
-      </g>`,
-    "gate-system": `
-      <g transform="translate(${135 + sceneOffset * 0.18} 150)">
-        <path d="M120 335 H980" stroke="${accent}" stroke-width="8" stroke-linecap="round" opacity="0.72"/>
-        ${[0, 1, 2, 3].map((index) => {
-          const x = 130 + index * 250;
-          const height = 125 + index * 18;
-          return `<rect x="${x}" y="${335 - height}" width="104" height="${height}" rx="16" fill="${index % 2 ? warm : pale}" opacity="0.70"/>
-            <circle cx="${x + 52}" cy="${315 - height}" r="18" fill="${accent}" opacity="0.95"/>`;
-        }).join("")}
-      </g>`,
-    "commercial-abstract": `
-      <g transform="translate(${150 + sceneOffset * 0.25} 145)">
-        <rect x="60" y="260" width="380" height="150" rx="28" fill="${accent}" opacity="0.42"/>
-        <rect x="500" y="155" width="270" height="210" rx="34" fill="${pale}" opacity="0.54"/>
-        <rect x="820" y="245" width="210" height="126" rx="24" fill="${warm}" opacity="0.66"/>
-        <path d="M220 260 C390 90 610 470 920 245" stroke="${accent}" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.72"/>
-      </g>`
-  }[motif];
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-    <defs>
-      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="${base}"/>
-        <stop offset="1" stop-color="#020617"/>
-      </linearGradient>
-      <radialGradient id="glow" cx="68%" cy="32%" r="55%">
-        <stop offset="0" stop-color="${accent}" stop-opacity="0.45"/>
-        <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
-      </radialGradient>
-    </defs>
-    <rect width="1280" height="720" fill="url(#bg)"/>
-    <rect width="1280" height="720" fill="url(#glow)"/>
-    ${grid}
-    ${horizontal}
-    ${nodes}
-    <rect x="64" y="64" width="1152" height="592" rx="38" fill="none" stroke="${pale}" stroke-opacity="0.16" stroke-width="2"/>
-    <path d="M84 612 C350 574 720 678 1190 594" stroke="${accent}" stroke-opacity="0.28" stroke-width="20" stroke-linecap="round" fill="none"/>
-  </svg>`;
-}
-
-async function generateLocalFallbackSceneImage(scene: Scene, project: Project, reason: unknown): Promise<SceneAsset> {
-  const svg = fallbackSceneSvg(scene);
-  const body = await sharp(Buffer.from(svg))
-    .png()
-    .toBuffer();
-  const key = `generated/${project.id}/${project.currentVersion.id}/scene-${scene.sceneNumber}-fallback-${crypto.randomUUID()}.png`;
-  const uploaded = await uploadToR2({ key, body, contentType: "image/png" });
-  return {
-    id: crypto.randomUUID(),
-    type: "image",
-    r2Key: uploaded.key,
-    url: assetUrlForKey(uploaded.key, uploaded.publicUrl),
-    metadata: {
-      source: "fallback-image",
-      model: "local-svg-fallback",
-      reason: reason instanceof Error ? reason.message.slice(0, 260) : String(reason ?? "image generation failed").slice(0, 260),
-      width: 1280,
-      height: 720,
-      sceneNumber: scene.sceneNumber
-    }
-  };
-}
-
 type ImageQuality = "standard" | "premium";
 type ImageReference = {
   body: Buffer;
@@ -467,24 +352,7 @@ export async function generateProjectSceneImages(
         };
       } catch (error) {
         console.error(`[image-assets] Scene ${scene.sceneNumber} image generation failed:`, error);
-        try {
-          const fallbackAsset = await generateLocalFallbackSceneImage(scene, project, error);
-          const existingAssets = options.replaceExistingImages
-            ? scene.assets.filter((asset) => !["image", "clip"].includes(asset.type))
-            : scene.assets;
-          scenes[index] = {
-            ...scene,
-            assets: options.candidate ? [...existingAssets, {
-              ...fallbackAsset,
-              type: "thumbnail" as const,
-              metadata: { ...fallbackAsset.metadata, candidate: true }
-            }] : [fallbackAsset, ...existingAssets]
-          };
-          console.warn(`[image-assets] Scene ${scene.sceneNumber} used local fallback image after AI generation failed.`);
-        } catch (fallbackError) {
-          failures.push(classifyImageError(fallbackError));
-          console.error(`[image-assets] Scene ${scene.sceneNumber} fallback image generation failed:`, fallbackError);
-        }
+        failures.push(classifyImageError(error));
       }
   });
 

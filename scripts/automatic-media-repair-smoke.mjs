@@ -11,9 +11,10 @@ assert.match(workspace, /missingImageSceneNumbers = missingSceneAssetNumbers/);
 assert.match(workspace, /missingAudioSceneNumbers = missingSceneAssetNumbers/);
 assert.match(workspace, /本次任务不会被标记为生成完成/);
 assert.ok(
-  workspace.indexOf("本次任务不会被标记为生成完成") < workspace.indexOf('setProgress(100)'),
-  "media completeness gate must run before generation is marked complete"
+  workspace.indexOf("if (resumeMissingOnly) {") < workspace.indexOf("let missingImageSceneNumbers"),
+  "a recovered durable project must enter the studio before media repair starts"
 );
+assert.match(workspace, /if \(!resumeMissingOnly\) window\.setTimeout\(\(\) => setStage\("studio"\), 350\)/);
 assert.match(audioRoute, /export const maxDuration = 300/);
 assert.match(audioRoute, /系统将只针对失败场景继续自动补齐/);
 

@@ -600,7 +600,7 @@ export function generateProjectFromPrompt(
   const narrationVoice = options?.narrationVoice ?? narrationVoiceForBrief(prompt);
   const scenes = applyFallbackConstraints(genericBlueprints, options, chinese, prompt).map((scene) => ({
     ...scene,
-    style: { ...scene.style, narrationVoice }
+    style: { ...scene.style, narrationVoice, narrationLanguage: options?.language ?? (chinese ? "中文" : "英文") }
   }));
 
   return {

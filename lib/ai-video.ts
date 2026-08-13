@@ -1260,7 +1260,7 @@ export async function createStoryboardProject(
     const narrationVoice = options?.narrationVoice ?? narrationVoiceForBrief(prompt);
     scenes = scenes.map((scene) => ({
       ...scene,
-      style: { ...scene.style, narrationVoice }
+      style: { ...scene.style, narrationVoice, narrationLanguage: options?.language }
     }));
     return {
       engine: textModel.engine,

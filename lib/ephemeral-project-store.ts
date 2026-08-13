@@ -1,5 +1,5 @@
 import type { ChatMessage, EditPlan, Project, ProjectListItem, Scene } from "@/lib/types";
-import { mediaAssetStatus } from "@/lib/generation-resume";
+import { isDeliverableVisualAsset, mediaAssetStatus, sceneHasVisualAsset } from "@/lib/generation-resume";
 
 type EphemeralProjectRecord = {
   project: Project;
@@ -38,7 +38,7 @@ export function getEphemeralProject(projectId: string, versionId?: string) {
 export function updateEphemeralVersionScenes(versionId: string, scenes: Scene[]) {
   for (const record of projects.values()) {
     if (record.project.currentVersion.id !== versionId) continue;
-    const visualCount = scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length;
+    const visualCount = scenes.filter(sceneHasVisualAsset).length;
     const audioCount = scenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio")).length;
     const project: Project = {
       ...record.project,
@@ -66,7 +66,7 @@ export function listEphemeralProjects(): ProjectListItem[] {
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .map(({ project, updatedAt }) => {
       const scenes = project.currentVersion.scenes;
-      const firstVisual = scenes.flatMap((scene) => scene.assets).find((asset) => ["image", "clip"].includes(asset.type));
+      const firstVisual = scenes.flatMap((scene) => scene.assets).find(isDeliverableVisualAsset);
       return {
         id: project.id,
         title: project.title,
@@ -74,7 +74,7 @@ export function listEphemeralProjects(): ProjectListItem[] {
         status: project.currentVersion.status,
         durationSeconds: project.currentVersion.durationSeconds,
         sceneCount: scenes.length,
-        visualCount: scenes.filter((scene) => scene.assets.some((asset) => ["image", "clip"].includes(asset.type))).length,
+        visualCount: scenes.filter(sceneHasVisualAsset).length,
         audioCount: scenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio")).length,
         renderUrl: project.currentVersion.renderUrl,
         thumbnailUrl: firstVisual?.url

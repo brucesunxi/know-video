@@ -67,7 +67,7 @@ import { analyzeEditIntent, globalEditTargetSceneNumbers } from "@/lib/edit-inte
 import { editPlanOperations } from "@/lib/edit-operations";
 import { parsePendingGenerationSession, PENDING_GENERATION_STORAGE_KEY, type PendingGenerationSession } from "@/lib/generation-session";
 import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
-import { missingMotionSceneNumbers, missingSceneAssetNumbers, sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
+import { isDeliverableVisualAsset, missingMotionSceneNumbers, missingSceneAssetNumbers, sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
 import { selectMotionCriticalScenes } from "@/lib/motion-scene-selection";
 import { auditProjectMedia } from "@/lib/project-media-audit";
 import { productionAsset, productionSettings } from "@/lib/production-settings";
@@ -334,6 +334,27 @@ function localizedErrorMessage(value: string, language: UiLanguage) {
   return /\p{Script=Han}/u.test(translated)
     ? "The request could not be completed. Please try again."
     : translated;
+}
+
+function projectNarrationLanguage(project: Project): "中文" | "英文" {
+  const narration = project.currentVersion.scenes.map((scene) => scene.voiceover).join(" ");
+  if (narration.trim()) return /\p{Script=Han}/u.test(narration) ? "中文" : "英文";
+  return project.currentVersion.scenes.find((scene) => scene.style.narrationLanguage)?.style.narrationLanguage ?? "中文";
+}
+
+function localizedSystemMessage(value: string, language: UiLanguage) {
+  if (language === "zh-CN") return value;
+  const sceneProgress = value.match(/^脚本和 (\d+) 个分镜已经完成，正在继续生成画面与配音。$/u);
+  if (sceneProgress) return `The script and ${sceneProgress[1]} scenes are ready. Visuals and narration are still being generated.`;
+  const fixed: Record<string, string> = {
+    "AI 已完成脚本、分镜和镜头提示词。你可以继续用右侧对话改片。": "AI has completed the script, storyboard, and shot prompts. Continue editing with chat.",
+    "已用本地规则生成初版分镜。": "A first storyboard draft was created with local rules.",
+    "生成任务已经恢复，缺失的场景素材已继续完成。": "The generation task was recovered and the missing scene assets were completed.",
+    "脚本和分镜已经保存，部分媒体素材需要在工作室中重试。": "The script and storyboard are saved. Some media assets need another attempt in the studio.",
+    "全部场景画面和配音已经完成，可以播放预览或继续通过对话修改。": "All scene visuals and narration are complete. Preview the video or continue editing with chat.",
+    "场景画面、自然配音和关键动态镜头已经完成，可以播放预览或继续通过对话修改。": "Scene visuals, narration, and key motion clips are complete. Preview the video or continue editing with chat."
+  };
+  return fixed[value] ?? localizedRuntimeLabel(value, language);
 }
 
 function localizedVoiceCopy(profile: (typeof narrationVoiceProfiles)[number], language: UiLanguage) {
@@ -831,6 +852,31 @@ function localizedGenerationPrompt(value: string, language: UiLanguage) {
   return value;
 }
 
+function generationTaskTitle(task: GenerationTaskListItem, language: UiLanguage) {
+  const fallback = language === "zh-CN" ? "未命名视频生成任务" : "Untitled video generation";
+  const prompt = localizedGenerationPrompt(task.prompt?.trim() ?? "", language);
+  if (!prompt) return fallback;
+  const requestOnly = prompt
+    .split(/\n|(?:Apply|Use) the [“\"].+?[”\"] (?:template )?style:|应用[“\"].+?[”\"](?:模板)?风格[：:]/u)[0]
+    .trim();
+  const firstSentence = requestOnly.match(/^.+?[。！？.!?](?:\s|$)/u)?.[0]?.trim() ?? requestOnly;
+  return compactText(firstSentence, fallback, language === "zh-CN" ? 42 : 86);
+}
+
+function generationTaskSpecs(task: GenerationTaskListItem, language: UiLanguage) {
+  const options = task.options;
+  if (!options) return [];
+  const text = (zh: string, en: string) => language === "zh-CN" ? zh : en;
+  const sceneCount = options.sceneCount === "auto"
+    ? text("自动规划分镜", "Auto-planned scenes")
+    : text(`${options.sceneCount} 个分镜`, `${options.sceneCount} scenes`);
+  return [
+    text(`约 ${options.duration} 秒`, `About ${options.duration} sec`),
+    options.language === "英文" ? text("英文旁白", "English narration") : text("中文旁白", "Chinese narration"),
+    sceneCount
+  ];
+}
+
 function elapsedGenerationLabel(startedAt?: number, now = Date.now()) {
   if (!startedAt || startedAt > now) return "刚刚开始";
   const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
@@ -1117,64 +1163,88 @@ function productionSummaryItems(input: {
   durationSeconds: number;
   logo?: SceneAsset;
   music?: SceneAsset;
+  language?: UiLanguage;
 }) {
+  const text = (zh: string, en: string) => input.language === "en" ? en : zh;
   const effectiveDuration = input.durationSeconds / input.settings.playbackRate;
   const caption = input.settings.captionsEnabled
-    ? `字幕开启 · ${input.settings.captionStyle === "minimal" ? "简洁" : input.settings.captionStyle === "highlight" ? "强调色" : "深色底"}`
-    : "字幕关闭";
+    ? text(
+        `字幕开启 · ${input.settings.captionStyle === "minimal" ? "简洁" : input.settings.captionStyle === "highlight" ? "强调色" : "深色底"}`,
+        `Captions on · ${input.settings.captionStyle === "minimal" ? "Minimal" : input.settings.captionStyle === "highlight" ? "Highlight" : "Dark background"}`
+      )
+    : text("字幕关闭", "Captions off");
   const music = input.music
-    ? `音乐 ${Math.round(input.settings.musicVolume * 100)}% · ${input.settings.musicDucking === "off" ? "不避让" : input.settings.musicDucking === "strong" ? "强避让" : "平衡避让"}`
-    : "未添加背景音乐";
+    ? text(
+        `音乐 ${Math.round(input.settings.musicVolume * 100)}% · ${input.settings.musicDucking === "off" ? "不避让" : input.settings.musicDucking === "strong" ? "强避让" : "平衡避让"}`,
+        `Music ${Math.round(input.settings.musicVolume * 100)}% · ${input.settings.musicDucking === "off" ? "No ducking" : input.settings.musicDucking === "strong" ? "Strong ducking" : "Balanced ducking"}`
+      )
+    : text("未添加背景音乐", "No background music");
   const logo = input.logo
-    ? `Logo ${input.settings.logoSize}% · ${productionSettingLabels({ logoPosition: input.settings.logoPosition })[0].replace("Logo 位置：", "")}`
-    : "未添加 Logo";
+    ? text(
+        `Logo ${input.settings.logoSize}% · ${productionSettingLabels({ logoPosition: input.settings.logoPosition })[0].replace("Logo 位置：", "")}`,
+        `Logo ${input.settings.logoSize}% · ${input.settings.logoPosition.replace("-", " ")}`
+      )
+    : text("未添加 Logo", "No logo");
   return [
-    { label: "导出时长", value: productionSecondsLabel(effectiveDuration), detail: `${input.settings.playbackRate}x 播放速度` },
-    { label: "字幕", value: caption, detail: input.settings.captionsEnabled ? "随旁白逐句显示" : "画面不叠加字幕" },
-    { label: "声音", value: music, detail: input.music ? "导出时自动混音" : "仅保留旁白音轨" },
-    { label: "品牌", value: logo, detail: input.logo ? "导出时叠加到画面" : "不叠加品牌标识" }
+    { label: text("导出时长", "Export duration"), value: productionSecondsLabel(effectiveDuration), detail: text(`${input.settings.playbackRate}x 播放速度`, `${input.settings.playbackRate}x playback speed`) },
+    { label: text("字幕", "Captions"), value: caption, detail: input.settings.captionsEnabled ? text("随旁白逐句显示", "Timed to narration") : text("画面不叠加字幕", "No captions over visuals") },
+    { label: text("声音", "Audio"), value: music, detail: input.music ? text("导出时自动混音", "Mixed automatically on export") : text("仅保留旁白音轨", "Narration track only") },
+    { label: text("品牌", "Brand"), value: logo, detail: input.logo ? text("导出时叠加到画面", "Overlaid on exported video") : text("不叠加品牌标识", "No brand mark") }
   ];
 }
 
-function productionImpactChecks(input: { settings: ProductionSettings; logo?: SceneAsset; music?: SceneAsset }) {
+function productionImpactChecks(input: { settings: ProductionSettings; logo?: SceneAsset; music?: SceneAsset; language?: UiLanguage }) {
+  const text = (zh: string, en: string) => input.language === "en" ? en : zh;
   return [
     {
-      label: "字幕层",
+      label: text("字幕层", "Caption layer"),
       value: input.settings.captionsEnabled
-        ? `开启 · ${input.settings.captionStyle === "minimal" ? "简洁" : input.settings.captionStyle === "highlight" ? "强调色" : "深色底"}`
-        : "关闭",
+        ? text(
+            `开启 · ${input.settings.captionStyle === "minimal" ? "简洁" : input.settings.captionStyle === "highlight" ? "强调色" : "深色底"}`,
+            `On · ${input.settings.captionStyle === "minimal" ? "Minimal" : input.settings.captionStyle === "highlight" ? "Highlight" : "Dark background"}`
+          )
+        : text("关闭", "Off"),
       status: input.settings.captionsEnabled ? "ready" : "muted",
-      detail: input.settings.captionsEnabled ? "导出画面会叠加逐句字幕。" : "导出画面不会显示字幕。"
+      detail: input.settings.captionsEnabled ? text("导出画面会叠加逐句字幕。", "Timed captions will appear in the exported video.") : text("导出画面不会显示字幕。", "No captions will appear in the exported video.")
     },
     {
-      label: "背景音乐",
-      value: input.music ? `${Math.round(input.settings.musicVolume * 100)}% · ${input.settings.musicDucking === "off" ? "不避让" : input.settings.musicDucking === "strong" ? "强避让" : "平衡避让"}` : "未添加",
+      label: text("背景音乐", "Background music"),
+      value: input.music ? text(
+        `${Math.round(input.settings.musicVolume * 100)}% · ${input.settings.musicDucking === "off" ? "不避让" : input.settings.musicDucking === "strong" ? "强避让" : "平衡避让"}`,
+        `${Math.round(input.settings.musicVolume * 100)}% · ${input.settings.musicDucking === "off" ? "No ducking" : input.settings.musicDucking === "strong" ? "Strong ducking" : "Balanced ducking"}`
+      ) : text("未添加", "Not added"),
       status: input.music ? "ready" : "muted",
-      detail: input.music ? "MP4 会混入背景音乐，并按旁白策略压低。" : "最终只保留旁白音轨。"
+      detail: input.music ? text("MP4 会混入背景音乐，并按旁白策略压低。", "Music will be mixed into the MP4 and ducked under narration.") : text("最终只保留旁白音轨。", "The export will contain narration only.")
     },
     {
-      label: "品牌 Logo",
-      value: input.logo ? `${input.settings.logoSize}% · ${productionSettingLabels({ logoPosition: input.settings.logoPosition })[0].replace("Logo 位置：", "")}` : "未添加",
+      label: text("品牌 Logo", "Brand logo"),
+      value: input.logo ? text(
+        `${input.settings.logoSize}% · ${productionSettingLabels({ logoPosition: input.settings.logoPosition })[0].replace("Logo 位置：", "")}`,
+        `${input.settings.logoSize}% · ${input.settings.logoPosition.replace("-", " ")}`
+      ) : text("未添加", "Not added"),
       status: input.logo ? "ready" : "muted",
-      detail: input.logo ? "导出画面会叠加品牌标识。" : "最终画面不会叠加品牌标识。"
+      detail: input.logo ? text("导出画面会叠加品牌标识。", "The brand mark will be overlaid on the export.") : text("最终画面不会叠加品牌标识。", "No brand mark will be overlaid.")
     }
   ] as const;
 }
 
-function exportReadinessItems(project: Project, settings: ProductionSettings) {
+function exportReadinessItems(project: Project, settings: ProductionSettings, language: UiLanguage) {
+  const text = (zh: string, en: string) => language === "en" ? en : zh;
   const scenes = project.currentVersion.scenes;
   const visualCount = scenes.filter(sceneHasVisualAsset).length;
   const audioCount = scenes.filter(sceneHasAudioAsset).length;
   const clipCount = scenes.filter(sceneHasMotionAsset).length;
+  const narrationLanguage = projectNarrationLanguage(project);
   return [
-    { label: "画面", value: `${visualCount}/${scenes.length}`, detail: "预览与 MP4 画面完整" },
-    { label: "配音", value: `${audioCount}/${scenes.length}`, detail: "旁白音轨完整" },
-    { label: "动态镜头", value: clipCount > 0 ? `${clipCount} 个` : "智能运镜", detail: clipCount > 0 ? "优先使用视频片段" : "使用图片运镜合成" },
+    { label: text("画面", "Visuals"), value: `${visualCount}/${scenes.length}`, detail: text("预览与 MP4 画面完整", "Preview and MP4 visuals complete") },
+    { label: text("配音", "Narration"), value: `${audioCount}/${scenes.length}`, detail: narrationLanguage === "英文" ? text("英文旁白音轨完整", "English narration complete") : text("中文旁白音轨完整", "Chinese narration complete") },
+    { label: text("动态镜头", "Motion"), value: clipCount > 0 ? text(`${clipCount} 个`, `${clipCount} clips`) : text("智能运镜", "Smart camera motion"), detail: clipCount > 0 ? text("优先使用视频片段", "Video clips used where available") : text("使用图片运镜合成", "Composed with image camera motion") },
     ...productionSummaryItems({
       settings,
       durationSeconds: project.currentVersion.durationSeconds,
       logo: productionAsset(project, "logo"),
-      music: productionAsset(project, "music")
+      music: productionAsset(project, "music"),
+      language
     })
   ];
 }
@@ -1217,7 +1287,7 @@ function compactText(text: string | undefined, fallback: string, maxLength = 72)
 }
 
 function scenePreviewAsset(scene?: Scene) {
-  return scene?.assets.find((asset) => asset.type === "image" && asset.url)
+  return scene?.assets.find((asset) => asset.type === "image" && isDeliverableVisualAsset(asset))
     ?? scene?.assets.find((asset) => (
       asset.type === "thumbnail"
       && asset.url
@@ -1515,57 +1585,61 @@ function exportActionLabel(input: {
   missingVisualCount: number;
   missingAudioCount: number;
   invalidMediaCount?: number;
+  language?: UiLanguage;
 }) {
-  if (input.exportProgress !== undefined) return `正在合成 MP4 ${input.exportProgress}%`;
-  if (input.invalidMediaCount && input.invalidMediaCount > 0) return `先修复 ${input.invalidMediaCount} 个异常素材`;
+  const text = (zh: string, en: string) => input.language === "en" ? en : zh;
+  if (input.exportProgress !== undefined) return text(`正在合成 MP4 ${input.exportProgress}%`, `Rendering MP4 ${input.exportProgress}%`);
+  if (input.invalidMediaCount && input.invalidMediaCount > 0) return text(`先修复 ${input.invalidMediaCount} 个异常素材`, `Repair ${input.invalidMediaCount} invalid assets first`);
   if (input.missingVisualCount > 0 && input.missingAudioCount > 0) {
-    return `缺 ${input.missingVisualCount} 个画面 · ${input.missingAudioCount} 段配音`;
+    return text(`缺 ${input.missingVisualCount} 个画面 · ${input.missingAudioCount} 段配音`, `Missing ${input.missingVisualCount} visuals · ${input.missingAudioCount} narrations`);
   }
-  if (input.missingVisualCount > 0) return `缺 ${input.missingVisualCount} 个画面`;
-  if (input.missingAudioCount > 0) return `缺 ${input.missingAudioCount} 段配音`;
-  return input.renderUrl ? "下载 MP4" : "导出 MP4";
+  if (input.missingVisualCount > 0) return text(`缺 ${input.missingVisualCount} 个画面`, `Missing ${input.missingVisualCount} visuals`);
+  if (input.missingAudioCount > 0) return text(`缺 ${input.missingAudioCount} 段配音`, `Missing ${input.missingAudioCount} narrations`);
+  return input.renderUrl ? text("下载 MP4", "Download MP4") : text("导出 MP4", "Export MP4");
 }
 
 function exportBlockingItems(input: {
   missingVisualSceneNumbers: number[];
   missingAudioSceneNumbers: number[];
   invalidMedia: ReturnType<typeof invalidRenderMediaSummary>;
+  language?: UiLanguage;
 }) {
+  const text = (zh: string, en: string) => input.language === "en" ? en : zh;
   return [
     input.missingVisualSceneNumbers.length > 0
       ? {
           key: "missing-visual",
           tone: "attention",
-          title: "缺少画面素材",
-          detail: `场景 ${sceneNumberListLabel(input.missingVisualSceneNumbers)} 没有可用于预览和导出的图片或视频片段。`,
-          action: "生成缺失画面"
+          title: text("缺少画面素材", "Missing visual assets"),
+          detail: text(`场景 ${sceneNumberListLabel(input.missingVisualSceneNumbers)} 没有可用于预览和导出的图片或视频片段。`, `Scenes ${sceneNumberListLabel(input.missingVisualSceneNumbers)} have no image or video clip available for preview and export.`),
+          action: text("生成缺失画面", "Generate missing visuals")
         }
       : undefined,
     input.missingAudioSceneNumbers.length > 0
       ? {
           key: "missing-audio",
           tone: "attention",
-          title: "缺少旁白配音",
-          detail: `场景 ${sceneNumberListLabel(input.missingAudioSceneNumbers)} 没有旁白音轨，导出会静音或不完整。`,
-          action: "生成缺失配音"
+          title: text("缺少旁白配音", "Missing narration"),
+          detail: text(`场景 ${sceneNumberListLabel(input.missingAudioSceneNumbers)} 没有旁白音轨，导出会静音或不完整。`, `Scenes ${sceneNumberListLabel(input.missingAudioSceneNumbers)} have no narration track, so the export would be silent or incomplete.`),
+          action: text("生成缺失配音", "Generate missing narration")
         }
       : undefined,
     input.invalidMedia.visual.length > 0
       ? {
           key: "invalid-visual",
           tone: "danger",
-          title: "画面文件异常",
-          detail: `场景 ${sceneNumberListLabel(input.invalidMedia.visual)} 的云端画面文件可能已失效或格式异常。`,
-          action: "重做异常画面"
+          title: text("画面文件异常", "Invalid visual files"),
+          detail: text(`场景 ${sceneNumberListLabel(input.invalidMedia.visual)} 的云端画面文件可能已失效或格式异常。`, `Cloud visual files for scenes ${sceneNumberListLabel(input.invalidMedia.visual)} may have expired or use an invalid format.`),
+          action: text("重做异常画面", "Regenerate invalid visuals")
         }
       : undefined,
     input.invalidMedia.audio.length > 0
       ? {
           key: "invalid-audio",
           tone: "danger",
-          title: "配音文件异常",
-          detail: `场景 ${sceneNumberListLabel(input.invalidMedia.audio)} 的云端音频文件可能已失效或格式异常。`,
-          action: "重做异常配音"
+          title: text("配音文件异常", "Invalid narration files"),
+          detail: text(`场景 ${sceneNumberListLabel(input.invalidMedia.audio)} 的云端音频文件可能已失效或格式异常。`, `Cloud narration files for scenes ${sceneNumberListLabel(input.invalidMedia.audio)} may have expired or use an invalid format.`),
+          action: text("重做异常配音", "Regenerate invalid narration")
         }
       : undefined
   ].filter(Boolean) as Array<{
@@ -1578,7 +1652,7 @@ function exportBlockingItems(input: {
 }
 
 function sceneVisualAsset(scene: Scene) {
-  return scene.assets.find((asset) => ["image", "clip"].includes(asset.type) && asset.url);
+  return scene.assets.find(isDeliverableVisualAsset);
 }
 
 function sceneHasMotionAsset(scene: Scene) {
@@ -1957,11 +2031,11 @@ function Shell({
       aria-label={text("切换为英文界面", "Switch interface to Chinese")}
       className="kv-ui-language-toggle"
       onClick={() => setLanguage(language === "zh-CN" ? "en" : "zh-CN")}
-      title={text("界面语言：中文", "Interface language: English")}
+      title={text("当前界面语言：中文；点击切换为英文", "Current interface language: English; switch to Chinese")}
       type="button"
     >
       <Globe2 size={16} />
-      <span>{language === "zh-CN" ? "EN" : "中文"}</span>
+      <span>{language === "zh-CN" ? "中文" : "English"}</span>
     </button>
   );
   return (
@@ -2286,10 +2360,15 @@ function ProjectLibrary({
                       {task.status === "pending" ? <Loader2 className="kv-spin" size={18} /> : <AlertCircle size={18} />}
                     </span>
                     <span className="kv-generation-task-copy">
-                      <strong>{task.prompt ? localizedGenerationPrompt(task.prompt, language) : text("未命名视频生成任务", "Untitled video generation")}</strong>
+                      <strong>{generationTaskTitle(task, language)}</strong>
                       <span>{task.status === "pending"
-                        ? text("正在后台生成脚本与分镜，关闭页面不会中断。", "Generating the script and storyboard in the background. Closing this page will not interrupt it.")
+                        ? text("正在后台生成脚本与分镜", "Building the script and storyboard in the background")
                         : localizedErrorMessage(task.error || text("生成没有完成，请重新提交。", "Generation did not finish. Please submit it again."), language)}</span>
+                      {generationTaskSpecs(task, language).length > 0 ? (
+                        <span className="kv-generation-task-specs">
+                          {generationTaskSpecs(task, language).map((spec) => <em key={spec}>{spec}</em>)}
+                        </span>
+                      ) : null}
                     </span>
                     <span className="kv-generation-task-action">
                       <small>{task.status === "pending" ? text("生成中", "Generating") : text("生成失败", "Failed")} · {new Date(task.updatedAt).toLocaleString(text("zh-CN", "en-US"), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
@@ -4021,8 +4100,8 @@ function ProductionSettingsPanel({
   const { language, text } = useUiCopy();
   const [musicVolume, setMusicVolume] = useState(settings.musicVolume);
   const [logoSize, setLogoSize] = useState(settings.logoSize);
-  const summary = productionSummaryItems({ settings, durationSeconds, logo, music });
-  const impactChecks = productionImpactChecks({ settings, logo, music });
+  const summary = productionSummaryItems({ settings, durationSeconds, logo, music, language });
+  const impactChecks = productionImpactChecks({ settings, logo, music, language });
 
   useEffect(() => setMusicVolume(settings.musicVolume), [settings.musicVolume]);
   useEffect(() => setLogoSize(settings.logoSize), [settings.logoSize]);
@@ -4516,7 +4595,7 @@ function ChatPanel({
       <div className="kv-chat-log" ref={logRef}>
         {messages.map((message) => (
           <div className={`kv-msg ${message.role}`} key={message.id}>
-            <p>{message.content}</p>
+            <p>{message.role === "assistant" ? localizedSystemMessage(message.content, language) : message.content}</p>
             {message.editPlan ? (
               <div className="kv-plan-summary">
                 <span>{message.editPlan.affectedScenes.length > 0 ? text(`影响场景：${message.editPlan.affectedScenes.join(", ")}`, `Affected scenes: ${message.editPlan.affectedScenes.join(", ")}`) : text("作用范围：全片设置", "Scope: full-video settings")}</span>
@@ -4898,7 +4977,8 @@ function StudioScreen({
   onRemoveProduction,
   onMutateScene,
   onSaveScene,
-  onVoiceChange
+  onVoiceChange,
+  expectedNarrationLanguage
 }: {
   chatAttachments: File[];
   project: Project;
@@ -4960,6 +5040,7 @@ function StudioScreen({
   onMutateScene: (mutation: SceneStructureMutation) => void;
   onSaveScene: (sceneNumber: number, edits: SceneTextEdits) => void;
   onVoiceChange: (sceneNumbers: number[], voice: NarrationVoice) => void;
+  expectedNarrationLanguage?: GenerationOptions["language"];
 }) {
   const { language, text } = useUiCopy();
   const playerRef = useRef<PlayerRef>(null);
@@ -4978,6 +5059,8 @@ function StudioScreen({
     (issue) => issue.type === "clip" && issue.errorCode === "VIDEO_PROVIDER_BALANCE_REQUIRED"
   );
   const filmSettings = productionSettings(project);
+  const actualNarrationLanguage = projectNarrationLanguage(project);
+  const narrationLanguageMismatch = Boolean(expectedNarrationLanguage && expectedNarrationLanguage !== actualNarrationLanguage);
   const mediaAudit = auditProjectMedia(project);
   const qualityErrors = mediaAudit.errors.filter((issue) => !["missing-visual", "missing-audio"].includes(issue.code));
   const exportReady = missingSceneNumbers.length === 0
@@ -4985,11 +5068,12 @@ function StudioScreen({
     && invalidRenderMedia.length === 0
     && qualityErrors.length === 0
     && exportProgress === undefined;
-  const exportReadiness = exportReady ? exportReadinessItems(project, filmSettings) : [];
+  const exportReadiness = exportReady ? exportReadinessItems(project, filmSettings, language) : [];
   const exportBlockers = exportBlockingItems({
     missingVisualSceneNumbers: missingSceneNumbers,
     missingAudioSceneNumbers,
-    invalidMedia
+    invalidMedia,
+    language
   });
   useEffect(() => {
     if (!toolMenuOpen) return;
@@ -5137,7 +5221,8 @@ function StudioScreen({
                 renderUrl: project.currentVersion.renderUrl,
                 missingVisualCount: missingSceneNumbers.length,
                 missingAudioCount: missingAudioSceneNumbers.length,
-                invalidMediaCount: invalidRenderMedia.length + qualityErrors.length
+                invalidMediaCount: invalidRenderMedia.length + qualityErrors.length,
+                language
               })}
             </button>
             {exportProgress !== undefined && activeRenderJobId ? (
@@ -5165,6 +5250,20 @@ function StudioScreen({
                   <em>{item.detail}</em>
                 </span>
               ))}
+            </div>
+          </section>
+        ) : null}
+        {narrationLanguageMismatch ? (
+          <section className="kv-export-blockers" role="alert" aria-label={text("旁白语言与生成设置不一致", "Narration language does not match generation settings")}>
+            <div>
+              <AlertCircle size={18} />
+              <div>
+                <strong>{text("旁白语言与生成设置不一致", "Narration language does not match generation settings")}</strong>
+                <span>{text(
+                  `项目原本选择${expectedNarrationLanguage}旁白，但当前脚本和音轨实际为${actualNarrationLanguage}。请在右侧输入“将全片翻译为${expectedNarrationLanguage}并重新配音”后确认修改。`,
+                  `This project requested ${expectedNarrationLanguage === "英文" ? "English" : "Chinese"} narration, but its current script and audio are actually ${actualNarrationLanguage === "英文" ? "English" : "Chinese"}. Ask the editor to translate the full video and regenerate narration.`
+                )}</span>
+              </div>
             </div>
           </section>
         ) : null}
@@ -5527,6 +5626,7 @@ export function WorkspaceClient({
   const musicInputRef = useRef<HTMLInputElement>(null);
   const recoveringRenderRef = useRef<string>();
   const recoveringGenerationRef = useRef(false);
+  const recoveringGenerationRequestIdRef = useRef<string>();
   const cancelledRenderIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -5613,6 +5713,7 @@ export function WorkspaceClient({
       return;
     }
     recoveringGenerationRef.current = true;
+    recoveringGenerationRequestIdRef.current = pending.requestId;
     setBriefPrompt(pending.prompt);
     setGenerationOptions(pending.options);
     setGenerationStartedAt(pending.startedAt);
@@ -5635,6 +5736,7 @@ export function WorkspaceClient({
       })
       .finally(() => {
         recoveringGenerationRef.current = false;
+        recoveringGenerationRequestIdRef.current = undefined;
         setIsBusy(false);
       });
   }, []);
@@ -5670,6 +5772,11 @@ export function WorkspaceClient({
     let generatedProject = data.project;
     const warnings: string[] = [];
     const issues: GenerationMediaIssue[] = [];
+    // A recovered durable project belongs in the studio; only a first-run creation keeps its recovery marker through media generation.
+    if (resumeMissingOnly) {
+      clearPendingGenerationSession();
+      setGenerationStartedAt(undefined);
+    }
     setProject(generatedProject);
     setProjectSource("database");
     setProjects([]);
@@ -5694,10 +5801,16 @@ export function WorkspaceClient({
           : "已用本地规则生成初版分镜。"
       }
     ]);
+    if (resumeMissingOnly) {
+      setSelectedScene(1);
+      setStudioView("preview");
+      setStage("studio");
+    }
 
     let missingImageSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "image");
     let imageFailureReason = "场景画面生成失败。";
     for (let attempt = 0; attempt < AUTOMATIC_MEDIA_REPAIR_ATTEMPTS && missingImageSceneNumbers.length > 0; attempt += 1) {
+      if (resumeMissingOnly) setBusyAction("generating-images");
       setProgress(64);
       setGenerationStatus(attempt === 0
         ? resumeMissingOnly ? "正在补齐尚未完成的场景画面" : "正在生成统一风格的场景画面"
@@ -5734,6 +5847,7 @@ export function WorkspaceClient({
     let missingAudioSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "audio");
     let audioFailureReason = "场景配音生成失败。";
     for (let attempt = 0; attempt < AUTOMATIC_MEDIA_REPAIR_ATTEMPTS && missingAudioSceneNumbers.length > 0; attempt += 1) {
+      if (resumeMissingOnly) setBusyAction("generating-audio");
       setProgress(84);
       setGenerationStatus(attempt === 0
         ? resumeMissingOnly ? "正在补齐尚未完成的自然配音" : "正在生成自然配音"
@@ -5769,7 +5883,11 @@ export function WorkspaceClient({
     if (missingImageSceneNumbers.length > 0 || missingAudioSceneNumbers.length > 0) {
       setProject(generatedProject);
       setGenerationIssues(issues);
-      throw new Error(`系统自动补齐素材后仍有 ${missingImageSceneNumbers.length} 个画面和 ${missingAudioSceneNumbers.length} 段配音未完成。本次任务不会被标记为生成完成，系统会保留进度并在恢复任务时继续补齐。`);
+      const incompleteMessage = `系统自动补齐后仍有 ${missingImageSceneNumbers.length} 个画面和 ${missingAudioSceneNumbers.length} 段配音未完成。`;
+      if (!resumeMissingOnly) {
+        throw new Error(`${incompleteMessage} 本次任务不会被标记为生成完成，请稍后恢复任务继续补齐。`);
+      }
+      warnings.push(`${incompleteMessage} 可在工作室继续重试。`);
     }
 
     if (options.motion === "key-scenes") {
@@ -5802,6 +5920,7 @@ export function WorkspaceClient({
     }
 
     setGenerationStatus("正在保存可继续编辑的项目");
+    if (resumeMissingOnly) setBusyAction(undefined);
     setProgress(96);
     setGenerationIssues(issues);
     setErrorMessage(undefined);
@@ -5821,10 +5940,12 @@ export function WorkspaceClient({
     setPendingPlan(undefined);
     setStudioView("preview");
     setProgress(100);
-    setGenerationStartedAt(undefined);
-    clearPendingGenerationSession();
+    if (!resumeMissingOnly) {
+      setGenerationStartedAt(undefined);
+      clearPendingGenerationSession();
+    }
     setBriefAttachments([]);
-    window.setTimeout(() => setStage("studio"), 350);
+    if (!resumeMissingOnly) window.setTimeout(() => setStage("studio"), 350);
   }
 
   function addBriefAttachmentFiles(files: File[]) {
@@ -7351,14 +7472,29 @@ export function WorkspaceClient({
       setStage("brief");
       return;
     }
-    if (recoveringGenerationRef.current) return;
     const stored = readPendingGenerationSession();
     const options = stored?.requestId === task.id ? stored.options : task.options ?? generationOptions;
     const startedAt = stored?.requestId === task.id
       ? stored.startedAt
       : Number.isFinite(Date.parse(task.createdAt ?? task.updatedAt)) ? Date.parse(task.createdAt ?? task.updatedAt) : Date.now();
     const resumablePrompt = prompt || (stored?.requestId === task.id ? stored.prompt : "");
+    if (recoveringGenerationRef.current && recoveringGenerationRequestIdRef.current === task.id) {
+      setBriefPrompt(resumablePrompt);
+      setGenerationOptions(options);
+      setGenerationStartedAt(startedAt);
+      setProgress((current) => Math.max(current, 36));
+      setGenerationStatus("正在等待后台完成脚本与分镜");
+      setErrorMessage(undefined);
+      setIsBusy(true);
+      setStage("generating");
+      return;
+    }
+    if (recoveringGenerationRef.current) {
+      setErrorMessage("另一个生成任务正在恢复，请稍后再打开这个任务。");
+      return;
+    }
     recoveringGenerationRef.current = true;
+    recoveringGenerationRequestIdRef.current = task.id;
     setBriefPrompt(resumablePrompt);
     setGenerationOptions(options);
     setGenerationStartedAt(startedAt);
@@ -7380,6 +7516,7 @@ export function WorkspaceClient({
       setErrorMessage(message);
     } finally {
       recoveringGenerationRef.current = false;
+      recoveringGenerationRequestIdRef.current = undefined;
       setIsBusy(false);
     }
   }
@@ -7393,10 +7530,12 @@ export function WorkspaceClient({
         project?: Project;
         messages?: ChatMessage[];
         pendingPlan?: EditPlan;
+        generationOptions?: GenerationOptions;
         error?: string;
       };
       if (!response.ok || !data.project || !data.messages) throw new Error(data.error || "项目读取失败。");
       setProject(data.project);
+      if (data.generationOptions) setGenerationOptions(data.generationOptions);
       setProjectSource("database");
       setMessages(data.messages);
       setSelectedScene(1);
@@ -7607,6 +7746,7 @@ export function WorkspaceClient({
           onMutateScene={(mutation) => void mutateSceneStructure(mutation)}
           onSaveScene={saveSceneEdits}
           onVoiceChange={(sceneNumbers, voice) => void regenerateAudio(sceneNumbers, voice)}
+          expectedNarrationLanguage={generationOptions.language}
           onViewChange={setStudioView}
           pendingPlan={pendingPlan}
           project={project}

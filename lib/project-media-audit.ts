@@ -1,6 +1,7 @@
 import { resolvedClipPlaybackRate } from "@/lib/clip-timing";
 import { narrationComfortIssue } from "@/lib/narration-fit";
 import { productionSettingsFromScenes } from "@/lib/production-settings";
+import { isDeliverableVisualAsset } from "@/lib/generation-resume";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 
 export type ProjectMediaAuditIssue = {
@@ -54,7 +55,7 @@ export function auditProjectMedia(project: Project) {
   const production = productionSettingsFromScenes(project.currentVersion.scenes);
 
   for (const scene of project.currentVersion.scenes) {
-    const visual = scene.assets.find((asset) => ["clip", "image"].includes(asset.type) && asset.url);
+    const visual = scene.assets.find(isDeliverableVisualAsset);
     const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
     const clip = scene.assets.find((asset) => asset.type === "clip" && asset.url);
     if (!visual) {

@@ -3969,6 +3969,25 @@ html[data-theme="dark"] .kv-user-menu {
   line-height: 1.45;
 }
 
+.kv-generation-task-copy .kv-generation-task-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.kv-generation-task-specs em {
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 3px 8px;
+  color: #41605d;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .kv-generation-task-action {
   display: grid;
   justify-items: end;

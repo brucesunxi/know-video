@@ -9,7 +9,7 @@ const output = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports, require: () => ({}) });
-const { mediaAssetStatus, missingMotionSceneNumbers, missingSceneAssetNumbers, sceneHasAudioAsset, sceneHasVisualAsset } = module.exports;
+const { isDeliverableVisualAsset, mediaAssetStatus, missingMotionSceneNumbers, missingSceneAssetNumbers, sceneHasAudioAsset, sceneHasVisualAsset } = module.exports;
 
 const scenes = [
   { sceneNumber: 1, assets: [{ type: "image", url: "image-1" }, { type: "audio", url: "audio-1" }, { type: "clip", url: "clip-1" }] },
@@ -27,5 +27,9 @@ assert.equal(sceneHasAudioAsset(scenes[1]), false);
 assert.equal(mediaAssetStatus(scenes), "partial");
 assert.equal(mediaAssetStatus([scenes[0]]), "ready");
 assert.equal(mediaAssetStatus([{ sceneNumber: 5, assets: [] }]), "failed");
+const fallback = { type: "image", url: "fallback", metadata: { source: "fallback-image", model: "local-svg-fallback" } };
+assert.equal(isDeliverableVisualAsset(fallback), false);
+assert.equal(sceneHasVisualAsset({ sceneNumber: 5, assets: [fallback] }), false);
+assert.deepEqual(Array.from(missingSceneAssetNumbers([{ sceneNumber: 5, assets: [fallback] }], "image")), [5]);
 
 console.log("Generation resume smoke checks passed.");
