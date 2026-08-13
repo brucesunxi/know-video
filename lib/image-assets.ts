@@ -73,6 +73,21 @@ function buildUltraSafeSceneImagePrompt(scene: Scene, project: Project) {
   ].join("\n"));
 }
 
+function buildTextSafeCorrectionPrompt(scene: Scene, project: Project) {
+  return enforceTextFreeImagePrompt([
+    `Create a polished 16:9 scene illustration for ${imageSafeSemanticText(project.title)}.`,
+    projectVisualIdentity(project),
+    exactVisualStyleDirection(scene.style),
+    `Scene meaning: ${imageSafeSemanticText(scene.voiceover)} ${imageSafeSemanticText(scene.visualPrompt)}`,
+    semanticFallbackComposition(scene),
+    `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
+    "Build the meaning with recognizable people, environments, actions, and physical objects instead of written information.",
+    "TEXT-SAFE COMPOSITION: do not include screens, phones facing camera, documents, books, signs, posters, whiteboards, blackboards, dashboards, charts, diagrams, forms, packaging, badges, uniforms with markings, storefronts, vehicle markings, or decorative glyphs.",
+    "Use natural scene depth and a single clear action. Keep all surfaces plain and uninterrupted. Do not arrange blank rectangles or lines in a way that resembles an interface, document, chart, or writing.",
+    "The final frame must remain rich and specific to this scene while containing no typography or writing-like marks."
+  ].join("\n"));
+}
+
 function semanticFallbackComposition(scene: Scene) {
   const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`;
   if (/(?:方块|沙盒|游戏|课程|编程|voxel|sandbox|game|course|programming)/iu.test(description)) {
@@ -107,7 +122,7 @@ async function generatedImageContainsText(body: Buffer) {
       messages: [{
         role: "user",
         content: [
-          { type: "text", text: "Inspect the entire image. Answer exactly TEXT_PRESENT if it contains any visible word, letter, number, caption, label, logo, watermark, signature, pseudo-writing, scrambled lettering, or writing-like glyph. Otherwise answer exactly TEXT_FREE." },
+          { type: "text", text: "Inspect the entire image. Answer TEXT_PRESENT when there is readable text, a logo, watermark, signature, or a clustered sequence of fake or scrambled characters clearly intended to look like writing. Do not classify ordinary object outlines, connector lines, isolated geometric marks, facial features, texture strokes, or unlabeled pictorial icons as text. Answer exactly TEXT_PRESENT or TEXT_FREE." },
           { type: "image_url", image_url: { url: `data:image/png;base64,${body.toString("base64")}`, detail: "high" } }
         ]
       }]
@@ -117,7 +132,7 @@ async function generatedImageContainsText(body: Buffer) {
     if (verdict.includes("TEXT_FREE")) return false;
     throw new Error("Vision model returned an inconclusive text inspection");
   } catch (error) {
-    throw new GeneratedImageQualityError("无法确认生成画面是否完全无文字。", { cause: error });
+    throw new GeneratedImageQualityError("无法确认生成画面是否完全无文字。", "text_check_failed", { cause: error });
   }
 }
 
@@ -199,9 +214,11 @@ async function generateSceneImage(
   let qualityMetadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"] | undefined;
   for (let qualityAttempt = 0; qualityAttempt < 3; qualityAttempt += 1) {
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
-    const attemptPrompt = enforceTextFreeImagePrompt(qualityAttempt === 0
-      ? prompt
-      : `${prompt}\nQuality correction attempt ${qualityAttempt + 1}: the prior candidate was rejected. Rebuild the composition as a fully resolved, information-rich frame in the exact locked rendering medium. Remove every word, letter, number, logo, watermark, fake glyph, and writing-like mark; use blank surfaces and purely pictorial objects instead. Keep clear subject separation and meaningful foreground, midground, and background. Do not switch to photography, 3D, voxel, low-poly, or another illustration style. Avoid empty gradients or featureless surfaces.`);
+    const attemptPrompt = qualityAttempt === 2
+      ? buildTextSafeCorrectionPrompt(scene, project)
+      : enforceTextFreeImagePrompt(qualityAttempt === 0
+        ? prompt
+        : `${prompt}\nQuality correction attempt ${qualityAttempt + 1}: the prior candidate was rejected. Rebuild the composition as a fully resolved, information-rich frame in the exact locked rendering medium. Remove every word, letter, number, logo, watermark, fake glyph, and writing-like mark; use blank surfaces and purely pictorial objects instead. Keep clear subject separation and meaningful foreground, midground, and background. Do not switch to photography, 3D, voxel, low-poly, or another illustration style. Avoid empty gradients or featureless surfaces.`);
     let generatedBody: Buffer;
     let generatedModel: string;
     let effectivePrompt = attemptPrompt;
@@ -246,7 +263,7 @@ async function generateSceneImage(
       }
       const normalized = await normalizeGeneratedImage(generatedBody);
       if (await generatedImageContainsText(normalized.body)) {
-        throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。");
+        throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。", "text_detected");
       }
       body = normalized.body;
       qualityMetadata = normalized.metadata;
@@ -255,7 +272,7 @@ async function generateSceneImage(
       break;
     } catch (error) {
       if (!(error instanceof GeneratedImageQualityError) || qualityAttempt === 2) throw error;
-      console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation; retrying:`, error.message);
+      console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${error.code}); retrying:`, error.message);
     }
   }
   if (!body || !qualityMetadata) return undefined;
@@ -351,7 +368,8 @@ export async function generateProjectSceneImages(
           assets: options.candidate ? [...existingAssets, generatedAsset] : [generatedAsset, ...existingAssets]
         };
       } catch (error) {
-        console.error(`[image-assets] Scene ${scene.sceneNumber} image generation failed:`, error);
+        const qualityCode = error instanceof GeneratedImageQualityError ? error.code : undefined;
+        console.error(`[image-assets] Scene ${scene.sceneNumber} image generation failed${qualityCode ? ` (${qualityCode})` : ""}:`, error);
         failures.push(classifyImageError(error));
       }
   });

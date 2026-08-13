@@ -73,7 +73,8 @@ export async function POST(request: Request) {
     updated = await generateProjectSceneImages(updated, {
       replaceExistingImages: true,
       sceneNumbers: retrySceneNumbers,
-      quality: body.quality
+      quality: body.quality,
+      variantKey: `repair-${retry + 1}-${crypto.randomUUID()}`
     });
     failedTargets = imageFailedScenes(updated.currentVersion.scenes, requestedSceneNumbers, previousImageKeys);
   }
