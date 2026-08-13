@@ -857,7 +857,7 @@ function generationTaskTitle(task: GenerationTaskListItem, language: UiLanguage)
   const prompt = localizedGenerationPrompt(task.prompt?.trim() ?? "", language);
   if (!prompt) return fallback;
   const requestOnly = prompt
-    .split(/\n|(?:Apply|Use) the [“\"].+?[”\"] (?:template )?style:|应用[“\"].+?[”\"](?:模板)?风格[：:]/u)[0]
+    .split(/\n|(?:Apply|Use) the [“"].+?[”"] (?:template )?style:|应用[“"].+?[”"](?:模板)?风格[：:]/u)[0]
     .trim();
   const firstSentence = requestOnly.match(/^.+?[。！？.!?](?:\s|$)/u)?.[0]?.trim() ?? requestOnly;
   return compactText(firstSentence, fallback, language === "zh-CN" ? 42 : 86);

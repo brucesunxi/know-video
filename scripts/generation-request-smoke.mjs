@@ -79,6 +79,15 @@ assert.match(workspace, /window\.localStorage\.setItem\(PENDING_GENERATION_STORA
 assert.match(workspace, /generationRequests\?: GenerationTaskListItem\[\]/);
 assert.match(workspace, /function generationTaskTitle\(task: GenerationTaskListItem, language: UiLanguage\)/);
 assert.match(workspace, /function generationTaskSpecs\(task: GenerationTaskListItem, language: UiLanguage\)/);
+const taskPromptDivider = /\n|(?:Apply|Use) the [“"].+?[”"] (?:template )?style:|应用[“"].+?[”"](?:模板)?风格[：:]/u;
+assert.equal(
+  'Create a safety briefing. Apply the “Job-site safety briefing” template style: Cinematic documentary.'.split(taskPromptDivider)[0],
+  "Create a safety briefing. "
+);
+assert.equal(
+  '制作工地安全简报。应用“工地安全”模板风格：电影纪实。'.split(taskPromptDivider)[0],
+  "制作工地安全简报。"
+);
 assert.match(workspace, /function openGenerationTask\(task: GenerationTaskListItem\)/);
 assert.match(workspace, /onOpenGeneration: \(task: GenerationTaskListItem\) => void/);
 assert.match(workspace, /查看进度/);
