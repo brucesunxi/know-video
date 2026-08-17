@@ -272,6 +272,13 @@ function localizedRuntimeLabel(value: string, language: UiLanguage) {
     "建议重新导出一次；如果仍失败，先确认所有场景都能正常播放预览。": "Export again. If it still fails, confirm that every scene plays correctly in preview."
   };
   if (labels[value]) return labels[value];
+  const compositeParts = value.split(" · ");
+  if (compositeParts.length > 1) {
+    const translatedParts = compositeParts.map((part) => labels[part] ?? part);
+    if (translatedParts.every((part) => !/\p{Script=Han}/u.test(part))) {
+      return translatedParts.join(" · ");
+    }
+  }
   const seconds = value.match(/^约 (\d+) 秒$/u);
   if (seconds) return `About ${seconds[1]} seconds`;
   const scenes = value.match(/^(\d+) 个场景$/u);

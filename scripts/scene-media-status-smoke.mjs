@@ -7,6 +7,8 @@ const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "
 assert.match(workspace, /function sceneMediaState/);
 assert.match(workspace, /function sceneMediaStatusLabel/);
 assert.match(workspace, /function sceneMediaDiagnosticItems/);
+assert.match(workspace, /const compositeParts = value\.split\(" · "\)/);
+assert.match(workspace, /translatedParts\.join\(" · "\)/);
 assert.match(workspace, /sceneHasVisualAsset/);
 assert.match(workspace, /sceneHasAudioAsset/);
 assert.match(workspace, /className=\{`kv-scene-media-status \$\{mediaState\.ready \? "ready" : "partial"\}`\}/);
