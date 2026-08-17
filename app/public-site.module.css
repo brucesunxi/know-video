@@ -53,6 +53,26 @@
   font-weight: 650;
 }
 
+.languageSwitch {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid #cfd7e1;
+  border-radius: 7px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.languageSwitch:hover {
+  border-color: #7fbdb5;
+  color: #007c70;
+}
+
 .nav a:hover,
 .footer a:hover {
   color: #007c70;

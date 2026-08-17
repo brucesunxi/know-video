@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Know Video Studio",
-  description: "从一句需求生成脚本、分镜、画面、配音和可对话修改的视频。"
+  description: "Create scripts, storyboards, scene visuals, narration, motion, and editable videos from one brief."
 };
 
 export default function RootLayout({
