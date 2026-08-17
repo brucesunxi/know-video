@@ -14,6 +14,7 @@ const {
   extractBriefSubject,
   ensureBriefFaithfulProjectTitle,
   projectTitleRepresentsBrief,
+  projectTitleMistakesStyleForSubject,
   extractBriefVisualConcepts,
   detectBriefDomain,
   isProductionInstructionClause
@@ -27,6 +28,8 @@ assert.equal(extractBriefSubject(kindergartenBrief, true), "幼儿园");
 assert.equal(projectTitleRepresentsBrief("纸乐园的第一天", kindergartenBrief, true), false);
 assert.equal(projectTitleRepresentsBrief("走进幼儿园", kindergartenBrief, true), true);
 assert.equal(ensureBriefFaithfulProjectTitle("纸乐园的第一天", kindergartenBrief, true), "幼儿园宣传片");
+assert.equal(projectTitleMistakesStyleForSubject("纸乐园的第一天", kindergartenBrief, true), true);
+assert.equal(projectTitleMistakesStyleForSubject("我们的第一天", kindergartenBrief, true), false);
 assert.equal(projectTitleRepresentsBrief("A Day at Kindergarten", kindergartenBrief, false), true);
 assert.equal(ensureBriefFaithfulProjectTitle("A Day at Paper Paradise", kindergartenBrief, false), "Kindergarten Introduction");
 assert.equal(facts.some((fact) => /30\s*秒|官网首屏|风格高级/u.test(fact)), false);

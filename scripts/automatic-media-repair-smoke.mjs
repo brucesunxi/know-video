@@ -6,7 +6,9 @@ const audioRoute = fs.readFileSync(new URL("../app/api/assets/audio/generate/rou
 const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
 assert.match(workspace, /AUTOMATIC_MEDIA_REPAIR_ATTEMPTS = 3/);
-assert.match(workspace, /attempt < AUTOMATIC_MEDIA_REPAIR_ATTEMPTS && missingImageSceneNumbers\.length > 0/);
+assert.match(workspace, /generateImageScenesIndependently/);
+assert.match(workspace, /sceneNumbers: \[sceneNumber\]/);
+assert.match(workspace, /for \(let attempt = 0; attempt < 2 && !completed; attempt \+= 1\)/);
 assert.match(workspace, /attempt < AUTOMATIC_MEDIA_REPAIR_ATTEMPTS && missingAudioSceneNumbers\.length > 0/);
 assert.match(workspace, /missingImageSceneNumbers = missingSceneAssetNumbers/);
 assert.match(workspace, /missingAudioSceneNumbers = missingSceneAssetNumbers/);

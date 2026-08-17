@@ -195,6 +195,21 @@ export async function getProjectGenerationOptions(projectId: string, userId: str
   return rows[0] ? toRecord(rows[0]).options : undefined;
 }
 
+export async function getProjectGenerationRequest(projectId: string, userId: string) {
+  if (!hasDatabaseUrl()) return undefined;
+  await ensureGenerationRequestsSchema();
+  const rows = await getSql()`
+    select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
+    from generation_requests
+    where project_id = ${projectId}
+      and user_id = ${userId}
+      and status = 'ready'
+    order by updated_at desc
+    limit 1
+  ` as GenerationRequestRow[];
+  return rows[0] ? toRecord(rows[0]) : undefined;
+}
+
 export async function listIncompleteGenerationRequests(userId: string) {
   if (!hasDatabaseUrl()) return [];
   await ensureGenerationRequestsSchema();

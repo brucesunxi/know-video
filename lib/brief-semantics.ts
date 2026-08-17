@@ -136,6 +136,8 @@ const subjectTranslations: Array<[RegExp, string, string]> = [
   [/游戏/u, "游戏", "game"]
 ];
 
+const visualStyleTitlePattern = /(?:纸艺|拼贴|纸乐园|纸世界|像素|漫画|黑板|粉笔|线稿|简笔|等距|电影感|电影纪实|写实|paper\s*(?:art|collage|cut)|collage|pixel|comic|chalkboard|line\s*art|isometric|cinematic|realistic)/iu;
+
 function translatedSubject(subject: string, chinese: boolean) {
   const translation = subjectTranslations.find(([pattern]) => pattern.test(subject));
   if (!translation) return subject;
@@ -168,6 +170,12 @@ export function ensureBriefFaithfulProjectTitle(candidate: string, prompt: strin
 
   const readableSubject = localizedSubject.replace(/\s+/g, " ").trim();
   return `${readableSubject.charAt(0).toUpperCase()}${readableSubject.slice(1)} Introduction`;
+}
+
+export function projectTitleMistakesStyleForSubject(title: string, prompt: string, chinese = true) {
+  return !projectTitleRepresentsBrief(title, prompt, chinese)
+    && visualStyleTitlePattern.test(title)
+    && !visualStyleTitlePattern.test(prompt);
 }
 
 export function extractBriefFacts(prompt: string, chinese = true) {

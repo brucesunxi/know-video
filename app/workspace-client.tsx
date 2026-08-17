@@ -410,6 +410,50 @@ type MediaGenerationResponse = {
 const IMAGE_GENERATION_TIMEOUT_MS = 305_000;
 const AUDIO_GENERATION_TIMEOUT_MS = 305_000;
 const AUTOMATIC_MEDIA_REPAIR_ATTEMPTS = 3;
+
+async function generateImageScenesIndependently(input: {
+  project: Project;
+  sceneNumbers: number[];
+  quality: "standard" | "premium";
+  onProject?: (project: Project) => void;
+}) {
+  let updatedProject = input.project;
+  const failedSceneNumbers: number[] = [];
+  let lastError: string | undefined;
+
+  for (const sceneNumber of input.sceneNumbers) {
+    let completed = false;
+    for (let attempt = 0; attempt < 2 && !completed; attempt += 1) {
+      try {
+        const response = await fetch("/api/assets/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            projectId: updatedProject.id,
+            versionId: updatedProject.currentVersion.id,
+            billingRequestId: crypto.randomUUID(),
+            sceneNumbers: [sceneNumber],
+            quality: input.quality,
+            variantKey: attempt === 0 ? "primary" : `repair-${crypto.randomUUID()}`
+          }),
+          signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS)
+        });
+        const data = await response.json().catch(() => ({})) as MediaGenerationResponse;
+        if (data.project) {
+          updatedProject = data.project;
+          input.onProject?.(updatedProject);
+        }
+        completed = response.ok && Boolean(data.completedSceneNumbers?.includes(sceneNumber));
+        if (!completed) lastError = data.error || lastError || "场景画面生成失败。";
+      } catch (error) {
+        lastError = requestErrorMessage(error, lastError || "场景画面生成失败。");
+      }
+    }
+    if (!completed) failedSceneNumbers.push(sceneNumber);
+  }
+
+  return { project: updatedProject, failedSceneNumbers, error: lastError };
+}
 type InvalidRenderMedia = {
   sceneNumber: number;
   type: "visual" | "audio";
@@ -6000,34 +6044,18 @@ export function WorkspaceClient({
     ]);
     let missingImageSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "image");
     let imageFailureReason = "场景画面生成失败。";
-    for (let attempt = 0; attempt < AUTOMATIC_MEDIA_REPAIR_ATTEMPTS && missingImageSceneNumbers.length > 0; attempt += 1) {
+    if (missingImageSceneNumbers.length > 0) {
       if (resumeMissingOnly) setBusyAction("generating-images");
       setProgress(64);
-      setGenerationStatus(attempt === 0
-        ? resumeMissingOnly ? "正在补齐尚未完成的场景画面" : "正在生成统一风格的场景画面"
-        : `正在自动补齐 ${missingImageSceneNumbers.length} 个缺失画面（第 ${attempt + 1} 次）`);
-      try {
-        const imageResponse = await fetch("/api/assets/generate", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            projectId: generatedProject.id,
-            versionId: generatedProject.currentVersion.id,
-            billingRequestId: crypto.randomUUID(),
-            sceneNumbers: missingImageSceneNumbers,
-            quality: "standard"
-          }),
-          signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS)
-        });
-        const imageData = await imageResponse.json() as MediaGenerationResponse;
-        if (imageData.project) {
-          generatedProject = imageData.project;
-          setProject(generatedProject);
-        }
-        if (!imageResponse.ok) imageFailureReason = imageData.error || imageFailureReason;
-      } catch (error) {
-        imageFailureReason = requestErrorMessage(error, imageFailureReason);
-      }
+      setGenerationStatus(resumeMissingOnly ? "正在补齐尚未完成的场景画面" : "正在生成统一风格的场景画面");
+      const imageResult = await generateImageScenesIndependently({
+        project: generatedProject,
+        sceneNumbers: missingImageSceneNumbers,
+        quality: "standard",
+        onProject: setProject
+      });
+      generatedProject = imageResult.project;
+      imageFailureReason = imageResult.error || imageFailureReason;
       missingImageSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "image");
     }
     if (missingImageSceneNumbers.length > 0) {
@@ -6555,24 +6583,14 @@ export function WorkspaceClient({
     if (data.regeneration.imageSceneNumbers.length > 0) {
       setBusyAction("generating-images");
       try {
-        const imageResponse = await fetch("/api/assets/generate", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            projectId: updatedProject.id,
-            versionId: updatedProject.currentVersion.id,
-            billingRequestId: crypto.randomUUID(),
-            sceneNumbers: data.regeneration.imageSceneNumbers,
-            quality: "standard"
-          }),
-          signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS)
+        const imageResult = await generateImageScenesIndependently({
+          project: updatedProject,
+          sceneNumbers: data.regeneration.imageSceneNumbers,
+          quality: "standard",
+          onProject: setProject
         });
-        const imageData = await imageResponse.json() as { project?: Project; error?: string };
-        if (imageData.project) {
-          updatedProject = imageData.project;
-          setProject(updatedProject);
-        }
-        if (!imageResponse.ok) warnings.push(imageData.error || "部分修改场景的画面生成失败。");
+        updatedProject = imageResult.project;
+        if (imageResult.failedSceneNumbers.length > 0) warnings.push(imageResult.error || "部分修改场景的画面生成失败。");
       } catch (error) {
         warnings.push(requestErrorMessage(error, "修改场景的画面生成失败。"));
       }
@@ -6719,24 +6737,14 @@ export function WorkspaceClient({
       if (regeneration.imageSceneNumbers.length > 0) {
         setBusyAction("generating-images");
         try {
-          const imageResponse = await fetch("/api/assets/generate", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              projectId: updatedProject.id,
-              versionId: updatedProject.currentVersion.id,
-              billingRequestId: crypto.randomUUID(),
-              sceneNumbers: regeneration.imageSceneNumbers,
-              quality: "standard"
-            }),
-            signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS)
+          const imageResult = await generateImageScenesIndependently({
+            project: updatedProject,
+            sceneNumbers: regeneration.imageSceneNumbers,
+            quality: "standard",
+            onProject: setProject
           });
-          const imageData = await imageResponse.json() as { project?: Project; error?: string };
-          if (imageData.project) {
-            updatedProject = imageData.project;
-            setProject(updatedProject);
-          }
-          if (!imageResponse.ok) warnings.push(imageData.error || "拆分或合并后的画面生成失败。");
+          updatedProject = imageResult.project;
+          if (imageResult.failedSceneNumbers.length > 0) warnings.push(imageResult.error || "拆分或合并后的画面生成失败。");
         } catch (error) {
           warnings.push(requestErrorMessage(error, "拆分或合并后的画面生成失败。"));
         }
@@ -7378,23 +7386,18 @@ export function WorkspaceClient({
     setVersionPreview(undefined);
     setAssetsOpen(false);
     try {
-      const response = await fetch("/api/assets/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          projectId: project.id,
-          versionId: project.currentVersion.id,
-          billingRequestId: crypto.randomUUID(),
-          sceneNumbers,
-          quality
-        }),
-        signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS)
+      const targetSceneNumbers = sceneNumbers?.length
+        ? sceneNumbers
+        : project.currentVersion.scenes.map((scene) => scene.sceneNumber);
+      const result = await generateImageScenesIndependently({
+        project,
+        sceneNumbers: targetSceneNumbers,
+        quality,
+        onProject: setProject
       });
-      const data = await response.json() as MediaGenerationResponse;
-      if (data.project) setProject(data.project);
-      if (!response.ok || !data.project) throw new Error(data.error || "场景画面生成失败。");
-      setInvalidRenderMedia((current) => withoutRepairedInvalidMedia(current, "visual", sceneNumbers));
-      setGenerationIssues((current) => withoutRepairedGenerationIssues(current, "visual", sceneNumbers));
+      if (result.failedSceneNumbers.length > 0) throw new Error(result.error || "部分场景画面生成失败。");
+      setInvalidRenderMedia((current) => withoutRepairedInvalidMedia(current, "visual", targetSceneNumbers));
+      setGenerationIssues((current) => withoutRepairedGenerationIssues(current, "visual", targetSceneNumbers));
       pushMessage({
         role: "assistant",
         type: "text",
@@ -7403,7 +7406,7 @@ export function WorkspaceClient({
             ? `场景 ${sceneNumbers[0]} 已经提升为精细画质。`
             : `场景 ${sceneNumbers[0]} 的画面已经重新生成。`
           : "场景画面已经重新生成，可以继续播放或导出。",
-        versionId: data.project.currentVersion.id
+        versionId: result.project.currentVersion.id
       }, true);
     } catch (error) {
       const message = requestErrorMessage(error, "场景画面生成失败，请稍后重试。");

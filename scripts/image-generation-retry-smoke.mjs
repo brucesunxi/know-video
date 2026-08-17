@@ -5,15 +5,13 @@ const route = fs.readFileSync(new URL("../app/api/assets/generate/route.ts", imp
 const imageAssets = fs.readFileSync(new URL("../lib/image-assets.ts", import.meta.url), "utf8");
 
 assert.match(route, /function imageFailedScenes/);
+assert.match(route, /MAX_SCENES_PER_IMAGE_REQUEST = 1/);
+assert.match(route, /processingSceneNumbers = requestedSceneNumbers\.slice\(0, MAX_SCENES_PER_IMAGE_REQUEST\)/);
 assert.match(route, /requestedSceneNumbers/);
-assert.match(route, /for \(let retry = 0; retry < 2 && failedTargets\.length > 0; retry \+= 1\)/);
-assert.match(route, /Retrying failed image scenes/);
-assert.match(route, /generateProjectSceneImages\(updated, \{/);
-assert.match(route, /sceneNumbers: retrySceneNumbers/);
-assert.match(route, /variantKey: `repair-\$\{retry \+ 1\}-\$\{crypto\.randomUUID\(\)\}`/);
+assert.match(route, /variantKey: body\.variantKey/);
 assert.match(route, /persistGeneratedSceneAssets/);
-assert.ok(route.indexOf("Retrying failed image scenes") < route.lastIndexOf("persistGeneratedSceneAssets"));
-assert.match(route, /mediaGenerationProgress\(\s*requestedSceneNumbers,/);
+assert.match(route, /sceneNumbers: processingSceneNumbers/);
+assert.match(route, /mediaGenerationProgress\(\s*processingSceneNumbers,/);
 assert.match(imageAssets, /inspectGeneratedImage/);
 assert.match(imageAssets, /inspectCloudflareGeneratedImage/);
 assert.match(imageAssets, /generatedImageContainsAnyText/);

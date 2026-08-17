@@ -12,10 +12,12 @@ const requestSchema = z.object({
   versionId: z.string().min(1).max(200),
   sceneNumbers: z.array(z.number().int().positive()).optional(),
   quality: z.enum(["standard", "premium"]).default("standard"),
+  variantKey: z.string().min(1).max(200).optional(),
   billingRequestId: z.string().uuid().optional()
 });
 
 export const maxDuration = 300;
+const MAX_SCENES_PER_IMAGE_REQUEST = 1;
 
 function imageFailedScenes(
   scenes: Scene[],
@@ -60,28 +62,19 @@ export async function POST(request: Request) {
   const requestedSceneNumbers = body.sceneNumbers?.length
     ? body.sceneNumbers
     : project.currentVersion.scenes.map((scene) => scene.sceneNumber);
-  let updated = await generateProjectSceneImages(project, {
+  // Persist small batches so a serverless timeout cannot discard an entire storyboard.
+  const processingSceneNumbers = requestedSceneNumbers.slice(0, MAX_SCENES_PER_IMAGE_REQUEST);
+  const updated = await generateProjectSceneImages(project, {
     replaceExistingImages: true,
-    sceneNumbers: body.sceneNumbers,
-    quality: body.quality
+    sceneNumbers: processingSceneNumbers,
+    quality: body.quality,
+    variantKey: body.variantKey
   });
-  let failedTargets = imageFailedScenes(updated.currentVersion.scenes, requestedSceneNumbers, previousImageKeys);
-
-  for (let retry = 0; retry < 2 && failedTargets.length > 0; retry += 1) {
-    const retrySceneNumbers = failedTargets.map((scene) => scene.sceneNumber);
-    console.warn(`[image-assets] Retrying failed image scenes (${retry + 1}/2): ${retrySceneNumbers.join(",")}.`);
-    updated = await generateProjectSceneImages(updated, {
-      replaceExistingImages: true,
-      sceneNumbers: retrySceneNumbers,
-      quality: body.quality,
-      variantKey: `repair-${retry + 1}-${crypto.randomUUID()}`
-    });
-    failedTargets = imageFailedScenes(updated.currentVersion.scenes, requestedSceneNumbers, previousImageKeys);
-  }
+  let failedTargets = imageFailedScenes(updated.currentVersion.scenes, processingSceneNumbers, previousImageKeys);
 
   await persistGeneratedSceneAssets(updated.currentVersion.id, updated.currentVersion.scenes, {
     replaceImages: true,
-    sceneNumbers: body.sceneNumbers
+    sceneNumbers: processingSceneNumbers
   });
   const persisted = await loadProjectForRender(body.projectId, body.versionId, user.id);
   if (!persisted) {
@@ -89,7 +82,7 @@ export async function POST(request: Request) {
   }
   const persistedFailedTargets = imageFailedScenes(
     persisted.currentVersion.scenes,
-    requestedSceneNumbers,
+    processingSceneNumbers,
     previousImageKeys
   );
   if (failedTargets.length === 0 && persistedFailedTargets.length > 0) {
@@ -97,7 +90,7 @@ export async function POST(request: Request) {
   }
   failedTargets = failedTargets.length > 0 ? failedTargets : persistedFailedTargets;
   const progress = mediaGenerationProgress(
-    requestedSceneNumbers,
+    processingSceneNumbers,
     failedTargets.map((scene) => scene.sceneNumber)
   );
   const completedScenes = persisted.currentVersion.scenes.filter((scene) => progress.completedSceneNumbers.includes(scene.sceneNumber));
@@ -117,7 +110,7 @@ export async function POST(request: Request) {
         : billingIdempotencyKey(imageResourceType, [body.projectId, body.versionId, ...completedImageKeys]),
       status: "settled",
       metadata: {
-        requestedSceneNumbers,
+        requestedSceneNumbers: processingSceneNumbers,
         completedSceneNumbers: progress.completedSceneNumbers,
         failedSceneNumbers: progress.failedSceneNumbers,
         quality: body.quality,
@@ -130,12 +123,12 @@ export async function POST(request: Request) {
       projectId: body.projectId,
       versionId: body.versionId,
       resourceType: imageResourceType,
-      quantity: requestedSceneNumbers.length,
+      quantity: processingSceneNumbers.length,
       idempotencyKey: body.billingRequestId
         ? `${imageResourceType}:${body.billingRequestId}`
-        : billingIdempotencyKey(imageResourceType, [body.projectId, body.versionId, "released", ...requestedSceneNumbers]),
+        : billingIdempotencyKey(imageResourceType, [body.projectId, body.versionId, "released", ...processingSceneNumbers]),
       status: "released",
-      metadata: { requestedSceneNumbers, failedSceneNumbers: progress.failedSceneNumbers, quality: body.quality }
+      metadata: { requestedSceneNumbers: processingSceneNumbers, failedSceneNumbers: progress.failedSceneNumbers, quality: body.quality }
     });
   }
 

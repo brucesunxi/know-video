@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
+import { ensureBriefFaithfulProjectTitle, projectTitleMistakesStyleForSubject } from "@/lib/brief-semantics";
 import { getSql, hasDatabaseUrl } from "@/lib/db";
-import { getProjectGenerationOptions } from "@/lib/generation-requests";
+import { getProjectGenerationRequest } from "@/lib/generation-requests";
 import { getProjectSnapshot } from "@/lib/project-store";
 import { deleteR2Objects } from "@/lib/r2";
 
@@ -33,8 +34,32 @@ export async function GET(
   if (!snapshot) {
     return NextResponse.json({ error: "项目不存在或已经被删除。" }, { status: 404 });
   }
-  const generationOptions = await getProjectGenerationOptions(projectId, user.id);
-  return NextResponse.json({ ...snapshot, generationOptions });
+  const generation = await getProjectGenerationRequest(projectId, user.id);
+  const originalPrompt = generation?.prompt
+    ?? snapshot.messages.find((message) => message.role === "user")?.content;
+  if (
+    originalPrompt
+    && projectTitleMistakesStyleForSubject(
+      snapshot.project.title,
+      originalPrompt,
+      generation?.options?.language !== "英文"
+    )
+  ) {
+    const repairedTitle = ensureBriefFaithfulProjectTitle(
+      snapshot.project.title,
+      originalPrompt,
+      generation?.options?.language !== "英文"
+    );
+    if (repairedTitle !== snapshot.project.title && hasDatabaseUrl()) {
+      await getSql()`
+        update projects
+        set title = ${repairedTitle}, updated_at = now()
+        where id = ${projectId} and user_id = ${user.id}
+      `;
+      snapshot.project = { ...snapshot.project, title: repairedTitle };
+    }
+  }
+  return NextResponse.json({ ...snapshot, generationOptions: generation?.options });
 }
 
 export async function PATCH(
