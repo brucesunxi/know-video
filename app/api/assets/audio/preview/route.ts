@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
-import { generateAzureChineseSpeech } from "@/lib/azure-speech";
+import { generateAzureSpeech } from "@/lib/azure-speech";
 import { isNarrationVoice, narrationVoiceProfile } from "@/lib/voice-profiles";
 
 const requestSchema = z.object({
-  voice: z.string().refine(isNarrationVoice)
+  voice: z.string().refine(isNarrationVoice),
+  language: z.enum(["中文", "英文"])
 });
 
 export const maxDuration = 60;
@@ -24,7 +25,13 @@ export async function POST(request: Request) {
 
   try {
     const profile = narrationVoiceProfile(parsed.data.voice);
-    const generated = await generateAzureChineseSpeech(profile.sampleText, undefined, profile.id);
+    const english = parsed.data.language === "英文";
+    const generated = await generateAzureSpeech(
+      english ? profile.sampleTextEn : profile.sampleText,
+      undefined,
+      profile.id,
+      english ? "en-US" : "zh-CN"
+    );
     return new NextResponse(new Uint8Array(generated.body), {
       headers: {
         "Cache-Control": "private, max-age=3600",

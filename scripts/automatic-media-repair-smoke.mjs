@@ -10,6 +10,9 @@ assert.match(workspace, /attempt < AUTOMATIC_MEDIA_REPAIR_ATTEMPTS && missingAud
 assert.match(workspace, /missingImageSceneNumbers = missingSceneAssetNumbers/);
 assert.match(workspace, /missingAudioSceneNumbers = missingSceneAssetNumbers/);
 assert.match(workspace, /本次任务不会被标记为生成完成/);
+assert.match(workspace, /if \(missingImageSceneNumbers\.length === 0 && missingAudioSceneNumbers\.length === 0\) \{\s*setGenerationStartedAt\(undefined\);\s*clearPendingGenerationSession\(\);/);
+assert.match(workspace, /if \(data\.generationOptions && missingRequiredMedia\)/);
+assert.match(workspace, /continueGeneratedProject\(\{\s*project: data\.project,/);
 assert.ok(
   workspace.indexOf("if (resumeMissingOnly) {") < workspace.indexOf("let missingImageSceneNumbers"),
   "a recovered durable project must enter the studio before media repair starts"

@@ -1,7 +1,6 @@
 import OpenAI from "openai";
 import { assertUsableSpeechAudio } from "@/lib/audio-quality";
-import { generateAzureChineseSpeech, hasAzureSpeech } from "@/lib/azure-speech";
-import { generateCloudflareSpeech, hasCloudflareAI } from "@/lib/cloudflare-ai";
+import { generateAzureSpeech, hasAzureSpeech } from "@/lib/azure-speech";
 import { getOptionalEnv } from "@/lib/env";
 import { sanitizeNarrationForSpeech } from "@/lib/narration-cleanup";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
@@ -11,6 +10,39 @@ import type { NarrationVoice, Project, Scene, SceneAsset } from "@/lib/types";
 
 function containsChinese(text: string) {
   return /\p{Script=Han}/u.test(text);
+}
+
+async function generateOpenAISpeech(
+  text: string,
+  targetDurationSeconds: number,
+  expectedTextDurationSeconds: number,
+  direction: string
+) {
+  const apiKey = getOptionalEnv("OPENAI_API_KEY");
+  if (!apiKey) throw new Error("OpenAI speech backup is not configured");
+  const client = new OpenAI({ apiKey });
+  const model = getOptionalEnv("OPENAI_TTS_MODEL") || "gpt-4o-mini-tts";
+  const voice = getOptionalEnv("OPENAI_TTS_VOICE") || "alloy";
+  const result = await client.audio.speech.create({
+    model,
+    voice: voice as "alloy",
+    input: text,
+    response_format: "wav",
+    instructions: `${direction} Use one consistent natural speaking pace. Clear pronunciation, no sound effects. Do not speed up or slow down to match a target duration.`
+  });
+  const body = Buffer.from(await result.arrayBuffer());
+  const inspection = assertUsableSpeechAudio(body, {
+    targetDurationSeconds,
+    expectedTextDurationSeconds
+  });
+  return {
+    body,
+    model,
+    voice,
+    contentType: "audio/wav" as const,
+    extension: "wav" as const,
+    actualDurationSeconds: inspection.durationSeconds
+  };
 }
 
 async function mapWithConcurrency<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>) {
@@ -41,66 +73,33 @@ async function generateSceneVoice(
   const expectedTextDurationSeconds = estimateNarrationSeconds(voiceover);
   const selectedVoice = narrationVoice ?? scene.style.narrationVoice ?? DEFAULT_NARRATION_VOICE;
   const profile = narrationVoiceProfile(selectedVoice);
-  if (containsChinese(voiceover)) {
-    try {
-      if (!hasAzureSpeech()) throw new Error("Chinese speech service is not configured");
-      const generated = await generateAzureChineseSpeech(voiceover, scene.durationSeconds, selectedVoice);
-      body = generated.body;
-      model = generated.model;
-      voice = generated.voice;
-      rate = generated.rate;
-      actualDurationSeconds = generated.actualDurationSeconds;
-      contentType = generated.contentType;
-      extension = generated.extension;
-    } catch (azureError) {
-      const apiKey = getOptionalEnv("OPENAI_API_KEY");
-      if (!apiKey) throw azureError;
-      console.error("[audio-assets] Azure Chinese speech failed, trying verified backup:", azureError);
-      const client = new OpenAI({ apiKey });
-      model = getOptionalEnv("OPENAI_TTS_MODEL") || "gpt-4o-mini-tts";
-      voice = getOptionalEnv("OPENAI_TTS_VOICE") || "alloy";
-      const result = await client.audio.speech.create({
-        model,
-        voice: voice as "alloy",
-        input: voiceover,
-        response_format: "wav",
-        instructions: `${profile.direction} Use your natural speaking pace consistently. Clear pronunciation, no sound effects. Do not speed up or slow down to match a target duration.`
-      });
-      body = Buffer.from(await result.arrayBuffer());
-      const inspection = assertUsableSpeechAudio(body, {
-        targetDurationSeconds: scene.durationSeconds,
-        expectedTextDurationSeconds
-      });
-      actualDurationSeconds = inspection.durationSeconds;
-      contentType = "audio/wav";
-      extension = "wav";
-    }
-  } else if (hasCloudflareAI()) {
-    const generated = await generateCloudflareSpeech(voiceover);
+  const narrationLanguage = containsChinese(voiceover) ? "zh-CN" : "en-US";
+  const direction = narrationLanguage === "zh-CN" ? profile.directionZh : profile.directionEn;
+  try {
+    if (!hasAzureSpeech()) throw new Error("Azure speech service is not configured");
+    const generated = await generateAzureSpeech(
+      voiceover,
+      scene.durationSeconds,
+      selectedVoice,
+      narrationLanguage
+    );
     body = generated.body;
     model = generated.model;
-    voice = "default";
+    voice = generated.voice;
+    rate = generated.rate;
+    actualDurationSeconds = generated.actualDurationSeconds;
     contentType = generated.contentType;
     extension = generated.extension;
-  } else {
-    const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
-    model = getOptionalEnv("OPENAI_TTS_MODEL") || "gpt-4o-mini-tts";
-    voice = getOptionalEnv("OPENAI_TTS_VOICE") || "alloy";
-    const result = await client.audio.speech.create({
-      model,
-      voice: voice as "alloy",
-      input: voiceover,
-      response_format: "mp3",
-      instructions: "Natural, confident film narration. Match the language of the text. Use one consistent natural speaking pace. Do not speed up or slow down to match a target duration."
-    });
-    body = Buffer.from(await result.arrayBuffer());
-    const inspection = assertUsableSpeechAudio(body, {
-      targetDurationSeconds: scene.durationSeconds,
-      expectedTextDurationSeconds
-    });
-    actualDurationSeconds = inspection.durationSeconds;
-    contentType = "audio/mpeg";
-    extension = "mp3";
+  } catch (azureError) {
+    if (!getOptionalEnv("OPENAI_API_KEY")) throw azureError;
+    console.error(`[audio-assets] Azure ${narrationLanguage} speech failed, switching to OpenAI backup:`, azureError);
+    const generated = await generateOpenAISpeech(
+      voiceover,
+      scene.durationSeconds,
+      expectedTextDurationSeconds,
+      direction
+    );
+    ({ body, model, voice, contentType, extension, actualDurationSeconds } = generated);
   }
   const inspection = assertUsableSpeechAudio(body, {
     targetDurationSeconds: scene.durationSeconds,
@@ -143,7 +142,7 @@ export async function generateProjectVoices(
   narrationVoice?: NarrationVoice
 ) {
   if (
-    (!hasAzureSpeech() && !hasCloudflareAI() && !getOptionalEnv("OPENAI_API_KEY"))
+    (!hasAzureSpeech() && !getOptionalEnv("OPENAI_API_KEY"))
     || getOptionalEnv("ENABLE_TTS") === "false"
   ) {
     return {

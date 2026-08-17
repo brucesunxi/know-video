@@ -33,7 +33,7 @@ import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 import { parseModelJson } from "@/lib/model-json";
 import { estimateNarrationSeconds } from "@/lib/speech-timing";
 import { exactVisualStyleDirection, visualStyleDirection, visualStyleProfile } from "@/lib/visual-style-profiles";
-import type { EditPlan, GenerationOptions, ProductionAssetChange, ProductionSettings, Project, ProjectVersion, Scene, SceneStructureMutation } from "@/lib/types";
+import { NARRATION_VOICE_IDS, type EditPlan, type GenerationOptions, type ProductionAssetChange, type ProductionSettings, type Project, type ProjectVersion, type Scene, type SceneStructureMutation } from "@/lib/types";
 
 type AiEngine = "deepseek-flash" | "openai" | "heuristic";
 type EditPlanningResult =
@@ -335,7 +335,7 @@ const editPlanPayloadSchema = z.object({
       before: z.object({
         title: z.string(),
         voiceover: z.string().optional(),
-        narrationVoice: z.enum(["male-clear", "male-deep", "female-natural"]).optional(),
+        narrationVoice: z.enum(NARRATION_VOICE_IDS).optional(),
         thumbnailTone: z.string(),
         visualPrompt: z.string(),
         motionPrompt: z.string().optional()
@@ -343,7 +343,7 @@ const editPlanPayloadSchema = z.object({
       after: z.object({
         title: z.string(),
         voiceover: z.string().optional(),
-        narrationVoice: z.enum(["male-clear", "male-deep", "female-natural"]).optional(),
+        narrationVoice: z.enum(NARRATION_VOICE_IDS).optional(),
         thumbnailTone: z.string(),
         visualPrompt: z.string(),
         motionPrompt: z.string().optional()
@@ -665,8 +665,8 @@ function buildGlobalChineseFallbackEditPlan(params: {
   };
 }
 
-function getTextModel() {
-  const timeout = Math.min(90_000, Math.max(8_000, Number(process.env.AI_TEXT_TIMEOUT_MS) || 45_000));
+function getTextModel(maxTimeoutMs = 90_000) {
+  const timeout = Math.min(maxTimeoutMs, 90_000, Math.max(8_000, Number(process.env.AI_TEXT_TIMEOUT_MS) || 45_000));
   if (process.env.DEEPSEEK_API_KEY) {
     const configuredModel = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
     const model = configuredModel === "deepseek-v4-flash" ? configuredModel : "deepseek-v4-flash";
@@ -1014,7 +1014,8 @@ async function createTreatment(
   prompt: string,
   textModel: NonNullable<ReturnType<typeof getTextModel>>,
   options?: GenerationOptions,
-  referenceContext = ""
+  referenceContext = "",
+  deadline = Number.POSITIVE_INFINITY
 ) {
   const targetDuration = requestedDuration(prompt, options);
   const sceneCount = requestedSceneCount(prompt, targetDuration, options);
@@ -1085,7 +1086,7 @@ async function createTreatment(
   }
   treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
   const narrationIssues = treatmentNarrationIssues(treatment, targetDuration);
-  if (narrationIssues.length > 0) {
+  if (narrationIssues.length > 0 && Date.now() < deadline) {
     const repair = await textModel.client.chat.completions.create({
       model: textModel.model,
       response_format: { type: "json_object" },
@@ -1115,6 +1116,8 @@ async function createTreatment(
     if (treatment.beats.length !== sceneCount || remainingNarrationIssues.length > 0) {
       console.warn(`[ai-video] Treatment narration still needed local constraints after AI repair: ${remainingNarrationIssues.join(", ") || "beat count mismatch"}.`);
     }
+  } else if (narrationIssues.length > 0) {
+    console.warn(`[ai-video] Skipping treatment AI repair to preserve the project-generation time budget: ${narrationIssues.join(", ")}.`);
   }
   return treatment;
 }
@@ -1175,7 +1178,9 @@ export async function createStoryboardProject(
   project: Project;
   engine: AiEngine;
 }> {
-  const textModel = getTextModel();
+  // Leave enough of Vercel's 300-second request window for validation and durable persistence.
+  const generationDeadline = Date.now() + 210_000;
+  const textModel = getTextModel(42_000);
   if (!textModel) {
     return { project: generateProjectFromPrompt(prompt, baseProject, options), engine: "heuristic" };
   }
@@ -1183,7 +1188,7 @@ export async function createStoryboardProject(
   try {
     const targetDuration = requestedDuration(prompt, options);
     const durationRange = approximateDurationRange(targetDuration);
-    const treatment = await createTreatment(prompt, textModel, options, referenceContext);
+    const treatment = await createTreatment(prompt, textModel, options, referenceContext, generationDeadline - 90_000);
     const conceptDirection = briefVisualConceptDirection(prompt, options);
     const completion = await textModel.client.chat.completions.create({
       model: textModel.model,
@@ -1232,7 +1237,7 @@ export async function createStoryboardProject(
     let scenes = normalizeStoryboard(acceptedStoryboard, treatment, targetDuration, prompt, options);
     let qualityIssues = storyboardQualityIssues(scenes, options, acceptedStoryboard.title, prompt);
     const initialRepairIssues = qualityIssues.filter((issue) => issue !== "voiceover is too sparse for the scene duration");
-    if (initialRepairIssues.length > 0) {
+    if (initialRepairIssues.length > 0 && Date.now() < generationDeadline - 50_000) {
       console.warn(`[ai-video] Storyboard quality check requested a repair: ${initialRepairIssues.join(", ")}.`);
       acceptedStoryboard = await repairStoryboard({
         prompt,
@@ -1253,6 +1258,12 @@ export async function createStoryboardProject(
         }
         console.warn(`[ai-video] Accepting repaired storyboard with non-blocking quality warnings: ${qualityIssues.join(", ")}.`);
       }
+    } else if (initialRepairIssues.length > 0) {
+      const blockingIssues = blockingStoryboardIssues(initialRepairIssues);
+      if (blockingIssues.length > 0) {
+        throw new Error(`Storyboard time budget exhausted with blocking quality issues: ${blockingIssues.join(", ")}`);
+      }
+      console.warn(`[ai-video] Skipping storyboard AI repair to preserve durable project persistence: ${initialRepairIssues.join(", ")}.`);
     } else if (qualityIssues.length > 0) {
       console.warn(`[ai-video] Accepting storyboard with natural narration breathing room: ${qualityIssues.join(", ")}.`);
     }
@@ -1539,11 +1550,11 @@ export async function createEditPlan(params: {
         {
           role: "system",
           content:
-            "You are an AI video editor responsible for content and media changes after timeline operations have already been compiled separately. Convert the remaining instruction into a scene-level edit plan. Preserve unrelated scenes. Never return changes for a scene outside an explicitly requested or semantically identified scene or range. Every returned content change must use status updated. A request without a specific scene target that changes language, narration, captions, style, palette, pacing, music, fonts, logos, watermarks, or voice applies to the full video. Supported narrationVoice values are male-clear for a clear energetic male voice, male-deep for a calm authoritative male voice, and female-natural for a warm natural female voice. Only change narrationVoice when the user asks for an audio voice or vocal character change. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. A request to generate or animate a video clip is a media operation: preserve unrelated scene text and visual direction, and regenerate clip plus render. User-uploaded attachments are authoritative source material: preserve their product, person, brand, composition, narration, or music identity unless the user explicitly asks to replace that attachment. If a requested visual transformation requires regeneration, describe the attachment identity that must remain in after.visualPrompt. Return strict JSON only."
+            "You are an AI video editor responsible for content and media changes after timeline operations have already been compiled separately. Convert the remaining instruction into a scene-level edit plan. Preserve unrelated scenes. Never return changes for a scene outside an explicitly requested or semantically identified scene or range. Every returned content change must use status updated. A request without a specific scene target that changes language, narration, captions, style, palette, pacing, music, fonts, logos, watermarks, or voice applies to the full video. Supported narrationVoice values are male-clear (energetic), male-deep (brand), male-documentary (documentary), male-youthful (casual), female-natural (professional), female-warm (warm), female-bright (promotional), female-calm (educational), and female-authoritative (formal). Only change narrationVoice when the user asks for an audio voice or vocal character change. When the user requests a language or narration change, rewrite title, voiceover, visualPrompt, and motionPrompt in the requested language and include the required regenerated assets. A request to generate or animate a video clip is a media operation: preserve unrelated scene text and visual direction, and regenerate clip plus render. User-uploaded attachments are authoritative source material: preserve their product, person, brand, composition, narration, or music identity unless the user explicitly asks to replace that attachment. If a requested visual transformation requires regeneration, describe the attachment identity that must remain in after.visualPrompt. Return strict JSON only."
         },
         {
           role: "user",
-          content: `Current version scenes:\n${JSON.stringify(currentScenes, null, 2)}${attachmentContext ? `\n\n${attachmentContext}` : ""}\n\nUser edit request:\n${params.request}${globalDirective}${generatedClipDirective}${retry ? "\n\nYour previous attempt was incomplete. Rebuild the entire plan and satisfy every requirement above." : ""}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
+          content: `Current version scenes:\n${JSON.stringify(currentScenes, null, 2)}${attachmentContext ? `\n\n${attachmentContext}` : ""}\n\nUser edit request:\n${params.request}${globalDirective}${generatedClipDirective}${retry ? "\n\nYour previous attempt was incomplete. Rebuild the entire plan and satisfy every requirement above." : ""}\n\nJSON shape: { "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "${NARRATION_VOICE_IDS.join("\"|\"")}", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "${NARRATION_VOICE_IDS.join("\"|\"")}", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
         }
       ],
       temperature: globalChineseRewrite ? 0.2 : 0.45
@@ -1873,7 +1884,7 @@ export async function refineEditPlan(params: {
           },
           {
             role: "user",
-            content: `Current scenes:\n${JSON.stringify(currentScenes, null, 2)}${attachmentContext ? `\n\n${attachmentContext}` : ""}\n\nExisting proposed plan:\n${JSON.stringify(params.existingPlan, null, 2)}\n\nFollow-up instruction:\n${params.request}${refinementDirective}${retry ? "\n\nThe previous response failed scope or language validation. Rebuild the complete plan exactly as directed." : ""}\n\nReturn JSON in this exact shape:\n{ "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "male-clear"|"male-deep"|"female-natural", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
+            content: `Current scenes:\n${JSON.stringify(currentScenes, null, 2)}${attachmentContext ? `\n\n${attachmentContext}` : ""}\n\nExisting proposed plan:\n${JSON.stringify(params.existingPlan, null, 2)}\n\nFollow-up instruction:\n${params.request}${refinementDirective}${retry ? "\n\nThe previous response failed scope or language validation. Rebuild the complete plan exactly as directed." : ""}\n\nReturn JSON in this exact shape:\n{ "summary": string, "affectedScenes": number[], "changes": [{ "sceneNumber": number, "status": "updated", "before": { "title": string, "voiceover": string, "narrationVoice"?: "${NARRATION_VOICE_IDS.join("\"|\"")}", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "after": { "title": string, "voiceover": string, "narrationVoice"?: "${NARRATION_VOICE_IDS.join("\"|\"")}", "thumbnailTone": string, "visualPrompt": string, "motionPrompt": string }, "regenerate": ("image"|"audio"|"clip"|"thumbnail"|"caption"|"render")[] }] }`
           }
         ],
         temperature: 0.2

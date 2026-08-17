@@ -4,7 +4,10 @@ import vm from "node:vm";
 import ts from "typescript";
 import { createRequire } from "node:module";
 
-const require = createRequire(import.meta.url);
+const nativeRequire = createRequire(import.meta.url);
+const moduleRequire = (specifier) => specifier === "@/lib/types"
+  ? { NARRATION_VOICE_IDS: ["male-clear", "male-deep", "male-documentary", "male-youthful", "female-natural", "female-warm", "female-bright", "female-calm", "female-authoritative"] }
+  : nativeRequire(specifier);
 const source = fs.readFileSync(new URL("../lib/edit-plan-schema.ts", import.meta.url), "utf8");
 const output = ts.transpileModule(source, {
   compilerOptions: {
@@ -14,7 +17,7 @@ const output = ts.transpileModule(source, {
   }
 }).outputText;
 const module = { exports: {} };
-vm.runInNewContext(output, { module, exports: module.exports, require });
+vm.runInNewContext(output, { module, exports: module.exports, require: moduleRequire });
 const { editPlanSchema } = module.exports;
 
 const side = {
@@ -43,6 +46,14 @@ const valid = {
 };
 
 assert.equal(editPlanSchema.safeParse(valid).success, true);
+assert.equal(editPlanSchema.safeParse({
+  ...valid,
+  changes: [{ ...valid.changes[0], after: { ...side, narrationVoice: "female-calm" }, regenerate: ["audio", "render"] }]
+}).success, true);
+assert.equal(editPlanSchema.safeParse({
+  ...valid,
+  changes: [{ ...valid.changes[0], after: { ...side, narrationVoice: "unknown-voice" } }]
+}).success, false);
 assert.equal(editPlanSchema.safeParse({
   ...valid,
   referenceAssets: [{

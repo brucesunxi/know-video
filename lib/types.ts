@@ -1,5 +1,17 @@
 export type AssetType = "image" | "audio" | "clip" | "thumbnail" | "caption" | "render" | "logo" | "music";
-export type NarrationVoice = "male-clear" | "male-deep" | "female-natural";
+export const NARRATION_VOICE_IDS = [
+  "male-clear",
+  "male-deep",
+  "male-documentary",
+  "male-youthful",
+  "female-natural",
+  "female-warm",
+  "female-bright",
+  "female-calm",
+  "female-authoritative"
+] as const;
+
+export type NarrationVoice = (typeof NARRATION_VOICE_IDS)[number];
 export type PlaybackRate = 0.75 | 1 | 1.25 | 1.5;
 export type CaptionStyle = "minimal" | "boxed" | "highlight";
 export type LogoPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";

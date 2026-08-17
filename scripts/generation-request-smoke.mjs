@@ -37,6 +37,8 @@ assert.match(projectsRoute, /after\(\(\) => runBackgroundGeneration/);
 assert.match(projectsRoute, /return NextResponse\.json\(\{ status: "pending", requestId \}, \{ status: 202 \}\)/);
 assert.match(projectsRoute, /listIncompleteGenerationRequests\(user\.id\)/);
 assert.match(generationRoute, /getGenerationRequest\(parsed\.data, user\.id\)/);
+assert.match(generationRoute, /if \(!requestId\)/);
+assert.match(generationRoute, /generationRequests: await listIncompleteGenerationRequests\(user\.id\)/);
 assert.match(schema, /generation_requests \([\s\S]*?user_id uuid references users\(id\)/);
 assert.match(schema, /generation_requests \([\s\S]*?options_json jsonb/);
 const options = {
@@ -97,6 +99,10 @@ assert.match(workspace, /task\.options \?\? generationOptions/);
 assert.match(workspace, /recoveringGenerationRequestIdRef\.current === task\.id/);
 assert.match(workspace, /setStage\("generating"\);\s+return;/);
 assert.match(workspace, /setPendingVideoGeneration/);
+assert.match(workspace, /className=\{`kv-task-bell/);
+assert.match(workspace, /生成任务中心/);
+assert.match(workspace, /const \[taskFilter, setTaskFilter\]/);
+assert.match(workspace, /window\.setInterval\(\(\) => void refreshTasks\(\), 8_000\)/);
 assert.match(workspace, /约 \$\{secondsPerScene\} 秒\/幕/);
 assert.match(workspace, /label: "旁白语言"/);
 assert.match(workspace, /脚本和旁白会按此语言生成/);
@@ -107,5 +113,7 @@ assert.match(styles, /\.kv-generation-review b/);
 assert.match(styles, /\.kv-generation-task-open/);
 assert.match(styles, /\.kv-generation-task-action/);
 assert.match(styles, /\.kv-generation-task-specs em/);
+assert.match(styles, /\.kv-task-center-list/);
+assert.match(styles, /\.kv-generation-task-filters/);
 
 console.log("Generation request smoke checks passed.");

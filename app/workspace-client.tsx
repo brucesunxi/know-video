@@ -330,6 +330,13 @@ function localizedRuntimeLabel(value: string, language: UiLanguage) {
 
 function localizedErrorMessage(value: string, language: UiLanguage) {
   if (language === "zh-CN") return value;
+  const fixed: Record<string, string> = {
+    "生成任务运行超时，请重新提交。": "Script and storyboard generation timed out before the project could be saved. Review the request and try again.",
+    "脚本服务连接超时，请稍后重试。": "The script service timed out. Please try again in a moment.",
+    "视频脚本和分镜生成没有完成，请重试。": "The script and storyboard could not be completed. Please try again.",
+    "生成没有完成，请检查需求后重试。": "Generation did not finish. Review the request and try again."
+  };
+  if (fixed[value]) return fixed[value];
   const translated = localizedRuntimeLabel(value, language);
   return /\p{Script=Han}/u.test(translated)
     ? "The request could not be completed. Please try again."
@@ -1885,7 +1892,9 @@ function Shell({
   project,
   source,
   stage,
+  generationTasks,
   onNewVideo,
+  onOpenGeneration,
   onOpenProjects,
   onOpenStudio
 }: {
@@ -1894,7 +1903,9 @@ function Shell({
   project: Project;
   source: Source;
   stage: Stage;
+  generationTasks: GenerationTaskListItem[];
   onNewVideo: () => void;
+  onOpenGeneration: (task: GenerationTaskListItem) => void;
   onOpenProjects: () => void;
   onOpenStudio: () => void;
 }) {
@@ -1906,6 +1917,21 @@ function Shell({
   const [paymentsConfigured, setPaymentsConfigured] = useState<boolean>();
   const [checkoutPackId, setCheckoutPackId] = useState<string>();
   const [billingNotice, setBillingNotice] = useState<{ tone: "info" | "success" | "error"; message: string }>();
+  const pendingTaskCount = generationTasks.filter((task) => task.status === "pending").length;
+  const failedTaskCount = generationTasks.filter((task) => task.status === "failed").length;
+  const taskCount = pendingTaskCount + failedTaskCount;
+  const notificationButton = (
+    <button
+      aria-label={text(taskCount > 0 ? `后台任务，${taskCount} 项` : "后台任务", taskCount > 0 ? `Background tasks, ${taskCount} items` : "Background tasks")}
+      className={`kv-task-bell${failedTaskCount > 0 ? " attention" : ""}`}
+      onClick={() => setHomeDialog("notifications")}
+      title={text("后台任务", "Background tasks")}
+      type="button"
+    >
+      <Bell size={18} />
+      {taskCount > 0 ? <b>{taskCount > 9 ? "9+" : taskCount}</b> : null}
+    </button>
+  );
   const loadCreditAccount = async () => {
     const response = await fetch("/api/billing/account", { cache: "no-store" });
     const data = await response.json().catch(() => ({})) as {
@@ -2111,7 +2137,7 @@ function Shell({
                   : text(`${creditBalance.toLocaleString("en-US")} credits · 购买`, `${creditBalance.toLocaleString("en-US")} credits · Buy`)}
               </button>
               <button aria-label={darkMode ? "浅色模式" : "夜间模式"} onClick={() => setDarkMode((enabled) => !enabled)} title={darkMode ? "浅色模式" : "夜间模式"} type="button"><Moon size={18} /></button>
-              <button aria-label={text("通知", "Notifications")} onClick={() => setHomeDialog("notifications")} type="button"><Bell size={18} /></button>
+              {notificationButton}
               <div className="kv-user-menu">
                 {currentUser.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -2143,6 +2169,7 @@ function Shell({
             </div>
             <div className="kv-status-row">
               {languageToggle}
+              {notificationButton}
               {statusBadges.map((badge) => (
                 <span className={badge.tone} key={`${badge.tone}-${badge.label}`}>{localizedStatusBadge(badge.label)}</span>
               ))}
@@ -2165,7 +2192,7 @@ function Shell({
           </header>
         )}
         {children}
-        {stage === "brief" && homeDialog ? (
+        {homeDialog ? (
           <div className="kv-home-dialog-backdrop" role="presentation" onMouseDown={(event) => {
             if (event.target === event.currentTarget) setHomeDialog(undefined);
           }}>
@@ -2244,12 +2271,44 @@ function Shell({
               ) : null}
               {homeDialog === "notifications" ? (
                 <>
-                  <span className="kv-eyebrow">{text("通知", "Notifications")}</span>
-                  <h3>{text("通知中心", "Notification center")}</h3>
-                  <ul>
-                    <li>{text("项目保存、导出完成和生成失败会在这里集中展示。", "Project saves, completed exports, and generation failures appear here.")}</li>
-                    <li>{text("当前没有新的未读通知。", "There are no unread notifications.")}</li>
-                  </ul>
+                  <span className="kv-eyebrow">{text("后台任务", "Background tasks")}</span>
+                  <div className="kv-task-center-heading">
+                    <div>
+                      <h3>{text("生成任务中心", "Generation task center")}</h3>
+                      <p>{text("离开当前页面不会中断脚本与分镜生成。", "Script and storyboard generation continues when you leave this page.")}</p>
+                    </div>
+                    <span>{pendingTaskCount > 0 ? text(`${pendingTaskCount} 项运行中`, `${pendingTaskCount} running`) : text("当前空闲", "All quiet")}</span>
+                  </div>
+                  {generationTasks.length > 0 ? (
+                    <div className="kv-task-center-list">
+                      {generationTasks.slice(0, 8).map((task) => (
+                        <button key={task.id} onClick={() => {
+                          setHomeDialog(undefined);
+                          onOpenGeneration(task);
+                        }} type="button">
+                          <i className={task.status}>{task.status === "pending" ? <Loader2 className="kv-spin" size={16} /> : <AlertCircle size={16} />}</i>
+                          <span>
+                            <strong>{generationTaskTitle(task, language)}</strong>
+                            <small>{task.status === "pending"
+                              ? text("正在生成脚本与分镜", "Building script and storyboard")
+                              : localizedErrorMessage(task.error || text("生成没有完成，请重新提交。", "Generation did not finish. Please submit it again."), language)}</small>
+                          </span>
+                          <b>{task.status === "pending" ? text("查看进度", "View progress") : text("检查重试", "Review")}</b>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="kv-task-center-empty">
+                      <Check size={18} />
+                      <span>{text("当前没有正在运行或需要处理的生成任务。", "There are no running tasks or tasks requiring attention.")}</span>
+                    </div>
+                  )}
+                  <button className="kv-task-center-all" onClick={() => {
+                    setHomeDialog(undefined);
+                    onOpenProjects();
+                  }} type="button">
+                    <Layers3 size={16} />{text("查看全部项目与任务", "View all projects and tasks")}<ArrowRight size={15} />
+                  </button>
                 </>
               ) : null}
               {homeDialog === "workspace" ? (
@@ -2309,11 +2368,13 @@ function ProjectLibrary({
   errorMessage?: string;
 }) {
   const { language, text } = useUiCopy();
+  const [taskFilter, setTaskFilter] = useState<"all" | "pending" | "failed">("all");
   const [renamingId, setRenamingId] = useState<string>();
   const [renameValue, setRenameValue] = useState("");
   const [deleteCandidate, setDeleteCandidate] = useState<ProjectListItem>();
   const filtered = projects.filter((item) => item.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  const filteredTasks = generationTasks.filter((item) => (item.prompt ?? "").toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const matchingTasks = generationTasks.filter((item) => (item.prompt ?? "").toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const filteredTasks = matchingTasks.filter((item) => taskFilter === "all" || item.status === taskFilter);
   const statusLabel: Record<ProjectListItem["status"], string> = {
     draft: text("草稿", "Draft"),
     planning: text("规划中", "Planning"),
@@ -2338,12 +2399,12 @@ function ProjectLibrary({
       <div className="kv-project-search">
         <Search size={18} />
         <input aria-label={text("搜索项目", "Search projects")} onChange={(event) => onQueryChange(event.target.value)} placeholder={text("搜索视频项目", "Search video projects")} value={query} />
-        <span>{text(`${filtered.length + filteredTasks.length} 条记录`, `${filtered.length + filteredTasks.length} records`)}</span>
+        <span>{text(`${filtered.length + matchingTasks.length} 条记录`, `${filtered.length + matchingTasks.length} records`)}</span>
       </div>
       {errorMessage ? <div className="kv-inline-error" role="alert"><AlertCircle size={18} />{localizedErrorMessage(errorMessage, language)}</div> : null}
       {isLoading ? (
         <div className="kv-project-empty"><Loader2 className="kv-spin" size={24} /><p>{text("正在读取项目...", "Loading projects...")}</p></div>
-      ) : filtered.length === 0 && filteredTasks.length === 0 ? (
+      ) : filtered.length === 0 && matchingTasks.length === 0 ? (
         <div className="kv-project-empty">
           <FolderOpen size={28} />
           <h3>{query ? text("没有匹配的项目", "No matching projects") : text("还没有视频项目", "No video projects yet")}</h3>
@@ -2351,9 +2412,24 @@ function ProjectLibrary({
         </div>
       ) : (
         <>
-          {filteredTasks.length > 0 ? (
-            <div className="kv-generation-task-list" aria-label={text("生成任务记录", "Generation task history")}>
-              {filteredTasks.map((task) => (
+          {matchingTasks.length > 0 ? (
+            <section className="kv-generation-task-section" aria-label={text("后台生成任务", "Background generation tasks")}>
+              <div className="kv-generation-task-heading">
+                <div>
+                  <span className="kv-eyebrow">{text("后台任务", "Background tasks")}</span>
+                  <h3>{text("视频生成任务", "Video generation activity")}</h3>
+                </div>
+                <div className="kv-generation-task-filters" role="tablist" aria-label={text("任务状态筛选", "Filter tasks by status")}>
+                  {(["all", "pending", "failed"] as const).map((filter) => (
+                    <button aria-selected={taskFilter === filter} className={taskFilter === filter ? "active" : ""} key={filter} onClick={() => setTaskFilter(filter)} role="tab" type="button">
+                      {filter === "all" ? text("全部", "All") : filter === "pending" ? text("生成中", "Running") : text("需处理", "Needs attention")}
+                      <span>{filter === "all" ? matchingTasks.length : matchingTasks.filter((task) => task.status === filter).length}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="kv-generation-task-list">
+              {filteredTasks.length > 0 ? filteredTasks.map((task) => (
                 <article className={task.status} key={task.id}>
                   <button className="kv-generation-task-open" onClick={() => onOpenGeneration(task)} type="button">
                     <span className="kv-generation-task-icon">
@@ -2376,8 +2452,9 @@ function ProjectLibrary({
                     </span>
                   </button>
                 </article>
-              ))}
-            </div>
+              )) : <div className="kv-generation-task-empty">{text("这个状态下暂无任务。", "No tasks in this status.")}</div>}
+              </div>
+            </section>
           ) : null}
           {filtered.length > 0 ? <div className="kv-project-grid">
           {filtered.map((item) => (
@@ -2495,7 +2572,7 @@ function BriefScreen({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string>();
   const [composerDragActive, setComposerDragActive] = useState(false);
-  const previewUrlsRef = useRef(new Map<NarrationVoice, string>());
+  const previewUrlsRef = useRef(new Map<string, string>());
   const previewAudioRef = useRef<HTMLAudioElement>();
   const previewAbortRef = useRef<AbortController>();
   const advancedSettingsRef = useRef<HTMLDetailsElement>(null);
@@ -2549,12 +2626,13 @@ function BriefScreen({
     const controller = new AbortController();
     previewAbortRef.current = controller;
     try {
-      let url = previewUrlsRef.current.get(voice);
+      const previewKey = `${options.language}:${voice}`;
+      let url = previewUrlsRef.current.get(previewKey);
       if (!url) {
         const response = await fetch("/api/assets/audio/preview", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ voice }),
+          body: JSON.stringify({ voice, language: options.language }),
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(65_000)])
         });
         if (!response.ok) {
@@ -2562,7 +2640,7 @@ function BriefScreen({
           throw new Error(detail?.error || "试听加载失败。请稍后重试。");
         }
         url = URL.createObjectURL(await response.blob());
-        previewUrlsRef.current.set(voice, url);
+        previewUrlsRef.current.set(previewKey, url);
       }
       const audio = new Audio(url);
       if (controller.signal.aborted) return;
@@ -3511,7 +3589,7 @@ function ScenePanel({
   const [previewError, setPreviewError] = useState<string>();
   const previewAudioRef = useRef<HTMLAudioElement>();
   const previewAbortRef = useRef<AbortController>();
-  const previewUrlsRef = useRef(new Map<NarrationVoice, string>());
+  const previewUrlsRef = useRef(new Map<string, string>());
   const imageMetadata = scene?.assets.find((asset) => asset.type === "image")?.metadata;
   const qualityLabel = imageMetadata?.quality === "premium"
     || String(imageMetadata?.model ?? "").includes("klein-9b")
@@ -3558,6 +3636,10 @@ function ScenePanel({
   const targetSceneNumbers = voiceScope === "all"
     ? scenes.map((item) => item.sceneNumber)
     : scene ? [scene.sceneNumber] : [];
+  const previewNarrationLanguage: GenerationOptions["language"] = scene?.style.narrationLanguage === "英文"
+    || (scene && !/\p{Script=Han}/u.test(scene.voiceover))
+    ? "英文"
+    : "中文";
 
   async function toggleVoicePreview(voice: NarrationVoice) {
     if (previewingVoice === voice) {
@@ -3579,12 +3661,13 @@ function ScenePanel({
     const controller = new AbortController();
     previewAbortRef.current = controller;
     try {
-      let url = previewUrlsRef.current.get(voice);
+      const previewKey = `${previewNarrationLanguage}:${voice}`;
+      let url = previewUrlsRef.current.get(previewKey);
       if (!url) {
         const response = await fetch("/api/assets/audio/preview", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ voice }),
+          body: JSON.stringify({ voice, language: previewNarrationLanguage }),
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(65_000)])
         });
         if (!response.ok) {
@@ -3592,7 +3675,7 @@ function ScenePanel({
           throw new Error(detail?.error || "试听加载失败。请稍后重试。");
         }
         url = URL.createObjectURL(await response.blob());
-        previewUrlsRef.current.set(voice, url);
+        previewUrlsRef.current.set(previewKey, url);
       }
       const audio = new Audio(url);
       if (controller.signal.aborted) return;
@@ -3649,8 +3732,14 @@ function ScenePanel({
               <button aria-pressed={voiceScope === "all"} className={voiceScope === "all" ? "active" : ""} onClick={() => setVoiceScope("all")} type="button">{text("整片", "Full video")}</button>
             </div>
           </div>
-          <div className="kv-voice-options">
-            {narrationVoiceProfiles.map((profile) => {
+          <div className="kv-voice-library">
+            {([
+              [text("男声", "Male voices"), narrationVoiceProfiles.filter((profile) => profile.id.startsWith("male-"))],
+              [text("女声", "Female voices"), narrationVoiceProfiles.filter((profile) => profile.id.startsWith("female-"))]
+            ] as const).map(([groupLabel, profiles]) => <section key={groupLabel}>
+              <h4>{groupLabel}<span>{profiles.length}</span></h4>
+              <div className="kv-voice-options">
+              {profiles.map((profile) => {
               const active = selectedVoice === profile.id;
               const playing = previewingVoice === profile.id;
               const profileCopy = localizedVoiceCopy(profile, language);
@@ -3680,7 +3769,9 @@ function ScenePanel({
                   </button>
                 </article>
               );
-            })}
+              })}
+              </div>
+            </section>)}
           </div>
           <div className="kv-voice-apply-row">
             <p aria-live="polite">{previewError ? localizedErrorMessage(previewError, language) : `${voiceCopy.shortLabel} · ${voiceCopy.useCase}`}</p>
@@ -5637,6 +5728,31 @@ export function WorkspaceClient({
     }
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const refreshTasks = async () => {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const response = await fetch("/api/projects/generation", { cache: "no-store" });
+        const data = await response.json().catch(() => ({})) as { generationRequests?: GenerationTaskListItem[] };
+        if (!cancelled && response.ok) setGenerationTasks(data.generationRequests ?? []);
+      } catch (error) {
+        console.warn("[generation-tasks] Unable to refresh background tasks:", error);
+      }
+    };
+    void refreshTasks();
+    const interval = window.setInterval(() => void refreshTasks(), 8_000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refreshTasks();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
   function changeUiLanguage(language: UiLanguage) {
     setUiLanguage(language);
     window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, language);
@@ -5772,10 +5888,11 @@ export function WorkspaceClient({
     let generatedProject = data.project;
     const warnings: string[] = [];
     const issues: GenerationMediaIssue[] = [];
-    // A recovered durable project belongs in the studio; only a first-run creation keeps its recovery marker through media generation.
+    // A recovered durable project belongs in the studio while required media is repaired.
     if (resumeMissingOnly) {
-      clearPendingGenerationSession();
-      setGenerationStartedAt(undefined);
+      setSelectedScene(1);
+      setStudioView("preview");
+      setStage("studio");
     }
     setProject(generatedProject);
     setProjectSource("database");
@@ -5801,12 +5918,6 @@ export function WorkspaceClient({
           : "已用本地规则生成初版分镜。"
       }
     ]);
-    if (resumeMissingOnly) {
-      setSelectedScene(1);
-      setStudioView("preview");
-      setStage("studio");
-    }
-
     let missingImageSceneNumbers = missingSceneAssetNumbers(generatedProject.currentVersion.scenes, "image");
     let imageFailureReason = "场景画面生成失败。";
     for (let attempt = 0; attempt < AUTOMATIC_MEDIA_REPAIR_ATTEMPTS && missingImageSceneNumbers.length > 0; attempt += 1) {
@@ -5940,7 +6051,7 @@ export function WorkspaceClient({
     setPendingPlan(undefined);
     setStudioView("preview");
     setProgress(100);
-    if (!resumeMissingOnly) {
+    if (missingImageSceneNumbers.length === 0 && missingAudioSceneNumbers.length === 0) {
       setGenerationStartedAt(undefined);
       clearPendingGenerationSession();
     }
@@ -7534,6 +7645,18 @@ export function WorkspaceClient({
         error?: string;
       };
       if (!response.ok || !data.project || !data.messages) throw new Error(data.error || "项目读取失败。");
+      const missingRequiredMedia = missingSceneAssetNumbers(data.project.currentVersion.scenes, "image").length > 0
+        || missingSceneAssetNumbers(data.project.currentVersion.scenes, "audio").length > 0;
+      if (data.generationOptions && missingRequiredMedia) {
+        setIsBusy(true);
+        await continueGeneratedProject({
+          project: data.project,
+          messages: data.messages,
+          engine: "ai",
+          recovered: true
+        }, data.generationOptions, true);
+        return;
+      }
       setProject(data.project);
       if (data.generationOptions) setGenerationOptions(data.generationOptions);
       setProjectSource("database");
@@ -7556,6 +7679,7 @@ export function WorkspaceClient({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "项目读取失败。");
     } finally {
+      setIsBusy(false);
       setProjectsLoading(false);
     }
   }
@@ -7623,7 +7747,9 @@ export function WorkspaceClient({
     <UiLanguageContext.Provider value={{ language: uiLanguage, setLanguage: changeUiLanguage }}>
     <Shell
       currentUser={currentUser}
+      generationTasks={generationTasks}
       onNewVideo={resetToBrief}
+      onOpenGeneration={(task) => void openGenerationTask(task)}
       onOpenProjects={() => void openProjects()}
       onOpenStudio={() => {
         if (projectSource !== "empty") setStage("studio");

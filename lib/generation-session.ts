@@ -1,4 +1,4 @@
-import type { GenerationOptions } from "@/lib/types";
+import { NARRATION_VOICE_IDS, type GenerationOptions, type NarrationVoice } from "@/lib/types";
 
 export const PENDING_GENERATION_STORAGE_KEY = "know-video:pending-generation";
 export const PENDING_GENERATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -34,7 +34,7 @@ export function parsePendingGenerationSession(raw: string | null, now = Date.now
       || (value.options.visualStylePrompt !== undefined && typeof value.options.visualStylePrompt !== "string")
       || !["camera", "key-scenes"].includes(value.options.motion)
       || !["economy", "balanced"].includes(value.options.videoTier)
-      || (value.options.narrationVoice !== undefined && !["male-clear", "male-deep", "female-natural"].includes(value.options.narrationVoice))
+      || (value.options.narrationVoice !== undefined && !NARRATION_VOICE_IDS.includes(value.options.narrationVoice as NarrationVoice))
     ) {
       return undefined;
     }

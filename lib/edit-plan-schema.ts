@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { NARRATION_VOICE_IDS } from "@/lib/types";
 
-const narrationVoiceSchema = z.enum(["male-clear", "male-deep", "female-natural"]);
+const narrationVoiceSchema = z.enum(NARRATION_VOICE_IDS);
 const sceneTargetSchema = {
   sceneNumber: z.number().int().positive(),
   sceneId: z.string().uuid().optional()

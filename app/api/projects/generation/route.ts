@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
-import { getGenerationRequest } from "@/lib/generation-requests";
+import { getGenerationRequest, listIncompleteGenerationRequests } from "@/lib/generation-requests";
 import { getProjectSnapshot } from "@/lib/project-store";
 
 const requestIdSchema = z.string().uuid();
@@ -15,6 +15,9 @@ export async function GET(request: Request) {
     throw error;
   }
   const requestId = new URL(request.url).searchParams.get("requestId");
+  if (!requestId) {
+    return NextResponse.json({ generationRequests: await listIncompleteGenerationRequests(user.id) });
+  }
   const parsed = requestIdSchema.safeParse(requestId);
   if (!parsed.success) {
     return NextResponse.json({ error: "生成任务标识无效。" }, { status: 400 });

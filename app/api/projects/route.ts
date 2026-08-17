@@ -22,6 +22,7 @@ import { getFromR2, headR2Object, readR2Prefix } from "@/lib/r2";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
 import { hasDatabaseUrl } from "@/lib/db";
+import { NARRATION_VOICE_IDS } from "@/lib/types";
 
 const referenceAssetSchema = z.object({
   key: z.string().min(1).max(800),
@@ -46,7 +47,7 @@ const requestSchema = z.object({
     visualStylePrompt: z.string().trim().min(1).max(800).optional(),
     motion: z.enum(["camera", "key-scenes"]),
     videoTier: z.enum(["economy", "balanced"]),
-    narrationVoice: z.enum(["male-clear", "male-deep", "female-natural"]).optional()
+    narrationVoice: z.enum(NARRATION_VOICE_IDS).optional()
   }).optional(),
   referenceAssets: z.array(referenceAssetSchema).max(12).default([])
 }).superRefine((value, context) => {
