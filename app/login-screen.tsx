@@ -66,6 +66,14 @@ export function LoginScreen({ configured, error }: LoginScreenProps) {
         ) : (
           <small>{text("只允许 @gmail.com 邮箱继续进入。", "Only @gmail.com addresses can continue.")}</small>
         )}
+        <nav className="kv-login-public-links" aria-label={text("公开信息", "Public information")}>
+          <a href="/business">{text("业务与价格", "Business & pricing")}</a>
+          <a href="/terms">{text("服务条款", "Terms")}</a>
+          <a href="/privacy">{text("隐私政策", "Privacy")}</a>
+          <a href="/refund-policy">{text("退款政策", "Refunds")}</a>
+          <a href="/checkout">{text("购买流程", "Checkout")}</a>
+          <a href="/contact">{text("联系我们", "Contact")}</a>
+        </nav>
       </section>
     </main>
   );

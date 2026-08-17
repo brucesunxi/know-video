@@ -10763,3 +10763,22 @@ html[data-theme="dark"] .kv-media-generation-counts > span {
 .kv-style-thumb.style-safety-poster { --kv-style-image: url("/template-previews/phishing.webp"); }
 .kv-style-thumb.style-cinematic-realism { --kv-style-image: url("/template-previews/property.webp"); }
 .kv-style-thumb.style-product-ui { --kv-style-image: url("/template-previews/rollout.webp"); }
+
+.kv-login-public-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 18px;
+  margin-top: 18px;
+  font-size: 12px;
+}
+
+.kv-login-public-links a {
+  color: #667286;
+  text-decoration: none;
+}
+
+.kv-login-public-links a:hover {
+  color: #007c70;
+  text-decoration: underline;
+}
