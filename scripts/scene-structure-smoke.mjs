@@ -73,6 +73,13 @@ assert.deepEqual(plain(transitioned.project.currentVersion.scenes[1].style.trans
 assert.equal(transitioned.project.currentVersion.renderUrl, undefined);
 assert.deepEqual(plain(transitioned.regeneration), { imageSceneNumbers: [], audioSceneNumbers: [], clipSceneNumbers: [] });
 
+const motionApplied = applySceneStructureMutation(project, { operation: "set-motion", sceneNumber: 2, preset: "auto", intensity: "standard" }, createId);
+assert.equal(motionApplied.project.currentVersion.scenes[1].style.motion.mode, "local");
+assert.equal(motionApplied.project.currentVersion.scenes[1].style.motion.preset, "auto");
+assert.equal(motionApplied.project.currentVersion.renderUrl, undefined);
+const motionReplanned = applySceneStructureMutation(motionApplied.project, { operation: "set-motion", sceneNumber: 2, preset: "auto", intensity: "standard" }, createId);
+assert.equal(motionReplanned.project.currentVersion.scenes[1].style.motion.seed, motionApplied.project.currentVersion.scenes[1].style.motion.seed + 1);
+
 const candidateProject = plain(project);
 candidateProject.currentVersion.renderUrl = "https://example.com/render.mp4";
 candidateProject.currentVersion.renderJobId = "render-1";

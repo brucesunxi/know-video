@@ -84,6 +84,7 @@ const project = {
       title: "Reveal",
       durationSeconds: 5,
       motionPrompt: "A slow camera push-in while the subject turns naturally.",
+      style: { theme: "dark", palette: ["#000000"], mood: "cinematic" },
       assets: [{ id: "image", type: "image", r2Key: "image.png", url: "/api/assets/image.png" }]
     }]
   }
@@ -114,6 +115,7 @@ assert.equal(clip.metadata.duration, 2.9);
 assert.equal(clip.metadata.requestedDuration, 3);
 assert.equal(clip.metadata.estimatedCostUsd, 0.16);
 assert.equal(clip.metadata.codec, "h264");
+assert.equal(result.project.currentVersion.scenes[0].style.motion.mode, "ai");
 assert.equal(result.project.currentVersion.renderUrl, undefined);
 
 console.log("Generated video asset orchestration smoke checks passed.");

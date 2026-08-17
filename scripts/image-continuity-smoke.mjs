@@ -88,6 +88,8 @@ assert.match(prompt, /CONTENT LOCK — HIGHEST SEMANTIC PRIORITY/);
 assert.match(prompt, /Do not return a style sample, mood board, color palette/);
 assert.match(prompt, /TEXT-FREE BACKGROUND PLATE — ABSOLUTE HIGHEST PRIORITY/);
 assert.match(prompt, /absolutely no words, letters, numbers/);
+assert.match(prompt, /Do not compose the frame as an advertisement, poster, title card/);
+assert.match(prompt, /Do not add graphic overlays, lower thirds/);
 assert.match(prompt, /video renderer will add all readable titles/);
 assert.match(prompt, /inspect every pixel/);
 assert.doesNotMatch(prompt, /Use little or no text/);

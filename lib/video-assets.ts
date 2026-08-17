@@ -82,6 +82,15 @@ export async function generateProjectSceneClips(
       });
       scenes[index] = {
         ...scene,
+        style: {
+          ...scene.style,
+          motion: {
+            mode: "ai",
+            preset: scene.style.motion?.preset ?? "auto",
+            intensity: scene.style.motion?.intensity ?? "standard",
+            seed: scene.style.motion?.seed ?? scene.sceneNumber
+          }
+        },
         assets: [clip, ...scene.assets.filter((asset) => asset.type !== "clip")]
       };
     } catch (error) {

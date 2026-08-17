@@ -9,6 +9,8 @@ export const TEXT_FREE_IMAGE_DIRECTION = [
   "Render absolutely no words, letters, numbers, captions, labels, typography, signatures, watermarks, logos, brand names, interface copy, or text-like glyphs anywhere in the image.",
   "Any screen, sign, poster, document, package, badge, button, chart, or interface must use only clean unlabeled geometry, blank surfaces, icons, color blocks, lines, and diagrams without characters.",
   "Do not invent pseudo-writing, scrambled lettering, lorem ipsum, fake Chinese characters, or decorative symbols that resemble text.",
+  "Do not compose the frame as an advertisement, poster, title card, presentation, mood board, magazine spread, split-screen graphic, or branded campaign layout. Show one natural diegetic scene instead.",
+  "Do not add graphic overlays, lower thirds, headline areas, text panels, colored copy boxes, or blank poster-like regions intended for writing.",
   "If an object normally contains writing, turn it away from camera, crop out its written area, or replace that area with a completely blank surface.",
   "Names and written content mentioned above are semantic context only and must not be painted into the image. The video renderer will add all readable titles, captions, labels, and logos later.",
   "Before finishing, inspect every pixel of the frame and remove all writing-like marks. A visually strong image containing even one character or fake glyph is invalid."

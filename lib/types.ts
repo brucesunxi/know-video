@@ -18,6 +18,8 @@ export type LogoPosition = "top-left" | "top-right" | "bottom-left" | "bottom-ri
 export type MusicDucking = "off" | "balanced" | "strong";
 export type SceneTransitionKind = "auto" | "cut" | "dissolve" | "push-left" | "push-right" | "zoom" | "wipe";
 export type VideoGenerationTier = "economy" | "balanced";
+export type LocalMotionPreset = "auto" | "push-in" | "pull-out" | "pan-left" | "pan-right" | "tilt-up" | "tilt-down" | "drift";
+export type LocalMotionIntensity = "subtle" | "standard" | "dynamic";
 
 export type ProductionSettings = {
   captionsEnabled: boolean;
@@ -32,6 +34,7 @@ export type ProductionSettings = {
 export type SceneStructureMutation =
   | { operation: "set-duration"; sceneNumber: number; sceneId?: string; durationSeconds: number }
   | { operation: "set-transition"; sceneNumber: number; sceneId?: string; kind: SceneTransitionKind; durationSeconds: number }
+  | { operation: "set-motion"; sceneNumber: number; sceneId?: string; preset: LocalMotionPreset; intensity: LocalMotionIntensity }
   | { operation: "set-visual"; sceneNumber: number; sceneId?: string; assetId: string }
   | { operation: "move"; sceneNumber: number; sceneId?: string; direction: "earlier" | "later" }
   | { operation: "move-to"; sceneNumber: number; sceneId?: string; targetSceneNumber: number; targetSceneId?: string }
@@ -113,6 +116,7 @@ export type Scene = {
     narrationLanguage?: "中文" | "英文";
     production?: Partial<ProductionSettings>;
     transition?: { kind: SceneTransitionKind; durationSeconds: number };
+    motion?: { mode: "local" | "ai"; preset: LocalMotionPreset; intensity: LocalMotionIntensity; seed: number };
     referenceAssets?: GenerationReferenceAsset[];
   };
   assets: SceneAsset[];

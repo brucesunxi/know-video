@@ -16,6 +16,9 @@ assert.ok(route.indexOf("Retrying failed image scenes") < route.lastIndexOf("per
 assert.match(route, /mediaGenerationProgress\(\s*requestedSceneNumbers,/);
 assert.match(imageAssets, /inspectGeneratedImage/);
 assert.match(imageAssets, /inspectCloudflareGeneratedImage/);
+assert.match(imageAssets, /generatedImageContainsAnyText/);
+assert.match(imageAssets, /Promise\.all\(\[/);
+assert.match(imageAssets, /misspelled, cropped, blurry, nonsensical/);
 assert.match(imageAssets, /palette sheet, pattern, material sample, abstract shapes, or style demonstration is invalid/);
 assert.match(imageAssets, /qualityAttempt < 3/);
 assert.match(imageAssets, /qualityAttempt === 2\s*\? buildTextSafeCorrectionPrompt/);

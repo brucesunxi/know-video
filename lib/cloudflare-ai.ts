@@ -215,7 +215,7 @@ export async function detectCloudflareImageText(body: Buffer) {
     body: JSON.stringify({
       image: `data:image/jpeg;base64,${normalized.toString("base64")}`,
       task: "query",
-      question: "Inspect the entire image, including screens, signs, clothing, objects, and background. Answer TEXT_PRESENT when there is readable text, a logo, watermark, signature, or a clustered sequence of fake or scrambled characters clearly intended to look like writing. Do not classify ordinary object outlines, connector lines, isolated geometric marks, facial features, texture strokes, or unlabeled pictorial icons as text. Answer exactly TEXT_PRESENT or TEXT_FREE.",
+      question: "Perform a high-recall text inspection over the entire image, including foreground and background, screens, posters, colored panels, packaging, walls, clothing, and the bottom and right edges. Answer TEXT_PRESENT if there is any word, letter, number, caption, headline, sign, label, logo, watermark, signature, interface copy, or a sequence of malformed or fake glyphs intended to resemble writing. Misspelled, cropped, blurry, nonsensical, or partially occluded writing still counts as TEXT_PRESENT. Do not classify isolated object outlines or ordinary texture marks as text. Answer exactly TEXT_PRESENT or TEXT_FREE.",
       reasoning: false,
       temperature: 0,
       max_tokens: 12,

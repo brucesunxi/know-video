@@ -69,6 +69,7 @@ import { editPlanOperations } from "@/lib/edit-operations";
 import { parsePendingGenerationSession, PENDING_GENERATION_STORAGE_KEY, type PendingGenerationSession } from "@/lib/generation-session";
 import { contentPromptForGeneration } from "@/lib/generation-prompt";
 import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
+import { sceneUsesAiMotionClip } from "@/lib/local-motion";
 import { isDeliverableVisualAsset, missingMotionSceneNumbers, missingSceneAssetNumbers, sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
 import { selectMotionCriticalScenes } from "@/lib/motion-scene-selection";
 import { auditProjectMedia } from "@/lib/project-media-audit";
@@ -82,7 +83,7 @@ import {
 import { VIDEO_FPS } from "@/video/config";
 import { VIDEO_GENERATION_DURATION_SECONDS, VIDEO_GENERATION_TIERS, videoGenerationEstimateLabel } from "@/lib/video-cost-policy";
 import { creditPacks, usdPrice } from "@/lib/billing/packs";
-import type { ChatMessage, EditChange, EditPlan, GenerationOptions, GenerationReferenceAsset, GenerationTaskListItem, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
+import type { ChatMessage, EditChange, EditPlan, GenerationOptions, GenerationReferenceAsset, GenerationTaskListItem, LocalMotionIntensity, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind, VideoGenerationTier } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
@@ -143,7 +144,7 @@ function localizedRuntimeLabel(value: string, language: UiLanguage) {
     "旁白语言": "Narration language",
     "动态策略": "Motion strategy",
     "自动规划场景": "Auto-planned scenes",
-    "全片智能运镜": "Smart camera motion",
+    "全片自动镜头编排": "Automatic shot editing",
     "中文": "Chinese",
     "英文": "English",
     "刚刚开始": "Just started",
@@ -727,7 +728,7 @@ function generationSpecItems(options: GenerationOptions) {
   const sceneLabel = options.sceneCount === "auto" ? "自动规划场景" : `${options.sceneCount} 个场景`;
   const motionLabel = options.motion === "key-scenes"
     ? `1 个${VIDEO_GENERATION_TIERS[options.videoTier].label}镜头`
-    : "全片智能运镜";
+    : "全片自动镜头编排";
   return [
     { label: "目标时长", value: `约 ${options.duration} 秒` },
     { label: "分镜策略", value: sceneLabel },
@@ -768,7 +769,7 @@ function generationReviewItems(prompt: string, options: GenerationOptions) {
       value: motionCount > 0 ? `最高预估 ${videoGenerationEstimateLabel(options.videoTier)}` : "$0 动态模型费用",
       detail: motionCount > 0
         ? `仅生成 ${motionCount} 个 ${VIDEO_GENERATION_DURATION_SECONDS} 秒镜头 · ${VIDEO_GENERATION_TIERS[options.videoTier].resolution} · 不自动重试`
-        : "全部使用本地智能运镜，后续可逐场景自愿补动态",
+        : "全部使用本地自动镜头编排，后续可逐场景自愿补 AI 动态",
       tone: motionCount > 0 ? "working" : "ready"
     },
     {
@@ -1274,7 +1275,7 @@ function exportReadinessItems(project: Project, settings: ProductionSettings, la
   return [
     { label: text("画面", "Visuals"), value: `${visualCount}/${scenes.length}`, detail: text("预览与 MP4 画面完整", "Preview and MP4 visuals complete") },
     { label: text("配音", "Narration"), value: `${audioCount}/${scenes.length}`, detail: narrationLanguage === "英文" ? text("英文旁白音轨完整", "English narration complete") : text("中文旁白音轨完整", "Chinese narration complete") },
-    { label: text("动态镜头", "Motion"), value: clipCount > 0 ? text(`${clipCount} 个`, `${clipCount} clips`) : text("智能运镜", "Smart camera motion"), detail: clipCount > 0 ? text("优先使用视频片段", "Video clips used where available") : text("使用图片运镜合成", "Composed with image camera motion") },
+    { label: text("动态镜头", "Motion"), value: clipCount > 0 ? text(`${clipCount} 个`, `${clipCount} clips`) : text("自动镜头编排", "Automatic shot edit"), detail: clipCount > 0 ? text("优先使用视频片段", "Video clips used where available") : text("微镜头、景别与转场合成", "Micro-shots, reframing, and transitions") },
     ...productionSummaryItems({
       settings,
       durationSeconds: project.currentVersion.durationSeconds,
@@ -1292,6 +1293,7 @@ function sceneStructureLabel(mutation?: EditPlan["sceneStructure"]) {
     const label = transitionOptions.find((option) => option.value === mutation.kind)?.label ?? mutation.kind;
     return `场景 ${mutation.sceneNumber} 进入转场：${label}${mutation.kind === "cut" ? "" : ` · ${mutation.durationSeconds} 秒`}`;
   }
+  if (mutation.operation === "set-motion") return `场景 ${mutation.sceneNumber} 应用本地自动镜头编排`;
   if (mutation.operation === "set-visual") return `场景 ${mutation.sceneNumber} 采用新的候选画面`;
   if (mutation.operation === "move") return `场景 ${mutation.sceneNumber} 向${mutation.direction === "earlier" ? "前" : "后"}移动一位`;
   if (mutation.operation === "move-to") return `场景 ${mutation.sceneNumber} 移动到第 ${mutation.targetSceneNumber} 位`;
@@ -1694,7 +1696,7 @@ function sceneVisualAsset(scene: Scene) {
 }
 
 function sceneHasMotionAsset(scene: Scene) {
-  return scene.assets.some((asset) => asset.type === "clip" && Boolean(asset.url));
+  return sceneUsesAiMotionClip(scene);
 }
 
 function sceneMediaState(scene: Scene) {
@@ -1739,7 +1741,7 @@ function sceneMediaDiagnosticItems(scene: Scene) {
       key: "motion",
       label: "动态",
       status: state.motionReady ? "ready" : state.visualReady ? "optional" : "blocked",
-      detail: state.motionReady ? "已有动态镜头" : state.visualReady ? "可基于画面生成" : "先生成画面"
+      detail: state.motionReady ? "AI 动态镜头" : state.visualReady ? "本地自动镜头编排" : "先生成画面"
     }
   ] as const;
 }
@@ -3042,7 +3044,7 @@ function BriefScreen({
             <label>
               <span>{text("动态方式", "Motion")}</span>
               <select onChange={(event) => onOptionsChange({ ...options, motion: event.target.value as GenerationOptions["motion"] })} value={options.motion}>
-                <option value="camera">{text("智能运镜（低成本）", "Smart camera motion (low cost)")}</option>
+                <option value="camera">{text("自动镜头编排（低成本）", "Automatic shot editing (low cost)")}</option>
                 <option value="key-scenes">{text("生成关键动态镜头（额外计费）", "Generate key video shots (additional cost)")}</option>
               </select>
             </label>
@@ -3390,7 +3392,7 @@ function Storyboard({
         <div className="kv-scene-readiness-card">
           <div>
             <strong>S{scene.sceneNumber} · {localizedRuntimeLabel(sceneMediaStatusLabel(scene), language)}</strong>
-            <span>{text("画面、配音齐全后才能稳定预览和导出；动态镜头可让关键场景更像真实视频。", "Complete visuals and narration for reliable preview and export. Motion clips make key scenes feel more like video.")}</span>
+            <span>{text("画面、配音齐全后即可使用免费的自动镜头编排；系统会切分微镜头并组合景别、运动和转场，需要真实物体运动时再选择 AI 动态镜头。", "Once visuals and narration are ready, free automatic shot editing divides the scene into micro-shots and combines reframing, motion, and transitions. Choose AI motion only for real subject movement.")}</span>
             <div className="kv-scene-media-diagnostics" aria-label={text("本场景素材诊断", "Scene asset diagnostics")}>
               {selectedMediaDiagnostics.map((item) => (
                 <span className={item.status} key={item.key}>
@@ -3412,7 +3414,11 @@ function Storyboard({
             </button>
             <button disabled={isBusy || !selectedMediaState?.visualReady} onClick={() => onGenerateClip(scene.sceneNumber)} type="button">
               {isBusy ? <Loader2 className="kv-spin" size={15} /> : <Clapperboard size={15} />}
-              {selectedMediaState?.motionReady ? text("重做动态镜头", "Regenerate motion") : text("生成动态镜头", "Generate motion")}
+              {selectedMediaState?.motionReady
+                ? text("动态镜头选项", "Motion options")
+                : scene.style.motion?.mode === "local"
+                  ? text("调整镜头编排", "Adjust shot edit")
+                  : text("生成动态", "Generate motion")}
             </button>
           </div>
         </div>
@@ -5770,6 +5776,8 @@ export function WorkspaceClient({
     narrationVoice: DEFAULT_NARRATION_VOICE
   });
   const [pendingVideoGeneration, setPendingVideoGeneration] = useState<{ sceneNumbers: number[] }>();
+  const [motionGenerationMode, setMotionGenerationMode] = useState<"local" | VideoGenerationTier>("local");
+  const [localMotionIntensity, setLocalMotionIntensity] = useState<LocalMotionIntensity>("standard");
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [generationTasks, setGenerationTasks] = useState<GenerationTaskListItem[]>([]);
   const [projectQuery, setProjectQuery] = useState("");
@@ -7899,8 +7907,14 @@ export function WorkspaceClient({
           onUpload={() => fileInputRef.current?.click()}
           onRegenerate={regenerateImages}
           onEnhanceScene={(sceneNumber) => regenerateImages([sceneNumber], "premium")}
-          onGenerateClip={(sceneNumber) => setPendingVideoGeneration({ sceneNumbers: [sceneNumber] })}
-          onGenerateClips={(sceneNumbers) => setPendingVideoGeneration({ sceneNumbers: sceneNumbers.slice(0, 1) })}
+          onGenerateClip={(sceneNumber) => {
+            setMotionGenerationMode("local");
+            setPendingVideoGeneration({ sceneNumbers: [sceneNumber] });
+          }}
+          onGenerateClips={(sceneNumbers) => {
+            setMotionGenerationMode("local");
+            setPendingVideoGeneration({ sceneNumbers: sceneNumbers.slice(0, 1) });
+          }}
           onRegenerateAudio={regenerateAudio}
           onExport={exportVideo}
           exportProgress={exportProgress}
@@ -7952,32 +7966,69 @@ export function WorkspaceClient({
         }} role="presentation">
           <section aria-labelledby="video-cost-title" aria-modal="true" className="kv-confirm-modal kv-cost-modal" role="dialog">
             <div className="kv-confirm-icon"><Film size={21} /></div>
-            <h3 id="video-cost-title">{uiLanguage === "zh-CN" ? "确认生成动态镜头" : "Confirm motion generation"}</h3>
-            <p>{uiLanguage === "zh-CN" ? `场景 ${pendingVideoGeneration.sceneNumbers.join("、")} 将调用付费视频模型。系统只提交一次 3 秒请求，失败不会自动重试。` : `Scene ${pendingVideoGeneration.sceneNumbers.join(", ")} will use a paid video model. The system submits one 3-second request and will not retry automatically if it fails.`}</p>
+            <h3 id="video-cost-title">{uiLanguage === "zh-CN" ? "选择动态方式" : "Choose a motion method"}</h3>
+            <p>{uiLanguage === "zh-CN" ? `场景 ${pendingVideoGeneration.sceneNumbers.join("、")} 默认使用本地自动镜头编排，不调用视频模型。它会按时长切分微镜头并组合景别、运动和转场；只有需要人物或物体真实运动时，才建议使用 AI 动态镜头。` : `Scene ${pendingVideoGeneration.sceneNumbers.join(", ")} uses local automatic shot editing by default without a video model. It divides the duration into micro-shots with reframing, motion, and transitions. Choose AI motion only for real character or object movement.`}</p>
             <div className="kv-cost-options">
+              <label className={motionGenerationMode === "local" ? "selected" : ""}>
+                <input
+                  checked={motionGenerationMode === "local"}
+                  name="motion-method"
+                  onChange={() => setMotionGenerationMode("local")}
+                  type="radio"
+                />
+                <span><strong>{uiLanguage === "zh-CN" ? "自动镜头编排" : "Automatic shot edit"}</strong><small>{uiLanguage === "zh-CN" ? "免费 · 微镜头、景别、运动与转场" : "Free · Micro-shots, reframing, motion, transitions"}</small></span>
+                <b>{uiLanguage === "zh-CN" ? "免费" : "Free"}</b>
+              </label>
               {(["economy", "balanced"] as const).map((tier) => (
-                <label className={generationOptions.videoTier === tier ? "selected" : ""} key={tier}>
+                <label className={motionGenerationMode === tier ? "selected" : ""} key={tier}>
                   <input
-                    checked={generationOptions.videoTier === tier}
-                    name="video-tier"
-                    onChange={() => setGenerationOptions((current) => ({ ...current, videoTier: tier }))}
+                    checked={motionGenerationMode === tier}
+                    name="motion-method"
+                    onChange={() => {
+                      setMotionGenerationMode(tier);
+                      setGenerationOptions((current) => ({ ...current, videoTier: tier }));
+                    }}
                     type="radio"
                   />
-                  <span><strong>{uiLanguage === "zh-CN" ? VIDEO_GENERATION_TIERS[tier].label : tier === "economy" ? "Economy" : "Balanced"}</strong><small>{VIDEO_GENERATION_TIERS[tier].resolution} · {uiLanguage === "zh-CN" ? "3 秒" : "3 sec"}</small></span>
+                  <span><strong>{uiLanguage === "zh-CN" ? `AI ${VIDEO_GENERATION_TIERS[tier].label}` : tier === "economy" ? "AI motion · Economy" : "AI motion · Balanced"}</strong><small>{VIDEO_GENERATION_TIERS[tier].resolution} · {uiLanguage === "zh-CN" ? "3 秒真实动态" : "3 sec generated motion"}</small></span>
                   <b>{uiLanguage === "zh-CN" ? "最高约" : "Up to"} {videoGenerationEstimateLabel(tier)}</b>
                 </label>
               ))}
             </div>
-            <p className="kv-cost-note">{uiLanguage === "zh-CN" ? "这是按当前公开价格计算的最高预估，不包含静态画面与配音的少量用量。动态镜头会自动适配当前场景时长。" : "This is the maximum estimate based on current public pricing. It excludes minor image and narration usage. Motion clips are fitted to the current scene duration."}</p>
+            {motionGenerationMode === "local" ? (
+              <label className="kv-motion-intensity">
+                <span>{uiLanguage === "zh-CN" ? "剪辑节奏" : "Editing pace"}</span>
+                <select onChange={(event) => setLocalMotionIntensity(event.target.value as LocalMotionIntensity)} value={localMotionIntensity}>
+                  <option value="subtle">{uiLanguage === "zh-CN" ? "轻柔" : "Subtle"}</option>
+                  <option value="standard">{uiLanguage === "zh-CN" ? "自然" : "Natural"}</option>
+                  <option value="dynamic">{uiLanguage === "zh-CN" ? "明显" : "Dynamic"}</option>
+                </select>
+              </label>
+            ) : null}
+            <p className="kv-cost-note">{motionGenerationMode === "local"
+              ? uiLanguage === "zh-CN" ? "系统按场景时长生成 1–4 个虚拟素材片段，自动组合全景、中景、细节视角及淡化、滑动或缩放转场；预览与 MP4 导出效果一致。" : "The scene becomes 1–4 virtual material clips with wide, medium, and detail reframing plus deterministic dissolve, slide, or zoom transitions. Preview and MP4 export remain identical."
+              : uiLanguage === "zh-CN" ? "AI 动态镜头按当前公开价格计费，只提交一次 3 秒请求，失败不会自动重试。" : "AI motion is billed from current public pricing. One 3-second request is submitted with no automatic retry."}</p>
             <div>
               <button disabled={isBusy} onClick={() => setPendingVideoGeneration(undefined)} type="button">{uiLanguage === "zh-CN" ? "取消" : "Cancel"}</button>
               <button className="kv-cost-confirm" disabled={isBusy} onClick={() => {
                 const request = pendingVideoGeneration;
-                const tier = generationOptions.videoTier;
+                const mode = motionGenerationMode;
                 setPendingVideoGeneration(undefined);
-                void generateVideoClips(request.sceneNumbers, tier);
+                if (mode === "local") {
+                  void mutateSceneStructure({
+                    operation: "set-motion",
+                    sceneNumber: request.sceneNumbers[0],
+                    preset: "auto",
+                    intensity: localMotionIntensity
+                  });
+                } else {
+                  void generateVideoClips(request.sceneNumbers, mode);
+                }
               }} type="button">
-                <Film size={16} />{uiLanguage === "zh-CN" ? "确认，最高" : "Confirm, up to"} {videoGenerationEstimateLabel(generationOptions.videoTier)}
+                {motionGenerationMode === "local" ? <Sparkles size={16} /> : <Film size={16} />}
+                {motionGenerationMode === "local"
+                  ? uiLanguage === "zh-CN" ? "应用镜头编排" : "Apply shot edit"
+                  : <>{uiLanguage === "zh-CN" ? "确认，最高" : "Confirm, up to"} {videoGenerationEstimateLabel(motionGenerationMode)}</>}
               </button>
             </div>
           </section>

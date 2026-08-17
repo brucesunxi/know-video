@@ -17,6 +17,7 @@ import { clipDurationInFrames, resolvedClipPlaybackRate } from "@/lib/clip-timin
 import { readableTextColor, sceneAccentColor } from "@/lib/color-contrast";
 import { activeNarrationCaption, narrationAudioPlaybackRate, narrationDurationInFrames } from "@/lib/narration-timing";
 import { isDeliverableVisualAsset } from "@/lib/generation-resume";
+import { localMotionSequence, sceneUsesAiMotionClip, type LocalMotionBeat, type LocalMotionPlan } from "@/lib/local-motion";
 import { productionAsset, productionSceneTimeline, productionSettings } from "@/lib/production-settings";
 import { resolvedSceneTransition, type ResolvedSceneTransitionKind } from "@/lib/scene-transitions";
 import { VIDEO_FPS } from "@/video/config";
@@ -42,47 +43,50 @@ function captionFontSize(caption: string) {
   return 31;
 }
 
-function motionValues(scene: Scene, frame: number, durationInFrames: number) {
-  const progressRange = [0, Math.max(1, durationInFrames - 1)];
-  const direction = scene.motionPrompt.toLowerCase();
-  const pansRight = direction.includes("right") || direction.includes("向右");
-  const pansLeft = direction.includes("left") || direction.includes("向左");
-  const movesUp = direction.includes("upward") || direction.includes("rise") || direction.includes("向上") || direction.includes("上升");
-  const movesDown = direction.includes("downward") || direction.includes("descend") || direction.includes("向下") || direction.includes("下降");
-  const orbit = direction.includes("orbit") || direction.includes("arc") || direction.includes("环绕") || direction.includes("弧线");
-  const pullsBack = direction.includes("pull") || direction.includes("zoom out") || direction.includes("拉远");
-  const x = pansRight
-    ? interpolate(frame, progressRange, [-3.2, 3.2])
-    : pansLeft
-      ? interpolate(frame, progressRange, [3.2, -3.2])
-      : orbit
-        ? interpolate(frame, progressRange, [scene.sceneNumber % 2 === 0 ? 2.4 : -2.4, scene.sceneNumber % 2 === 0 ? -2.4 : 2.4])
-        : interpolate(frame, progressRange, [0, scene.sceneNumber % 2 === 0 ? -1.6 : 1.6]);
-  const y = movesUp
-    ? interpolate(frame, progressRange, [2.4, -2.4])
-    : movesDown
-      ? interpolate(frame, progressRange, [-2.4, 2.4])
-      : orbit
-        ? interpolate(frame, progressRange, [-1.2, 1.2])
-        : 0;
-  const scale = pullsBack
-    ? interpolate(frame, progressRange, [1.14, 1.035])
-    : interpolate(frame, progressRange, [1.035, 1.115]);
-  return { x, y, scale };
+function motionValues(plan: LocalMotionPlan, frame: number, durationInFrames: number) {
+  const progress = interpolate(frame, [0, Math.max(1, durationInFrames - 1)], [0, 1], {
+    easing: Easing.bezier(0.33, 0, 0.2, 1),
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  return {
+    x: interpolate(progress, [0, 1], [plan.xFrom, plan.xTo]),
+    y: interpolate(progress, [0, 1], [plan.yFrom, plan.yTo]),
+    scale: interpolate(progress, [0, 1], [plan.scaleFrom, plan.scaleTo])
+  };
+}
+
+function beatTransitionOffset(beat: LocalMotionBeat, progress: number) {
+  const remaining = 1 - progress;
+  if (beat.transition === "slide-left") return { x: 9 * remaining, y: 0, scale: 1, opacity: progress };
+  if (beat.transition === "slide-right") return { x: -9 * remaining, y: 0, scale: 1, opacity: progress };
+  if (beat.transition === "slide-up") return { x: 0, y: 7 * remaining, scale: 1, opacity: progress };
+  if (beat.transition === "slide-down") return { x: 0, y: -7 * remaining, scale: 1, opacity: progress };
+  if (beat.transition === "zoom") return { x: 0, y: 0, scale: 1.08 - progress * 0.08, opacity: progress };
+  return { x: 0, y: 0, scale: 1, opacity: progress };
 }
 
 function visualLayerStyle({
   motion,
-  nativeVideo
+  nativeVideo,
+  opacity = 1,
+  transitionScale = 1,
+  transitionX = 0,
+  transitionY = 0
 }: {
   motion: ReturnType<typeof motionValues>;
   nativeVideo: boolean;
+  opacity?: number;
+  transitionScale?: number;
+  transitionX?: number;
+  transitionY?: number;
 }): React.CSSProperties {
   if (nativeVideo) {
     return {
       height: "100%",
       left: 0,
       objectFit: "cover",
+      opacity,
       position: "absolute",
       top: 0,
       transform: "none",
@@ -91,14 +95,77 @@ function visualLayerStyle({
   }
 
   return {
-    height: "106%",
-    left: `${motion.x}%`,
+    height: "112%",
+    left: "-6%",
     objectFit: "cover",
     position: "absolute",
-    top: `${-3 + motion.y}%`,
-    transform: `scale(${motion.scale})`,
-    width: "106%"
+    top: "-6%",
+    opacity,
+    transform: `translate3d(${motion.x + transitionX}%, ${motion.y + transitionY}%, 0) scale(${motion.scale * transitionScale})`,
+    transformOrigin: "center center",
+    width: "112%",
+    willChange: "transform"
   };
+}
+
+function LocalImageSequence({
+  image,
+  scene,
+  frame,
+  durationInFrames
+}: {
+  image: string;
+  scene: Scene;
+  frame: number;
+  durationInFrames: number;
+}) {
+  const beats = localMotionSequence(scene, durationInFrames, VIDEO_FPS);
+  const activeIndex = Math.max(0, beats.findLastIndex((beat) => frame >= beat.startFrame));
+  const active = beats[activeIndex] ?? beats[0];
+  const activeFrame = Math.max(0, Math.min(active.endFrame - active.startFrame - 1, frame - active.startFrame));
+  const activeDuration = Math.max(1, active.endFrame - active.startFrame);
+  const activeMotion = motionValues(active.plan, activeFrame, activeDuration);
+  const transitionProgress = active.transitionFrames > 0
+    ? interpolate(activeFrame, [0, active.transitionFrames], [0, 1], {
+      easing: Easing.inOut(Easing.cubic),
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp"
+    })
+    : 1;
+  const incoming = beatTransitionOffset(active, transitionProgress);
+  const previous = activeIndex > 0 ? beats[activeIndex - 1] : undefined;
+  const previousMotion = previous
+    ? motionValues(previous.plan, previous.endFrame - previous.startFrame - 1, previous.endFrame - previous.startFrame)
+    : undefined;
+
+  return (
+    <>
+      {previous && previousMotion && transitionProgress < 1 ? (
+        <Img
+          src={image}
+          style={visualLayerStyle({
+            motion: previousMotion,
+            nativeVideo: false,
+            opacity: 1 - transitionProgress * 0.82,
+            transitionScale: active.transition === "zoom" ? 1 - transitionProgress * 0.035 : 1,
+            transitionX: active.transition === "slide-left" ? -4 * transitionProgress : active.transition === "slide-right" ? 4 * transitionProgress : 0,
+            transitionY: active.transition === "slide-up" ? -3 * transitionProgress : active.transition === "slide-down" ? 3 * transitionProgress : 0
+          })}
+        />
+      ) : null}
+      <Img
+        src={image}
+        style={visualLayerStyle({
+          motion: activeMotion,
+          nativeVideo: false,
+          opacity: incoming.opacity,
+          transitionScale: incoming.scale,
+          transitionX: incoming.x,
+          transitionY: incoming.y
+        })}
+      />
+    </>
+  );
 }
 
 function transitionStyle(kind: ResolvedSceneTransitionKind, frame: number, transitionFrames: number, active: boolean) {
@@ -183,7 +250,6 @@ function SceneFrame({
     : 1;
   const copyOpacity = copyFadeIn * copyFadeOut;
   const visualFrame = Math.min(frame, contentDurationInFrames - 1);
-  const motion = motionValues(scene, visualFrame, contentDurationInFrames);
   const titleHold = interpolate(
     visualFrame,
     [0, Math.round(contentDurationInFrames * 0.68), Math.round(contentDurationInFrames * 0.82)],
@@ -193,7 +259,9 @@ function SceneFrame({
   const transition = resolvedSceneTransition(scene).kind;
   const accent = sceneAccentColor(scene.style.palette);
   const accentText = readableTextColor(accent);
-  const clipAsset = scene.assets.find((asset) => asset.type === "clip" && isDeliverableVisualAsset(asset));
+  const clipAsset = sceneUsesAiMotionClip(scene)
+    ? scene.assets.find((asset) => asset.type === "clip" && isDeliverableVisualAsset(asset))
+    : undefined;
   const clip = clipAsset?.url;
   const clipPlaybackRate = clipAsset ? resolvedClipPlaybackRate({
     asset: clipAsset,
@@ -232,14 +300,11 @@ function SceneFrame({
             pauseWhenBuffering
             playbackRate={clipPlaybackRate}
             src={clip}
-            style={visualLayerStyle({ motion, nativeVideo: true })}
+            style={visualLayerStyle({ motion: motionValues(localMotionSequence(scene, contentDurationInFrames, VIDEO_FPS)[0].plan, visualFrame, contentDurationInFrames), nativeVideo: true })}
           />
         </Freeze>
       ) : image ? (
-        <Img
-          src={image}
-          style={visualLayerStyle({ motion, nativeVideo: false })}
-        />
+        <LocalImageSequence durationInFrames={contentDurationInFrames} frame={visualFrame} image={image} scene={scene} />
       ) : null}
       <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(2,8,18,.16) 0%, rgba(2,8,18,.02) 42%, rgba(2,8,18,.9) 100%)" }} />
       <AbsoluteFill style={{ background: "linear-gradient(90deg, rgba(2,8,18,.5), transparent 62%)" }} />

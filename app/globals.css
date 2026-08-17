@@ -4514,6 +4514,8 @@ html[data-theme="dark"] .kv-user-menu {
 
 .kv-cost-modal {
   width: min(520px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
 }
 
 .kv-cost-modal .kv-confirm-icon {
@@ -4563,6 +4565,27 @@ html[data-theme="dark"] .kv-user-menu {
   border-left: 3px solid #9bded6;
   padding-left: 10px;
   font-size: 13px;
+}
+
+.kv-motion-intensity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.kv-motion-intensity select {
+  min-width: 132px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px 10px;
+  color: var(--ink);
+  font: inherit;
 }
 
 .kv-confirm-modal > div:last-child button.kv-cost-confirm {

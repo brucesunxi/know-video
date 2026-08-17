@@ -93,6 +93,23 @@ export function applySceneStructureMutation(
       style: { ...scenes[index].style, transition: { kind: mutation.kind, durationSeconds } }
     };
     description = `场景 ${mutation.sceneNumber} 的进入转场已更新。`;
+  } else if (mutation.operation === "set-motion") {
+    const current = scenes[index].style.motion;
+    const sameLocalPlan = current?.mode === "local" && current.preset === mutation.preset && current.intensity === mutation.intensity;
+    const initialSeed = Math.abs(Array.from(scenes[index].id).reduce((sum, character) => ((sum * 31) + character.charCodeAt(0)) | 0, 17));
+    scenes[index] = {
+      ...scenes[index],
+      style: {
+        ...scenes[index].style,
+        motion: {
+          mode: "local",
+          preset: mutation.preset,
+          intensity: mutation.intensity,
+          seed: sameLocalPlan ? current.seed + 1 : current?.seed ?? initialSeed
+        }
+      }
+    };
+    description = `场景 ${mutation.sceneNumber} 已${sameLocalPlan ? "重新规划" : "应用"}本地智能运镜。`;
   } else if (mutation.operation === "set-visual") {
     const candidate = scenes[index].assets.find((asset) => (
       asset.id === mutation.assetId && asset.type === "thumbnail" && asset.metadata?.candidate === true

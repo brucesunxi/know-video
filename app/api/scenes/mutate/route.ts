@@ -17,6 +17,12 @@ const schema = z.discriminatedUnion("operation", [
     kind: z.enum(["auto", "cut", "dissolve", "push-left", "push-right", "zoom", "wipe"]),
     durationSeconds: z.number().min(0).max(1.2)
   }),
+  z.object({
+    ...common,
+    operation: z.literal("set-motion"),
+    preset: z.enum(["auto", "push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "tilt-down", "drift"]),
+    intensity: z.enum(["subtle", "standard", "dynamic"])
+  }),
   z.object({ ...common, operation: z.literal("set-visual"), assetId: z.string().uuid() }),
   z.object({ ...common, operation: z.literal("move"), direction: z.enum(["earlier", "later"]) }),
   z.object({ ...common, operation: z.literal("move-to"), targetSceneNumber: z.number().int().positive() }),

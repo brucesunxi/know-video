@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import sharp from "sharp";
-import { generateCloudflareImage, hasCloudflareAI, inspectCloudflareGeneratedImage } from "@/lib/cloudflare-ai";
+import { detectCloudflareImageText, generateCloudflareImage, hasCloudflareAI, inspectCloudflareGeneratedImage } from "@/lib/cloudflare-ai";
 import { sceneReferenceAssets } from "@/lib/attachment-context";
 import { getOptionalEnv } from "@/lib/env";
 import {
@@ -157,6 +157,44 @@ async function inspectGeneratedImage(body: Buffer, scene: Scene, project: Projec
   }
 }
 
+async function generatedImageContainsAnyText(body: Buffer) {
+  try {
+    const apiKey = getOptionalEnv("OPENAI_API_KEY");
+    if (apiKey?.startsWith("sk-")) {
+      const client = new OpenAI({ apiKey });
+      const response = await client.chat.completions.create({
+        model: getOptionalEnv("OPENAI_VISION_MODEL") || "gpt-4o-mini",
+        temperature: 0,
+        max_tokens: 12,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: [
+                "Perform a high-recall text inspection over the entire image.",
+                "Return TEXT_PRESENT if any visible region contains a word, letter, number, caption, headline, sign, label, logo, watermark, signature, interface copy, or a sequence of malformed/fake glyphs intended to resemble writing.",
+                "Inspect foreground and background, especially screens, posters, colored panels, packaging, walls, clothing, and the bottom and right edges.",
+                "Even misspelled, cropped, blurry, nonsensical, or partially occluded writing counts as TEXT_PRESENT.",
+                "Return TEXT_FREE only when there are no writing-like character sequences anywhere. Answer exactly TEXT_PRESENT or TEXT_FREE."
+              ].join(" ")
+            },
+            { type: "image_url", image_url: { url: `data:image/png;base64,${body.toString("base64")}`, detail: "high" } }
+          ]
+        }]
+      } as never);
+      const verdict = response.choices[0]?.message?.content?.toUpperCase() ?? "";
+      if (verdict.includes("TEXT_PRESENT")) return true;
+      if (verdict.includes("TEXT_FREE")) return false;
+      throw new Error("Vision model returned an inconclusive dedicated text inspection");
+    }
+    if (hasCloudflareAI()) return (await detectCloudflareImageText(body)).hasText;
+    throw new Error("No vision service is configured for dedicated text inspection");
+  } catch (error) {
+    throw new GeneratedImageQualityError("无法确认生成画面是否完全无文字。", "text_check_failed", { cause: error });
+  }
+}
+
 async function loadImageReference(asset: SceneAsset | undefined, role: ImageReference["role"]) {
   if (!asset?.r2Key) return undefined;
   try {
@@ -283,8 +321,11 @@ async function generateSceneImage(
         generatedModel = imageModel();
       }
       const normalized = await normalizeGeneratedImage(generatedBody);
-      const inspection = await inspectGeneratedImage(normalized.body, scene, project);
-      if (inspection === "text_present") {
+      const [inspection, containsText] = await Promise.all([
+        inspectGeneratedImage(normalized.body, scene, project),
+        generatedImageContainsAnyText(normalized.body)
+      ]);
+      if (containsText || inspection === "text_present") {
         throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。", "text_detected");
       }
       if (inspection === "semantic_mismatch") {
