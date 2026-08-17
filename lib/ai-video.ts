@@ -9,6 +9,7 @@ import { fitScenesNarrationApproximate } from "@/lib/narration-fit";
 import { affectedSceneNumbersForOperations, bindOperationSceneIds, editPlanOperations } from "@/lib/edit-operations";
 import {
   detectBriefDomain,
+  ensureBriefFaithfulProjectTitle,
   extractBriefVisualConcepts,
   hasMetaProductionNarration,
   isProductionInstructionClause
@@ -1007,6 +1008,7 @@ function blockingStoryboardIssues(issues: string[]) {
     || issue === "scene content is not fully localized in Chinese"
     || issue === "scene content is not fully localized in English"
     || issue === "project title is not localized in the requested language"
+    || issue === "project title does not identify the client's actual subject"
   ));
 }
 
@@ -1048,6 +1050,7 @@ async function createTreatment(
           "Find a visual concept rooted in the user's actual subject, not a software feature list.",
           "Extract business structures from the client text and make them recurring visual motifs when present: gates, records, responsibility chains, evidence packets, approval paths, budget boundaries, risk signals, or scenario tables.",
           "Separate production instructions (make a video, duration, format, style, scenes) from the company or product being promoted.",
+          "The workingTitle must clearly name or identify the client's actual promoted subject. Visual media such as paper collage, pixel art, comic, chalkboard, line art, cinematic, or realistic are rendering styles only and must never replace the kindergarten, product, person, company, or place in the title.",
           "The spoken narrative must communicate the client's company, product, customer problem, differentiators, evidence, and outcome. It must never describe the act of making or watching this video unless video creation is itself the client's product.",
           "Mention the promoted subject naturally, but do not start multiple narrationLine values with the same product name or category. Vary openings across problem, action, proof, human change, and outcome.",
           "Each beat must advance one narrative arc and introduce a distinct visual event.",
@@ -1067,6 +1070,10 @@ async function createTreatment(
   });
 
   let treatment = treatmentSchema.parse(parseModelJson(completion.choices[0]?.message.content ?? "{}"));
+  treatment = {
+    ...treatment,
+    workingTitle: ensureBriefFaithfulProjectTitle(treatment.workingTitle, prompt, options?.language !== "英文")
+  };
   if (options?.style) {
     const profile = visualStyleProfile(options.style);
     treatment = {
@@ -1097,6 +1104,7 @@ async function createTreatment(
             "You are the commercial brief and narration quality editor.",
             "Repair the treatment while preserving every verified client fact and the required beat count.",
             "Separate production instructions from promoted-company content.",
+            "Keep workingTitle anchored to the client's actual promoted subject. A visual style is not the subject and cannot replace it in the title.",
             "Preserve the client's industry. Never rewrite a game, course, retail product, or entertainment property with unrelated enterprise-software language.",
             "Rewrite every narrationLine as concise, natural, audience-facing commercial narration grounded in its sourceFact.",
             "Do not start multiple narrationLine values with the same product name or category; vary the first phrase of every beat.",
@@ -1111,6 +1119,10 @@ async function createTreatment(
       temperature: 0.25
     });
     treatment = treatmentSchema.parse(parseModelJson(repair.choices[0]?.message.content ?? "{}"));
+    treatment = {
+      ...treatment,
+      workingTitle: ensureBriefFaithfulProjectTitle(treatment.workingTitle, prompt, options?.language !== "英文")
+    };
     treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
     const remainingNarrationIssues = treatmentNarrationIssues(treatment, targetDuration);
     if (treatment.beats.length !== sceneCount || remainingNarrationIssues.length > 0) {
@@ -1143,6 +1155,7 @@ async function repairStoryboard(params: {
         content: [
           "You are the final quality-control director for a commercial storyboard.",
           "Rewrite the storyboard to resolve every listed issue while preserving the approved treatment.",
+          "The project title must clearly identify the actual subject from the original request. Never turn a rendering style such as paper collage, pixel art, comic, chalkboard, line art, cinematic, or realistic into the subject of the title.",
           "Return strict JSON only, using the exact same storyboard schema.",
           "Use concrete filmable imagery, distinct shot purposes, natural narration, and coherent visual continuity.",
           "The approved treatment owns the spoken story. For scene N, copy treatment.beats[N-1].narrationLine into voiceover exactly; do not paraphrase, expand, or replace it.",
@@ -1203,6 +1216,7 @@ export async function createStoryboardProject(
               `Create exactly ${treatment.beats.length} scenes, one for each treatment beat, in the same order.`,
               `Treat ${targetDuration} seconds as an approximate pacing target. Let the complete video land naturally between ${durationRange.minimum} and ${durationRange.maximum} seconds, with every scene at least 2 seconds.`,
               "The storyboard must play as a real short film, not a generic SaaS page outline or presentation.",
+              "The project title must clearly identify the client's actual promoted subject. Visual style controls how the film looks; it must never replace the kindergarten, product, person, company, or place being introduced.",
               "Never use generic section titles such as Customization, User Interface, Benefits, Features, Overview, or Conclusion.",
               "Every scene must have one unmistakable visual subject, a foreground action, an environment, depth, and a specific composition.",
               "The user's product text may contain business structures such as gates, evidence packets, responsibility chains, approval records, or risk signals. Translate those structures into specific visual objects and spatial systems rather than generic attractive imagery.",
@@ -1269,6 +1283,11 @@ export async function createStoryboardProject(
     }
 
     const narrationVoice = options?.narrationVoice ?? narrationVoiceForBrief(prompt);
+    const projectTitle = ensureBriefFaithfulProjectTitle(
+      acceptedStoryboard.title,
+      prompt,
+      options?.language !== "英文"
+    );
     scenes = scenes.map((scene) => ({
       ...scene,
       style: { ...scene.style, narrationVoice, narrationLanguage: options?.language }
@@ -1282,7 +1301,7 @@ export async function createStoryboardProject(
           credits: 996,
           plan: "Free"
         }),
-        title: acceptedStoryboard.title,
+        title: projectTitle,
         currentVersion: {
           id: crypto.randomUUID(),
           label: "draft 1",

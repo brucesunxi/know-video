@@ -5,6 +5,7 @@ import type { EditPlan, GenerationOptions, Project, ProjectVersion, Scene } from
 import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/production-edit-intent";
 import {
   detectBriefDomain,
+  ensureBriefFaithfulProjectTitle,
   extractBriefFacts,
   extractBriefSubject,
   extractBriefVisualConcepts,
@@ -502,11 +503,12 @@ export function generateProjectFromPrompt(
   const styleSuffix = options?.style ? ` ${chinese ? "视觉风格档案" : "Visual style bible"}：${visualStyleDirection(options.style)}` : "";
   const businessNarrations = domainFallbackNarrations(prompt, briefSubject, briefFacts, briefConcepts, chinese);
   const fallbackDomain = detectBriefDomain(prompt);
-  const fallbackTitle = briefSubject === "这项产品" || briefSubject === "This product"
+  const fallbackTitleCandidate = briefSubject === "这项产品" || briefSubject === "This product"
     ? title
     : fallbackDomain === "gaming"
       ? (chinese ? `${briefSubject} 游戏预告` : `${briefSubject} Game Trailer`)
       : (chinese ? `${briefSubject} 产品介绍` : `${briefSubject} Product Film`);
+  const fallbackTitle = ensureBriefFaithfulProjectTitle(fallbackTitleCandidate, prompt, chinese);
   const fallbackTitles = fallbackDomain === "gaming"
     ? (chinese
         ? ["进入游戏", "玩法上手", "挑战升级", "策略变化", "赢得成果", "开始下一局"]

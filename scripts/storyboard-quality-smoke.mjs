@@ -37,6 +37,12 @@ const scenes = [
 const validIssues = storyboardQualityIssues(scenes, { language: "中文", style: "电影感", duration: "30", sceneCount: "4" }, "创意成片");
 assert.equal(detectedShotVariety(scenes), 4, "four distinct shot directions should be detected");
 assert.deepEqual(validIssues, [], `valid storyboard failed: ${validIssues.join(", ")}`);
+assert(storyboardQualityIssues(
+  scenes,
+  { language: "中文" },
+  "纸乐园的第一天",
+  "帮我生成一个幼儿园的宣传视频"
+).includes("project title does not identify the client's actual subject"));
 
 const mutate = (index, values) => scenes.map((scene, current) => current === index ? { ...scene, ...values } : scene);
 assert(storyboardQualityIssues(mutate(0, { visualPrompt: "A plain studio dashboard with cards and grids and no useful art direction details." }), { language: "中文" }).includes("scene content is not fully localized in Chinese"));

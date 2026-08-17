@@ -4,7 +4,8 @@ import {
   extractBriefSubject,
   extractBriefVisualConcepts,
   hasMetaProductionNarration,
-  isVideoCreationProductBrief
+  isVideoCreationProductBrief,
+  projectTitleRepresentsBrief
 } from "@/lib/brief-semantics";
 
 const genericSceneNames = [
@@ -185,6 +186,9 @@ export function storyboardQualityIssues(
     issues.push("voiceover narrates the production instead of the client's company or product");
   }
   if (brief) {
+    if (projectTitle && !projectTitleRepresentsBrief(projectTitle, brief, options?.language !== "英文")) {
+      issues.push("project title does not identify the client's actual subject");
+    }
     if (detectBriefDomain(brief) === "gaming") {
       const output = `${projectTitle ?? ""}\n${scenes.map((scene) => `${scene.voiceover}\n${baseVisualPrompt(scene)}`).join("\n")}`;
       const leaked = gamingIndustryLeakPatterns.some((pattern) => pattern.test(output) && !pattern.test(brief));

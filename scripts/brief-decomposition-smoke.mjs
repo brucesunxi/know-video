@@ -12,6 +12,8 @@ vm.runInNewContext(semanticsOutput, { module, exports: module.exports });
 const {
   extractBriefFacts,
   extractBriefSubject,
+  ensureBriefFaithfulProjectTitle,
+  projectTitleRepresentsBrief,
   extractBriefVisualConcepts,
   detectBriefDomain,
   isProductionInstructionClause
@@ -20,6 +22,13 @@ const {
 const mixedBrief = "请为 VYBEA 制作一个 30 秒企业产品介绍视频，风格高级、节奏明快、适合官网首屏。VYBEA 是面向娱乐 IP 的项目级责任治理平台。它帮助团队把分散风险信号转化为可审查证据和可追溯决策。";
 const facts = Array.from(extractBriefFacts(mixedBrief, true));
 assert.equal(extractBriefSubject(mixedBrief, true), "VYBEA");
+const kindergartenBrief = "帮我生成一个幼儿园的宣传视频";
+assert.equal(extractBriefSubject(kindergartenBrief, true), "幼儿园");
+assert.equal(projectTitleRepresentsBrief("纸乐园的第一天", kindergartenBrief, true), false);
+assert.equal(projectTitleRepresentsBrief("走进幼儿园", kindergartenBrief, true), true);
+assert.equal(ensureBriefFaithfulProjectTitle("纸乐园的第一天", kindergartenBrief, true), "幼儿园宣传片");
+assert.equal(projectTitleRepresentsBrief("A Day at Kindergarten", kindergartenBrief, false), true);
+assert.equal(ensureBriefFaithfulProjectTitle("A Day at Paper Paradise", kindergartenBrief, false), "Kindergarten Introduction");
 assert.equal(facts.some((fact) => /30\s*秒|官网首屏|风格高级/u.test(fact)), false);
 assert.equal(facts.some((fact) => fact.includes("项目级责任治理平台")), true);
 assert.equal(facts.some((fact) => fact.includes("可审查证据")), true);

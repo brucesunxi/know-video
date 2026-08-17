@@ -86,11 +86,88 @@ export function extractBriefSubject(prompt: string, chinese = true) {
     .trim();
   if (directedSubject) return directedSubject;
 
+  const commandedChineseSubject = prompt.match(
+    /(?:生成|制作|创建|做|拍)(?:一(?:个|家|款|所|间|门|部|支|段))?\s*([^，。；：:\n]{2,24}?)(?:的)?(?:宣传|介绍|推广|招生|品牌)?(?:视频|短片|宣传片|介绍片)/u
+  )?.[1]?.trim();
+  if (commandedChineseSubject) return commandedChineseSubject;
+
+  const englishSubject = prompt.match(
+    /(?:make|create|generate|produce)\s+(?:an?\s+)?(.{2,48}?)\s+(?:promotional|promotion|introductory|introduction|marketing|brand)?\s*(?:video|film)|(?:video|film)\s+(?:for|about)\s+(?:an?\s+)?([^,.!?;\n]{2,48})/iu
+  );
+  const commandedEnglishSubject = (englishSubject?.[1] ?? englishSubject?.[2])
+    ?.replace(/^(?:for|about)\s+/iu, "")
+    .trim();
+  if (commandedEnglishSubject) return commandedEnglishSubject;
+
   const firstClause = prompt.split(/[。！？；\n]/u)
     .map((part) => part.trim())
     .find((part) => part.length >= 2 && !productionInstructionPattern.test(part));
   if (firstClause) return firstClause.replace(/^[请帮我给为关于\s]+/u, "").slice(0, chinese ? 18 : 48);
   return chinese ? "这项产品" : "This product";
+}
+
+function compactTitleValue(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[\s，。！？；,.!?;:：、\-_"'“”‘’()（）]/g, "");
+}
+
+function subjectTokens(value: string) {
+  const latin = value.toLowerCase().match(/[a-z0-9]+/g)?.filter((token) => token.length >= 3) ?? [];
+  const han = (value.match(/\p{Script=Han}+/gu) ?? []).flatMap((part) => {
+    const characters = Array.from(part);
+    return characters.length <= 2
+      ? [part]
+      : characters.slice(0, -1).map((character, index) => `${character}${characters[index + 1]}`);
+  });
+  return [...latin, ...han];
+}
+
+const subjectTranslations: Array<[RegExp, string, string]> = [
+  [/幼儿园/u, "幼儿园", "kindergarten"],
+  [/托儿所|托育/u, "托育中心", "childcare center"],
+  [/学校/u, "学校", "school"],
+  [/课程/u, "课程", "course"],
+  [/咖啡店|咖啡馆/u, "咖啡店", "coffee shop"],
+  [/餐厅|饭店/u, "餐厅", "restaurant"],
+  [/酒店|旅馆/u, "酒店", "hotel"],
+  [/公司|企业/u, "公司", "company"],
+  [/产品/u, "产品", "product"],
+  [/游戏/u, "游戏", "game"]
+];
+
+function translatedSubject(subject: string, chinese: boolean) {
+  const translation = subjectTranslations.find(([pattern]) => pattern.test(subject));
+  if (!translation) return subject;
+  return chinese ? translation[1] : translation[2];
+}
+
+export function projectTitleRepresentsBrief(title: string, prompt: string, chinese = true) {
+  const subject = extractBriefSubject(prompt, chinese);
+  const compactSubject = compactTitleValue(subject);
+  if (["这项产品", "这个产品", "thisproduct", "theproduct"].includes(compactSubject)) return true;
+
+  const compactTitle = compactTitleValue(title);
+  if (!compactTitle) return false;
+  if (compactTitle.includes(compactSubject) || compactSubject.includes(compactTitle)) return true;
+  const localizedSubject = translatedSubject(subject, chinese);
+  const compactLocalizedSubject = compactTitleValue(localizedSubject);
+  if (compactTitle.includes(compactLocalizedSubject) || compactLocalizedSubject.includes(compactTitle)) return true;
+  return subjectTokens(`${subject} ${localizedSubject}`).some((token) => compactTitle.includes(compactTitleValue(token)));
+}
+
+export function ensureBriefFaithfulProjectTitle(candidate: string, prompt: string, chinese = true) {
+  const title = candidate.trim();
+  if (title && projectTitleRepresentsBrief(title, prompt, chinese)) return title;
+
+  const subject = extractBriefSubject(prompt, chinese);
+  const compactSubject = compactTitleValue(subject);
+  if (["这项产品", "这个产品", "thisproduct", "theproduct"].includes(compactSubject)) return title;
+  const localizedSubject = translatedSubject(subject, chinese);
+  if (chinese) return /宣传|推广|招生/u.test(prompt) ? `${localizedSubject}宣传片` : `${localizedSubject}介绍`;
+
+  const readableSubject = localizedSubject.replace(/\s+/g, " ").trim();
+  return `${readableSubject.charAt(0).toUpperCase()}${readableSubject.slice(1)} Introduction`;
 }
 
 export function extractBriefFacts(prompt: string, chinese = true) {
