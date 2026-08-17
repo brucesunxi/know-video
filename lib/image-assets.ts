@@ -159,6 +159,10 @@ async function inspectGeneratedImage(body: Buffer, scene: Scene, project: Projec
 
 async function generatedImageContainsAnyText(body: Buffer) {
   try {
+    // Keep image generation and validation on Cloudflare when it is configured.
+    // Falling through to OpenAI here can reject otherwise valid Cloudflare output
+    // because of an unrelated OpenAI quota or billing issue.
+    if (hasCloudflareAI()) return (await detectCloudflareImageText(body)).hasText;
     const apiKey = getOptionalEnv("OPENAI_API_KEY");
     if (apiKey?.startsWith("sk-")) {
       const client = new OpenAI({ apiKey });
@@ -188,7 +192,6 @@ async function generatedImageContainsAnyText(body: Buffer) {
       if (verdict.includes("TEXT_FREE")) return false;
       throw new Error("Vision model returned an inconclusive dedicated text inspection");
     }
-    if (hasCloudflareAI()) return (await detectCloudflareImageText(body)).hasText;
     throw new Error("No vision service is configured for dedicated text inspection");
   } catch (error) {
     throw new GeneratedImageQualityError("无法确认生成画面是否完全无文字。", "text_check_failed", { cause: error });

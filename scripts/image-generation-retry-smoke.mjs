@@ -15,6 +15,14 @@ assert.match(route, /mediaGenerationProgress\(\s*processingSceneNumbers,/);
 assert.match(imageAssets, /inspectGeneratedImage/);
 assert.match(imageAssets, /inspectCloudflareGeneratedImage/);
 assert.match(imageAssets, /generatedImageContainsAnyText/);
+const textInspection = imageAssets.slice(
+  imageAssets.indexOf("async function generatedImageContainsAnyText"),
+  imageAssets.indexOf("async function loadImageReference")
+);
+assert.ok(
+  textInspection.indexOf("hasCloudflareAI()") < textInspection.indexOf("OPENAI_API_KEY"),
+  "Cloudflare text inspection must run before the optional OpenAI fallback"
+);
 assert.match(imageAssets, /Promise\.all\(\[/);
 assert.match(imageAssets, /misspelled, cropped, blurry, nonsensical/);
 assert.match(imageAssets, /palette sheet, pattern, material sample, abstract shapes, or style demonstration is invalid/);
