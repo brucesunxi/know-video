@@ -166,6 +166,10 @@ export function sceneImagePrompt(
 
   return enforceTextFreeImagePrompt([
     `Create a polished, completely text-free 16:9 background plate for a commercial film about ${safeProjectTitle}.`,
+    "CONTENT LOCK — HIGHEST SEMANTIC PRIORITY:",
+    `The finished frame must visibly communicate this narration: ${imageSafeSemanticText(scene.voiceover)}`,
+    `Required concrete scene content: ${safeVisualPrompt}`,
+    "Depict recognizable scene-specific subjects, actions, props, and environment. Do not return a style sample, mood board, color palette, pattern library, material swatch, decorative geometry, or generic background.",
     projectVisualIdentity(project),
     exactStyle ? `STYLE LOCK — HIGHEST VISUAL PRIORITY:\n${exactStyle}` : "",
     sceneAttachmentSummary(scene) ?? "",

@@ -27,6 +27,7 @@ import {
   HelpCircle,
   History,
   Eye,
+  Image as ImageIcon,
   ImagePlus,
   Languages,
   Layers3,
@@ -66,6 +67,7 @@ import { editPlanVisualSceneNumbers, planPreviewAsset, removeEditPlanPreviewAsse
 import { analyzeEditIntent, globalEditTargetSceneNumbers } from "@/lib/edit-intent";
 import { editPlanOperations } from "@/lib/edit-operations";
 import { parsePendingGenerationSession, PENDING_GENERATION_STORAGE_KEY, type PendingGenerationSession } from "@/lib/generation-session";
+import { contentPromptForGeneration } from "@/lib/generation-prompt";
 import { looksSimplifiedChineseLocalized } from "@/lib/language-quality";
 import { isDeliverableVisualAsset, missingMotionSceneNumbers, missingSceneAssetNumbers, sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
 import { selectMotionCriticalScenes } from "@/lib/motion-scene-selection";
@@ -824,7 +826,7 @@ function templatePromptForRole(template: BriefTemplateCard, role: BriefTemplateR
     if (role === "logo") {
       return `${prompt}\n\nTreat the brand subject in the “${title}” template as the logo or brand mark. Build the opening, captions, and closing brand moments around it while borrowing the recognizable qualities of “${styleLabel}”.`;
     }
-    return `${prompt}\n\nApply the “${title}” template style: ${stylePrompt} ${briefTemplateContextEnglish[template.className] ?? ""}`.trimEnd();
+    return prompt;
   }
   if (role === "ref") {
     return `${template.prompt}\n\n参考模板“${template.title}”这一页的内容结构、信息层级和叙事方式；它原本的视觉方向是“${selectedStyle.label}”，但这里不要被固定风格限制。`;
@@ -832,7 +834,7 @@ function templatePromptForRole(template: BriefTemplateCard, role: BriefTemplateR
   if (role === "logo") {
     return `${template.prompt}\n\n把模板“${template.title}”中的品牌主体当作 Logo / 品牌标识来设计视频，围绕这个标识展开片头、字幕和结尾露出；画面可吸收“${selectedStyle.label}”的识别感。`;
   }
-  return `${template.prompt}\n\n应用模板“${template.title}”的 style：${selectedStyle.prompt} ${binding.context}`;
+  return template.prompt;
 }
 
 function withoutBriefReferenceInstruction(value: string) {
@@ -860,14 +862,41 @@ function localizedGenerationPrompt(value: string, language: UiLanguage) {
 }
 
 function generationTaskTitle(task: GenerationTaskListItem, language: UiLanguage) {
-  const fallback = language === "zh-CN" ? "未命名视频生成任务" : "Untitled video generation";
   const prompt = localizedGenerationPrompt(task.prompt?.trim() ?? "", language);
-  if (!prompt) return fallback;
-  const requestOnly = prompt
-    .split(/\n|(?:Apply|Use) the [“"].+?[”"] (?:template )?style:|应用[“"].+?[”"](?:模板)?风格[：:]/u)[0]
-    .trim();
-  const firstSentence = requestOnly.match(/^.+?[。！？.!?](?:\s|$)/u)?.[0]?.trim() ?? requestOnly;
-  return compactText(firstSentence, fallback, language === "zh-CN" ? 42 : 86);
+  if (prompt) {
+    const requestOnly = prompt
+      .split(/\n|(?:Apply|Use) the [“"].+?[”"] (?:template )?style:|应用[“"].+?[”"](?:模板)?风格[：:]/u)[0]
+      .trim();
+    const firstSentence = requestOnly.match(/^.+?[。！？.!?](?:\s|$)/u)?.[0]?.trim() ?? requestOnly;
+    const conciseName = firstSentence
+      .replace(/^(?:请|麻烦)?(?:帮我|为我)?(?:制作|生成|创建|做)(?:一个|一条|一支|一段|一期|一部)?\s*/u, "")
+      .replace(/^(?:please\s+)?(?:help me\s+)?(?:create|make|generate|produce|build)\s+(?:me\s+)?(?:an?|the)?\s*/iu, "")
+      .replace(/[。！？.!?]+$/u, "")
+      .trim();
+    if (conciseName) return compactText(conciseName, firstSentence, language === "zh-CN" ? 34 : 68);
+  }
+  const options = task.options;
+  const duration = options?.duration ? (language === "zh-CN" ? `${options.duration} 秒` : `${options.duration}-sec`) : undefined;
+  const narration = options?.language === "英文"
+    ? (language === "zh-CN" ? "英文旁白" : "English narration")
+    : options?.language === "中文"
+      ? (language === "zh-CN" ? "中文旁白" : "Chinese narration")
+      : undefined;
+  const rawStyle = options?.visualStyleLabel?.trim();
+  const style = language !== "zh-CN" && options?.visualStyleId
+    ? briefVisualStyleEnglish[options.visualStyleId]?.[0] ?? rawStyle
+    : rawStyle;
+  const date = task.createdAt ? new Intl.DateTimeFormat(language === "zh-CN" ? "zh-CN" : "en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(task.createdAt)) : undefined;
+  const descriptors = [style, duration, narration].filter(Boolean);
+  const base = descriptors.length > 0
+    ? descriptors.join(" · ")
+    : language === "zh-CN" ? "历史视频生成任务" : "Previous video generation";
+  return date ? `${base} · ${date}` : base;
 }
 
 function generationTaskSpecs(task: GenerationTaskListItem, language: UiLanguage) {
@@ -1592,10 +1621,12 @@ function exportActionLabel(input: {
   missingVisualCount: number;
   missingAudioCount: number;
   invalidMediaCount?: number;
+  requiredMediaGenerating?: boolean;
   language?: UiLanguage;
 }) {
   const text = (zh: string, en: string) => input.language === "en" ? en : zh;
   if (input.exportProgress !== undefined) return text(`正在合成 MP4 ${input.exportProgress}%`, `Rendering MP4 ${input.exportProgress}%`);
+  if (input.requiredMediaGenerating) return text("正在生成视频素材", "Generating video assets");
   if (input.invalidMediaCount && input.invalidMediaCount > 0) return text(`先修复 ${input.invalidMediaCount} 个异常素材`, `Repair ${input.invalidMediaCount} invalid assets first`);
   if (input.missingVisualCount > 0 && input.missingAudioCount > 0) {
     return text(`缺 ${input.missingVisualCount} 个画面 · ${input.missingAudioCount} 段配音`, `Missing ${input.missingVisualCount} visuals · ${input.missingAudioCount} narrations`);
@@ -1860,7 +1891,11 @@ function busyActionLabel(action?: BusyAction) {
   }
 }
 
-function projectStatusBadges(project: Project, source: Source, stage: Stage) {
+function isRequiredMediaGenerationAction(action?: BusyAction) {
+  return action === "generating-images" || action === "generating-audio";
+}
+
+function projectStatusBadges(project: Project, source: Source, stage: Stage, busyAction?: BusyAction) {
   if (stage === "projects") return [];
   if (stage === "generating") {
     return [
@@ -1877,6 +1912,13 @@ function projectStatusBadges(project: Project, source: Source, stage: Stage) {
   const storyboard = version.scenes.length > 0
     ? { label: `${version.scenes.length} 个分镜`, tone: "ready" }
     : { label: "等待分镜", tone: "attention" };
+  if (isRequiredMediaGenerationAction(busyAction)) {
+    return [
+      saved,
+      storyboard,
+      { label: busyAction === "generating-images" ? "正在生成画面" : "正在生成配音", tone: "working" }
+    ] as Array<{ label: string; tone: "ready" | "working" | "attention" | "neutral" }>;
+  }
   const output = outputReadiness({
     ...versionMediaSummary(version),
     status: version.status,
@@ -1892,6 +1934,7 @@ function Shell({
   project,
   source,
   stage,
+  busyAction,
   generationTasks,
   onNewVideo,
   onOpenGeneration,
@@ -1903,6 +1946,7 @@ function Shell({
   project: Project;
   source: Source;
   stage: Stage;
+  busyAction?: BusyAction;
   generationTasks: GenerationTaskListItem[];
   onNewVideo: () => void;
   onOpenGeneration: (task: GenerationTaskListItem) => void;
@@ -2029,7 +2073,7 @@ function Shell({
       document.documentElement.removeAttribute("data-theme");
     };
   }, [darkMode]);
-  const statusBadges = projectStatusBadges(project, source, stage);
+  const statusBadges = projectStatusBadges(project, source, stage, busyAction);
   const localizedStatusBadge = (label: string) => {
     if (language === "zh-CN") return label;
     const fixed: Record<string, string> = {
@@ -2039,6 +2083,8 @@ function Shell({
       "尚未创建项目": "No project yet",
       "本地预览": "Local preview",
       "等待分镜": "Waiting for scenes",
+      "正在生成画面": "Generating visuals",
+      "正在生成配音": "Generating narration",
       "可导出 MP4": "MP4 ready",
       "需补齐素材": "Assets incomplete"
     };
@@ -2742,15 +2788,7 @@ function BriefScreen({
 
   function promptWithStyle(style: BriefVisualStyle) {
     if (selectedTemplate) return templatePromptForRole(selectedTemplate, selectedTemplateRole, style, language);
-    const styleInstruction = language === "zh-CN"
-      ? `应用“${style.label}”的 style：${style.prompt}`
-      : `Apply the “${briefVisualStyleEnglish[style.id]?.[0] ?? style.label}” style: ${briefVisualStylePromptEnglish[style.id] ?? style.prompt}`;
-    const trimmed = prompt.trim();
-    if (!trimmed) return styleInstruction;
-    const withoutPreviousStyle = trimmed
-      .replace(/\n\n应用“[^”]+”的 style：.+$/u, "")
-      .replace(/\n\nApply the “[^”]+” style:.+$/u, "");
-    return `${withoutPreviousStyle}\n\n${styleInstruction}`;
+    return contentPromptForGeneration(prompt);
   }
 
   function confirmVisualStyle() {
@@ -5166,6 +5204,10 @@ function StudioScreen({
     invalidMedia,
     language
   });
+  const requiredMediaGenerationInProgress = isBusy && isRequiredMediaGenerationAction(busyAction);
+  const sceneCount = project.currentVersion.scenes.length;
+  const readyVisualCount = sceneCount - missingSceneNumbers.length;
+  const readyAudioCount = sceneCount - missingAudioSceneNumbers.length;
   useEffect(() => {
     if (!toolMenuOpen) return;
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -5219,7 +5261,23 @@ function StudioScreen({
   return (
     <div className="kv-studio">
       <section className="kv-studio-main">
-        {isBusy && busyAction ? (
+        {requiredMediaGenerationInProgress ? (
+          <section aria-live="polite" className="kv-media-generation-banner" role="status">
+            <div className="kv-media-generation-copy">
+              <Loader2 className="kv-spin" size={22} />
+              <div>
+                <span>{text("视频仍在生成中", "Video generation in progress")}</span>
+                <strong>{localizedRuntimeLabel(busyActionLabel(busyAction), language)}</strong>
+                <small>{text("当前待生成素材不是错误；完成后页面会自动更新。", "Pending assets are not errors. This page updates automatically as generation completes.")}</small>
+              </div>
+            </div>
+            <div className="kv-media-generation-counts">
+              <span><ImageIcon size={15} /><strong>{readyVisualCount}/{sceneCount}</strong><small>{text("画面", "Visuals")}</small></span>
+              <span><Mic2 size={15} /><strong>{readyAudioCount}/{sceneCount}</strong><small>{text("配音", "Narration")}</small></span>
+            </div>
+            <i aria-hidden="true" />
+          </section>
+        ) : isBusy && busyAction ? (
           <div className="kv-operation-status" role="status">
             <Loader2 className="kv-spin" size={16} />
             <span>{localizedRuntimeLabel(busyActionLabel(busyAction), language)}</span>
@@ -5306,13 +5364,14 @@ function StudioScreen({
               onClick={onExport}
               type="button"
             >
-              {exportProgress !== undefined ? <Loader2 className="kv-spin" size={16} /> : <Download size={16} />}
+              {exportProgress !== undefined || requiredMediaGenerationInProgress ? <Loader2 className="kv-spin" size={16} /> : <Download size={16} />}
               {exportActionLabel({
                 exportProgress,
                 renderUrl: project.currentVersion.renderUrl,
                 missingVisualCount: missingSceneNumbers.length,
                 missingAudioCount: missingAudioSceneNumbers.length,
                 invalidMediaCount: invalidRenderMedia.length + qualityErrors.length,
+                requiredMediaGenerating: requiredMediaGenerationInProgress,
                 language
               })}
             </button>
@@ -5358,7 +5417,7 @@ function StudioScreen({
             </div>
           </section>
         ) : null}
-        {exportBlockers.length > 0 || generationIssue.clip.length > 0 ? (
+        {!requiredMediaGenerationInProgress && (exportBlockers.length > 0 || generationIssue.clip.length > 0) ? (
           <section className="kv-export-blockers" role="status" aria-label={text("待处理素材清单", "Assets requiring attention")}>
             <div>
               <Clock3 size={18} />
@@ -5591,13 +5650,19 @@ function StudioScreen({
             ) : (
               <section className="kv-preview missing-image">
                 <div className="kv-missing-visual">
-                  <ImagePlus size={34} />
-                  <strong>{text(`还有 ${missingSceneNumbers.length} 个场景没有画面`, `${missingSceneNumbers.length} scenes are missing visuals`)}</strong>
-                  <p>{text("生成缺失素材后，时间轴预览和 MP4 导出才会启用。", "Generate the missing assets to enable timeline preview and MP4 export.")}</p>
-                  <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers)} type="button">
-                    {isBusy ? <Loader2 className="kv-spin" size={16} /> : <RefreshCcw size={16} />}
-                    {text("生成缺失画面", "Generate missing visuals")}
-                  </button>
+                  {requiredMediaGenerationInProgress ? <Loader2 className="kv-spin" size={34} /> : <ImagePlus size={34} />}
+                  <strong>{requiredMediaGenerationInProgress
+                    ? text("场景画面正在生成", "Scene visuals are being generated")
+                    : text(`还有 ${missingSceneNumbers.length} 个场景没有画面`, `${missingSceneNumbers.length} scenes are missing visuals`)}</strong>
+                  <p>{requiredMediaGenerationInProgress
+                    ? text(`已完成 ${readyVisualCount}/${sceneCount} 个画面，生成完成后将自动显示预览。`, `${readyVisualCount}/${sceneCount} visuals ready. The preview will appear automatically when generation finishes.`)
+                    : text("生成缺失素材后，时间轴预览和 MP4 导出才会启用。", "Generate the missing assets to enable timeline preview and MP4 export.")}</p>
+                  {!requiredMediaGenerationInProgress ? (
+                    <button disabled={isBusy} onClick={() => onRegenerate(missingSceneNumbers)} type="button">
+                      <RefreshCcw size={16} />
+                      {text("生成缺失画面", "Generate missing visuals")}
+                    </button>
+                  ) : null}
                 </div>
               </section>
             )}
@@ -6213,7 +6278,7 @@ export function WorkspaceClient({
 
   async function createVideo(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const prompt = generationPrompt;
+    const prompt = contentPromptForGeneration(generationPrompt);
     if (!prompt) return;
     const startedAt = Date.now();
     const requestId = crypto.randomUUID();
@@ -7746,6 +7811,7 @@ export function WorkspaceClient({
   return (
     <UiLanguageContext.Provider value={{ language: uiLanguage, setLanguage: changeUiLanguage }}>
     <Shell
+      busyAction={isBusy ? busyAction : undefined}
       currentUser={currentUser}
       generationTasks={generationTasks}
       onNewVideo={resetToBrief}

@@ -33,3 +33,20 @@ export function parseImageTextPresence(payload: unknown) {
   if (/\bTEXT_FREE\b/u.test(description)) return false;
   return undefined;
 }
+
+export function parseImageSemanticMatch(payload: unknown) {
+  const description = parseCloudflareVisionDescription(payload)?.toUpperCase();
+  if (!description) return undefined;
+  if (/\bSEMANTIC_MISMATCH\b/u.test(description)) return false;
+  if (/\bSEMANTIC_MATCH\b/u.test(description)) return true;
+  return undefined;
+}
+
+export function parseGeneratedImageInspection(payload: unknown) {
+  const description = parseCloudflareVisionDescription(payload)?.toUpperCase();
+  if (!description) return undefined;
+  if (/\bTEXT_PRESENT\b/u.test(description)) return "text_present" as const;
+  if (/\bSEMANTIC_MISMATCH\b/u.test(description)) return "semantic_mismatch" as const;
+  if (/\bIMAGE_PASS\b/u.test(description)) return "pass" as const;
+  return undefined;
+}

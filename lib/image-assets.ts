@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import sharp from "sharp";
-import { detectCloudflareImageText, generateCloudflareImage, hasCloudflareAI } from "@/lib/cloudflare-ai";
+import { generateCloudflareImage, hasCloudflareAI, inspectCloudflareGeneratedImage } from "@/lib/cloudflare-ai";
 import { sceneReferenceAssets } from "@/lib/attachment-context";
 import { getOptionalEnv } from "@/lib/env";
 import {
@@ -111,28 +111,49 @@ type ImageReference = {
   r2Key: string;
 };
 
-async function generatedImageContainsText(body: Buffer) {
+function expectedSceneSemantics(scene: Scene, project: Project) {
+  return [
+    `Project subject: ${imageSafeSemanticText(project.title)}.`,
+    `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
+    `Narrative meaning: ${imageSafeSemanticText(scene.voiceover)}.`,
+    `Required visible content: ${imageSafeSemanticText(scene.visualPrompt)}.`
+  ].join("\n").slice(0, 3600);
+}
+
+async function inspectGeneratedImage(body: Buffer, scene: Scene, project: Project) {
+  const expected = expectedSceneSemantics(scene, project);
   try {
-    if (hasCloudflareAI()) return (await detectCloudflareImageText(body)).hasText;
+    if (hasCloudflareAI()) return (await inspectCloudflareGeneratedImage(body, expected)).verdict;
     const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
     const response = await client.chat.completions.create({
       model: getOptionalEnv("OPENAI_VISION_MODEL") || "gpt-4o-mini",
       temperature: 0,
-      max_tokens: 8,
+      max_tokens: 16,
       messages: [{
         role: "user",
         content: [
-          { type: "text", text: "Inspect the entire image. Answer TEXT_PRESENT when there is readable text, a logo, watermark, signature, or a clustered sequence of fake or scrambled characters clearly intended to look like writing. Do not classify ordinary object outlines, connector lines, isolated geometric marks, facial features, texture strokes, or unlabeled pictorial icons as text. Answer exactly TEXT_PRESENT or TEXT_FREE." },
+          {
+            type: "text",
+            text: [
+              "Inspect this generated film frame against the expected scene.",
+              expected,
+              "Return TEXT_PRESENT if there is readable text, a logo, watermark, signature, or clustered fake writing.",
+              "Otherwise return SEMANTIC_MISMATCH if the central subject, action, and setting are unrelated or unrecognizable, or the image is a palette, pattern sheet, material swatch, decorative geometry, generic background, or style sample.",
+              "Return IMAGE_PASS only when the image is text-free and its concrete visible meaning materially matches the scene.",
+              "Answer exactly TEXT_PRESENT, SEMANTIC_MISMATCH, or IMAGE_PASS."
+            ].join("\n")
+          },
           { type: "image_url", image_url: { url: `data:image/png;base64,${body.toString("base64")}`, detail: "high" } }
         ]
       }]
     } as never);
     const verdict = response.choices[0]?.message?.content?.toUpperCase() ?? "";
-    if (verdict.includes("TEXT_PRESENT")) return true;
-    if (verdict.includes("TEXT_FREE")) return false;
-    throw new Error("Vision model returned an inconclusive text inspection");
+    if (verdict.includes("TEXT_PRESENT")) return "text_present" as const;
+    if (verdict.includes("SEMANTIC_MISMATCH")) return "semantic_mismatch" as const;
+    if (verdict.includes("IMAGE_PASS")) return "pass" as const;
+    throw new Error("Vision model returned an inconclusive generated-image inspection");
   } catch (error) {
-    throw new GeneratedImageQualityError("无法确认生成画面是否完全无文字。", "text_check_failed", { cause: error });
+    throw new GeneratedImageQualityError("无法确认生成画面的文字与场景质量。", "semantic_check_failed", { cause: error });
   }
 }
 
@@ -218,7 +239,7 @@ async function generateSceneImage(
       ? buildTextSafeCorrectionPrompt(scene, project)
       : enforceTextFreeImagePrompt(qualityAttempt === 0
         ? prompt
-        : `${prompt}\nQuality correction attempt ${qualityAttempt + 1}: the prior candidate was rejected. Rebuild the composition as a fully resolved, information-rich frame in the exact locked rendering medium. Remove every word, letter, number, logo, watermark, fake glyph, and writing-like mark; use blank surfaces and purely pictorial objects instead. Keep clear subject separation and meaningful foreground, midground, and background. Do not switch to photography, 3D, voxel, low-poly, or another illustration style. Avoid empty gradients or featureless surfaces.`);
+        : `${prompt}\nQuality correction attempt ${qualityAttempt + 1}: the prior candidate was rejected. Rebuild the composition as a fully resolved, information-rich frame in the exact locked rendering medium. The actual scene subject, action, environment, and narrative cause-and-effect must be immediately recognizable; a palette sheet, pattern, material sample, abstract shapes, or style demonstration is invalid. Remove every word, letter, number, logo, watermark, fake glyph, and writing-like mark; use blank surfaces and purely pictorial objects instead. Keep clear subject separation and meaningful foreground, midground, and background. Do not switch to photography, 3D, voxel, low-poly, or another illustration style. Avoid empty gradients or featureless surfaces.`);
     let generatedBody: Buffer;
     let generatedModel: string;
     let effectivePrompt = attemptPrompt;
@@ -262,8 +283,12 @@ async function generateSceneImage(
         generatedModel = imageModel();
       }
       const normalized = await normalizeGeneratedImage(generatedBody);
-      if (await generatedImageContainsText(normalized.body)) {
+      const inspection = await inspectGeneratedImage(normalized.body, scene, project);
+      if (inspection === "text_present") {
         throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。", "text_detected");
+      }
+      if (inspection === "semantic_mismatch") {
+        throw new GeneratedImageQualityError("生成画面与当前场景内容不匹配。", "semantic_mismatch");
       }
       body = normalized.body;
       qualityMetadata = normalized.metadata;

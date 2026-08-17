@@ -10,7 +10,9 @@ export type GeneratedImageQualityErrorCode =
   | "unsupported_format"
   | "empty_composition"
   | "text_detected"
-  | "text_check_failed";
+  | "text_check_failed"
+  | "semantic_mismatch"
+  | "semantic_check_failed";
 
 export class GeneratedImageQualityError extends Error {
   readonly code: GeneratedImageQualityErrorCode;

@@ -81,6 +81,12 @@ assert.match(workspace, /window\.localStorage\.setItem\(PENDING_GENERATION_STORA
 assert.match(workspace, /generationRequests\?: GenerationTaskListItem\[\]/);
 assert.match(workspace, /function generationTaskTitle\(task: GenerationTaskListItem, language: UiLanguage\)/);
 assert.match(workspace, /function generationTaskSpecs\(task: GenerationTaskListItem, language: UiLanguage\)/);
+assert.doesNotMatch(workspace, /Untitled video generation/);
+assert.match(workspace, /历史视频生成任务/);
+assert.match(workspace, /options\?\.visualStyleLabel\?\.trim\(\)/);
+assert.match(workspace, /briefVisualStyleEnglish\[options\.visualStyleId\]/);
+assert.match(workspace, /Intl\.DateTimeFormat/);
+assert.match(source, /set prompt = coalesce\(prompt,/);
 const taskPromptDivider = /\n|(?:Apply|Use) the [“"].+?[”"] (?:template )?style:|应用[“"].+?[”"](?:模板)?风格[：:]/u;
 assert.equal(
   'Create a safety briefing. Apply the “Job-site safety briefing” template style: Cinematic documentary.'.split(taskPromptDivider)[0],

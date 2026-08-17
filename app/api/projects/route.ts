@@ -23,6 +23,7 @@ import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
 import { hasDatabaseUrl } from "@/lib/db";
 import { NARRATION_VOICE_IDS } from "@/lib/types";
+import { contentPromptForGeneration } from "@/lib/generation-prompt";
 
 const referenceAssetSchema = z.object({
   key: z.string().min(1).max(800),
@@ -251,6 +252,10 @@ export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser();
     body = requestSchema.parse(await request.json());
+    body = { ...body, prompt: contentPromptForGeneration(body.prompt) };
+    if (body.prompt.length < 4) {
+      return NextResponse.json({ error: "请先描述视频要表达的具体内容，风格选择不能代替内容需求。" }, { status: 400 });
+    }
     const requestId = body.requestId;
     if (requestId) {
       const claim = await claimGenerationRequest({

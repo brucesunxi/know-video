@@ -8906,6 +8906,130 @@ html[data-theme="dark"] .kv-user-menu {
   font-weight: 750;
 }
 
+.kv-media-generation-banner {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+  margin: 18px 20px 0;
+  border: 1px solid #9fded4;
+  border-radius: 8px;
+  background: #edf9f6;
+  padding: 15px 18px 18px;
+  color: #075f56;
+}
+
+.kv-media-generation-copy {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.kv-media-generation-copy > svg {
+  flex: 0 0 auto;
+}
+
+.kv-media-generation-copy > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.kv-media-generation-copy span {
+  color: #36847c;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.kv-media-generation-copy strong {
+  color: #075f56;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.kv-media-generation-copy small {
+  color: #4d746f;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.kv-media-generation-counts {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.kv-media-generation-counts > span {
+  display: grid;
+  min-width: 104px;
+  grid-template-columns: auto auto;
+  align-items: center;
+  justify-content: start;
+  gap: 3px 6px;
+  border: 1px solid #c6e9e3;
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.kv-media-generation-counts svg {
+  grid-row: 1 / span 2;
+  color: #168f82;
+}
+
+.kv-media-generation-counts strong {
+  color: #075f56;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.kv-media-generation-counts small {
+  color: #63807c;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.kv-media-generation-banner > i {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 34%;
+  height: 3px;
+  background: #10a696;
+  animation: kv-media-progress 1.7s ease-in-out infinite;
+}
+
+@keyframes kv-media-progress {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(400%); }
+}
+
+html[data-theme="dark"] .kv-media-generation-banner {
+  border-color: #28635d;
+  background: #102b2a;
+  color: #ccf5ef;
+}
+
+html[data-theme="dark"] .kv-media-generation-copy strong,
+html[data-theme="dark"] .kv-media-generation-counts strong {
+  color: #ccf5ef;
+}
+
+html[data-theme="dark"] .kv-media-generation-copy small,
+html[data-theme="dark"] .kv-media-generation-counts small {
+  color: #99bbb6;
+}
+
+html[data-theme="dark"] .kv-media-generation-counts > span {
+  border-color: #315b58;
+  background: #173433;
+}
+
 .kv-preview {
   width: 100%;
   min-height: 0;
@@ -9197,6 +9321,23 @@ html[data-theme="dark"] .kv-user-menu {
 }
 
 @media (max-width: 760px) {
+  .kv-media-generation-banner {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 12px;
+    margin: 12px 12px 0;
+    padding: 14px 14px 17px;
+  }
+
+  .kv-media-generation-counts {
+    width: 100%;
+  }
+
+  .kv-media-generation-counts > span {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
   .kv-chat-draft-note {
     align-items: stretch;
     flex-direction: column;

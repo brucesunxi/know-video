@@ -2,7 +2,7 @@ import { getOptionalEnv } from "@/lib/env";
 import { assertUsableSpeechAudio } from "@/lib/audio-quality";
 import { isMp4Buffer, parseCloudflareVideoUrl } from "@/lib/cloudflare-video-response";
 import { parseCloudflareTranscript, type CloudflareTranscriptionResult } from "@/lib/cloudflare-transcription";
-import { parseCloudflareVisionDescription, parseImageTextPresence } from "@/lib/cloudflare-vision-response";
+import { parseCloudflareVisionDescription, parseGeneratedImageInspection, parseImageSemanticMatch, parseImageTextPresence } from "@/lib/cloudflare-vision-response";
 import {
   VIDEO_GENERATION_DURATION_SECONDS,
   VIDEO_GENERATION_MODEL,
@@ -228,6 +228,81 @@ export async function detectCloudflareImageText(body: Buffer) {
   const hasText = parseImageTextPresence(payload);
   if (hasText === undefined) throw new Error("AI vision service returned an inconclusive text inspection");
   return { hasText, model };
+}
+
+export async function evaluateCloudflareImageSemantics(body: Buffer, expectedScene: string) {
+  const model = getOptionalEnv("CLOUDFLARE_VISION_MODEL") || DEFAULT_VISION_MODEL;
+  const normalized = await sharp(body)
+    .rotate()
+    .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
+    .toBuffer();
+  const response = await fetch(endpoint(model), {
+    method: "POST",
+    headers: {
+      ...authorizationHeaders(),
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      image: `data:image/jpeg;base64,${normalized.toString("base64")}`,
+      task: "query",
+      question: [
+        "Judge whether this generated film frame visibly matches the expected scene below.",
+        `EXPECTED SCENE: ${expectedScene.slice(0, 2800)}`,
+        "Answer SEMANTIC_MATCH only when the central subject, action, and setting or concrete visual metaphor are recognizable and materially connected to the expected scene.",
+        "Answer SEMANTIC_MISMATCH when the image is mainly a color palette, pattern sheet, material swatch, decorative abstract geometry, generic background, unrelated subject, or merely matches the requested art style without depicting the scene content.",
+        "Do not require readable text. Judge visible meaning, not typography. Answer exactly SEMANTIC_MATCH or SEMANTIC_MISMATCH."
+      ].join("\n"),
+      reasoning: false,
+      temperature: 0,
+      max_tokens: 16,
+      stream: false
+    }),
+    signal: AbortSignal.timeout(35_000)
+  });
+  if (!response.ok) throw await responseError(response);
+  const payload = await response.json() as unknown;
+  const matches = parseImageSemanticMatch(payload);
+  if (matches === undefined) throw new Error("AI vision service returned an inconclusive semantic inspection");
+  return { matches, model };
+}
+
+export async function inspectCloudflareGeneratedImage(body: Buffer, expectedScene: string) {
+  const model = getOptionalEnv("CLOUDFLARE_VISION_MODEL") || DEFAULT_VISION_MODEL;
+  const normalized = await sharp(body)
+    .rotate()
+    .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
+    .toBuffer();
+  const response = await fetch(endpoint(model), {
+    method: "POST",
+    headers: {
+      ...authorizationHeaders(),
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      image: `data:image/jpeg;base64,${normalized.toString("base64")}`,
+      task: "query",
+      question: [
+        "Inspect this generated film frame against the expected scene below.",
+        `EXPECTED SCENE: ${expectedScene.slice(0, 2800)}`,
+        "Answer TEXT_PRESENT if there is readable text, a logo, watermark, signature, or clustered fake writing.",
+        "Otherwise answer SEMANTIC_MISMATCH if the central subject, action, and setting are unrelated or unrecognizable, or if the image is mainly a palette, pattern sheet, material swatch, decorative geometry, generic background, or style sample.",
+        "Answer IMAGE_PASS only when the image is text-free and its concrete visible meaning materially matches the expected scene.",
+        "Answer exactly TEXT_PRESENT, SEMANTIC_MISMATCH, or IMAGE_PASS."
+      ].join("\n"),
+      reasoning: false,
+      temperature: 0,
+      max_tokens: 16,
+      stream: false
+    }),
+    signal: AbortSignal.timeout(35_000)
+  });
+  if (!response.ok) throw await responseError(response);
+  const payload = await response.json() as unknown;
+  const verdict = parseGeneratedImageInspection(payload);
+  if (!verdict) throw new Error("AI vision service returned an inconclusive generated-image inspection");
+  return { verdict, model };
 }
 
 export async function transcribeCloudflareAudio(body: Buffer, language?: "zh" | "en") {

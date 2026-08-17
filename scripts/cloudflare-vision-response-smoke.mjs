@@ -9,7 +9,7 @@ const output = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports, require: () => ({}) });
-const { parseCloudflareVisionDescription, parseImageTextPresence } = module.exports;
+const { parseCloudflareVisionDescription, parseGeneratedImageInspection, parseImageSemanticMatch, parseImageTextPresence } = module.exports;
 
 assert.equal(
   parseCloudflareVisionDescription({ answer: "  A player explores a neon game level.  " }),
@@ -29,5 +29,11 @@ assert.equal(parseCloudflareVisionDescription({ answer: "a".repeat(1_700) }).len
 assert.equal(parseImageTextPresence({ answer: "TEXT_PRESENT" }), true);
 assert.equal(parseImageTextPresence({ result: { answer: "TEXT_FREE" } }), false);
 assert.equal(parseImageTextPresence({ answer: "The image is unclear." }), undefined);
+assert.equal(parseImageSemanticMatch({ answer: "SEMANTIC_MATCH" }), true);
+assert.equal(parseImageSemanticMatch({ result: { answer: "SEMANTIC_MISMATCH" } }), false);
+assert.equal(parseImageSemanticMatch({ answer: "The image is unclear." }), undefined);
+assert.equal(parseGeneratedImageInspection({ answer: "IMAGE_PASS" }), "pass");
+assert.equal(parseGeneratedImageInspection({ answer: "TEXT_PRESENT" }), "text_present");
+assert.equal(parseGeneratedImageInspection({ answer: "SEMANTIC_MISMATCH" }), "semantic_mismatch");
 
 console.log("Cloudflare vision response smoke checks passed.");

@@ -82,6 +82,7 @@
     "project:generation-budget:smoke": "node scripts/project-generation-budget-smoke.mjs",
     "project:delete:smoke": "node scripts/project-library-delete-smoke.mjs",
     "generation:request:smoke": "node scripts/generation-request-smoke.mjs",
+    "generation:prompt:smoke": "node scripts/generation-prompt-smoke.mjs",
     "generation:reference:smoke": "node scripts/generation-reference-smoke.mjs",
     "project:ephemeral:smoke": "node scripts/ephemeral-project-store-smoke.mjs",
     "generation:session:smoke": "node scripts/generation-session-smoke.mjs",

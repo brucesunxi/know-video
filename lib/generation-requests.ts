@@ -145,6 +145,17 @@ export async function claimGenerationRequest(input: {
   if (row.request_fingerprint !== input.fingerprint) {
     return { claimed: false, record: toRecord(row), conflict: true };
   }
+  if (!row.prompt || !row.options_json) {
+    const repairedRows = await sql`
+      update generation_requests
+      set prompt = coalesce(prompt, ${input.prompt.trim().slice(0, 4000)}),
+          options_json = coalesce(options_json, ${input.options ? JSON.stringify(input.options) : null}::jsonb),
+          updated_at = now()
+      where id = ${input.id} and user_id = ${input.userId}
+      returning id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
+    ` as GenerationRequestRow[];
+    return { claimed: inserted.length > 0, record: repairedRows[0] ? toRecord(repairedRows[0]) : toRecord(row) };
+  }
   return { claimed: inserted.length > 0, record: toRecord(row) };
 }
 
