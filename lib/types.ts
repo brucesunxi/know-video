@@ -64,8 +64,7 @@ export type GenerationOptions = {
   visualStyleId?: string;
   visualStyleLabel?: string;
   visualStylePrompt?: string;
-  motion: "camera" | "key-scenes";
-  videoTier: VideoGenerationTier;
+  motion: "camera" | "stock";
   narrationVoice?: NarrationVoice;
 };
 
@@ -112,6 +111,7 @@ export type Scene = {
     visualStyleId?: string;
     visualStyleLabel?: string;
     visualStylePrompt?: string;
+    stockSearchTerms?: string[];
     narrationVoice?: NarrationVoice;
     narrationLanguage?: "中文" | "英文";
     production?: Partial<ProductionSettings>;

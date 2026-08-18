@@ -46,8 +46,7 @@ const requestSchema = z.object({
     visualStyleId: z.string().trim().min(1).max(80).optional(),
     visualStyleLabel: z.string().trim().min(1).max(80).optional(),
     visualStylePrompt: z.string().trim().min(1).max(800).optional(),
-    motion: z.enum(["camera", "key-scenes"]),
-    videoTier: z.enum(["economy", "balanced"]),
+    motion: z.enum(["camera", "stock"]),
     narrationVoice: z.enum(NARRATION_VOICE_IDS).optional()
   }).optional(),
   referenceAssets: z.array(referenceAssetSchema).max(12).default([])

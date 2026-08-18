@@ -32,8 +32,7 @@ export function parsePendingGenerationSession(raw: string | null, now = Date.now
       || (value.options.visualStyleId !== undefined && typeof value.options.visualStyleId !== "string")
       || (value.options.visualStyleLabel !== undefined && typeof value.options.visualStyleLabel !== "string")
       || (value.options.visualStylePrompt !== undefined && typeof value.options.visualStylePrompt !== "string")
-      || !["camera", "key-scenes"].includes(value.options.motion)
-      || !["economy", "balanced"].includes(value.options.videoTier)
+      || !["camera", "stock"].includes(value.options.motion)
       || (value.options.narrationVoice !== undefined && !NARRATION_VOICE_IDS.includes(value.options.narrationVoice as NarrationVoice))
     ) {
       return undefined;

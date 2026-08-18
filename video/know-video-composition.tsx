@@ -274,6 +274,9 @@ function SceneFrame({
   const lastClipFrame = declaredClipFrames
     ? Math.max(0, declaredClipFrames - 1)
     : Math.max(0, contentDurationInFrames - 1);
+  const clipStartFrom = clipAsset
+    ? Math.max(0, Math.round(Number(clipAsset.metadata?.sourceStartSeconds ?? 0) * VIDEO_FPS))
+    : 0;
   const image = scene.assets.find((asset) => asset.type === "image" && isDeliverableVisualAsset(asset))?.url;
   const narrationFrames = narrationDurationInFrames(scene, VIDEO_FPS, playbackRate, contentDurationInFrames);
   const caption = activeNarrationCaption(scene.voiceover, visualFrame, narrationFrames);
@@ -300,6 +303,7 @@ function SceneFrame({
             pauseWhenBuffering
             playbackRate={clipPlaybackRate}
             src={clip}
+            startFrom={clipStartFrom}
             style={visualLayerStyle({ motion: motionValues(localMotionSequence(scene, contentDurationInFrames, VIDEO_FPS)[0].plan, visualFrame, contentDurationInFrames), nativeVideo: true })}
           />
         </Freeze>

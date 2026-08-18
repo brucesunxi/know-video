@@ -163,7 +163,7 @@ assert.match(workspace, /sceneNumbers: missingImageSceneNumbers/);
 assert.match(workspace, /sceneNumbers: missingAudioSceneNumbers/);
 assert.match(workspace, /if \(missingImageSceneNumbers\.length > 0\)/);
 assert.match(workspace, /if \(missingAudioSceneNumbers\.length > 0\)/);
-assert.match(workspace, /const dynamicScenes = missingMotionSceneNumbers/);
+assert.match(workspace, /generatedProject = await requestStockClips/);
 assert.match(workspace, /multiple onChange=\{selectBriefAttachments\}/);
 assert.match(workspace, /extractVideoPoster\(file\)/);
 assert.match(workspace, /referenceRole: "video-poster"/);

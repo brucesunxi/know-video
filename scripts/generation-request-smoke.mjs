@@ -46,8 +46,7 @@ const options = {
   sceneCount: "5",
   language: "中文",
   style: "电影质感",
-  motion: "key-scenes",
-  videoTier: "economy"
+  motion: "stock"
 };
 const first = generationRequestFingerprint("  生成产品介绍视频  ", options);
 const second = generationRequestFingerprint("生成产品介绍视频", options);
@@ -74,9 +73,10 @@ assert.match(workspace, /生成前审阅/);
 assert.match(workspace, /需求完整度/);
 assert.match(workspace, /分镜节奏/);
 assert.match(workspace, /动态成本/);
-assert.match(workspace, /最高预估/);
-assert.match(workspace, /costConsent: true/);
-assert.match(workspace, /billingRequestId: crypto\.randomUUID\(\)/);
+assert.match(workspace, /动态素材剪辑（免费）/);
+assert.match(workspace, /不调用付费视频模型/);
+assert.match(workspace, /\/api\/assets\/video\/stock/);
+assert.doesNotMatch(workspace, /生成关键动态镜头（额外计费）/);
 assert.match(workspace, /window\.localStorage\.setItem\(PENDING_GENERATION_STORAGE_KEY/);
 assert.match(workspace, /generationRequests\?: GenerationTaskListItem\[\]/);
 assert.match(workspace, /function generationTaskTitle\(task: GenerationTaskListItem, language: UiLanguage\)/);

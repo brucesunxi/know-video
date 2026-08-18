@@ -70,8 +70,7 @@ const project = videoBrainModule.exports.generateProjectFromPrompt(
     sceneCount: "5",
     language: "中文",
     style: "电影质感",
-    motion: "camera",
-    videoTier: "economy"
+    motion: "camera"
   }
 );
 
@@ -96,8 +95,7 @@ const creationPlatform = videoBrainModule.exports.generateProjectFromPrompt(
     sceneCount: "5",
     language: "中文",
     style: "极简高级",
-    motion: "camera",
-    videoTier: "economy"
+    motion: "camera"
   }
 );
 const openingNarration = creationPlatform.currentVersion.scenes[0].voiceover;
@@ -112,8 +110,7 @@ const inventorySaas = videoBrainModule.exports.generateProjectFromPrompt(
     sceneCount: "5",
     language: "中文",
     style: "极简高级",
-    motion: "camera",
-    videoTier: "economy"
+    motion: "camera"
   }
 );
 const inventoryNarration = inventorySaas.currentVersion.scenes.map((scene) => scene.voiceover).join("\n");

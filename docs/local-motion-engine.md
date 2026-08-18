@@ -4,7 +4,14 @@ Know Video uses a deterministic image-motion path before asking users to pay for
 
 ## Design basis
 
-The pipeline follows the cost-efficient composition pattern demonstrated by MoneyPrinterTurbo (MIT): split source material into bounded clips, repeat enough clips to cover narration, fit each clip to the target frame, apply deterministic transitions, and then compose narration, captions, and music. The implementation here is native to the existing TypeScript and Remotion renderer rather than embedding MoneyPrinterTurbo's Python and MoviePy runtime.
+The pipeline follows the cost-efficient composition pattern demonstrated by MoneyPrinterTurbo (MIT): search free or local video material from script-level English terms, split source material into bounded clips, fit each clip to the target frame, apply deterministic transitions, and then compose narration, captions, and music. The implementation is native to the existing TypeScript and Remotion renderer rather than embedding MoneyPrinterTurbo's Python and MoviePy runtime.
+
+Two zero-paid-model motion methods are exposed:
+
+- Simple camera motion keeps the generated scene image and applies deterministic pan, zoom, drift, and transitions.
+- Dynamic stock editing searches Pexels or Pixabay, imports a relevant real video clip into R2, selects a deterministic usable segment, and lets Remotion cut it to the narration-aligned scene duration. A missing provider or unmatched query falls back to simple camera motion and never invokes paid image-to-video generation.
+
+Configure at least one free provider key with `PEXELS_API_KEY` or `PIXABAY_API_KEY`. Search terms are produced during the existing storyboard request, so stock matching does not add a separate language-model call.
 
 Reference: https://github.com/harry0703/MoneyPrinterTurbo
 
