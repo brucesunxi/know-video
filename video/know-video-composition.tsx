@@ -59,12 +59,13 @@ function motionValues(plan: LocalMotionPlan, frame: number, durationInFrames: nu
 
 function beatTransitionOffset(beat: LocalMotionBeat, progress: number) {
   const remaining = 1 - progress;
+  if (beat.transition === "paper-swap") return { x: 5.5 * remaining, y: -2.5 * remaining, scale: 0.96 + progress * 0.04, opacity: progress, rotate: 1.8 * remaining };
   if (beat.transition === "slide-left") return { x: 9 * remaining, y: 0, scale: 1, opacity: progress };
   if (beat.transition === "slide-right") return { x: -9 * remaining, y: 0, scale: 1, opacity: progress };
   if (beat.transition === "slide-up") return { x: 0, y: 7 * remaining, scale: 1, opacity: progress };
   if (beat.transition === "slide-down") return { x: 0, y: -7 * remaining, scale: 1, opacity: progress };
   if (beat.transition === "zoom") return { x: 0, y: 0, scale: 1.08 - progress * 0.08, opacity: progress };
-  return { x: 0, y: 0, scale: 1, opacity: progress };
+  return { x: 0, y: 0, scale: 1, opacity: progress, rotate: 0 };
 }
 
 function visualLayerStyle({
@@ -74,7 +75,8 @@ function visualLayerStyle({
   opacity = 1,
   transitionScale = 1,
   transitionX = 0,
-  transitionY = 0
+  transitionY = 0,
+  transitionRotate = 0
 }: {
   motion: ReturnType<typeof motionValues>;
   nativeVideo: boolean;
@@ -83,6 +85,7 @@ function visualLayerStyle({
   transitionScale?: number;
   transitionX?: number;
   transitionY?: number;
+  transitionRotate?: number;
 }): React.CSSProperties {
   if (nativeVideo) {
     return {
@@ -99,15 +102,15 @@ function visualLayerStyle({
   }
 
   return {
-    height: "112%",
-    left: "-6%",
+    height: "116%",
+    left: "-8%",
     objectFit: "cover",
     position: "absolute",
-    top: "-6%",
+    top: "-8%",
     opacity,
-    transform: `translate3d(${motion.x + transitionX}%, ${motion.y + transitionY}%, 0) scale(${motion.scale * transitionScale})`,
+    transform: `translate3d(${motion.x + transitionX}%, ${motion.y + transitionY}%, 0) scale(${motion.scale * transitionScale}) rotate(${transitionRotate}deg)`,
     transformOrigin: "center center",
-    width: "112%",
+    width: "116%",
     willChange: "transform"
   };
 }
@@ -153,7 +156,8 @@ function LocalImageSequence({
             opacity: 1 - transitionProgress * 0.82,
             transitionScale: active.transition === "zoom" ? 1 - transitionProgress * 0.035 : 1,
             transitionX: active.transition === "slide-left" ? -4 * transitionProgress : active.transition === "slide-right" ? 4 * transitionProgress : 0,
-            transitionY: active.transition === "slide-up" ? -3 * transitionProgress : active.transition === "slide-down" ? 3 * transitionProgress : 0
+            transitionY: active.transition === "slide-up" ? -3 * transitionProgress : active.transition === "slide-down" ? 3 * transitionProgress : 0,
+            transitionRotate: active.transition === "paper-swap" ? -1.2 * transitionProgress : 0
           })}
         />
       ) : null}
@@ -165,7 +169,8 @@ function LocalImageSequence({
           opacity: incoming.opacity,
           transitionScale: incoming.scale,
           transitionX: incoming.x,
-          transitionY: incoming.y
+          transitionY: incoming.y,
+          transitionRotate: incoming.rotate ?? 0
         })}
       />
     </>

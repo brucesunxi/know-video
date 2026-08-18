@@ -80,6 +80,11 @@ assert.equal(motionApplied.project.currentVersion.renderUrl, undefined);
 const motionReplanned = applySceneStructureMutation(motionApplied.project, { operation: "set-motion", sceneNumber: 2, preset: "auto", intensity: "standard" }, createId);
 assert.equal(motionReplanned.project.currentVersion.scenes[1].style.motion.seed, motionApplied.project.currentVersion.scenes[1].style.motion.seed + 1);
 
+const batchMotion = applySceneStructureMutation(project, { operation: "set-motion", sceneNumber: 1, sceneNumbers: [1, 2], preset: "auto", intensity: "dynamic" }, createId);
+assert.ok(batchMotion.project.currentVersion.scenes.slice(0, 2).every((scene) => scene.style.motion?.mode === "local"));
+assert.ok(batchMotion.project.currentVersion.scenes.slice(0, 2).every((scene) => scene.style.motion?.intensity === "dynamic"));
+assert.match(batchMotion.description, /2 个场景/);
+
 const candidateProject = plain(project);
 candidateProject.currentVersion.renderUrl = "https://example.com/render.mp4";
 candidateProject.currentVersion.renderJobId = "render-1";

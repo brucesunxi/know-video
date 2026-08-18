@@ -142,7 +142,7 @@ function localizedRuntimeLabel(value: string, language: UiLanguage) {
     "旁白语言": "Narration language",
     "动态策略": "Motion strategy",
     "自动规划场景": "Auto-planned scenes",
-    "全片自动镜头编排": "Automatic shot editing",
+    "全片自动镜头编排": "Automatic dynamic editing",
     "中文": "Chinese",
     "英文": "English",
     "刚刚开始": "Just started",
@@ -1321,7 +1321,7 @@ function exportReadinessItems(project: Project, settings: ProductionSettings, la
   return [
     { label: text("画面", "Visuals"), value: `${visualCount}/${scenes.length}`, detail: text("预览与 MP4 画面完整", "Preview and MP4 visuals complete") },
     { label: text("配音", "Narration"), value: `${audioCount}/${scenes.length}`, detail: narrationLanguage === "英文" ? text("英文旁白音轨完整", "English narration complete") : text("中文旁白音轨完整", "Chinese narration complete") },
-    { label: text("动态镜头", "Motion"), value: clipCount > 0 ? text(`${clipCount} 个`, `${clipCount} clips`) : text("自动镜头编排", "Automatic shot edit"), detail: clipCount > 0 ? text("优先使用视频片段", "Video clips used where available") : text("微镜头、景别与转场合成", "Micro-shots, reframing, and transitions") },
+    { label: text("动态方式", "Motion"), value: clipCount > 0 ? text(`${clipCount} 个动态素材`, `${clipCount} motion clips`) : text("自动动态剪辑", "Automatic dynamic edit"), detail: clipCount > 0 ? text("优先使用视频片段", "Video clips used where available") : text("镜头运动与转场，不改变人物动作", "Camera movement and transitions; subjects remain still") },
     ...productionSummaryItems({
       settings,
       durationSeconds: project.currentVersion.durationSeconds,
@@ -1339,7 +1339,9 @@ function sceneStructureLabel(mutation?: EditPlan["sceneStructure"]) {
     const label = transitionOptions.find((option) => option.value === mutation.kind)?.label ?? mutation.kind;
     return `场景 ${mutation.sceneNumber} 进入转场：${label}${mutation.kind === "cut" ? "" : ` · ${mutation.durationSeconds} 秒`}`;
   }
-  if (mutation.operation === "set-motion") return `场景 ${mutation.sceneNumber} 应用本地自动镜头编排`;
+  if (mutation.operation === "set-motion") return mutation.sceneNumbers && mutation.sceneNumbers.length > 1
+    ? `${mutation.sceneNumbers.length} 个场景应用免费自动动态剪辑`
+    : `场景 ${mutation.sceneNumber} 应用免费自动动态剪辑`;
   if (mutation.operation === "set-visual") return `场景 ${mutation.sceneNumber} 采用新的候选画面`;
   if (mutation.operation === "move") return `场景 ${mutation.sceneNumber} 向${mutation.direction === "earlier" ? "前" : "后"}移动一位`;
   if (mutation.operation === "move-to") return `场景 ${mutation.sceneNumber} 移动到第 ${mutation.targetSceneNumber} 位`;
@@ -3438,7 +3440,7 @@ function Storyboard({
         <div className="kv-scene-readiness-card">
           <div>
             <strong>S{scene.sceneNumber} · {localizedRuntimeLabel(sceneMediaStatusLabel(scene), language)}</strong>
-            <span>{text("画面、配音齐全后即可使用免费的自动镜头编排；系统会切分微镜头并组合景别、运动和转场，需要真实物体运动时再选择 AI 动态镜头。", "Once visuals and narration are ready, free automatic shot editing divides the scene into micro-shots and combines reframing, motion, and transitions. Choose AI motion only for real subject movement.")}</span>
+            <span>{text("画面、配音齐全后即可使用免费的自动动态剪辑；系统会切分微镜头并组合景别、推拉摇移和转场。它让镜头动起来，但不会改变图片内人物或物体的动作。", "Once visuals and narration are ready, free automatic dynamic editing creates micro-shots with reframing, camera movement, and transitions. It moves the camera, not the people or objects inside the image.")}</span>
             <div className="kv-scene-media-diagnostics" aria-label={text("本场景素材诊断", "Scene asset diagnostics")}>
               {selectedMediaDiagnostics.map((item) => (
                 <span className={item.status} key={item.key}>
@@ -3463,7 +3465,7 @@ function Storyboard({
               {selectedMediaState?.motionReady
                 ? text("动态镜头选项", "Motion options")
                 : scene.style.motion?.mode === "local"
-                  ? text("调整镜头编排", "Adjust shot edit")
+                  ? text("调整动态剪辑", "Adjust dynamic edit")
                   : text("生成动态", "Generate motion")}
             </button>
           </div>
@@ -7907,7 +7909,7 @@ export function WorkspaceClient({
           }}
           onGenerateClips={(sceneNumbers) => {
             setMotionGenerationMode("local");
-            setPendingVideoGeneration({ sceneNumbers: sceneNumbers.slice(0, 1) });
+            setPendingVideoGeneration({ sceneNumbers });
           }}
           onRegenerateAudio={regenerateAudio}
           onExport={exportVideo}
@@ -7960,8 +7962,8 @@ export function WorkspaceClient({
         }} role="presentation">
           <section aria-labelledby="video-cost-title" aria-modal="true" className="kv-confirm-modal kv-cost-modal" role="dialog">
             <div className="kv-confirm-icon"><Film size={21} /></div>
-            <h3 id="video-cost-title">{uiLanguage === "zh-CN" ? "选择动态方式" : "Choose a motion method"}</h3>
-            <p>{uiLanguage === "zh-CN" ? `场景 ${pendingVideoGeneration.sceneNumbers.join("、")} 可以使用本地动态，摄影风格也可以匹配免费实拍素材。艺术风格会自动保留生成图片，避免破坏所选风格。两种方式都不会调用付费视频模型。` : `Scene ${pendingVideoGeneration.sceneNumbers.join(", ")} can use local motion, while photographic styles can also match free stock footage. Artistic styles automatically keep their generated images so the selected look is preserved. Neither option calls a paid video model.`}</p>
+            <h3 id="video-cost-title">{uiLanguage === "zh-CN" ? "选择动态剪辑方式" : "Choose a dynamic editing method"}</h3>
+            <p>{uiLanguage === "zh-CN" ? `将应用到场景 ${pendingVideoGeneration.sceneNumbers.join("、")}。艺术风格会保留生成图片并加强局部特写、推拉摇移和风格化转场；摄影风格也可以匹配免费实拍素材。两种方式都不会调用付费视频模型。` : `This will apply to scenes ${pendingVideoGeneration.sceneNumbers.join(", ")}. Artistic styles keep their generated images and use stronger detail shots, camera movement, and stylized transitions. Photographic styles can also match free footage. Neither method calls a paid video model.`}</p>
             <div className="kv-cost-options">
               <label className={motionGenerationMode === "local" ? "selected" : ""}>
                 <input
@@ -7970,7 +7972,7 @@ export function WorkspaceClient({
                   onChange={() => setMotionGenerationMode("local")}
                   type="radio"
                 />
-                <span><strong>{uiLanguage === "zh-CN" ? "简单运镜" : "Simple camera motion"}</strong><small>{uiLanguage === "zh-CN" ? "免费 · 静态图推拉摇移与转场" : "Free · Pan, zoom, drift, and transitions"}</small></span>
+                <span><strong>{uiLanguage === "zh-CN" ? "自动动态剪辑" : "Automatic dynamic edit"}</strong><small>{uiLanguage === "zh-CN" ? "免费 · 微镜头、局部特写、推拉摇移与风格化转场" : "Free · Micro-shots, detail crops, camera movement, and stylized transitions"}</small></span>
                 <b>{uiLanguage === "zh-CN" ? "免费" : "Free"}</b>
               </label>
               <label className={motionGenerationMode === "stock" ? "selected" : ""}>
@@ -7995,7 +7997,7 @@ export function WorkspaceClient({
               </label>
             ) : null}
             <p className="kv-cost-note">{motionGenerationMode === "local"
-              ? uiLanguage === "zh-CN" ? "使用现有场景图片做推拉摇移和本地转场；预览与 MP4 导出效果一致。" : "Uses the existing scene image for local pan, zoom, drift, and transitions. Preview and MP4 export remain identical."
+              ? uiLanguage === "zh-CN" ? "使用现有场景图片进行自动剪辑；镜头与构图会动，图片中的人物或物体本身不会产生新动作。预览与 MP4 导出效果一致。" : "Automatically edits the existing scene image. The camera and framing move, but people and objects in the image do not gain new actions. Preview and MP4 export remain identical."
               : uiLanguage === "zh-CN" ? "仅为兼容的摄影风格检索免费实拍视频；艺术风格和无匹配结果的场景保留生成图片与本地动态，绝不转用付费模型。" : "Matches free real footage only for compatible photographic styles. Artistic styles and unmatched scenes keep their generated images with local motion and never switch to a paid model."}</p>
             <div>
               <button disabled={isBusy} onClick={() => setPendingVideoGeneration(undefined)} type="button">{uiLanguage === "zh-CN" ? "取消" : "Cancel"}</button>
@@ -8007,6 +8009,7 @@ export function WorkspaceClient({
                   void mutateSceneStructure({
                     operation: "set-motion",
                     sceneNumber: request.sceneNumbers[0],
+                    sceneNumbers: request.sceneNumbers,
                     preset: "auto",
                     intensity: localMotionIntensity
                   });
@@ -8014,7 +8017,7 @@ export function WorkspaceClient({
               }} type="button">
                 {motionGenerationMode === "local" ? <Sparkles size={16} /> : <Film size={16} />}
                 {motionGenerationMode === "local"
-                  ? uiLanguage === "zh-CN" ? "应用简单运镜" : "Apply camera motion"
+                  ? uiLanguage === "zh-CN" ? "应用自动动态剪辑" : "Apply dynamic edit"
                   : uiLanguage === "zh-CN" ? "匹配免费动态素材" : "Match free dynamic footage"}
               </button>
             </div>

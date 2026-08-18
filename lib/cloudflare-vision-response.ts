@@ -46,6 +46,7 @@ export function parseGeneratedImageInspection(payload: unknown) {
   const description = parseCloudflareVisionDescription(payload)?.toUpperCase();
   if (!description) return undefined;
   if (/\bTEXT_PRESENT\b/u.test(description)) return "text_present" as const;
+  if (/\bSTYLE_MISMATCH\b/u.test(description)) return "style_mismatch" as const;
   if (/\bSEMANTIC_MISMATCH\b/u.test(description)) return "semantic_mismatch" as const;
   if (/\bIMAGE_PASS\b/u.test(description)) return "pass" as const;
   return undefined;

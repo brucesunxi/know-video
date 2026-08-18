@@ -34,7 +34,7 @@ export type ProductionSettings = {
 export type SceneStructureMutation =
   | { operation: "set-duration"; sceneNumber: number; sceneId?: string; durationSeconds: number }
   | { operation: "set-transition"; sceneNumber: number; sceneId?: string; kind: SceneTransitionKind; durationSeconds: number }
-  | { operation: "set-motion"; sceneNumber: number; sceneId?: string; preset: LocalMotionPreset; intensity: LocalMotionIntensity }
+  | { operation: "set-motion"; sceneNumber: number; sceneNumbers?: number[]; sceneId?: string; preset: LocalMotionPreset; intensity: LocalMotionIntensity }
   | { operation: "set-visual"; sceneNumber: number; sceneId?: string; assetId: string }
   | { operation: "move"; sceneNumber: number; sceneId?: string; direction: "earlier" | "later" }
   | { operation: "move-to"; sceneNumber: number; sceneId?: string; targetSceneNumber: number; targetSceneId?: string }

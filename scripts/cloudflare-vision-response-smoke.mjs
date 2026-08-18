@@ -34,6 +34,7 @@ assert.equal(parseImageSemanticMatch({ result: { answer: "SEMANTIC_MISMATCH" } }
 assert.equal(parseImageSemanticMatch({ answer: "The image is unclear." }), undefined);
 assert.equal(parseGeneratedImageInspection({ answer: "IMAGE_PASS" }), "pass");
 assert.equal(parseGeneratedImageInspection({ answer: "TEXT_PRESENT" }), "text_present");
+assert.equal(parseGeneratedImageInspection({ answer: "STYLE_MISMATCH" }), "style_mismatch");
 assert.equal(parseGeneratedImageInspection({ answer: "SEMANTIC_MISMATCH" }), "semantic_mismatch");
 
 console.log("Cloudflare vision response smoke checks passed.");

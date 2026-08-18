@@ -94,22 +94,31 @@ export function applySceneStructureMutation(
     };
     description = `场景 ${mutation.sceneNumber} 的进入转场已更新。`;
   } else if (mutation.operation === "set-motion") {
-    const current = scenes[index].style.motion;
-    const sameLocalPlan = current?.mode === "local" && current.preset === mutation.preset && current.intensity === mutation.intensity;
-    const initialSeed = Math.abs(Array.from(scenes[index].id).reduce((sum, character) => ((sum * 31) + character.charCodeAt(0)) | 0, 17));
-    scenes[index] = {
-      ...scenes[index],
-      style: {
-        ...scenes[index].style,
-        motion: {
-          mode: "local",
-          preset: mutation.preset,
-          intensity: mutation.intensity,
-          seed: sameLocalPlan ? current.seed + 1 : current?.seed ?? initialSeed
+    const requestedSceneNumbers = new Set(mutation.sceneNumbers?.length ? mutation.sceneNumbers : [mutation.sceneNumber]);
+    const matchingScenes = scenes.filter((scene) => requestedSceneNumbers.has(scene.sceneNumber));
+    if (matchingScenes.length !== requestedSceneNumbers.size) throw new Error("部分要调整的场景不存在。");
+    let replanned = 0;
+    for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex += 1) {
+      if (!requestedSceneNumbers.has(scenes[sceneIndex].sceneNumber)) continue;
+      const current = scenes[sceneIndex].style.motion;
+      const sameLocalPlan = current?.mode === "local" && current.preset === mutation.preset && current.intensity === mutation.intensity;
+      const initialSeed = Math.abs(Array.from(scenes[sceneIndex].id).reduce((sum, character) => ((sum * 31) + character.charCodeAt(0)) | 0, 17));
+      scenes[sceneIndex] = {
+        ...scenes[sceneIndex],
+        style: {
+          ...scenes[sceneIndex].style,
+          motion: {
+            mode: "local",
+            preset: mutation.preset,
+            intensity: mutation.intensity,
+            seed: sameLocalPlan ? current.seed + 1 : current?.seed ?? initialSeed
+          }
         }
-      }
-    };
-    description = `场景 ${mutation.sceneNumber} 已${sameLocalPlan ? "重新规划" : "应用"}本地智能运镜。`;
+      };
+      if (sameLocalPlan) replanned += 1;
+    }
+    const target = matchingScenes.length === 1 ? `场景 ${matchingScenes[0].sceneNumber}` : `${matchingScenes.length} 个场景`;
+    description = `${target}已${replanned === matchingScenes.length ? "重新规划" : "应用"}免费自动动态剪辑。`;
   } else if (mutation.operation === "set-visual") {
     const candidate = scenes[index].assets.find((asset) => (
       asset.id === mutation.assetId && asset.type === "thumbnail" && asset.metadata?.candidate === true

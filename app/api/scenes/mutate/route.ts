@@ -20,6 +20,7 @@ const schema = z.discriminatedUnion("operation", [
   z.object({
     ...common,
     operation: z.literal("set-motion"),
+    sceneNumbers: z.array(z.number().int().positive()).min(1).max(20).optional(),
     preset: z.enum(["auto", "push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "tilt-down", "drift"]),
     intensity: z.enum(["subtle", "standard", "dynamic"])
   }),

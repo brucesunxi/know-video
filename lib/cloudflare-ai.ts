@@ -287,9 +287,10 @@ export async function inspectCloudflareGeneratedImage(body: Buffer, expectedScen
         "Inspect this generated film frame against the expected scene below.",
         `EXPECTED SCENE: ${expectedScene.slice(0, 2800)}`,
         "Answer TEXT_PRESENT if there is readable text, a logo, watermark, signature, or clustered fake writing.",
-        "Otherwise answer SEMANTIC_MISMATCH if the central subject, action, and setting are unrelated or unrecognizable, or if the image is mainly a palette, pattern sheet, material swatch, decorative geometry, generic background, or style sample.",
-        "Answer IMAGE_PASS only when the image is text-free and its concrete visible meaning materially matches the expected scene.",
-        "Answer exactly TEXT_PRESENT, SEMANTIC_MISMATCH, or IMAGE_PASS."
+        "Otherwise answer STYLE_MISMATCH if the visible rendering medium conflicts with the LOCKED VISUAL STYLE, including photography instead of illustration, line art instead of paper collage, 3D instead of 2D, or any other medium substitution.",
+        "Otherwise answer SEMANTIC_MISMATCH if the central subject, action, and setting are unrelated or unrecognizable, or if the image is mainly a palette, pattern sheet, material swatch, decorative geometry, generic background, split-screen montage, contact sheet, storyboard sheet, or style sample.",
+        "Answer IMAGE_PASS only when the image is text-free, uses the exact locked rendering medium, and its concrete visible meaning materially matches the expected scene.",
+        "Answer exactly TEXT_PRESENT, STYLE_MISMATCH, SEMANTIC_MISMATCH, or IMAGE_PASS."
       ].join("\n"),
       reasoning: false,
       temperature: 0,

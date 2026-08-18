@@ -41,7 +41,7 @@ export async function persistSceneStructureMutation(input: {
     : input.mutation.operation === "set-transition"
       ? `调整场景 ${input.mutation.sceneNumber} 的进入转场`
     : input.mutation.operation === "set-motion"
-      ? `为场景 ${input.mutation.sceneNumber} 应用本地智能运镜`
+      ? `为${input.mutation.sceneNumbers && input.mutation.sceneNumbers.length > 1 ? `${input.mutation.sceneNumbers.length} 个场景` : `场景 ${input.mutation.sceneNumber}`}应用免费自动动态剪辑`
     : input.mutation.operation === "set-visual"
       ? `采用场景 ${input.mutation.sceneNumber} 的候选画面`
     : input.mutation.operation === "move"

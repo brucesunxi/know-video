@@ -31,5 +31,7 @@ assert.match(imageAssets, /qualityAttempt === 2\s*\? buildTextSafeCorrectionProm
 assert.match(imageAssets, /TEXT-SAFE COMPOSITION/);
 assert.match(imageAssets, /生成画面包含文字或类似文字的符号/);
 assert.match(imageAssets, /生成画面与当前场景内容不匹配/);
+assert.match(imageAssets, /生成画面偏离项目锁定的视觉风格/);
+assert.match(imageAssets, /STYLE_MISMATCH/);
 
 console.log("Image generation retry smoke checks passed.");

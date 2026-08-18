@@ -6,10 +6,12 @@ import { getOptionalEnv } from "@/lib/env";
 import {
   enforceTextFreeImagePrompt,
   imageSafeSemanticText,
+  projectLockedVisualStyle,
   projectVisualIdentity,
   sceneRequiresPremiumImage,
   sceneImagePrompt,
-  stableImageSeed
+  stableImageSeed,
+  type ImageReferenceRole
 } from "@/lib/image-continuity";
 import { GeneratedImageQualityError, normalizeGeneratedImage } from "@/lib/image-quality";
 import { mediaAssetStatus } from "@/lib/generation-resume";
@@ -39,7 +41,7 @@ function imageModel() {
 function buildSceneImagePrompt(
   scene: Scene,
   project: Project,
-  references: Array<{ role: "current" }>,
+  references: Array<{ role: ImageReferenceRole }>,
   visualInstruction?: string
 ) {
   return sceneImagePrompt(scene, project, references.map((reference) => reference.role), visualInstruction);
@@ -49,7 +51,7 @@ function buildBrandSafeImagePrompt(scene: Scene, project: Project) {
   return enforceTextFreeImagePrompt([
     `Create a brand-safe 16:9 cinematic key visual for the commercial film "${imageSafeSemanticText(project.title)}".`,
     projectVisualIdentity(project),
-    exactVisualStyleDirection(scene.style),
+    exactVisualStyleDirection(projectLockedVisualStyle(project) ?? scene.style),
     `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
     `Scene meaning: ${imageSafeSemanticText(scene.voiceover)} ${imageSafeSemanticText(scene.visualPrompt)}`,
     "Use a brand-neutral educational or commercial scene with concrete subject matter and purposeful action, rendered only in the locked style above.",
@@ -64,7 +66,7 @@ function buildUltraSafeSceneImagePrompt(scene: Scene, project: Project) {
     "Create a safe 16:9 educational commercial background plate.",
     `Topic: ${imageSafeSemanticText(project.title)}.`,
     `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
-    exactVisualStyleDirection(scene.style),
+    exactVisualStyleDirection(projectLockedVisualStyle(project) ?? scene.style),
     `Meaning to visualize: ${imageSafeSemanticText(scene.voiceover)}.`,
     semanticFallbackComposition(scene),
     `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
@@ -77,7 +79,7 @@ function buildTextSafeCorrectionPrompt(scene: Scene, project: Project) {
   return enforceTextFreeImagePrompt([
     `Create a polished 16:9 scene illustration for ${imageSafeSemanticText(project.title)}.`,
     projectVisualIdentity(project),
-    exactVisualStyleDirection(scene.style),
+    exactVisualStyleDirection(projectLockedVisualStyle(project) ?? scene.style),
     `Scene meaning: ${imageSafeSemanticText(scene.voiceover)} ${imageSafeSemanticText(scene.visualPrompt)}`,
     semanticFallbackComposition(scene),
     `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
@@ -107,13 +109,15 @@ type ImageQuality = "standard" | "premium";
 type ImageReference = {
   body: Buffer;
   contentType: "image/jpeg";
-  role: "current";
+  role: ImageReferenceRole;
   r2Key: string;
 };
 
 function expectedSceneSemantics(scene: Scene, project: Project) {
+  const lockedStyle = projectLockedVisualStyle(project) ?? scene.style;
   return [
     `Project subject: ${imageSafeSemanticText(project.title)}.`,
+    `LOCKED VISUAL STYLE: ${exactVisualStyleDirection(lockedStyle) || `${lockedStyle.theme}; ${lockedStyle.mood}`}.`,
     `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
     `Narrative meaning: ${imageSafeSemanticText(scene.voiceover)}.`,
     `Required visible content: ${imageSafeSemanticText(scene.visualPrompt)}.`
@@ -138,9 +142,10 @@ async function inspectGeneratedImage(body: Buffer, scene: Scene, project: Projec
               "Inspect this generated film frame against the expected scene.",
               expected,
               "Return TEXT_PRESENT if there is readable text, a logo, watermark, signature, or clustered fake writing.",
-              "Otherwise return SEMANTIC_MISMATCH if the central subject, action, and setting are unrelated or unrecognizable, or the image is a palette, pattern sheet, material swatch, decorative geometry, generic background, or style sample.",
-              "Return IMAGE_PASS only when the image is text-free and its concrete visible meaning materially matches the scene.",
-              "Answer exactly TEXT_PRESENT, SEMANTIC_MISMATCH, or IMAGE_PASS."
+              "Otherwise return STYLE_MISMATCH if the rendering medium conflicts with the LOCKED VISUAL STYLE, such as photography instead of illustration, line art instead of collage, or 3D instead of 2D.",
+              "Otherwise return SEMANTIC_MISMATCH if the central subject, action, and setting are unrelated or unrecognizable, or the image is a palette, pattern sheet, material swatch, decorative geometry, generic background, split-screen montage, contact sheet, storyboard sheet, or style sample.",
+              "Return IMAGE_PASS only when the image is text-free, follows the exact locked rendering medium, and its concrete visible meaning materially matches the scene.",
+              "Answer exactly TEXT_PRESENT, STYLE_MISMATCH, SEMANTIC_MISMATCH, or IMAGE_PASS."
             ].join("\n")
           },
           { type: "image_url", image_url: { url: `data:image/png;base64,${body.toString("base64")}`, detail: "high" } }
@@ -149,6 +154,7 @@ async function inspectGeneratedImage(body: Buffer, scene: Scene, project: Projec
     } as never);
     const verdict = response.choices[0]?.message?.content?.toUpperCase() ?? "";
     if (verdict.includes("TEXT_PRESENT")) return "text_present" as const;
+    if (verdict.includes("STYLE_MISMATCH")) return "style_mismatch" as const;
     if (verdict.includes("SEMANTIC_MISMATCH")) return "semantic_mismatch" as const;
     if (verdict.includes("IMAGE_PASS")) return "pass" as const;
     throw new Error("Vision model returned an inconclusive generated-image inspection");
@@ -238,6 +244,34 @@ async function loadSceneImageReference(scene: Scene, role: ImageReference["role"
     scene.assets.find((asset) => asset.type === "image" && asset.url),
     role
   );
+}
+
+function sameLockedStyle(left: Scene, right: Scene) {
+  if (left.style.visualStyleId || right.style.visualStyleId) {
+    return left.style.visualStyleId === right.style.visualStyleId;
+  }
+  return left.style.visualStylePrompt?.trim() === right.style.visualStylePrompt?.trim();
+}
+
+async function loadProjectStyleAnchorReference(project: Project, scene: Scene) {
+  const lockedStyle = projectLockedVisualStyle(project);
+  if (!lockedStyle || lockedStyle.visualStyleId === "cinematic-realism") return undefined;
+  const anchorScene = project.currentVersion.scenes
+    .filter((candidate) => candidate.sceneNumber !== scene.sceneNumber && sameLockedStyle(candidate, scene))
+    .sort((left, right) => left.sceneNumber - right.sceneNumber)
+    .find((candidate) => candidate.assets.some((asset) => (
+      asset.type === "image"
+      && asset.metadata?.source === "generated-image"
+      && asset.url
+      && asset.r2Key
+    )));
+  const anchorAsset = anchorScene?.assets.find((asset) => (
+    asset.type === "image"
+    && asset.metadata?.source === "generated-image"
+    && asset.url
+    && asset.r2Key
+  ));
+  return loadImageReference(anchorAsset, "style-anchor");
 }
 
 async function mapWithConcurrency<T>(
@@ -334,6 +368,9 @@ async function generateSceneImage(
       if (inspection === "semantic_mismatch") {
         throw new GeneratedImageQualityError("生成画面与当前场景内容不匹配。", "semantic_mismatch");
       }
+      if (inspection === "style_mismatch") {
+        throw new GeneratedImageQualityError("生成画面偏离项目锁定的视觉风格。", "style_mismatch");
+      }
       body = normalized.body;
       qualityMetadata = normalized.metadata;
       model = generatedModel;
@@ -411,7 +448,8 @@ export async function generateProjectSceneImages(
   await mapWithConcurrency(targets, concurrency, async ({ scene, index }) => {
       try {
         const currentReference = await loadSceneImageReference(scene, "current");
-        const references = [currentReference].filter(Boolean) as ImageReference[];
+        const styleAnchorReference = await loadProjectStyleAnchorReference(project, scene);
+        const references = [currentReference, styleAnchorReference].filter(Boolean) as ImageReference[];
         const generated = await generateSceneImage(
           scene,
           project,

@@ -12,6 +12,7 @@ export type GeneratedImageQualityErrorCode =
   | "text_detected"
   | "text_check_failed"
   | "semantic_mismatch"
+  | "style_mismatch"
   | "semantic_check_failed";
 
 export class GeneratedImageQualityError extends Error {

@@ -81,7 +81,6 @@ assert.match(projectVisualIdentity(project), /Locked palette: #07111d, #22c7b8, 
 const prompt = sceneImagePrompt(scene, project, ["current"]);
 assert.match(prompt, /current version of this exact scene/);
 assert.match(prompt, /Do not repeat the same layout/);
-assert.match(prompt, /Do not use it as a template for any other scene/);
 assert.match(prompt, /SCENE DIFFERENTIATION/);
 assert.match(prompt, /Style is only the rendering language/);
 assert.match(prompt, /CONTENT LOCK — HIGHEST SEMANTIC PRIORITY/);
@@ -93,6 +92,10 @@ assert.match(prompt, /Do not add graphic overlays, lower thirds/);
 assert.match(prompt, /video renderer will add all readable titles/);
 assert.match(prompt, /inspect every pixel/);
 assert.doesNotMatch(prompt, /Use little or no text/);
+
+const styleAnchorPrompt = sceneImagePrompt(scene, project, ["style-anchor"]);
+assert.match(styleAnchorPrompt, /STYLE-ONLY anchor from this project/);
+assert.match(styleAnchorPrompt, /Do not copy its subject, objects, layout, camera angle, pose, or background/);
 
 const pixelScene = {
   ...scene,

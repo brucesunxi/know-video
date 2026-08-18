@@ -11,7 +11,7 @@ export type LocalMotionPlan = {
   scaleTo: number;
 };
 
-export type LocalMotionBeatTransition = "dissolve" | "slide-left" | "slide-right" | "slide-up" | "slide-down" | "zoom";
+export type LocalMotionBeatTransition = "dissolve" | "slide-left" | "slide-right" | "slide-up" | "slide-down" | "zoom" | "paper-swap";
 
 export type LocalMotionBeat = {
   index: number;
@@ -19,6 +19,7 @@ export type LocalMotionBeat = {
   endFrame: number;
   transitionFrames: number;
   transition: LocalMotionBeatTransition;
+  treatment: "cinematic" | "graphic";
   plan: LocalMotionPlan;
 };
 
@@ -83,6 +84,19 @@ const BEAT_TRANSITIONS: LocalMotionBeatTransition[] = [
   "slide-down"
 ];
 
+const GRAPHIC_BEAT_TRANSITIONS: LocalMotionBeatTransition[] = [
+  "paper-swap",
+  "slide-left",
+  "zoom",
+  "paper-swap",
+  "slide-right",
+  "dissolve"
+];
+
+function motionTreatment(style: Pick<Scene["style"], "visualStyleId" | "visualStyleLabel" | "visualStylePrompt" | "theme" | "mood">) {
+  return styleAllowsFreeStockVideo(style as Scene["style"]) ? "cinematic" as const : "graphic" as const;
+}
+
 function planForPreset(input: {
   preset: LocalMotionPlan["preset"];
   factor: number;
@@ -116,7 +130,9 @@ function planForPreset(input: {
 export function localMotionPlan(scene: Pick<Scene, "id" | "sceneNumber" | "motionPrompt" | "visualPrompt" | "durationSeconds" | "style">): LocalMotionPlan {
   const configured = scene.style.motion?.preset ?? "auto";
   const preset = configured === "auto" ? inferredPreset(scene, scene.style.motion?.seed) : configured;
-  const factor = intensityFactor(scene.style.motion?.intensity ?? "standard", scene.durationSeconds);
+  const treatment = motionTreatment(scene.style);
+  const styleFactor = treatment === "graphic" ? 1.28 : 1;
+  const factor = intensityFactor(scene.style.motion?.intensity ?? "standard", scene.durationSeconds) * styleFactor;
   const seed = Number.isFinite(scene.style.motion?.seed)
     ? Number(scene.style.motion?.seed)
     : stableHash(`${scene.id}:${scene.sceneNumber}`);
@@ -130,8 +146,11 @@ export function localMotionSequence(
 ): LocalMotionBeat[] {
   const totalFrames = Math.max(1, Math.round(durationInFrames));
   const intensity = scene.style.motion?.intensity ?? "standard";
-  const targetSeconds = intensity === "dynamic" ? 2.45 : intensity === "subtle" ? 4.1 : 3.25;
-  const minimumBeatFrames = Math.max(1, Math.round(fps * 1.55));
+  const treatment = motionTreatment(scene.style);
+  const targetSeconds = treatment === "graphic"
+    ? intensity === "dynamic" ? 1.95 : intensity === "subtle" ? 3.35 : 2.55
+    : intensity === "dynamic" ? 2.45 : intensity === "subtle" ? 4.1 : 3.25;
+  const minimumBeatFrames = Math.max(1, Math.round(fps * (treatment === "graphic" ? 1.35 : 1.55)));
   const maximumBeats = Math.max(1, Math.min(4, Math.floor(totalFrames / minimumBeatFrames)));
   const beatCount = Math.max(1, Math.min(maximumBeats, Math.round(totalFrames / Math.max(1, targetSeconds * fps))));
   const basePlan = localMotionPlan(scene);
@@ -139,7 +158,7 @@ export function localMotionSequence(
     ? Number(scene.style.motion?.seed)
     : stableHash(`${scene.id}:${scene.sceneNumber}:sequence`);
   const alternatives = COMPLEMENTARY_PRESETS[basePlan.preset];
-  const factor = intensityFactor(intensity, scene.durationSeconds);
+  const factor = intensityFactor(intensity, scene.durationSeconds) * (treatment === "graphic" ? 1.28 : 1);
   const baseFrames = Math.floor(totalFrames / beatCount);
   let cursor = 0;
 
@@ -149,16 +168,22 @@ export function localMotionSequence(
     const endFrame = Math.max(startFrame + 1, startFrame + length);
     cursor = endFrame;
     const preset = index === 0 ? basePlan.preset : alternatives[(seed + index - 1) % alternatives.length];
-    const shotScale = index === 0 ? 0 : index % 3 === 1 ? 0.045 : index % 3 === 2 ? 0.085 : 0.025;
+    const shotScale = index === 0
+      ? 0
+      : treatment === "graphic"
+        ? index % 3 === 1 ? 0.07 : index % 3 === 2 ? 0.115 : 0.04
+        : index % 3 === 1 ? 0.045 : index % 3 === 2 ? 0.085 : 0.025;
     const transitionFrames = index === 0
       ? 0
-      : Math.min(Math.round(fps * 0.42), Math.max(2, Math.floor(length * 0.22)));
+      : Math.min(Math.round(fps * (treatment === "graphic" ? 0.5 : 0.42)), Math.max(2, Math.floor(length * (treatment === "graphic" ? 0.26 : 0.22))));
+    const transitions = treatment === "graphic" ? GRAPHIC_BEAT_TRANSITIONS : BEAT_TRANSITIONS;
     return {
       index,
       startFrame,
       endFrame,
       transitionFrames,
-      transition: BEAT_TRANSITIONS[(seed + index) % BEAT_TRANSITIONS.length],
+      transition: transitions[(seed + index) % transitions.length],
+      treatment,
       plan: planForPreset({ preset, factor, seed: seed + index, shotScale })
     };
   });

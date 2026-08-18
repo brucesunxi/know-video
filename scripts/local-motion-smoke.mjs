@@ -52,6 +52,17 @@ assert.equal(sequence[0].transitionFrames, 0);
 assert.ok(sequence.slice(1).every((beat) => beat.transitionFrames > 0));
 assert.ok(new Set(sequence.map((beat) => beat.plan.preset)).size >= 2);
 assert.deepEqual(sequence, localMotionSequence(seeded, 240, 30));
+const graphicScene = scene("A calm observational shot.", {
+  style: { visualStyleId: "paper-collage", motion: { mode: "local", preset: "auto", intensity: "standard", seed: 7 } }
+});
+const graphicSequence = localMotionSequence(graphicScene, 240, 30);
+assert.ok(graphicSequence.length >= sequence.length);
+assert.ok(graphicSequence.every((beat) => beat.treatment === "graphic"));
+assert.ok(graphicSequence.some((beat) => beat.transition === "paper-swap"));
+assert.ok(
+  Math.abs(localMotionPlan(graphicScene).scaleTo - localMotionPlan(graphicScene).scaleFrom)
+    > Math.abs(localMotionPlan(seeded).scaleTo - localMotionPlan(seeded).scaleFrom)
+);
 assert.equal(sceneUsesAiMotionClip(seeded), false);
 assert.equal(sceneUsesAiMotionClip(scene("Move", {
   style: { motion: { mode: "ai", preset: "auto", intensity: "standard", seed: 1 } },

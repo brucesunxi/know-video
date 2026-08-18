@@ -2,7 +2,7 @@ import { sceneAttachmentSummary } from "@/lib/attachment-context";
 import type { Project, Scene } from "@/lib/types";
 import { exactVisualStyleDirection } from "@/lib/visual-style-profiles";
 
-export type ImageReferenceRole = "current";
+export type ImageReferenceRole = "current" | "style-anchor";
 
 export const TEXT_FREE_IMAGE_DIRECTION = [
   "TEXT-FREE BACKGROUND PLATE — ABSOLUTE HIGHEST PRIORITY AND DELIVERY REQUIREMENT:",
@@ -76,6 +76,12 @@ export function projectVisualIdentity(project: Project) {
     "Keep the art direction, palette, lighting language, lens character, and material treatment recognizably consistent across every scene.",
     "Do not repeat the same layout, camera angle, foreground object, background, or subject arrangement across scenes. Each scene must show a different narrative beat and a visibly different composition."
   ].join("\n");
+}
+
+export function projectLockedVisualStyle(project: Project) {
+  return project.currentVersion.scenes.find((scene) => (
+    scene.style.visualStyleId || scene.style.visualStylePrompt
+  ))?.style ?? project.currentVersion.scenes[0]?.style;
 }
 
 function educationGameCourseDirection(description: string, scene: Scene) {
@@ -160,11 +166,13 @@ export function sceneImagePrompt(
     .replaceAll("&", "＆")
     .replaceAll("<", "＜")
     .replaceAll(">", "＞");
-  const referenceDirection = referenceRoles.map((_, index) => (
-    `Reference image ${index} is the current version of this exact scene only. Preserve this scene's central subject identity, composition logic, environment, and visual language while improving fidelity and following the revised direction. Do not use it as a template for any other scene.`
-  )).join("\n");
-  const exactStyle = exactVisualStyleDirection(scene.style);
-  const isCinematic = !scene.style.visualStyleId || scene.style.visualStyleId === "cinematic-realism";
+  const referenceDirection = referenceRoles.map((role, index) => role === "current"
+    ? `Reference image ${index + 1} is the current version of this exact scene only. Preserve this scene's central subject identity, composition logic, environment, and visual language while improving fidelity and following the revised direction.`
+    : `Reference image ${index + 1} is a STYLE-ONLY anchor from this project. Match only its rendering medium, paper or brush texture, line treatment, color behavior, lighting language, and character-design grammar. Do not copy its subject, objects, layout, camera angle, pose, or background; build the distinct scene content required below.`
+  ).join("\n");
+  const lockedStyle = projectLockedVisualStyle(project) ?? scene.style;
+  const exactStyle = exactVisualStyleDirection(lockedStyle);
+  const isCinematic = !lockedStyle.visualStyleId || lockedStyle.visualStyleId === "cinematic-realism";
 
   return enforceTextFreeImagePrompt([
     `Create a polished, completely text-free 16:9 background plate for a commercial film about ${safeProjectTitle}.`,
