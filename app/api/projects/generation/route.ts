@@ -45,5 +45,19 @@ export async function GET(request: Request) {
       error: generation.error || "视频脚本和分镜生成没有完成，请重试。"
     });
   }
+  if (generation.projectId) {
+    const snapshot = await getProjectSnapshot(generation.projectId, user.id);
+    const scenes = snapshot?.project.currentVersion.scenes ?? [];
+    return NextResponse.json({
+      status: "pending",
+      phase: "media",
+      projectId: generation.projectId,
+      progress: {
+        scenes: scenes.length,
+        visuals: scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image" && asset.url)).length,
+        narrations: scenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio" && asset.url)).length
+      }
+    }, { status: 202 });
+  }
   return NextResponse.json({ status: "pending" }, { status: 202 });
 }

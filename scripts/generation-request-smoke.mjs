@@ -34,6 +34,8 @@ assert.match(source, /interval '15 minutes'/);
 assert.match(source, /options_json jsonb/);
 assert.match(source, /options\?: GenerationOptions/);
 assert.match(projectsRoute, /after\(\(\) => runBackgroundGeneration/);
+assert.match(projectsRoute, /attachGenerationRequestProject/);
+assert.match(projectsRoute, /enqueueProjectMediaScene/);
 assert.match(projectsRoute, /return NextResponse\.json\(\{ status: "pending", requestId \}, \{ status: 202 \}\)/);
 assert.match(projectsRoute, /listIncompleteGenerationRequests\(user\.id\)/);
 assert.match(generationRoute, /getGenerationRequest\(parsed\.data, user\.id\)/);

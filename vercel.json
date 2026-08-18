@@ -1,0 +1,14 @@
+{
+  "functions": {
+    "app/api/queues/project-media/route.ts": {
+      "maxDuration": 300,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "project-media-generation",
+          "retryAfterSeconds": 30
+        }
+      ]
+    }
+  }
+}

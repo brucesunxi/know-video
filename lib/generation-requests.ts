@@ -169,7 +169,10 @@ export async function getGenerationRequest(id: string, userId: string) {
     where id = ${id}
       and user_id = ${userId}
       and status = 'pending'
-      and updated_at < now() - interval '15 minutes'
+      and (
+        (project_id is null and updated_at < now() - interval '15 minutes')
+        or (project_id is not null and updated_at < now() - interval '24 hours')
+      )
   `;
   const rows = await sql`
     select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
@@ -188,7 +191,7 @@ export async function getProjectGenerationOptions(projectId: string, userId: str
     from generation_requests
     where project_id = ${projectId}
       and user_id = ${userId}
-      and status = 'ready'
+      and status in ('pending', 'ready')
     order by updated_at desc
     limit 1
   ` as GenerationRequestRow[];
@@ -203,7 +206,7 @@ export async function getProjectGenerationRequest(projectId: string, userId: str
     from generation_requests
     where project_id = ${projectId}
       and user_id = ${userId}
-      and status = 'ready'
+      and status in ('pending', 'ready')
     order by updated_at desc
     limit 1
   ` as GenerationRequestRow[];
@@ -219,7 +222,10 @@ export async function listIncompleteGenerationRequests(userId: string) {
     set status = 'failed', error = '生成任务运行超时，请重新提交。', updated_at = now()
     where user_id = ${userId}
       and status = 'pending'
-      and updated_at < now() - interval '15 minutes'
+      and (
+        (project_id is null and updated_at < now() - interval '15 minutes')
+        or (project_id is not null and updated_at < now() - interval '24 hours')
+      )
   `;
   const rows = await sql`
     select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
@@ -242,6 +248,30 @@ export async function completeGenerationRequest(input: {
     update generation_requests
     set status = 'ready', project_id = ${input.projectId}, engine = ${input.engine}, error = null, updated_at = now()
     where id = ${input.id} and status = 'pending'
+  `;
+}
+
+export async function attachGenerationRequestProject(input: {
+  id: string;
+  projectId: string;
+  engine: string;
+}) {
+  if (!hasDatabaseUrl()) return;
+  await ensureGenerationRequestsSchema();
+  await getSql()`
+    update generation_requests
+    set project_id = ${input.projectId}, engine = ${input.engine}, error = null, updated_at = now()
+    where id = ${input.id} and status = 'pending'
+  `;
+}
+
+export async function touchGenerationRequest(id: string) {
+  if (!hasDatabaseUrl()) return;
+  await ensureGenerationRequestsSchema();
+  await getSql()`
+    update generation_requests
+    set updated_at = now()
+    where id = ${id} and status = 'pending'
   `;
 }
 

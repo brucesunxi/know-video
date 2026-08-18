@@ -113,6 +113,36 @@ type ImageReference = {
   r2Key: string;
 };
 
+type RecoverableImageQualityCode = Extract<
+  GeneratedImageQualityError["code"],
+  "style_mismatch" | "semantic_mismatch" | "semantic_check_failed"
+>;
+
+type TextFreeImageCandidate = {
+  body: Buffer;
+  metadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"];
+  model: string;
+  prompt: string;
+  seed: number;
+  warningCode: RecoverableImageQualityCode;
+};
+
+const recoverableCandidatePriority: Record<RecoverableImageQualityCode, number> = {
+  style_mismatch: 3,
+  semantic_check_failed: 2,
+  semantic_mismatch: 1
+};
+
+function betterTextFreeCandidate(
+  current: TextFreeImageCandidate | undefined,
+  candidate: TextFreeImageCandidate
+) {
+  if (!current) return candidate;
+  return recoverableCandidatePriority[candidate.warningCode] > recoverableCandidatePriority[current.warningCode]
+    ? candidate
+    : current;
+}
+
 function expectedSceneSemantics(scene: Scene, project: Project) {
   const lockedStyle = projectLockedVisualStyle(project) ?? scene.style;
   return [
@@ -308,6 +338,8 @@ async function generateSceneImage(
   let model = "";
   let seed = baseSeed;
   let qualityMetadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"] | undefined;
+  let fallbackCandidate: TextFreeImageCandidate | undefined;
+  let qualityWarningCode: RecoverableImageQualityCode | undefined;
   for (let qualityAttempt = 0; qualityAttempt < 3; qualityAttempt += 1) {
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
     const attemptPrompt = qualityAttempt === 2
@@ -358,18 +390,52 @@ async function generateSceneImage(
         generatedModel = imageModel();
       }
       const normalized = await normalizeGeneratedImage(generatedBody);
-      const [inspection, containsText] = await Promise.all([
-        inspectGeneratedImage(normalized.body, scene, project),
-        generatedImageContainsAnyText(normalized.body)
-      ]);
-      if (containsText || inspection === "text_present") {
+      // Text is a hard safety boundary. Semantic/style inspection is kept
+      // separate so a conservative quality verdict cannot erase a usable frame.
+      const containsText = await generatedImageContainsAnyText(normalized.body);
+      if (containsText) {
         throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。", "text_detected");
       }
-      if (inspection === "semantic_mismatch") {
-        throw new GeneratedImageQualityError("生成画面与当前场景内容不匹配。", "semantic_mismatch");
+
+      let inspection: Awaited<ReturnType<typeof inspectGeneratedImage>>;
+      try {
+        inspection = await inspectGeneratedImage(normalized.body, scene, project);
+      } catch (error) {
+        if (!(error instanceof GeneratedImageQualityError) || error.code !== "semantic_check_failed") throw error;
+        fallbackCandidate = betterTextFreeCandidate(fallbackCandidate, {
+          body: normalized.body,
+          metadata: normalized.metadata,
+          model: generatedModel,
+          prompt: effectivePrompt,
+          seed,
+          warningCode: error.code
+        });
+        if (qualityAttempt < 2) {
+          console.warn(`[image-assets] Scene ${scene.sceneNumber} inspection was unavailable; retrying with a new candidate.`);
+          continue;
+        }
+        break;
       }
-      if (inspection === "style_mismatch") {
-        throw new GeneratedImageQualityError("生成画面偏离项目锁定的视觉风格。", "style_mismatch");
+      if (inspection === "text_present") {
+        throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。", "text_detected");
+      }
+      if (inspection === "semantic_mismatch" || inspection === "style_mismatch") {
+        const qualityError = inspection === "semantic_mismatch"
+          ? new GeneratedImageQualityError("生成画面与当前场景内容不匹配。", "semantic_mismatch")
+          : new GeneratedImageQualityError("生成画面偏离项目锁定的视觉风格。", "style_mismatch");
+        fallbackCandidate = betterTextFreeCandidate(fallbackCandidate, {
+          body: normalized.body,
+          metadata: normalized.metadata,
+          model: generatedModel,
+          prompt: effectivePrompt,
+          seed,
+          warningCode: inspection
+        });
+        if (qualityAttempt < 2) {
+          console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${qualityError.code}); retrying:`, qualityError.message);
+          continue;
+        }
+        break;
       }
       body = normalized.body;
       qualityMetadata = normalized.metadata;
@@ -380,6 +446,17 @@ async function generateSceneImage(
       if (!(error instanceof GeneratedImageQualityError) || qualityAttempt === 2) throw error;
       console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${error.code}); retrying:`, error.message);
     }
+  }
+  if (!body && fallbackCandidate) {
+    body = fallbackCandidate.body;
+    qualityMetadata = fallbackCandidate.metadata;
+    model = fallbackCandidate.model;
+    prompt = fallbackCandidate.prompt;
+    seed = fallbackCandidate.seed;
+    qualityWarningCode = fallbackCandidate.warningCode;
+    console.warn(
+      `[image-assets] Scene ${scene.sceneNumber} kept the best text-free candidate after quality retries (${qualityWarningCode}).`
+    );
   }
   if (!body || !qualityMetadata) return undefined;
 
@@ -404,6 +481,8 @@ async function generateSceneImage(
       ...qualityMetadata,
       referenceKeys: usableReferences.map((reference) => reference.r2Key),
       candidateInstruction: visualInstruction || undefined,
+      qualityWarningCode,
+      qualityFallback: Boolean(qualityWarningCode),
       sceneNumber: scene.sceneNumber
     }
   };

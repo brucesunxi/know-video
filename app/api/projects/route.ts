@@ -11,11 +11,13 @@ import {
 } from "@/lib/generation-reference-assets";
 import {
   claimGenerationRequest,
+  attachGenerationRequestProject,
   completeGenerationRequest,
   failGenerationRequest,
   generationRequestFingerprint,
   listIncompleteGenerationRequests
 } from "@/lib/generation-requests";
+import { enqueueProjectMediaScene } from "@/lib/media-generation-queue";
 import { persistGeneratedProject } from "@/lib/project-mutations";
 import { getProjectSnapshot, listProjects } from "@/lib/project-store";
 import { getFromR2, headR2Object, readR2Prefix } from "@/lib/r2";
@@ -189,9 +191,6 @@ async function generateAndPersistProject(body: ProjectGenerationInput, userId: s
       engine,
       userId
     });
-    if (requestId) {
-      await completeGenerationRequest({ id: requestId, projectId: persisted.project.id, engine });
-    }
     await recordUsageEvent({
       userId,
       projectId: persisted.project.id,
@@ -221,6 +220,25 @@ async function generateAndPersistProject(body: ProjectGenerationInput, userId: s
         status: "settled",
         metadata: { analyzedReferenceKeys: Object.keys(analyses).sort() }
       });
+    }
+    if (requestId) {
+      await attachGenerationRequestProject({ id: requestId, projectId: persisted.project.id, engine });
+      const firstSceneNumber = persisted.project.currentVersion.scenes
+        .map((scene) => scene.sceneNumber)
+        .sort((left, right) => left - right)[0];
+      if (firstSceneNumber) {
+        await enqueueProjectMediaScene({
+          requestId,
+          userId,
+          projectId: persisted.project.id,
+          versionId: persisted.project.currentVersion.id,
+          sceneNumber: firstSceneNumber,
+          engine,
+          options: body.options
+        });
+      } else {
+        await completeGenerationRequest({ id: requestId, projectId: persisted.project.id, engine });
+      }
     }
     return { ...persisted, engine: publicEngine(engine) };
 }

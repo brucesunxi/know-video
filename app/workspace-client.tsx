@@ -6105,7 +6105,7 @@ export function WorkspaceClient({
       warnings.push(`${incompleteMessage} 可在工作室继续重试。`);
     }
 
-    if (options.motion === "stock") {
+    if (options.motion === "stock" && data.recovered !== true) {
       const dynamicScenes = generatedProject.currentVersion.scenes.map((scene) => scene.sceneNumber);
       setProgress(90);
       setGenerationStatus("正在匹配并剪辑免费动态素材");
