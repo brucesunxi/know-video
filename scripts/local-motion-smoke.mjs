@@ -8,7 +8,16 @@ const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
 const module = { exports: {} };
-vm.runInNewContext(output, { module, exports: module.exports, require: () => ({}) });
+vm.runInNewContext(output, {
+  module,
+  exports: module.exports,
+  require: (name) => {
+    if (name === "@/lib/style-motion-policy") {
+      return { styleAllowsFreeStockVideo: (style) => style.visualStyleId === "cinematic-realism" || !style.visualStyleId };
+    }
+    throw new Error(`Unexpected import: ${name}`);
+  }
+});
 const { localMotionPlan, localMotionSequence, sceneUsesAiMotionClip } = module.exports;
 
 const scene = (motionPrompt, overrides = {}) => ({
@@ -47,6 +56,18 @@ assert.equal(sceneUsesAiMotionClip(seeded), false);
 assert.equal(sceneUsesAiMotionClip(scene("Move", {
   style: { motion: { mode: "ai", preset: "auto", intensity: "standard", seed: 1 } },
   assets: [{ type: "clip", url: "/scene.mp4" }]
+})), true);
+assert.equal(sceneUsesAiMotionClip(scene("Move", {
+  style: { visualStyleId: "comic-book", motion: { mode: "ai", preset: "auto", intensity: "standard", seed: 1 } },
+  assets: [{ type: "clip", url: "/stock.mp4", metadata: { source: "free-stock-video" } }]
+})), false);
+assert.equal(sceneUsesAiMotionClip(scene("Move", {
+  style: { visualStyleId: "cinematic-realism", motion: { mode: "ai", preset: "auto", intensity: "standard", seed: 1 } },
+  assets: [{ type: "clip", url: "/stock.mp4", metadata: { source: "free-stock-video" } }]
+})), true);
+assert.equal(sceneUsesAiMotionClip(scene("Move", {
+  style: { visualStyleId: "comic-book", motion: { mode: "ai", preset: "auto", intensity: "standard", seed: 1 } },
+  assets: [{ type: "clip", url: "/uploaded.mp4", metadata: { source: "user-upload" } }]
 })), true);
 
 console.log("Local motion planner smoke checks passed.");

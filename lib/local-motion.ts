@@ -1,4 +1,5 @@
 import type { LocalMotionIntensity, LocalMotionPreset, Scene } from "@/lib/types";
+import { styleAllowsFreeStockVideo } from "@/lib/style-motion-policy";
 
 export type LocalMotionPlan = {
   preset: Exclude<LocalMotionPreset, "auto">;
@@ -164,6 +165,8 @@ export function localMotionSequence(
 }
 
 export function sceneUsesAiMotionClip(scene: Pick<Scene, "style" | "assets">) {
-  return scene.style.motion?.mode !== "local"
-    && scene.assets.some((asset) => asset.type === "clip" && Boolean(asset.url));
+  if (scene.style.motion?.mode === "local") return false;
+  const clip = scene.assets.find((asset) => asset.type === "clip" && Boolean(asset.url));
+  if (!clip) return false;
+  return clip.metadata?.source !== "free-stock-video" || styleAllowsFreeStockVideo(scene.style);
 }

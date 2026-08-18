@@ -74,6 +74,7 @@
     "video:timing:smoke": "node scripts/clip-timing-smoke.mjs",
     "video:uploaded-timing:smoke": "node scripts/uploaded-video-timing-smoke.mjs",
     "video:selection:smoke": "node scripts/motion-scene-selection-smoke.mjs",
+    "video:style-motion:smoke": "node scripts/style-motion-policy-smoke.mjs",
     "video:local-motion:smoke": "node scripts/local-motion-smoke.mjs",
     "video:stock:smoke": "node scripts/stock-video-assets-smoke.mjs",
     "composition:video-layer:smoke": "node scripts/composition-video-layer-smoke.mjs",

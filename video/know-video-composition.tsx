@@ -20,6 +20,7 @@ import { isDeliverableVisualAsset } from "@/lib/generation-resume";
 import { localMotionSequence, sceneUsesAiMotionClip, type LocalMotionBeat, type LocalMotionPlan } from "@/lib/local-motion";
 import { productionAsset, productionSceneTimeline, productionSettings } from "@/lib/production-settings";
 import { resolvedSceneTransition, type ResolvedSceneTransitionKind } from "@/lib/scene-transitions";
+import { freeStockVideoColorGrade } from "@/lib/style-motion-policy";
 import { VIDEO_FPS } from "@/video/config";
 
 export type KnowVideoCompositionProps = { project: Project };
@@ -69,6 +70,7 @@ function beatTransitionOffset(beat: LocalMotionBeat, progress: number) {
 function visualLayerStyle({
   motion,
   nativeVideo,
+  filter,
   opacity = 1,
   transitionScale = 1,
   transitionX = 0,
@@ -76,6 +78,7 @@ function visualLayerStyle({
 }: {
   motion: ReturnType<typeof motionValues>;
   nativeVideo: boolean;
+  filter?: string;
   opacity?: number;
   transitionScale?: number;
   transitionX?: number;
@@ -84,6 +87,7 @@ function visualLayerStyle({
   if (nativeVideo) {
     return {
       height: "100%",
+      filter,
       left: 0,
       objectFit: "cover",
       opacity,
@@ -304,7 +308,11 @@ function SceneFrame({
             playbackRate={clipPlaybackRate}
             src={clip}
             startFrom={clipStartFrom}
-            style={visualLayerStyle({ motion: motionValues(localMotionSequence(scene, contentDurationInFrames, VIDEO_FPS)[0].plan, visualFrame, contentDurationInFrames), nativeVideo: true })}
+            style={visualLayerStyle({
+              motion: motionValues(localMotionSequence(scene, contentDurationInFrames, VIDEO_FPS)[0].plan, visualFrame, contentDurationInFrames),
+              nativeVideo: true,
+              filter: clipAsset?.metadata?.source === "free-stock-video" ? freeStockVideoColorGrade(scene.style) : undefined
+            })}
           />
         </Freeze>
       ) : image ? (

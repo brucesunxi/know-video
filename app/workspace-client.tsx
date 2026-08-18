@@ -814,7 +814,7 @@ function generationReviewItems(prompt: string, options: GenerationOptions) {
       label: "动态成本",
       value: "$0 动态模型费用",
       detail: options.motion === "stock"
-        ? "按脚本匹配免费实拍素材并自动切片，不调用付费视频模型"
+        ? "摄影风格匹配免费实拍素材；艺术风格保留生成图与本地动态，不调用付费视频模型"
         : "全部使用本地简单运镜和转场",
       tone: "ready"
     },
@@ -6108,7 +6108,11 @@ export function WorkspaceClient({
       setProgress(90);
       setGenerationStatus("正在匹配并剪辑免费动态素材");
       try {
-        generatedProject = await requestStockClips(generatedProject, dynamicScenes);
+        const stockResult = await requestStockClips(generatedProject, dynamicScenes);
+        generatedProject = stockResult.project;
+        if (stockResult.styleProtectedSceneNumbers.length > 0) {
+          warnings.push(`场景 ${stockResult.styleProtectedSceneNumbers.join("、")} 已按所选艺术风格保留生成图片，并使用本地动态效果。`);
+        }
         setProject(generatedProject);
       } catch (error) {
         const reason = requestErrorMessage(error, "部分场景没有匹配到免费动态素材，已保留简单运镜。");
@@ -7490,9 +7494,17 @@ export function WorkspaceClient({
       }),
       signal: AbortSignal.timeout(295_000)
     });
-    const data = await response.json() as { project?: Project; error?: string; errorCode?: string };
+    const data = await response.json() as {
+      project?: Project;
+      error?: string;
+      errorCode?: string;
+      styleProtectedSceneNumbers?: number[];
+    };
     if (!response.ok && !data.project) throw new MediaRequestError(data.error || "免费动态素材匹配失败。", data.errorCode);
-    return data.project ?? baseProject;
+    return {
+      project: data.project ?? baseProject,
+      styleProtectedSceneNumbers: data.styleProtectedSceneNumbers ?? []
+    };
   }
 
   async function generateStockClips(sceneNumbers: number[]) {
@@ -7500,15 +7512,22 @@ export function WorkspaceClient({
     setBusyAction("generating-video");
     setErrorMessage(undefined);
     try {
-      const updatedProject = await requestStockClips(project, sceneNumbers);
+      const result = await requestStockClips(project, sceneNumbers);
+      const updatedProject = result.project;
+      const protectedSet = new Set(result.styleProtectedSceneNumbers);
+      const matchedSceneNumbers = sceneNumbers.filter((sceneNumber) => !protectedSet.has(sceneNumber));
       setProject(updatedProject);
       setGenerationIssues((current) => withoutRepairedGenerationIssues(current, "clip", sceneNumbers));
       pushMessage({
         role: "assistant",
         type: "text",
-        content: sceneNumbers.length === 1
-          ? `场景 ${sceneNumbers[0]} 已匹配免费动态素材，预览与 MP4 导出将优先使用该镜头。`
-          : `${sceneNumbers.length} 个场景已完成免费动态素材剪辑。`,
+        content: result.styleProtectedSceneNumbers.length > 0
+          ? matchedSceneNumbers.length > 0
+            ? `${matchedSceneNumbers.length} 个摄影风格场景已匹配免费动态素材；场景 ${result.styleProtectedSceneNumbers.join("、")} 为保持所选艺术风格，继续使用生成图片与本地动态。`
+            : `场景 ${result.styleProtectedSceneNumbers.join("、")} 为保持所选艺术风格，继续使用生成图片与本地动态。`
+          : sceneNumbers.length === 1
+            ? `场景 ${sceneNumbers[0]} 已匹配免费动态素材，预览与 MP4 导出将优先使用该镜头。`
+            : `${sceneNumbers.length} 个场景已完成免费动态素材剪辑。`,
         versionId: updatedProject.currentVersion.id
       }, true);
     } catch (error) {
@@ -7942,7 +7961,7 @@ export function WorkspaceClient({
           <section aria-labelledby="video-cost-title" aria-modal="true" className="kv-confirm-modal kv-cost-modal" role="dialog">
             <div className="kv-confirm-icon"><Film size={21} /></div>
             <h3 id="video-cost-title">{uiLanguage === "zh-CN" ? "选择动态方式" : "Choose a motion method"}</h3>
-            <p>{uiLanguage === "zh-CN" ? `场景 ${pendingVideoGeneration.sceneNumbers.join("、")} 可以保留简单运镜，也可以匹配免费实拍素材并按旁白节奏自动剪辑。两种方式都不会调用付费视频模型。` : `Scene ${pendingVideoGeneration.sceneNumbers.join(", ")} can use simple camera motion or free stock footage edited to the narration rhythm. Neither option calls a paid video model.`}</p>
+            <p>{uiLanguage === "zh-CN" ? `场景 ${pendingVideoGeneration.sceneNumbers.join("、")} 可以使用本地动态，摄影风格也可以匹配免费实拍素材。艺术风格会自动保留生成图片，避免破坏所选风格。两种方式都不会调用付费视频模型。` : `Scene ${pendingVideoGeneration.sceneNumbers.join(", ")} can use local motion, while photographic styles can also match free stock footage. Artistic styles automatically keep their generated images so the selected look is preserved. Neither option calls a paid video model.`}</p>
             <div className="kv-cost-options">
               <label className={motionGenerationMode === "local" ? "selected" : ""}>
                 <input
@@ -7977,7 +7996,7 @@ export function WorkspaceClient({
             ) : null}
             <p className="kv-cost-note">{motionGenerationMode === "local"
               ? uiLanguage === "zh-CN" ? "使用现有场景图片做推拉摇移和本地转场；预览与 MP4 导出效果一致。" : "Uses the existing scene image for local pan, zoom, drift, and transitions. Preview and MP4 export remain identical."
-              : uiLanguage === "zh-CN" ? "按场景语义从免费素材库检索真实视频，裁切并保存到项目；没有匹配结果时保留简单运镜，绝不转用付费模型。" : "Matches real footage from free libraries, cuts it to the scene, and saves it to the project. Unmatched scenes keep simple camera motion and never switch to a paid model."}</p>
+              : uiLanguage === "zh-CN" ? "仅为兼容的摄影风格检索免费实拍视频；艺术风格和无匹配结果的场景保留生成图片与本地动态，绝不转用付费模型。" : "Matches free real footage only for compatible photographic styles. Artistic styles and unmatched scenes keep their generated images with local motion and never switch to a paid model."}</p>
             <div>
               <button disabled={isBusy} onClick={() => setPendingVideoGeneration(undefined)} type="button">{uiLanguage === "zh-CN" ? "取消" : "Cancel"}</button>
               <button className="kv-cost-confirm" disabled={isBusy} onClick={() => {

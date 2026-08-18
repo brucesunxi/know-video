@@ -15,6 +15,7 @@ vm.runInNewContext(output, {
   require: (name) => {
     if (name === "@/lib/env") return { getOptionalEnv: (key) => env[key] };
     if (name === "@/lib/r2") return {};
+    if (name === "@/lib/style-motion-policy") return { styleAllowsFreeStockVideo: () => true };
     throw new Error(`Unexpected import: ${name}`);
   }
 });
@@ -39,5 +40,7 @@ assert.equal(hasFreeStockVideoProvider(), true);
 assert.match(source, /api\.pexels\.com\/v1\/videos\/search/);
 assert.match(source, /costUsd: 0/);
 assert.match(source, /moneyprinterturbo-inspired-stock-cut/);
+assert.match(source, /styleProtectedSceneNumbers/);
+assert.match(source, /styleAllowsFreeStockVideo\(scene\.style\)/);
 
 console.log("Free stock video asset smoke checks passed.");

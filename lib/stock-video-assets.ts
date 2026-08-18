@@ -1,5 +1,6 @@
 import { getOptionalEnv } from "@/lib/env";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
+import { styleAllowsFreeStockVideo } from "@/lib/style-motion-policy";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 
 type StockVideoCandidate = {
@@ -189,8 +190,26 @@ export async function generateProjectStockClips(project: Project, sceneNumbers: 
   const scenes = [...project.currentVersion.scenes];
   const used = new Set<string>();
   const failures: Array<{ sceneNumber: number; error: unknown }> = [];
+  const styleProtectedSceneNumbers: number[] = [];
   for (const [index, scene] of scenes.entries()) {
     if (!targets.has(scene.sceneNumber)) continue;
+    if (!styleAllowsFreeStockVideo(scene.style)) {
+      styleProtectedSceneNumbers.push(scene.sceneNumber);
+      scenes[index] = {
+        ...scene,
+        style: {
+          ...scene.style,
+          motion: {
+            mode: "local",
+            preset: scene.style.motion?.preset ?? "auto",
+            intensity: scene.style.motion?.intensity ?? "standard",
+            seed: scene.style.motion?.seed ?? scene.sceneNumber
+          }
+        },
+        assets: scene.assets.filter((asset) => asset.type !== "clip" || asset.metadata?.source !== "free-stock-video")
+      };
+      continue;
+    }
     try {
       const clip = await importSceneStockVideo(project, scene, used);
       scenes[index] = {
@@ -213,6 +232,7 @@ export async function generateProjectStockClips(project: Project, sceneNumbers: 
   }
   return {
     project: { ...project, currentVersion: { ...project.currentVersion, renderUrl: undefined, status: "draft" as const, scenes } },
-    failures
+    failures,
+    styleProtectedSceneNumbers
   };
 }

@@ -19,6 +19,7 @@ assert.match(source, /beatTransitionOffset/);
 assert.match(source, /previous && previousMotion && transitionProgress < 1/);
 assert.match(source, /nativeVideo: false/);
 assert.match(source, /sceneUsesAiMotionClip\(scene\)/);
+assert.match(source, /freeStockVideoColorGrade\(scene\.style\)/);
 assert.match(source, /height:\s*"112%"[\s\S]*translate3d\(\$\{motion\.x \+ transitionX\}%/);
 assert.match(source, /Easing\.bezier\(0\.33, 0, 0\.2, 1\)/);
 assert.match(source, /key=\{`narration-\$\{scene\.id\}`\}[\s\S]*<Audio[\s\S]*src=\{audio\}/);

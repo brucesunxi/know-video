@@ -39,29 +39,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请求包含当前版本中不存在的场景。" }, { status: 409 });
   }
 
-  const previousClipKeys = new Map(project.currentVersion.scenes.map((scene) => [
-    scene.sceneNumber,
-    scene.assets.find((asset) => asset.type === "clip" && asset.url)?.r2Key
-  ]));
   const result = await generateProjectStockClips(project, body.sceneNumbers);
   await persistGeneratedSceneAssets(result.project.currentVersion.id, result.project.currentVersion.scenes, {
     replaceClips: true,
-    sceneNumbers: body.sceneNumbers
+    sceneNumbers: body.sceneNumbers,
+    updateStyles: true
   });
-  const failedSceneNumbers = result.project.currentVersion.scenes
-    .filter((scene) => body.sceneNumbers.includes(scene.sceneNumber))
-    .filter((scene) => {
-      const clip = scene.assets.find((asset) => asset.type === "clip" && asset.url);
-      return !clip || clip.r2Key === previousClipKeys.get(scene.sceneNumber);
-    })
-    .map((scene) => scene.sceneNumber);
-  const progress = mediaGenerationProgress(body.sceneNumbers, failedSceneNumbers);
+  const failedSceneNumbers = result.failures.map((failure) => failure.sceneNumber);
+  const attemptedSceneNumbers = body.sceneNumbers.filter((sceneNumber) => !result.styleProtectedSceneNumbers.includes(sceneNumber));
+  const progress = mediaGenerationProgress(attemptedSceneNumbers, failedSceneNumbers);
   if (failedSceneNumbers.length > 0) {
     return NextResponse.json({
       error: mediaGenerationFailureMessage("免费动态素材", progress, "未匹配到足够相关的可用视频，未完成场景会继续使用简单运镜。"),
       project: result.project,
+      styleProtectedSceneNumbers: result.styleProtectedSceneNumbers,
       ...progress
     }, { status: progress.completedSceneNumbers.length > 0 ? 207 : 502 });
   }
-  return NextResponse.json({ project: result.project, costUsd: 0, ...progress });
+  return NextResponse.json({
+    project: result.project,
+    costUsd: 0,
+    styleProtectedSceneNumbers: result.styleProtectedSceneNumbers,
+    ...progress
+  });
 }
