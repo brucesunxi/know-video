@@ -237,7 +237,7 @@ export async function reserveAdditionalCredits(input: {
       returning reservation.*, debited.available_credits
     ), ledger_entry as (
       insert into credit_ledger (user_id, event_type, credits_delta, balance_after, source_id, metadata_json)
-      select user_id, 'reserve_adjustment', -${input.credits}, available_credits, ${sourceId},
+      select user_id, 'reserve_adjustment', -(${input.credits}::bigint), available_credits, ${sourceId},
         ${JSON.stringify({ reservationKey: input.reservationKey, ...input.metadata })}::jsonb
       from updated
       on conflict (source_id) do nothing

@@ -1020,6 +1020,18 @@ function generationTaskSpecs(task: GenerationTaskListItem, language: UiLanguage)
   ];
 }
 
+function generationTaskProgressLabel(task: GenerationTaskListItem, language: UiLanguage, background = false) {
+  const text = (zh: string, en: string) => language === "zh-CN" ? zh : en;
+  if (task.projectId) {
+    return background
+      ? text("正在后台生成场景画面与配音", "Generating scene visuals and narration in the background")
+      : text("正在生成场景画面与配音", "Generating scene visuals and narration");
+  }
+  return background
+    ? text("正在后台生成脚本与分镜", "Building the script and storyboard in the background")
+    : text("正在生成脚本与分镜", "Building script and storyboard");
+}
+
 function elapsedGenerationLabel(startedAt?: number, now = Date.now()) {
   if (!startedAt || startedAt > now) return "刚刚开始";
   const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
@@ -2412,7 +2424,7 @@ function Shell({
                   <div className="kv-task-center-heading">
                     <div>
                       <h3>{text("生成任务中心", "Generation task center")}</h3>
-                      <p>{text("离开当前页面不会中断脚本与分镜生成。", "Script and storyboard generation continues when you leave this page.")}</p>
+                      <p>{text("离开当前页面不会中断视频生成。", "Video generation continues when you leave this page.")}</p>
                     </div>
                     <span>{pendingTaskCount > 0 ? text(`${pendingTaskCount} 项运行中`, `${pendingTaskCount} running`) : text("当前空闲", "All quiet")}</span>
                   </div>
@@ -2428,7 +2440,7 @@ function Shell({
                             <span>
                               <strong>{generationTaskTitle(task, language)}</strong>
                               <small>{task.status === "pending"
-                                ? text("正在生成脚本与分镜", "Building script and storyboard")
+                                ? generationTaskProgressLabel(task, language)
                                 : generationTaskFailureLabel(task.error, language)}</small>
                             </span>
                             <b>{task.status === "pending" ? text("刷新状态", "Refresh status") : text("检查重试", "Review")}</b>
@@ -2584,7 +2596,7 @@ function ProjectLibrary({
                     <span className="kv-generation-task-copy">
                       <strong>{generationTaskTitle(task, language)}</strong>
                       <span>{task.status === "pending"
-                        ? text("正在后台生成脚本与分镜", "Building the script and storyboard in the background")
+                        ? generationTaskProgressLabel(task, language, true)
                         : generationTaskFailureLabel(task.error, language)}</span>
                       {generationTaskSpecs(task, language).length > 0 ? (
                         <span className="kv-generation-task-specs">

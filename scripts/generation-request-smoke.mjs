@@ -47,6 +47,7 @@ assert.match(generationRoute, /export async function DELETE/);
 assert.match(generationRoute, /deleteFailedGenerationRequest\(parsed\.data, user\.id\)/);
 assert.match(schema, /generation_requests \([\s\S]*?user_id uuid references users\(id\)/);
 assert.match(schema, /generation_requests \([\s\S]*?options_json jsonb/);
+assert.match(source, /operator is not unique/);
 const options = {
   duration: "30",
   sceneCount: "5",
@@ -87,6 +88,11 @@ assert.match(workspace, /window\.localStorage\.setItem\(PENDING_GENERATION_STORA
 assert.match(workspace, /generationRequests\?: GenerationTaskListItem\[\]/);
 assert.match(workspace, /function generationTaskTitle\(task: GenerationTaskListItem, language: UiLanguage\)/);
 assert.match(workspace, /function generationTaskSpecs\(task: GenerationTaskListItem, language: UiLanguage\)/);
+assert.match(workspace, /function generationTaskProgressLabel\(task: GenerationTaskListItem, language: UiLanguage, background = false\)/);
+assert.match(workspace, /if \(task\.projectId\)/);
+assert.match(workspace, /正在后台生成场景画面与配音/);
+assert.match(workspace, /Generating scene visuals and narration in the background/);
+assert.match(workspace, /离开当前页面不会中断视频生成/);
 assert.doesNotMatch(workspace, /Untitled video generation/);
 assert.match(workspace, /历史视频生成任务/);
 assert.match(workspace, /options\?\.visualStyleLabel\?\.trim\(\)/);

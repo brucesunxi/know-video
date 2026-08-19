@@ -34,7 +34,7 @@ let schemaPromise: Promise<void> | undefined;
 
 function publicStoredError(error: string | null) {
   if (!error) return undefined;
-  if (/relation .* does not exist|column .* does not exist|neondberror|sqlstate|42p01|42703/i.test(error)) {
+  if (/relation .* does not exist|column .* does not exist|operator is not unique|neondberror|sqlstate|42p01|42703|42725/i.test(error)) {
     return "生成服务初始化没有完成，请重试。";
   }
   return error;
