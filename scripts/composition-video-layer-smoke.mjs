@@ -20,7 +20,7 @@ assert.match(source, /previous && previousMotion && transitionProgress < 1/);
 assert.match(source, /nativeVideo: false/);
 assert.match(source, /sceneUsesAiMotionClip\(scene\)/);
 assert.match(source, /freeStockVideoColorGrade\(scene\.style\)/);
-assert.match(source, /height:\s*"116%"[\s\S]*translate3d\(\$\{motion\.x \+ transitionX\}%/);
+assert.match(source, /height:\s*"112%"[\s\S]*translate3d\(\$\{motion\.x \+ transitionX\}%/);
 assert.match(source, /paper-swap/);
 assert.match(source, /transitionRotate/);
 assert.match(source, /Easing\.bezier\(0\.33, 0, 0\.2, 1\)/);

@@ -45,20 +45,25 @@ const seeded = scene("A calm observational shot.", {
 });
 assert.deepEqual(localMotionPlan(seeded), localMotionPlan(seeded));
 const sequence = localMotionSequence(seeded, 240, 30);
-assert.ok(sequence.length >= 2);
+assert.equal(sequence.length, 1);
 assert.equal(sequence[0].startFrame, 0);
 assert.equal(sequence.at(-1).endFrame, 240);
 assert.equal(sequence[0].transitionFrames, 0);
-assert.ok(sequence.slice(1).every((beat) => beat.transitionFrames > 0));
-assert.ok(new Set(sequence.map((beat) => beat.plan.preset)).size >= 2);
 assert.deepEqual(sequence, localMotionSequence(seeded, 240, 30));
+const longSequence = localMotionSequence({ ...seeded, durationSeconds: 10 }, 300, 30);
+assert.ok(longSequence.length >= 2);
+assert.ok(longSequence.slice(1).every((beat) => beat.transitionFrames > 0));
+assert.ok(new Set(longSequence.map((beat) => beat.plan.preset)).size >= 2);
 const graphicScene = scene("A calm observational shot.", {
   style: { visualStyleId: "paper-collage", motion: { mode: "local", preset: "auto", intensity: "standard", seed: 7 } }
 });
-const graphicSequence = localMotionSequence(graphicScene, 240, 30);
-assert.ok(graphicSequence.length >= sequence.length);
+const graphicSequence = localMotionSequence({ ...graphicScene, durationSeconds: 10 }, 300, 30);
+assert.ok(graphicSequence.length >= 1);
 assert.ok(graphicSequence.every((beat) => beat.treatment === "graphic"));
-assert.ok(graphicSequence.some((beat) => beat.transition === "paper-swap"));
+assert.deepEqual(
+  graphicSequence,
+  localMotionSequence({ ...graphicScene, durationSeconds: 10 }, 300, 30)
+);
 assert.ok(
   Math.abs(localMotionPlan(graphicScene).scaleTo - localMotionPlan(graphicScene).scaleFrom)
     > Math.abs(localMotionPlan(seeded).scaleTo - localMotionPlan(seeded).scaleFrom)

@@ -31,7 +31,7 @@ assert.ok(
 assert.match(imageAssets, /misspelled, cropped, blurry, nonsensical/);
 assert.match(imageAssets, /palette sheet, pattern, material sample, abstract shapes, or style demonstration is invalid/);
 assert.match(imageAssets, /qualityAttempt < 3/);
-assert.match(imageAssets, /qualityAttempt === 2\s*\? buildTextSafeCorrectionPrompt/);
+assert.match(imageAssets, /qualityAttempt === 2\s*\? `\$\{buildTextSafeCorrectionPrompt/);
 assert.match(imageAssets, /TEXT-SAFE COMPOSITION/);
 assert.match(imageAssets, /生成画面包含文字或类似文字的符号/);
 assert.match(imageAssets, /生成画面与当前场景内容不匹配/);
@@ -41,5 +41,10 @@ assert.match(imageAssets, /betterTextFreeCandidate/);
 assert.match(imageAssets, /kept the best text-free candidate after quality retries/);
 assert.match(imageAssets, /qualityFallback: Boolean\(qualityWarningCode\)/);
 assert.match(imageAssets, /style_mismatch: 3/);
+assert.match(imageAssets, /composition_duplicate/);
+assert.match(imageAssets, /ADJACENT_SCENE_DUPLICATE_THRESHOLD/);
+assert.match(imageAssets, /reference\.role !== "style-anchor"/);
+assert.match(imageAssets, /mapWithConcurrency\(targets, 1/);
+assert.match(imageAssets, /currentVersion: \{ \.\.\.project\.currentVersion, scenes \}/);
 
 console.log("Image generation retry smoke checks passed.");

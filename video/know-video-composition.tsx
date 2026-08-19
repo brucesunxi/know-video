@@ -102,15 +102,15 @@ function visualLayerStyle({
   }
 
   return {
-    height: "116%",
-    left: "-8%",
+    height: "112%",
+    left: "-6%",
     objectFit: "cover",
     position: "absolute",
-    top: "-8%",
+    top: "-6%",
     opacity,
     transform: `translate3d(${motion.x + transitionX}%, ${motion.y + transitionY}%, 0) scale(${motion.scale * transitionScale}) rotate(${transitionRotate}deg)`,
     transformOrigin: "center center",
-    width: "116%",
+    width: "112%",
     willChange: "transform"
   };
 }

@@ -14,6 +14,7 @@ import {
   type ImageReferenceRole
 } from "@/lib/image-continuity";
 import { GeneratedImageQualityError, normalizeGeneratedImage } from "@/lib/image-quality";
+import { ADJACENT_SCENE_DUPLICATE_THRESHOLD, imagePerceptualSimilarity } from "@/lib/image-similarity";
 import { mediaAssetStatus } from "@/lib/generation-resume";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
@@ -111,6 +112,11 @@ type ImageReference = {
   contentType: "image/jpeg";
   role: ImageReferenceRole;
   r2Key: string;
+};
+
+type SceneComparisonImage = {
+  body: Buffer;
+  sceneNumber: number;
 };
 
 type RecoverableImageQualityCode = Extract<
@@ -304,6 +310,37 @@ async function loadProjectStyleAnchorReference(project: Project, scene: Scene) {
   return loadImageReference(anchorAsset, "style-anchor");
 }
 
+async function loadProjectComparisonImages(project: Project, scene: Scene) {
+  const comparisonScenes = project.currentVersion.scenes
+    .filter((candidate) => candidate.sceneNumber !== scene.sceneNumber && sameLockedStyle(candidate, scene))
+    .sort((left, right) => {
+      const leftDistance = Math.abs(left.sceneNumber - scene.sceneNumber);
+      const rightDistance = Math.abs(right.sceneNumber - scene.sceneNumber);
+      return leftDistance - rightDistance || left.sceneNumber - right.sceneNumber;
+    })
+    .slice(0, 4);
+  const comparisons = await Promise.all(comparisonScenes.map(async (candidate) => {
+    const acceptedGeneratedImage = candidate.assets.find((asset) => (
+      asset.type === "image"
+      && asset.metadata?.source === "generated-image"
+      && asset.url
+      && asset.r2Key
+    ));
+    const reference = await loadImageReference(acceptedGeneratedImage, "style-anchor");
+    return reference ? { body: reference.body, sceneNumber: candidate.sceneNumber } : undefined;
+  }));
+  return comparisons.filter(Boolean) as SceneComparisonImage[];
+}
+
+async function nearestSceneSimilarity(body: Buffer, comparisons: SceneComparisonImage[]) {
+  let nearest: { score: number; sceneNumber: number } | undefined;
+  for (const comparison of comparisons) {
+    const score = await imagePerceptualSimilarity(body, comparison.body);
+    if (!nearest || score > nearest.score) nearest = { score, sceneNumber: comparison.sceneNumber };
+  }
+  return nearest;
+}
+
 async function mapWithConcurrency<T>(
   items: T[],
   concurrency: number,
@@ -326,7 +363,8 @@ async function generateSceneImage(
   quality: ImageQuality,
   references: ImageReference[],
   variantKey = "primary",
-  visualInstruction?: string
+  visualInstruction?: string,
+  comparisonImages: SceneComparisonImage[] = []
 ): Promise<{ asset: SceneAsset } | undefined> {
   const effectiveQuality: ImageQuality = quality === "premium" || sceneRequiresPremiumImage(scene)
     ? "premium"
@@ -340,13 +378,21 @@ async function generateSceneImage(
   let qualityMetadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"] | undefined;
   let fallbackCandidate: TextFreeImageCandidate | undefined;
   let qualityWarningCode: RecoverableImageQualityCode | undefined;
+  let closestScene: { score: number; sceneNumber: number } | undefined;
+  let duplicateWasDetected = false;
   for (let qualityAttempt = 0; qualityAttempt < 3; qualityAttempt += 1) {
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
+    const duplicateCorrection = duplicateWasDetected
+      ? "COMPOSITION REJECTION: the prior candidate was too similar to another scene. Re-stage this beat from a substantially different camera height, shot size, subject arrangement, foreground silhouette, and background. Do not reuse the same tabletop, centered object group, horizon, pose, or color-block placement."
+      : "";
     const attemptPrompt = qualityAttempt === 2
-      ? buildTextSafeCorrectionPrompt(scene, project)
+      ? `${buildTextSafeCorrectionPrompt(scene, project)}\n${duplicateCorrection}`
       : enforceTextFreeImagePrompt(qualityAttempt === 0
         ? prompt
-        : `${prompt}\nQuality correction attempt ${qualityAttempt + 1}: the prior candidate was rejected. Rebuild the composition as a fully resolved, information-rich frame in the exact locked rendering medium. The actual scene subject, action, environment, and narrative cause-and-effect must be immediately recognizable; a palette sheet, pattern, material sample, abstract shapes, or style demonstration is invalid. Remove every word, letter, number, logo, watermark, fake glyph, and writing-like mark; use blank surfaces and purely pictorial objects instead. Keep clear subject separation and meaningful foreground, midground, and background. Do not switch to photography, 3D, voxel, low-poly, or another illustration style. Avoid empty gradients or featureless surfaces.`);
+        : `${prompt}\n${duplicateCorrection}\nQuality correction attempt ${qualityAttempt + 1}: the prior candidate was rejected. Rebuild the composition as a fully resolved, information-rich frame in the exact locked rendering medium. The actual scene subject, action, environment, and narrative cause-and-effect must be immediately recognizable; a palette sheet, pattern, material sample, abstract shapes, or style demonstration is invalid. Remove every word, letter, number, logo, watermark, fake glyph, and writing-like mark; use blank surfaces and purely pictorial objects instead. Keep clear subject separation and meaningful foreground, midground, and background. Do not switch to photography, 3D, voxel, low-poly, or another illustration style. Avoid empty gradients or featureless surfaces.`);
+    const attemptReferences = duplicateWasDetected
+      ? usableReferences.filter((reference) => reference.role !== "style-anchor")
+      : usableReferences;
     let generatedBody: Buffer;
     let generatedModel: string;
     let effectivePrompt = attemptPrompt;
@@ -356,7 +402,7 @@ async function generateSceneImage(
         try {
           generated = await generateCloudflareImage(attemptPrompt, effectiveQuality, {
             seed,
-            references: usableReferences
+            references: attemptReferences
           });
         } catch (error) {
           if (!isSafetyFiltered(error)) throw error;
@@ -396,6 +442,17 @@ async function generateSceneImage(
       if (containsText) {
         throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。", "text_detected");
       }
+
+      const nearest = await nearestSceneSimilarity(normalized.body, comparisonImages);
+      if (nearest && nearest.score >= ADJACENT_SCENE_DUPLICATE_THRESHOLD) {
+        duplicateWasDetected = true;
+        closestScene = nearest;
+        throw new GeneratedImageQualityError(
+          `生成画面与分镜 ${nearest.sceneNumber} 的构图过于相似。`,
+          "composition_duplicate"
+        );
+      }
+      if (!closestScene || (nearest && nearest.score > closestScene.score)) closestScene = nearest;
 
       let inspection: Awaited<ReturnType<typeof inspectGeneratedImage>>;
       try {
@@ -480,6 +537,8 @@ async function generateSceneImage(
       seed,
       ...qualityMetadata,
       referenceKeys: usableReferences.map((reference) => reference.r2Key),
+      closestSceneNumber: closestScene?.sceneNumber,
+      closestSceneSimilarity: closestScene?.score,
       candidateInstruction: visualInstruction || undefined,
       qualityWarningCode,
       qualityFallback: Boolean(qualityWarningCode),
@@ -521,21 +580,29 @@ export async function generateProjectSceneImages(
     .map((scene, index) => ({ scene, index }))
     .filter(({ scene }) => !selectedScenes || selectedScenes.has(scene.sceneNumber));
   if (selectedIndexes.length === 0) return project;
-  const concurrency = Math.min(3, Math.max(1, Number(getOptionalEnv("IMAGE_GENERATION_CONCURRENCY")) || 2));
   const targets = [...selectedIndexes];
 
-  await mapWithConcurrency(targets, concurrency, async ({ scene, index }) => {
+  // Generate project scenes in order so every later scene can be compared with
+  // the actual accepted frames before it. Parallel generation cannot enforce
+  // cross-scene composition uniqueness reliably.
+  await mapWithConcurrency(targets, 1, async ({ scene, index }) => {
       try {
+        const workingProject = {
+          ...project,
+          currentVersion: { ...project.currentVersion, scenes }
+        };
         const currentReference = await loadSceneImageReference(scene, "current");
-        const styleAnchorReference = await loadProjectStyleAnchorReference(project, scene);
+        const styleAnchorReference = await loadProjectStyleAnchorReference(workingProject, scene);
+        const comparisonImages = await loadProjectComparisonImages(workingProject, scene);
         const references = [currentReference, styleAnchorReference].filter(Boolean) as ImageReference[];
         const generated = await generateSceneImage(
           scene,
-          project,
+          workingProject,
           options.quality ?? "standard",
           references,
           options.variantKey,
-          options.visualInstruction
+          options.visualInstruction,
+          comparisonImages
         );
         if (!generated) return;
 

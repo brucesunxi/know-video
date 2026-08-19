@@ -104,26 +104,26 @@ function planForPreset(input: {
   shotScale?: number;
 }): LocalMotionPlan {
   const { preset, factor, seed, shotScale = 0 } = input;
-  const pan = 2.8 * factor;
-  const tilt = 2.15 * factor;
-  const zoom = 0.078 * factor;
-  const baseScale = 1.035 + shotScale;
+  const pan = 4.25 * factor;
+  const tilt = 3.25 * factor;
+  const zoom = 0.105 * factor;
+  const baseScale = 1.01 + shotScale;
   const alternate = seed % 2 === 0 ? 1 : -1;
 
-  if (preset === "push-in") return { preset, xFrom: -0.35 * alternate, xTo: 0.35 * alternate, yFrom: 0.2, yTo: -0.2, scaleFrom: baseScale, scaleTo: baseScale + zoom };
-  if (preset === "pull-out") return { preset, xFrom: 0.35 * alternate, xTo: -0.35 * alternate, yFrom: -0.2, yTo: 0.2, scaleFrom: baseScale + zoom, scaleTo: baseScale };
-  if (preset === "pan-left") return { preset, xFrom: pan, xTo: -pan, yFrom: 0, yTo: 0, scaleFrom: 1.075 + shotScale, scaleTo: 1.075 + shotScale + zoom * 0.22 };
-  if (preset === "pan-right") return { preset, xFrom: -pan, xTo: pan, yFrom: 0, yTo: 0, scaleFrom: 1.075 + shotScale, scaleTo: 1.075 + shotScale + zoom * 0.22 };
-  if (preset === "tilt-up") return { preset, xFrom: 0, xTo: 0, yFrom: tilt, yTo: -tilt, scaleFrom: 1.07 + shotScale, scaleTo: 1.07 + shotScale + zoom * 0.18 };
-  if (preset === "tilt-down") return { preset, xFrom: 0, xTo: 0, yFrom: -tilt, yTo: tilt, scaleFrom: 1.07 + shotScale + zoom * 0.18, scaleTo: 1.07 + shotScale };
+  if (preset === "push-in") return { preset, xFrom: -0.7 * alternate, xTo: 0.7 * alternate, yFrom: 0.45, yTo: -0.45, scaleFrom: baseScale, scaleTo: baseScale + zoom };
+  if (preset === "pull-out") return { preset, xFrom: 0.7 * alternate, xTo: -0.7 * alternate, yFrom: -0.45, yTo: 0.45, scaleFrom: baseScale + zoom, scaleTo: baseScale };
+  if (preset === "pan-left") return { preset, xFrom: pan, xTo: -pan, yFrom: 0.35 * alternate, yTo: -0.35 * alternate, scaleFrom: 1.045 + shotScale, scaleTo: 1.045 + shotScale + zoom * 0.28 };
+  if (preset === "pan-right") return { preset, xFrom: -pan, xTo: pan, yFrom: -0.35 * alternate, yTo: 0.35 * alternate, scaleFrom: 1.045 + shotScale, scaleTo: 1.045 + shotScale + zoom * 0.28 };
+  if (preset === "tilt-up") return { preset, xFrom: 0.35 * alternate, xTo: -0.35 * alternate, yFrom: tilt, yTo: -tilt, scaleFrom: 1.04 + shotScale, scaleTo: 1.04 + shotScale + zoom * 0.24 };
+  if (preset === "tilt-down") return { preset, xFrom: -0.35 * alternate, xTo: 0.35 * alternate, yFrom: -tilt, yTo: tilt, scaleFrom: 1.04 + shotScale + zoom * 0.24, scaleTo: 1.04 + shotScale };
   return {
     preset,
-    xFrom: 1.45 * factor * alternate,
-    xTo: -1.45 * factor * alternate,
-    yFrom: -0.8 * factor,
-    yTo: 0.8 * factor,
-    scaleFrom: 1.05 + shotScale,
-    scaleTo: 1.05 + shotScale + zoom * 0.62
+    xFrom: 2.8 * factor * alternate,
+    xTo: -2.8 * factor * alternate,
+    yFrom: -1.6 * factor,
+    yTo: 1.6 * factor,
+    scaleFrom: 1.025 + shotScale,
+    scaleTo: 1.025 + shotScale + zoom * 0.72
   };
 }
 
@@ -148,9 +148,9 @@ export function localMotionSequence(
   const intensity = scene.style.motion?.intensity ?? "standard";
   const treatment = motionTreatment(scene.style);
   const targetSeconds = treatment === "graphic"
-    ? intensity === "dynamic" ? 1.95 : intensity === "subtle" ? 3.35 : 2.55
-    : intensity === "dynamic" ? 2.45 : intensity === "subtle" ? 4.1 : 3.25;
-  const minimumBeatFrames = Math.max(1, Math.round(fps * (treatment === "graphic" ? 1.35 : 1.55)));
+    ? intensity === "dynamic" ? 3.2 : intensity === "subtle" ? 6.5 : 4.8
+    : intensity === "dynamic" ? 3.6 : intensity === "subtle" ? 7.2 : 5.4;
+  const minimumBeatFrames = Math.max(1, Math.round(fps * (treatment === "graphic" ? 2.6 : 3)));
   const maximumBeats = Math.max(1, Math.min(4, Math.floor(totalFrames / minimumBeatFrames)));
   const beatCount = Math.max(1, Math.min(maximumBeats, Math.round(totalFrames / Math.max(1, targetSeconds * fps))));
   const basePlan = localMotionPlan(scene);
@@ -171,11 +171,11 @@ export function localMotionSequence(
     const shotScale = index === 0
       ? 0
       : treatment === "graphic"
-        ? index % 3 === 1 ? 0.07 : index % 3 === 2 ? 0.115 : 0.04
-        : index % 3 === 1 ? 0.045 : index % 3 === 2 ? 0.085 : 0.025;
+        ? index % 3 === 1 ? 0.045 : index % 3 === 2 ? 0.075 : 0.025
+        : index % 3 === 1 ? 0.03 : index % 3 === 2 ? 0.055 : 0.018;
     const transitionFrames = index === 0
       ? 0
-      : Math.min(Math.round(fps * (treatment === "graphic" ? 0.5 : 0.42)), Math.max(2, Math.floor(length * (treatment === "graphic" ? 0.26 : 0.22))));
+      : Math.min(Math.round(fps * (treatment === "graphic" ? 0.38 : 0.32)), Math.max(2, Math.floor(length * 0.16)));
     const transitions = treatment === "graphic" ? GRAPHIC_BEAT_TRANSITIONS : BEAT_TRANSITIONS;
     return {
       index,

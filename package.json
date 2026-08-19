@@ -42,6 +42,7 @@
     "image:continuity:smoke": "node scripts/image-continuity-smoke.mjs",
     "image:anchor-policy:smoke": "node scripts/image-anchor-policy-smoke.mjs",
     "image:quality:smoke": "node scripts/image-quality-smoke.mjs",
+    "image:similarity:smoke": "node scripts/image-similarity-smoke.mjs",
     "image:candidates:smoke": "node scripts/image-candidates-smoke.mjs",
     "image:generation-retry:smoke": "node scripts/image-generation-retry-smoke.mjs",
     "visual:candidate-ui:smoke": "node scripts/visual-candidate-ui-smoke.mjs",
