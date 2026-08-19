@@ -1,0 +1,95 @@
+.shell {
+  min-height: 100vh;
+  background: #f4f7f9;
+  color: #111b2d;
+  padding: 36px clamp(20px, 5vw, 72px) 64px;
+  font-family: Inter, "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  max-width: 1280px;
+  margin: 0 auto 28px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid #d7e0e7;
+}
+
+.header p { margin: 22px 0 7px; color: #68758a; font-size: 12px; font-weight: 800; letter-spacing: 1.2px; }
+.header h1 { margin: 0; font-size: 34px; line-height: 1.15; letter-spacing: 0; }
+.header > div > span { display: block; margin-top: 9px; color: #627087; font-size: 15px; }
+
+.back { display: inline-flex; align-items: center; gap: 7px; color: #344258; text-decoration: none; font-size: 14px; font-weight: 700; }
+.back:hover { color: #08796c; }
+
+.adminBadge { display: flex; align-items: center; gap: 10px; min-width: 245px; padding: 12px 15px; border: 1px solid #b9ddd7; background: #ecfaf7; border-radius: 7px; color: #08796c; }
+.adminBadge span { display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-weight: 700; }
+.adminBadge small { color: #607a77; font-size: 11px; font-weight: 600; }
+
+.notice { display: flex; align-items: center; gap: 9px; max-width: 1280px; margin: 0 auto 18px; padding: 13px 15px; border: 1px solid; border-radius: 6px; font-size: 14px; font-weight: 650; }
+.success { color: #08796c; background: #ecfaf7; border-color: #a9ded5; }
+.error { color: #a52b24; background: #fff3f2; border-color: #efb9b4; }
+
+.workspace { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr); gap: 18px; max-width: 1280px; margin: 0 auto 18px; }
+.panel, .history { background: #fff; border: 1px solid #d7e0e7; border-radius: 8px; box-shadow: 0 12px 30px rgba(31, 48, 66, .06); }
+.panel { padding: 24px; }
+.panelTitle { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 19px; }
+.panelTitle svg { color: #08796c; margin-top: 2px; }
+.panelTitle h2, .historyHead h2 { margin: 0; font-size: 19px; letter-spacing: 0; }
+.panelTitle p, .historyHead p { margin: 4px 0 0; color: #758196; font-size: 13px; }
+
+.searchForm { display: grid; grid-template-columns: 1fr auto; gap: 9px; }
+.searchForm input, .grantForm input, .grantForm textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd6df; border-radius: 6px; background: #fff; color: #111b2d; font: inherit; outline: none; }
+.searchForm input, .grantForm input { height: 44px; padding: 0 13px; }
+.grantForm textarea { padding: 11px 13px; resize: vertical; }
+.searchForm input:focus, .grantForm input:focus, .grantForm textarea:focus { border-color: #169b8b; box-shadow: 0 0 0 3px rgba(22, 155, 139, .12); }
+.searchForm button, .primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 6px; background: #142238; color: #fff; padding: 0 18px; font: inherit; font-size: 14px; font-weight: 750; cursor: pointer; }
+.searchForm button:disabled, .primary:disabled { opacity: .45; cursor: default; }
+
+.userCard { display: grid; grid-template-columns: auto 1fr; gap: 13px; margin-top: 17px; padding: 16px; border: 1px solid #c9e4df; border-radius: 7px; background: #f5fbfa; }
+.avatar { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: #0b8f80; color: #fff; font-size: 17px; font-weight: 800; }
+.userCard > div:nth-child(2) { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.userCard strong { font-size: 15px; }
+.userCard span { color: #4f5e72; font-size: 13px; }
+.userCard small { overflow: hidden; color: #8490a0; font-size: 11px; text-overflow: ellipsis; }
+.userCard dl { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 0; }
+.userCard dl div { padding: 11px 12px; border: 1px solid #d7e5e3; border-radius: 5px; background: #fff; }
+.userCard dt { color: #778398; font-size: 11px; }
+.userCard dd { margin: 4px 0 0; font-size: 18px; font-weight: 800; }
+
+.disabledPanel { opacity: .68; }
+.grantForm { display: flex; flex-direction: column; gap: 15px; }
+.grantForm label { display: flex; flex-direction: column; gap: 7px; color: #46546a; font-size: 13px; font-weight: 700; }
+.amountInput { position: relative; }
+.amountInput input { padding-right: 82px; font-size: 18px; font-weight: 750; }
+.amountInput em { position: absolute; right: 13px; top: 50%; transform: translateY(-50%); color: #6f7b8e; font-size: 12px; font-style: normal; }
+.summary { display: flex; align-items: center; justify-content: space-between; padding: 12px 13px; border-top: 1px solid #e2e8ed; border-bottom: 1px solid #e2e8ed; color: #667389; font-size: 13px; }
+.summary strong { color: #08796c; font-size: 20px; }
+.primary { min-height: 45px; background: #08796c; }
+
+.empty { margin-top: 17px; padding: 22px; border: 1px dashed #cbd6df; border-radius: 6px; color: #7b8798; text-align: center; font-size: 13px; }
+.history { max-width: 1280px; margin: 0 auto; overflow: hidden; }
+.historyHead { display: flex; justify-content: space-between; align-items: center; padding: 22px 24px; border-bottom: 1px solid #e0e6eb; }
+.historyHead > span { padding: 5px 9px; border-radius: 4px; background: #edf2f5; color: #68758a; font-size: 12px; font-weight: 700; }
+.history .empty { margin: 20px 24px 24px; }
+.tableWrap { overflow-x: auto; }
+.tableWrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tableWrap th { padding: 11px 16px; background: #f7f9fa; color: #6d798c; font-size: 11px; text-align: left; text-transform: uppercase; }
+.tableWrap td { padding: 14px 16px; border-top: 1px solid #e5eaee; color: #46546a; }
+.tableWrap td strong, .tableWrap td small { display: block; }
+.tableWrap td strong { color: #172237; font-size: 13px; }
+.tableWrap td small { margin-top: 3px; color: #7f8a9b; }
+.creditDelta { color: #08796c !important; font-weight: 800; }
+.spin { animation: spin .85s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 840px) {
+  .shell { padding: 22px 14px 40px; }
+  .header { align-items: flex-start; flex-direction: column; }
+  .adminBadge { min-width: 0; width: 100%; box-sizing: border-box; }
+  .workspace { grid-template-columns: 1fr; }
+  .userCard dl { grid-template-columns: 1fr; }
+  .tableWrap table { min-width: 720px; }
+}

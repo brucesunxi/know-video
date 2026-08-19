@@ -71,6 +71,7 @@
     "billing:reservation:smoke": "node scripts/billing-reservation-smoke.mjs",
     "billing:purchase:smoke": "node scripts/billing-purchase-smoke.mjs",
     "billing:xendit:smoke": "node scripts/billing-xendit-smoke.mjs",
+    "admin:credits:smoke": "node scripts/admin-credits-smoke.mjs",
     "business:verification:smoke": "node scripts/business-verification-smoke.mjs",
     "video:quality:smoke": "node scripts/video-quality-smoke.mjs",
     "video:timing:smoke": "node scripts/clip-timing-smoke.mjs",

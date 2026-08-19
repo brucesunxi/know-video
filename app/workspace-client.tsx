@@ -2238,6 +2238,9 @@ function Shell({
               </button>
               <button aria-label={darkMode ? "浅色模式" : "夜间模式"} onClick={() => setDarkMode((enabled) => !enabled)} title={darkMode ? "浅色模式" : "夜间模式"} type="button"><Moon size={18} /></button>
               {notificationButton}
+              {currentUser.email.trim().toLowerCase() === "sunxi0302@gmail.com" ? (
+                <a aria-label={text("Credits 管理后台", "Credits admin")} className="kv-admin-link" href="/admin" title={text("Credits 管理后台", "Credits admin")}><Settings size={18} /></a>
+              ) : null}
               <div className="kv-user-menu">
                 {currentUser.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -2273,6 +2276,9 @@ function Shell({
               {statusBadges.map((badge) => (
                 <span className={badge.tone} key={`${badge.tone}-${badge.label}`}>{localizedStatusBadge(badge.label)}</span>
               ))}
+              {currentUser.email.trim().toLowerCase() === "sunxi0302@gmail.com" ? (
+                <a aria-label={text("Credits 管理后台", "Credits admin")} className="kv-admin-link" href="/admin" title={text("Credits 管理后台", "Credits admin")}><Settings size={18} /></a>
+              ) : null}
               <div className="kv-user-menu">
                 {currentUser.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element

@@ -1038,6 +1038,27 @@ button:disabled {
   background: #c24132;
 }
 
+.kv-admin-link {
+  display: inline-grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  box-sizing: border-box;
+  border: 1px solid #d9e1e8;
+  border-radius: 12px;
+  background: #fff;
+  color: #273448;
+  text-decoration: none;
+}
+
+.kv-admin-link:hover,
+.kv-admin-link:focus-visible {
+  border-color: #8dd8cf;
+  background: #f1fbf9;
+  color: #087568;
+}
+
 .kv-home-top-actions {
   display: flex;
   align-items: center;
