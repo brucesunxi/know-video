@@ -119,6 +119,8 @@ function localizedRuntimeLabel(value: string, language: UiLanguage) {
     "正在等待后台完成脚本与分镜": "Waiting for the script and storyboard to finish",
     "脚本与分镜仍在后台生成，正在自动恢复": "The script and storyboard are still generating. Recovery is in progress",
     "连接超时，正在找回后台生成结果": "The connection timed out. Recovering the background generation result",
+    "任务已转入后台生成": "Generation continues in the background",
+    "连接中断，任务将在后台继续确认": "Connection interrupted. The background task will continue to be checked",
     "正在生成统一风格的场景画面": "Generating consistently styled scene visuals",
     "正在补齐尚未完成的场景画面": "Completing unfinished scene visuals",
     "正在生成自然配音": "Generating natural narration",
@@ -1929,43 +1931,6 @@ async function waitForRenderJob(
   return undefined;
 }
 
-async function waitForGenerationRequest(
-  requestId: string,
-  onWaiting: () => void
-): Promise<Required<Pick<StoryboardGenerationResponse, "project" | "messages" | "engine">> & StoryboardGenerationResponse> {
-  const startedAt = Date.now();
-  let consecutiveFailures = 0;
-  onWaiting();
-  while (Date.now() - startedAt < 4 * 60 * 1000) {
-    await new Promise((resolve) => window.setTimeout(resolve, 2000));
-    try {
-      const response = await fetch(
-        `/api/projects/generation?requestId=${encodeURIComponent(requestId)}`,
-        { cache: "no-store", signal: AbortSignal.timeout(12_000) }
-      );
-      const data = await response.json().catch(() => ({})) as StoryboardGenerationResponse;
-      if (response.status === 202 || data.status === "pending") {
-        consecutiveFailures = 0;
-        continue;
-      }
-      if (!response.ok || data.status === "failed") {
-        throw new Error(data.error || "视频脚本和分镜生成没有完成，请重试。");
-      }
-      if (!data.project || !Array.isArray(data.messages) || !data.engine) {
-        throw new Error("生成任务返回的数据不完整，请重试。");
-      }
-      return { ...data, project: data.project, messages: data.messages, engine: data.engine };
-    } catch (error) {
-      if (error instanceof Error && /没有完成|数据不完整/.test(error.message)) throw error;
-      consecutiveFailures += 1;
-      if (consecutiveFailures >= 5) {
-        throw new Error("暂时无法读取后台生成进度。项目完成后仍会保存在项目列表中，请稍后查看。");
-      }
-    }
-  }
-  throw new Error("脚本和分镜生成时间较长。任务仍可能在后台完成，请稍后到项目列表查看。");
-}
-
 function busyActionLabel(action?: BusyAction) {
   switch (action) {
     case "diagnosing-scene":
@@ -2466,7 +2431,7 @@ function Shell({
                                 ? text("正在生成脚本与分镜", "Building script and storyboard")
                                 : generationTaskFailureLabel(task.error, language)}</small>
                             </span>
-                            <b>{task.status === "pending" ? text("查看进度", "View progress") : text("检查重试", "Review")}</b>
+                            <b>{task.status === "pending" ? text("刷新状态", "Refresh status") : text("检查重试", "Review")}</b>
                           </button>
                           {task.status === "failed" ? (
                             <button aria-label={text("删除这条失败提示", "Delete this failed task")} className="kv-task-center-delete" onClick={() => void onDeleteGeneration(task)} title={text("删除提示", "Delete notification")} type="button">
@@ -2629,7 +2594,7 @@ function ProjectLibrary({
                     </span>
                     <span className="kv-generation-task-action">
                       <small>{task.status === "pending" ? text("生成中", "Generating") : text("生成失败", "Failed")} · {new Date(task.updatedAt).toLocaleString(text("zh-CN", "en-US"), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
-                      <b>{task.status === "pending" ? text("查看进度", "View progress") : text("检查并重试", "Review and retry")} <ArrowRight size={15} /></b>
+                      <b>{task.status === "pending" ? text("刷新状态", "Refresh status") : text("检查并重试", "Review and retry")} <ArrowRight size={15} /></b>
                     </span>
                   </button>
                   {task.status === "failed" ? (
@@ -5932,7 +5897,6 @@ export function WorkspaceClient({
   const musicInputRef = useRef<HTMLInputElement>(null);
   const recoveringRenderRef = useRef<string>();
   const recoveringGenerationRef = useRef(false);
-  const recoveringGenerationRequestIdRef = useRef<string>();
   const cancelledRenderIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -5948,9 +5912,12 @@ export function WorkspaceClient({
     const refreshTasks = async () => {
       if (document.visibilityState === "hidden") return;
       try {
-        const response = await fetch("/api/projects/generation", { cache: "no-store" });
-        const data = await response.json().catch(() => ({})) as { generationRequests?: GenerationTaskListItem[] };
-        if (!cancelled && response.ok) setGenerationTasks(data.generationRequests ?? []);
+        const response = await fetch(stage === "projects" ? "/api/projects" : "/api/projects/generation", { cache: "no-store" });
+        const data = await response.json().catch(() => ({})) as { projects?: ProjectListItem[]; generationRequests?: GenerationTaskListItem[] };
+        if (!cancelled && response.ok) {
+          setGenerationTasks(data.generationRequests ?? []);
+          if (stage === "projects" && data.projects) setProjects(data.projects);
+        }
       } catch (error) {
         console.warn("[generation-tasks] Unable to refresh background tasks:", error);
       }
@@ -5966,7 +5933,7 @@ export function WorkspaceClient({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, []);
+  }, [stage]);
 
   function changeUiLanguage(language: UiLanguage) {
     setUiLanguage(language);
@@ -6044,31 +6011,27 @@ export function WorkspaceClient({
       return;
     }
     recoveringGenerationRef.current = true;
-    recoveringGenerationRequestIdRef.current = pending.requestId;
     setBriefPrompt(pending.prompt);
     setGenerationOptions(pending.options);
     setGenerationStartedAt(pending.startedAt);
-    setIsBusy(true);
     setErrorMessage(undefined);
-    setProgress(36);
-    setGenerationStatus("正在恢复刷新前的视频生成任务");
-    setStage("generating");
-    void waitForGenerationRequest(pending.requestId, () => {
-      setGenerationStatus("正在等待后台完成脚本与分镜");
-    })
-      .then((data) => continueGeneratedProject(data, pending.options, true))
-      .catch((error) => {
-        const message = requestErrorMessage(error, "生成任务恢复失败，请稍后重试。");
-        setErrorMessage(message);
-        setStage("brief");
-        if (/没有完成|没有找到|标识无效|数据不完整/.test(message)) {
+    setStage("projects");
+    void fetch(`/api/projects/generation?requestId=${encodeURIComponent(pending.requestId)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({})) as StoryboardGenerationResponse;
+        if (response.ok && data.status === "ready") clearPendingGenerationSession();
+        if (!response.ok || data.status === "failed") {
           clearPendingGenerationSession();
+          throw new Error(data.error || "视频生成没有完成，请检查后重试。");
         }
+        await openProjects();
+      })
+      .catch(async (error) => {
+        await openProjects();
+        setErrorMessage(requestErrorMessage(error, "生成任务状态读取失败，请稍后重试。"));
       })
       .finally(() => {
         recoveringGenerationRef.current = false;
-        recoveringGenerationRequestIdRef.current = undefined;
-        setIsBusy(false);
       });
   }, []);
 
@@ -6463,10 +6426,9 @@ export function WorkspaceClient({
         });
         const result = await response.json().catch(() => ({})) as StoryboardGenerationResponse;
         if (response.status === 202 || result.status === "pending") {
-          data = await waitForGenerationRequest(requestId, () => {
-            setProgress(36);
-            setGenerationStatus("脚本与分镜仍在后台生成，正在自动恢复");
-          });
+          setGenerationStatus("任务已转入后台生成");
+          await openProjects();
+          return;
         } else {
           if (!response.ok) throw new Error(result.error || "视频项目创建失败。");
           if (!result.project || !Array.isArray(result.messages) || !result.engine) {
@@ -6478,10 +6440,9 @@ export function WorkspaceClient({
         const connectionInterrupted = error instanceof TypeError
           || (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name));
         if (!connectionInterrupted) throw error;
-        data = await waitForGenerationRequest(requestId, () => {
-          setProgress(36);
-          setGenerationStatus("连接超时，正在找回后台生成结果");
-        });
+        setGenerationStatus("连接中断，任务将在后台继续确认");
+        await openProjects();
+        return;
       }
       await continueGeneratedProject(data, generationOptions, data.recovered === true);
     } catch (error) {
@@ -7759,52 +7720,23 @@ export function WorkspaceClient({
       setStage("brief");
       return;
     }
-    const stored = readPendingGenerationSession();
-    const options = stored?.requestId === task.id ? stored.options : task.options ?? generationOptions;
-    const startedAt = stored?.requestId === task.id
-      ? stored.startedAt
-      : Number.isFinite(Date.parse(task.createdAt ?? task.updatedAt)) ? Date.parse(task.createdAt ?? task.updatedAt) : Date.now();
-    const resumablePrompt = prompt || (stored?.requestId === task.id ? stored.prompt : "");
-    if (recoveringGenerationRef.current && recoveringGenerationRequestIdRef.current === task.id) {
-      setBriefPrompt(resumablePrompt);
-      setGenerationOptions(options);
-      setGenerationStartedAt(startedAt);
-      setProgress((current) => Math.max(current, 36));
-      setGenerationStatus("正在等待后台完成脚本与分镜");
-      setErrorMessage(undefined);
-      setIsBusy(true);
-      setStage("generating");
-      return;
-    }
-    if (recoveringGenerationRef.current) {
-      setErrorMessage("另一个生成任务正在恢复，请稍后再打开这个任务。");
-      return;
-    }
-    recoveringGenerationRef.current = true;
-    recoveringGenerationRequestIdRef.current = task.id;
-    setBriefPrompt(resumablePrompt);
-    setGenerationOptions(options);
-    setGenerationStartedAt(startedAt);
-    setProgress(36);
-    setGenerationStatus("正在等待后台完成脚本与分镜");
     setErrorMessage(undefined);
-    setIsBusy(true);
-    setStage("generating");
-    savePendingGenerationSession({ requestId: task.id, prompt: resumablePrompt, options, startedAt });
+    setStage("projects");
     try {
-      const data = await waitForGenerationRequest(task.id, () => {
-        setGenerationStatus("脚本与分镜仍在后台生成，正在自动恢复");
-      });
-      await continueGeneratedProject(data, options, true);
+      const response = await fetch(`/api/projects/generation?requestId=${encodeURIComponent(task.id)}`, { cache: "no-store" });
+      const data = await response.json().catch(() => ({})) as StoryboardGenerationResponse;
+      if (!response.ok || data.status === "failed") throw new Error(data.error || "生成任务没有完成，请重试。");
+      if (data.status === "ready" && data.project) {
+        clearPendingGenerationSession();
+        await openProject(data.project.id);
+        return;
+      }
+      await openProjects();
     } catch (error) {
       const message = requestErrorMessage(error, "生成进度读取失败，请稍后重试。");
       if (/没有完成|没有找到|标识无效|数据不完整/.test(message)) clearPendingGenerationSession();
       await openProjects();
       setErrorMessage(message);
-    } finally {
-      recoveringGenerationRef.current = false;
-      recoveringGenerationRequestIdRef.current = undefined;
-      setIsBusy(false);
     }
   }
 
@@ -7932,6 +7864,8 @@ export function WorkspaceClient({
       const data = await response.json().catch(() => ({})) as { deleted?: boolean; error?: string };
       if (!response.ok || !data.deleted) throw new Error(data.error || "失败任务删除失败。");
       setGenerationTasks((current) => current.filter((item) => item.id !== task.id));
+      const pending = readPendingGenerationSession();
+      if (pending?.requestId === task.id) clearPendingGenerationSession();
       return true;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "失败任务删除失败。");
