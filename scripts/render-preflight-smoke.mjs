@@ -25,6 +25,16 @@ vm.runInNewContext(output, {
           .find((asset) => asset.type === type && asset.url)
       };
     }
+    if (specifier === "@/lib/generation-resume") {
+      return {
+        isDeliverableVisualAsset: (asset) =>
+          ["image", "clip"].includes(asset.type) &&
+          Boolean(asset.url) &&
+          asset.metadata?.source !== "fallback-image" &&
+          asset.metadata?.model !== "local-svg-fallback" &&
+          asset.metadata?.qualityFallback !== true
+      };
+    }
     return {};
   }
 });

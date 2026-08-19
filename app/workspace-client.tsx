@@ -65,6 +65,7 @@ import { maxUploadBytes, replacementAssetTypes, uploadedAssetType } from "@/lib/
 import { referenceDescriptor } from "@/lib/attachment-context";
 import { editPlanVisualSceneNumbers, planPreviewAsset, removeEditPlanPreviewAssets } from "@/lib/edit-plan-preview-assets";
 import { analyzeEditIntent, globalEditTargetSceneNumbers } from "@/lib/edit-intent";
+import { isReadOnlySceneDiagnosticRequest } from "@/lib/scene-diagnostics";
 import { editPlanOperations } from "@/lib/edit-operations";
 import { parsePendingGenerationSession, PENDING_GENERATION_STORAGE_KEY, type PendingGenerationSession } from "@/lib/generation-session";
 import { contentPromptForGeneration } from "@/lib/generation-prompt";
@@ -480,6 +481,7 @@ type StoryboardGenerationResponse = {
   recovered?: boolean;
 };
 type BusyAction =
+  | "diagnosing-scene"
   | "planning-edit"
   | "refining-edit"
   | "applying-edit"
@@ -1910,6 +1912,8 @@ async function waitForGenerationRequest(
 
 function busyActionLabel(action?: BusyAction) {
   switch (action) {
+    case "diagnosing-scene":
+      return "正在检查场景素材状态";
     case "planning-edit":
       return "正在理解要求并生成逐场景修改方案";
     case "refining-edit":
@@ -3983,7 +3987,7 @@ function VisualCandidateComparison({
 }) {
   const { language, text } = useUiCopy();
   const candidates = scene.assets.filter((asset) => asset.type === "thumbnail" && asset.metadata?.candidate === true && asset.url);
-  const currentImage = scene.assets.find((asset) => asset.type === "image" && asset.url);
+  const currentImage = scene.assets.find((asset) => asset.type === "image" && isDeliverableVisualAsset(asset));
   const initialIndex = Math.max(0, candidates.findIndex((asset) => asset.id === initialCandidateId));
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -4107,7 +4111,7 @@ function SceneAssetsPanel({
   const { language, text } = useUiCopy();
   const assets = scene.assets.filter((asset) => ["image", "thumbnail", "clip", "audio"].includes(asset.type));
   const candidateCount = assets.filter((asset) => asset.type === "thumbnail" && asset.metadata?.candidate === true).length;
-  const hasCurrentImage = assets.some((asset) => asset.type === "image" && asset.url);
+  const hasCurrentImage = assets.some((asset) => asset.type === "image" && isDeliverableVisualAsset(asset));
   const [comparisonId, setComparisonId] = useState<string>();
   const [candidateComposerOpen, setCandidateComposerOpen] = useState(false);
   const [candidateInstruction, setCandidateInstruction] = useState("");
@@ -5008,7 +5012,7 @@ function versionSceneSignature(scene?: Scene) {
 
 function VersionSceneSide({ label, scene }: { label: string; scene?: Scene }) {
   const { text } = useUiCopy();
-  const image = scene?.assets.find((asset) => asset.type === "image" && asset.url);
+  const image = scene?.assets.find((asset) => asset.type === "image" && isDeliverableVisualAsset(asset));
   const clip = scene?.assets.find((asset) => asset.type === "clip" && asset.url);
   return (
     <div className="kv-version-scene-side">
@@ -5363,7 +5367,7 @@ function StudioScreen({
             </button>
             <button
               className="kv-video-action"
-              disabled={isBusy || !scene?.assets.some((asset) => asset.type === "image" && asset.url)}
+              disabled={isBusy || !scene?.assets.some((asset) => asset.type === "image" && isDeliverableVisualAsset(asset))}
               onClick={() => onGenerateClip(selectedScene)}
               type="button"
             >
@@ -6424,7 +6428,11 @@ export function WorkspaceClient({
     setChatInput("");
     setCandidateToCompare(undefined);
     setIsBusy(true);
-    setBusyAction(pendingPlan ? "refining-edit" : "planning-edit");
+    setBusyAction(pendingPlan
+      ? "refining-edit"
+      : isReadOnlySceneDiagnosticRequest(request)
+        ? "diagnosing-scene"
+        : "planning-edit");
     setErrorMessage(undefined);
     pushMessage({
       role: "user",
@@ -6468,13 +6476,21 @@ export function WorkspaceClient({
         throw new Error(failure.error || "修改计划生成失败，请重试。");
       }
       const data = await response.json() as {
-        action?: "visual-candidate" | "version-restored";
+        action?: "visual-candidate" | "version-restored" | "scene-diagnostic";
         editPlan?: EditPlan;
         messages: ChatMessage[];
         project?: Project;
         candidate?: SceneAsset;
         candidateIntent?: { sceneNumber: number; instruction: string };
+        sceneNumber?: number;
       };
+      if (data.action === "scene-diagnostic") {
+        if (!Array.isArray(data.messages)) throw new Error("场景检查返回格式异常，请重试。");
+        setPendingPlan(undefined);
+        if (data.sceneNumber) setSelectedScene(data.sceneNumber);
+        setMessages((current) => [...current, ...data.messages.filter((message) => message.role === "assistant")]);
+        return;
+      }
       if (data.action === "version-restored") {
         if (!data.project || !Array.isArray(data.messages)) {
           throw new Error("版本恢复返回格式异常，请重试。");

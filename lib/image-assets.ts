@@ -19,6 +19,8 @@ import { mediaAssetStatus } from "@/lib/generation-resume";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 import { exactVisualStyleDirection } from "@/lib/visual-style-profiles";
+import { billingCatalogItem } from "@/lib/billing/catalog";
+import { recordProviderCostAttempt } from "@/lib/billing/provider-costs";
 
 function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
   if (hasCloudflareAI()) return undefined;
@@ -119,35 +121,7 @@ type SceneComparisonImage = {
   sceneNumber: number;
 };
 
-type RecoverableImageQualityCode = Extract<
-  GeneratedImageQualityError["code"],
-  "style_mismatch" | "semantic_mismatch" | "semantic_check_failed"
->;
-
-type TextFreeImageCandidate = {
-  body: Buffer;
-  metadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"];
-  model: string;
-  prompt: string;
-  seed: number;
-  warningCode: RecoverableImageQualityCode;
-};
-
-const recoverableCandidatePriority: Record<RecoverableImageQualityCode, number> = {
-  style_mismatch: 3,
-  semantic_check_failed: 2,
-  semantic_mismatch: 1
-};
-
-function betterTextFreeCandidate(
-  current: TextFreeImageCandidate | undefined,
-  candidate: TextFreeImageCandidate
-) {
-  if (!current) return candidate;
-  return recoverableCandidatePriority[candidate.warningCode] > recoverableCandidatePriority[current.warningCode]
-    ? candidate
-    : current;
-}
+const MAX_IMAGE_QUALITY_ATTEMPTS = 4;
 
 function expectedSceneSemantics(scene: Scene, project: Project) {
   const lockedStyle = projectLockedVisualStyle(project) ?? scene.style;
@@ -179,7 +153,8 @@ async function inspectGeneratedImage(body: Buffer, scene: Scene, project: Projec
               expected,
               "Return TEXT_PRESENT if there is readable text, a logo, watermark, signature, or clustered fake writing.",
               "Otherwise return STYLE_MISMATCH if the rendering medium conflicts with the LOCKED VISUAL STYLE, such as photography instead of illustration, line art instead of collage, or 3D instead of 2D.",
-              "Otherwise return SEMANTIC_MISMATCH if the central subject, action, and setting are unrelated or unrecognizable, or the image is a palette, pattern sheet, material swatch, decorative geometry, generic background, split-screen montage, contact sheet, storyboard sheet, or style sample.",
+              "Otherwise return SEMANTIC_MISMATCH if the central subject, action, and setting are unrelated or unrecognizable, or the image is a palette, pattern sheet, material swatch, decorative geometry, generic background, split-screen montage, contact sheet, storyboard sheet, style sample, browser window, website screenshot, application interface, dashboard, presentation slide, document, or mostly blank screen.",
+              "A browser or app screenshot is never an acceptable substitute for a concrete film scene, even when the topic mentions software, a website, onboarding, or a welcome page.",
               "Return IMAGE_PASS only when the image is text-free, follows the exact locked rendering medium, and its concrete visible meaning materially matches the scene.",
               "Answer exactly TEXT_PRESENT, STYLE_MISMATCH, SEMANTIC_MISMATCH, or IMAGE_PASS."
             ].join("\n")
@@ -376,16 +351,68 @@ async function generateSceneImage(
   let model = "";
   let seed = baseSeed;
   let qualityMetadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"] | undefined;
-  let fallbackCandidate: TextFreeImageCandidate | undefined;
-  let qualityWarningCode: RecoverableImageQualityCode | undefined;
   let closestScene: { score: number; sceneNumber: number } | undefined;
   let duplicateWasDetected = false;
-  for (let qualityAttempt = 0; qualityAttempt < 3; qualityAttempt += 1) {
+  let providerRequestCount = 0;
+  let validationRequestCount = 0;
+  const costRunId = crypto.randomUUID();
+  const trackedCloudflareImage = async (
+    imagePrompt: string,
+    imageOptions: Parameters<typeof generateCloudflareImage>[2],
+    requestLabel: string
+  ) => {
+    providerRequestCount += 1;
+    let outcome: "succeeded" | "failed" = "failed";
+    let actualModel = billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").model;
+    try {
+      const result = await generateCloudflareImage(imagePrompt, effectiveQuality, imageOptions);
+      actualModel = result.model;
+      outcome = "succeeded";
+      return result;
+    } finally {
+      await recordProviderCostAttempt({
+        projectId: project.id,
+        versionId: project.currentVersion.id,
+        sceneNumber: scene.sceneNumber,
+        provider: "cloudflare",
+        model: actualModel,
+        operation: "image_generation",
+        outcome,
+        costUsd: billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").estimatedProviderUsdPerUnit,
+        idempotencyKey: `${costRunId}:image:${requestLabel}`,
+        metadata: { effectiveQuality, variantKey }
+      });
+    }
+  };
+  const trackedValidation = async <T>(requestLabel: string, operation: () => Promise<T>) => {
+    validationRequestCount += 1;
+    let outcome: "succeeded" | "failed" = "failed";
+    try {
+      const result = await operation();
+      outcome = "succeeded";
+      return result;
+    } finally {
+      const vision = billingCatalogItem("vision_analysis");
+      await recordProviderCostAttempt({
+        projectId: project.id,
+        versionId: project.currentVersion.id,
+        sceneNumber: scene.sceneNumber,
+        provider: vision.provider,
+        model: vision.model,
+        operation: "image_quality_validation",
+        outcome,
+        costUsd: vision.estimatedProviderUsdPerUnit,
+        idempotencyKey: `${costRunId}:validation:${requestLabel}`,
+        metadata: { effectiveQuality, variantKey }
+      });
+    }
+  };
+  for (let qualityAttempt = 0; qualityAttempt < MAX_IMAGE_QUALITY_ATTEMPTS; qualityAttempt += 1) {
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
     const duplicateCorrection = duplicateWasDetected
       ? "COMPOSITION REJECTION: the prior candidate was too similar to another scene. Re-stage this beat from a substantially different camera height, shot size, subject arrangement, foreground silhouette, and background. Do not reuse the same tabletop, centered object group, horizon, pose, or color-block placement."
       : "";
-    const attemptPrompt = qualityAttempt === 2
+    const attemptPrompt = qualityAttempt === MAX_IMAGE_QUALITY_ATTEMPTS - 1
       ? `${buildTextSafeCorrectionPrompt(scene, project)}\n${duplicateCorrection}`
       : enforceTextFreeImagePrompt(qualityAttempt === 0
         ? prompt
@@ -400,35 +427,54 @@ async function generateSceneImage(
       if (hasCloudflareAI()) {
         let generated;
         try {
-          generated = await generateCloudflareImage(attemptPrompt, effectiveQuality, {
+          generated = await trackedCloudflareImage(attemptPrompt, {
             seed,
             references: attemptReferences
-          });
+          }, `${qualityAttempt}:primary`);
         } catch (error) {
           if (!isSafetyFiltered(error)) throw error;
           effectivePrompt = buildBrandSafeImagePrompt(scene, project);
           try {
-            generated = await generateCloudflareImage(effectivePrompt, effectiveQuality, { seed });
+            generated = await trackedCloudflareImage(effectivePrompt, { seed }, `${qualityAttempt}:brand-safe`);
           } catch (fallbackError) {
             if (!isSafetyFiltered(fallbackError)) throw fallbackError;
             effectivePrompt = buildUltraSafeSceneImagePrompt(scene, project);
-            generated = await generateCloudflareImage(effectivePrompt, effectiveQuality, {
+            generated = await trackedCloudflareImage(effectivePrompt, {
               seed: (seed + 7_919) % 2_147_483_647 || 1,
               guidance: 3
-            });
+            }, `${qualityAttempt}:ultra-safe`);
           }
         }
         generatedBody = generated.body;
         generatedModel = generated.model;
       } else {
         const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
-        const result = await client.images.generate({
-          model: imageModel(),
-          prompt: attemptPrompt,
-          size: "1536x1024",
-          quality: "medium",
-          n: 1
-        } as never);
+        providerRequestCount += 1;
+        let openAiOutcome: "succeeded" | "failed" = "failed";
+        let result: Awaited<ReturnType<typeof client.images.generate>>;
+        try {
+          result = await client.images.generate({
+            model: imageModel(),
+            prompt: attemptPrompt,
+            size: "1536x1024",
+            quality: "medium",
+            n: 1
+          } as never);
+          openAiOutcome = "succeeded";
+        } finally {
+          await recordProviderCostAttempt({
+            projectId: project.id,
+            versionId: project.currentVersion.id,
+            sceneNumber: scene.sceneNumber,
+            provider: "openai",
+            model: imageModel(),
+            operation: "image_generation",
+            outcome: openAiOutcome,
+            costUsd: billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").estimatedProviderUsdPerUnit,
+            idempotencyKey: `${costRunId}:image:${qualityAttempt}:openai`,
+            metadata: { effectiveQuality, variantKey, costSource: "catalog_estimate" }
+          });
+        }
         const image = result.data?.[0];
         const base64 = image ? (image as { b64_json?: string }).b64_json : undefined;
         if (!base64) return undefined;
@@ -438,7 +484,9 @@ async function generateSceneImage(
       const normalized = await normalizeGeneratedImage(generatedBody);
       // Text is a hard safety boundary. Semantic/style inspection is kept
       // separate so a conservative quality verdict cannot erase a usable frame.
-      const containsText = await generatedImageContainsAnyText(normalized.body);
+      const containsText = hasCloudflareAI()
+        ? await trackedValidation(`${qualityAttempt}:text`, () => generatedImageContainsAnyText(normalized.body))
+        : await generatedImageContainsAnyText(normalized.body);
       if (containsText) {
         throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。", "text_detected");
       }
@@ -456,18 +504,12 @@ async function generateSceneImage(
 
       let inspection: Awaited<ReturnType<typeof inspectGeneratedImage>>;
       try {
-        inspection = await inspectGeneratedImage(normalized.body, scene, project);
+        inspection = hasCloudflareAI()
+          ? await trackedValidation(`${qualityAttempt}:semantic`, () => inspectGeneratedImage(normalized.body, scene, project))
+          : await inspectGeneratedImage(normalized.body, scene, project);
       } catch (error) {
         if (!(error instanceof GeneratedImageQualityError) || error.code !== "semantic_check_failed") throw error;
-        fallbackCandidate = betterTextFreeCandidate(fallbackCandidate, {
-          body: normalized.body,
-          metadata: normalized.metadata,
-          model: generatedModel,
-          prompt: effectivePrompt,
-          seed,
-          warningCode: error.code
-        });
-        if (qualityAttempt < 2) {
+        if (qualityAttempt < MAX_IMAGE_QUALITY_ATTEMPTS - 1) {
           console.warn(`[image-assets] Scene ${scene.sceneNumber} inspection was unavailable; retrying with a new candidate.`);
           continue;
         }
@@ -480,15 +522,7 @@ async function generateSceneImage(
         const qualityError = inspection === "semantic_mismatch"
           ? new GeneratedImageQualityError("生成画面与当前场景内容不匹配。", "semantic_mismatch")
           : new GeneratedImageQualityError("生成画面偏离项目锁定的视觉风格。", "style_mismatch");
-        fallbackCandidate = betterTextFreeCandidate(fallbackCandidate, {
-          body: normalized.body,
-          metadata: normalized.metadata,
-          model: generatedModel,
-          prompt: effectivePrompt,
-          seed,
-          warningCode: inspection
-        });
-        if (qualityAttempt < 2) {
+        if (qualityAttempt < MAX_IMAGE_QUALITY_ATTEMPTS - 1) {
           console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${qualityError.code}); retrying:`, qualityError.message);
           continue;
         }
@@ -500,20 +534,9 @@ async function generateSceneImage(
       prompt = effectivePrompt;
       break;
     } catch (error) {
-      if (!(error instanceof GeneratedImageQualityError) || qualityAttempt === 2) throw error;
+      if (!(error instanceof GeneratedImageQualityError) || qualityAttempt === MAX_IMAGE_QUALITY_ATTEMPTS - 1) throw error;
       console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${error.code}); retrying:`, error.message);
     }
-  }
-  if (!body && fallbackCandidate) {
-    body = fallbackCandidate.body;
-    qualityMetadata = fallbackCandidate.metadata;
-    model = fallbackCandidate.model;
-    prompt = fallbackCandidate.prompt;
-    seed = fallbackCandidate.seed;
-    qualityWarningCode = fallbackCandidate.warningCode;
-    console.warn(
-      `[image-assets] Scene ${scene.sceneNumber} kept the best text-free candidate after quality retries (${qualityWarningCode}).`
-    );
   }
   if (!body || !qualityMetadata) return undefined;
 
@@ -540,8 +563,13 @@ async function generateSceneImage(
       closestSceneNumber: closestScene?.sceneNumber,
       closestSceneSimilarity: closestScene?.score,
       candidateInstruction: visualInstruction || undefined,
-      qualityWarningCode,
-      qualityFallback: Boolean(qualityWarningCode),
+      qualityGate: "strict-semantic-style-pass",
+      providerRequestCount,
+      validationRequestCount,
+      estimatedActualCostUsd: Number((
+        providerRequestCount * billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").estimatedProviderUsdPerUnit
+        + validationRequestCount * billingCatalogItem("vision_analysis").estimatedProviderUsdPerUnit
+      ).toFixed(6)),
       sceneNumber: scene.sceneNumber
     }
   };

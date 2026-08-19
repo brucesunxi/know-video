@@ -3,6 +3,7 @@ import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset, VideoGenerationTier } from "@/lib/types";
 import { VIDEO_GENERATION_DURATION_SECONDS, VIDEO_GENERATION_TIERS, videoGenerationEstimate } from "@/lib/video-cost-policy";
 import { inspectGeneratedVideo } from "@/lib/video-quality";
+import { isDeliverableVisualAsset } from "@/lib/generation-resume";
 
 function sceneVideoPrompt(scene: Scene, project: Project) {
   return [
@@ -25,7 +26,7 @@ async function generateSceneClip(input: {
   assetBaseUrl: string;
   tier: VideoGenerationTier;
 }) {
-  const image = input.scene.assets.find((asset) => asset.type === "image" && asset.url);
+  const image = input.scene.assets.find((asset) => asset.type === "image" && isDeliverableVisualAsset(asset));
   if (!image) throw new Error("Scene has no reference image for video generation");
   const prompt = sceneVideoPrompt(input.scene, input.project);
   const duration = VIDEO_GENERATION_DURATION_SECONDS;

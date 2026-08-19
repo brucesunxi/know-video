@@ -22,10 +22,19 @@ import { persistGeneratedProject } from "@/lib/project-mutations";
 import { getProjectSnapshot, listProjects } from "@/lib/project-store";
 import { getFromR2, headR2Object, readR2Prefix } from "@/lib/r2";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
-import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
+import {
+  InsufficientCreditsError,
+  billingIdempotencyKey,
+  recordUsageEvent,
+  releaseCreditReservation,
+  reserveAdditionalCredits,
+  reserveCredits
+} from "@/lib/billing/usage";
+import { estimateBilling } from "@/lib/billing/estimate";
 import { hasDatabaseUrl } from "@/lib/db";
 import { NARRATION_VOICE_IDS } from "@/lib/types";
 import { contentPromptForGeneration } from "@/lib/generation-prompt";
+import { sceneRequiresPremiumImage } from "@/lib/image-continuity";
 
 const referenceAssetSchema = z.object({
   key: z.string().min(1).max(800),
@@ -120,6 +129,34 @@ function publicGenerationError(error: unknown) {
 
 type ProjectGenerationInput = z.infer<typeof requestSchema>;
 
+function projectReservationKey(requestId: string) {
+  return `project-generation:${requestId}`;
+}
+
+function plannedSceneCount(body: ProjectGenerationInput) {
+  if (body.options?.sceneCount && body.options.sceneCount !== "auto") return Number(body.options.sceneCount);
+  const duration = Number(body.options?.duration ?? 30);
+  if (duration <= 15) return 3;
+  if (duration <= 45) return 5;
+  return 6;
+}
+
+function projectEstimateItems(body: ProjectGenerationInput) {
+  const duration = Number(body.options?.duration ?? 30);
+  const sceneCount = plannedSceneCount(body);
+  const imageReferences = body.referenceAssets.filter((asset) => asset.contentType.startsWith("image/")).length;
+  const audioReferences = body.referenceAssets.filter((asset) => asset.contentType.startsWith("audio/") && asset.size <= 15_000_000).length;
+  const visionQuantity = Math.min(3, imageReferences) + Math.min(2, audioReferences);
+  return [
+    { resourceType: "storyboard_plan" as const, quantity: 1 },
+    ...(visionQuantity > 0 ? [{ resourceType: "vision_analysis" as const, quantity: visionQuantity }] : []),
+    { resourceType: "image_standard" as const, quantity: sceneCount },
+    // Background narration settles scene by scene, where each segment has a
+    // five-credit minimum. Reserve the larger of target duration or per-scene minimums.
+    { resourceType: "speech" as const, quantity: Math.max(Math.ceil(duration * 1.2), sceneCount * 5) }
+  ];
+}
+
 function uploadedReferenceKeys(body: ProjectGenerationInput) {
   if (!body.requestId) return [];
   return body.referenceAssets
@@ -191,10 +228,49 @@ async function generateAndPersistProject(body: ProjectGenerationInput, userId: s
       engine,
       userId
     });
+    if (requestId) {
+      const initiallyReserved = estimateBilling(projectEstimateItems(body)).maximumCredits;
+      const actualSpeechCredits = persisted.project.currentVersion.scenes.reduce(
+        (sum, scene) => sum + Math.max(5, Math.ceil(scene.durationSeconds)),
+        0
+      );
+      const actualBaseCredits = estimateBilling([
+        { resourceType: "storyboard_plan", quantity: 1 },
+        ...(Object.keys(analyses).length > 0
+          ? [{ resourceType: "vision_analysis" as const, quantity: Object.keys(analyses).length }]
+          : []),
+        { resourceType: "image_standard", quantity: persisted.project.currentVersion.scenes.length }
+      ]).maximumCredits + actualSpeechCredits;
+      if (actualBaseCredits > initiallyReserved) {
+        await reserveAdditionalCredits({
+          userId,
+          reservationKey: projectReservationKey(requestId),
+          adjustmentKey: `${requestId}:actual-storyboard-shape`,
+          credits: actualBaseCredits - initiallyReserved,
+          metadata: {
+            actualSceneCount: persisted.project.currentVersion.scenes.length,
+            actualSpeechCredits
+          }
+        });
+      }
+      const standardImage = estimateBilling([{ resourceType: "image_standard", quantity: 1 }]);
+      const premiumImage = estimateBilling([{ resourceType: "image_premium", quantity: 1 }]);
+      for (const scene of persisted.project.currentVersion.scenes.filter(sceneRequiresPremiumImage)) {
+        await reserveAdditionalCredits({
+          userId,
+          reservationKey: projectReservationKey(requestId),
+          adjustmentKey: `${requestId}:scene:${scene.sceneNumber}:premium-upgrade`,
+          credits: premiumImage.maximumCredits - standardImage.maximumCredits,
+          estimatedCostUsd: premiumImage.estimatedProviderCostUsd - standardImage.estimatedProviderCostUsd,
+          metadata: { sceneNumber: scene.sceneNumber, automaticPremiumUpgrade: true }
+        });
+      }
+    }
     await recordUsageEvent({
       userId,
       projectId: persisted.project.id,
       versionId: persisted.project.currentVersion.id,
+      reservationKey: requestId ? projectReservationKey(requestId) : undefined,
       resourceType: "storyboard_plan",
       quantity: 1,
       idempotencyKey: requestId
@@ -212,6 +288,7 @@ async function generateAndPersistProject(body: ProjectGenerationInput, userId: s
         userId,
         projectId: persisted.project.id,
         versionId: persisted.project.currentVersion.id,
+        reservationKey: requestId ? projectReservationKey(requestId) : undefined,
         resourceType: "vision_analysis",
         quantity: Object.keys(analyses).length,
         idempotencyKey: requestId
@@ -234,16 +311,22 @@ async function generateAndPersistProject(body: ProjectGenerationInput, userId: s
           versionId: persisted.project.currentVersion.id,
           sceneNumber: firstSceneNumber,
           engine,
+          billingReservationKey: projectReservationKey(requestId),
           options: body.options
         });
       } else {
         await completeGenerationRequest({ id: requestId, projectId: persisted.project.id, engine });
+        await releaseCreditReservation({
+          userId,
+          reservationKey: projectReservationKey(requestId),
+          reason: "project_completed_without_scenes"
+        });
       }
     }
     return { ...persisted, engine: publicEngine(engine) };
 }
 
-async function failBackgroundGeneration(body: ProjectGenerationInput, error: unknown) {
+async function failBackgroundGeneration(body: ProjectGenerationInput, error: unknown, userId?: string) {
   const keys = uploadedReferenceKeys(body);
   if (keys.length > 0) {
     await deleteUnreferencedStorageObjects(keys).catch((cleanupError) => {
@@ -252,6 +335,14 @@ async function failBackgroundGeneration(body: ProjectGenerationInput, error: unk
   }
   if (body.requestId) {
     await failGenerationRequest(body.requestId, publicGenerationError(error)).catch(() => undefined);
+    if (userId) {
+      await releaseCreditReservation({
+        userId,
+        reservationKey: projectReservationKey(body.requestId),
+        reason: "project_generation_failed",
+        metadata: { error: publicGenerationError(error) }
+      }).catch(() => undefined);
+    }
   }
   console.error("[projects] Unable to create video project:", error);
 }
@@ -260,14 +351,16 @@ async function runBackgroundGeneration(body: ProjectGenerationInput, userId: str
   try {
     await generateAndPersistProject(body, userId);
   } catch (error) {
-    await failBackgroundGeneration(body, error);
+    await failBackgroundGeneration(body, error, userId);
   }
 }
 
 export async function POST(request: Request) {
   let body: ProjectGenerationInput | undefined;
+  let billingUserId: string | undefined;
   try {
     const user = await requireCurrentUser();
+    billingUserId = user.id;
     body = requestSchema.parse(await request.json());
     body = { ...body, prompt: contentPromptForGeneration(body.prompt) };
     if (body.prompt.length < 4) {
@@ -302,8 +395,19 @@ export async function POST(request: Request) {
         });
       }
       if (hasDatabaseUrl()) {
+        const reservation = await reserveCredits({
+          userId: user.id,
+          reservationKey: projectReservationKey(requestId),
+          items: projectEstimateItems(body),
+          metadata: {
+            requestId,
+            plannedSceneCount: plannedSceneCount(body),
+            targetDurationSeconds: Number(body.options?.duration ?? 30)
+          },
+          expiresInMinutes: 180
+        });
         after(() => runBackgroundGeneration(body!, user.id));
-        return NextResponse.json({ status: "pending", requestId }, { status: 202 });
+        return NextResponse.json({ status: "pending", requestId, billingEstimate: reservation.estimate }, { status: 202 });
       }
     }
     return NextResponse.json(await generateAndPersistProject(body, user.id));
@@ -315,7 +419,16 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (body) await failBackgroundGeneration(body, error);
+    if (error instanceof InsufficientCreditsError) {
+      if (body) await failBackgroundGeneration(body, error, billingUserId);
+      return NextResponse.json({
+        error: error.message,
+        code: "INSUFFICIENT_CREDITS",
+        availableCredits: error.availableCredits,
+        requiredCredits: error.requiredCredits
+      }, { status: 402 });
+    }
+    if (body) await failBackgroundGeneration(body, error, billingUserId);
     return NextResponse.json(
       { error: publicGenerationError(error) },
       { status: 502 }

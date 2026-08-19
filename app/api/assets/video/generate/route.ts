@@ -6,6 +6,7 @@ import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/pr
 import { generateProjectSceneClips } from "@/lib/video-assets";
 import { videoGenerationEstimate } from "@/lib/video-cost-policy";
 import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
+import { InsufficientCreditsError, releaseCreditReservation, reserveCredits } from "@/lib/billing/usage";
 
 const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
@@ -58,7 +59,25 @@ export async function POST(request: Request) {
       error: `请先为场景 ${scenesWithoutImages.join("、")} 生成关键帧，再生成动态镜头。`
     }, { status: 409 });
   }
+  const videoResourceType = body.tier === "economy" ? "video_economy_3s" : "video_balanced_3s";
+  const billingOperationId = body.billingRequestId
+    ?? billingIdempotencyKey(videoResourceType, [body.projectId, body.versionId, "generate", ...body.sceneNumbers]);
+  const reservationKey = `asset-video:${billingOperationId}`;
+  try {
+    await reserveCredits({
+      userId: user.id,
+      reservationKey,
+      items: [{ resourceType: videoResourceType, quantity: body.sceneNumbers.length }],
+      metadata: { projectId: body.projectId, versionId: body.versionId, tier: body.tier, sceneNumbers: body.sceneNumbers }
+    });
+  } catch (error) {
+    if (error instanceof InsufficientCreditsError) {
+      return NextResponse.json({ error: error.message, code: "INSUFFICIENT_CREDITS", availableCredits: error.availableCredits, requiredCredits: error.requiredCredits }, { status: 402 });
+    }
+    throw error;
+  }
 
+  try {
   const previousClipKeys = new Map(targetScenes.map((scene) => [
     scene.sceneNumber,
     scene.assets.find((asset) => asset.type === "clip" && asset.url)?.r2Key
@@ -81,29 +100,40 @@ export async function POST(request: Request) {
     body.sceneNumbers,
     failed.map((scene) => scene.sceneNumber)
   );
-  const videoResourceType = body.tier === "economy" ? "video_economy_3s" : "video_balanced_3s";
   const completedClipKeys = result.project.currentVersion.scenes
     .filter((scene) => progress.completedSceneNumbers.includes(scene.sceneNumber))
     .map((scene) => scene.assets.find((asset) => asset.type === "clip" && asset.url)?.r2Key)
     .filter((key): key is string => Boolean(key));
-  await recordUsageEvent({
+  for (const sceneNumber of progress.completedSceneNumbers) {
+    const assetKey = result.project.currentVersion.scenes
+      .find((scene) => scene.sceneNumber === sceneNumber)
+      ?.assets.find((asset) => asset.type === "clip" && asset.url)?.r2Key;
+    await recordUsageEvent({
+      userId: user.id,
+      projectId: body.projectId,
+      versionId: body.versionId,
+      reservationKey,
+      resourceType: videoResourceType,
+      quantity: 1,
+      idempotencyKey: body.billingRequestId
+        ? `${videoResourceType}:${body.billingRequestId}:scene:${sceneNumber}`
+        : billingIdempotencyKey(videoResourceType, [body.projectId, body.versionId, sceneNumber, assetKey]),
+      status: "settled",
+      actualCostUsd: estimate.estimatedUsd,
+      metadata: {
+        tier: body.tier,
+        sceneNumber,
+        requestedSceneNumbers: body.sceneNumbers,
+        failedSceneNumbers: progress.failedSceneNumbers,
+        assetKey
+      }
+    });
+  }
+  await releaseCreditReservation({
     userId: user.id,
-    projectId: body.projectId,
-    versionId: body.versionId,
-    resourceType: videoResourceType,
-    quantity: Math.max(1, progress.completedSceneNumbers.length || body.sceneNumbers.length),
-    idempotencyKey: body.billingRequestId
-      ? `${videoResourceType}:${body.billingRequestId}`
-      : billingIdempotencyKey(videoResourceType, [body.projectId, body.versionId, progress.completedSceneNumbers.length ? "settled" : "released", ...body.sceneNumbers, ...completedClipKeys]),
-    status: progress.completedSceneNumbers.length > 0 ? "settled" : "released",
-    actualCostUsd: progress.completedSceneNumbers.length > 0 ? estimate.estimatedUsd * progress.completedSceneNumbers.length : undefined,
-    metadata: {
-      tier: body.tier,
-      requestedSceneNumbers: body.sceneNumbers,
-      completedSceneNumbers: progress.completedSceneNumbers,
-      failedSceneNumbers: progress.failedSceneNumbers,
-      assetKeys: completedClipKeys
-    }
+    reservationKey,
+    reason: failed.length > 0 ? "video_batch_partially_finished" : "video_batch_finished",
+    metadata: { completedSceneNumbers: progress.completedSceneNumbers, failedSceneNumbers: progress.failedSceneNumbers }
   });
   if (failed.length > 0) {
     const errorCode = videoFailureCode(result.failures);
@@ -121,4 +151,13 @@ export async function POST(request: Request) {
     }, { status: 502 });
   }
   return NextResponse.json({ project: result.project, costEstimate: estimate, ...progress });
+  } catch (error) {
+    await releaseCreditReservation({
+      userId: user.id,
+      reservationKey,
+      reason: "video_generation_exception",
+      metadata: { tier: body.tier, sceneNumbers: body.sceneNumbers }
+    }).catch(() => undefined);
+    throw error;
+  }
 }

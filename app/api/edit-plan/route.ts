@@ -11,12 +11,18 @@ import {
   loadProposedEditPlan,
   persistCandidateEditConversation,
   persistEditPlan,
+  persistReadOnlyConversation,
   restoreProjectVersion
 } from "@/lib/project-mutations";
 import { referenceAssetInputSchema, validateAndAnalyzeReferenceAssets, validateReferenceRelationships } from "@/lib/reference-asset-processing";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import type { ChatMessage, ProjectVersion } from "@/lib/types";
 import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
+import {
+  diagnosticScene,
+  isReadOnlySceneDiagnosticRequest,
+  sceneDiagnosticMessage
+} from "@/lib/scene-diagnostics";
 
 const requestSchema = z.object({
   request: z.string().trim().min(1).max(4000),
@@ -73,6 +79,30 @@ export async function POST(request: Request) {
       { error: "视频版本已经发生变化，请刷新后重新生成修改方案。" },
       { status: 409 }
     );
+  }
+  if (
+    currentProject &&
+    body.projectId &&
+    body.versionId &&
+    !body.editPlanId &&
+    body.referenceAssets.length === 0 &&
+    isReadOnlySceneDiagnosticRequest(body.request)
+  ) {
+    const scene = diagnosticScene(body.request, currentProject.currentVersion, body.selectedSceneNumber);
+    const response = scene
+      ? sceneDiagnosticMessage(scene, body.request)
+      : "没有找到你要检查的场景，请提供当前分镜板中的场景编号。";
+    const messages = await persistReadOnlyConversation({
+      projectId: body.projectId,
+      versionId: body.versionId,
+      request: body.request,
+      response
+    });
+    return NextResponse.json({
+      action: "scene-diagnostic",
+      sceneNumber: scene?.sceneNumber,
+      messages
+    });
   }
   const existingPlan = body.editPlanId && body.projectId && body.versionId
     ? await loadProposedEditPlan({

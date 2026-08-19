@@ -2,6 +2,7 @@ import { getSql, hasDatabaseUrl } from "@/lib/db";
 
 export type CreditAccount = {
   availableCredits: number;
+  reservedCredits: number;
   lifetimePurchased: number;
   lifetimeConsumed: number;
 };
@@ -53,6 +54,25 @@ export async function ensureCreditAccountSchema() {
           updated_at timestamptz not null default now()
         )
       `;
+      await sql`
+        create table if not exists credit_reservations (
+          id uuid primary key default uuid_generate_v4(),
+          user_id uuid not null references users(id) on delete cascade,
+          reservation_key text not null unique,
+          status text not null default 'reserved'
+            check (status in ('reserved', 'partially_settled', 'settled', 'released')),
+          reserved_credits bigint not null check (reserved_credits >= 0),
+          settled_credits bigint not null default 0 check (settled_credits >= 0),
+          released_credits bigint not null default 0 check (released_credits >= 0),
+          estimated_cost_microusd bigint not null default 0 check (estimated_cost_microusd >= 0),
+          estimate_json jsonb not null default '{}',
+          metadata_json jsonb not null default '{}',
+          expires_at timestamptz not null default (now() + interval '2 hours'),
+          created_at timestamptz not null default now(),
+          updated_at timestamptz not null default now(),
+          check (settled_credits + released_credits <= reserved_credits)
+        )
+      `;
       await sql`alter table credit_purchases add column if not exists payment_provider text`;
       await sql`alter table credit_purchases add column if not exists provider_checkout_id text`;
       await sql`alter table credit_purchases add column if not exists provider_payment_id text`;
@@ -72,6 +92,7 @@ export async function ensureCreditAccountSchema() {
       `;
       await sql`create index if not exists credit_purchases_user_created_idx on credit_purchases(user_id, created_at desc)`;
       await sql`create index if not exists credit_ledger_user_created_idx on credit_ledger(user_id, created_at desc)`;
+      await sql`create index if not exists credit_reservations_user_status_idx on credit_reservations(user_id, status, updated_at desc)`;
     })().catch((error) => {
       accountSchemaPromise = undefined;
       throw error;
@@ -81,16 +102,52 @@ export async function ensureCreditAccountSchema() {
 }
 
 export async function getCreditAccount(userId: string): Promise<CreditAccount> {
-  if (!hasDatabaseUrl()) return { availableCredits: 0, lifetimePurchased: 0, lifetimeConsumed: 0 };
+  if (!hasDatabaseUrl()) return { availableCredits: 0, reservedCredits: 0, lifetimePurchased: 0, lifetimeConsumed: 0 };
   await ensureCreditAccountSchema();
-  const rows = await getSql()`
+  const sql = getSql();
+  await sql`
     insert into credit_accounts (user_id)
     values (${userId})
     on conflict (user_id) do update set updated_at = credit_accounts.updated_at
-    returning available_credits, lifetime_purchased, lifetime_consumed
-  ` as Array<{ available_credits: string | number; lifetime_purchased: string | number; lifetime_consumed: string | number }>;
+  `;
+  await sql`
+    with expired as (
+      update credit_reservations reservation
+      set released_credits = reservation.reserved_credits - reservation.settled_credits,
+        status = case when reservation.settled_credits > 0 then 'settled' else 'released' end,
+        metadata_json = reservation.metadata_json || jsonb_build_object('releaseReason', 'reservation_expired'),
+        updated_at = now()
+      where reservation.user_id = ${userId}
+        and reservation.status in ('reserved', 'partially_settled')
+        and reservation.expires_at <= now()
+      returning reservation.user_id, reservation.reservation_key, reservation.released_credits
+    ), credited as (
+      update credit_accounts account
+      set available_credits = account.available_credits + totals.released_credits,
+        reserved_credits = account.reserved_credits - totals.released_credits,
+        updated_at = now()
+      from (
+        select user_id, sum(released_credits)::bigint as released_credits
+        from expired group by user_id
+      ) totals
+      where account.user_id = totals.user_id
+      returning account.available_credits
+    )
+    insert into credit_ledger (user_id, event_type, credits_delta, balance_after, source_id, metadata_json)
+    select expired.user_id, 'release', expired.released_credits,
+      (select available_credits from credited), 'release:' || expired.reservation_key,
+      jsonb_build_object('reason', 'reservation_expired')
+    from expired
+    on conflict (source_id) do nothing
+  `;
+  const rows = await sql`
+    select available_credits, reserved_credits, lifetime_purchased, lifetime_consumed
+    from credit_accounts
+    where user_id = ${userId}
+  ` as Array<{ available_credits: string | number; reserved_credits: string | number; lifetime_purchased: string | number; lifetime_consumed: string | number }>;
   return {
     availableCredits: Number(rows[0].available_credits),
+    reservedCredits: Number(rows[0].reserved_credits),
     lifetimePurchased: Number(rows[0].lifetime_purchased),
     lifetimeConsumed: Number(rows[0].lifetime_consumed)
   };

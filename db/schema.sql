@@ -225,6 +225,27 @@ create table if not exists credit_accounts (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists credit_reservations (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references users(id) on delete cascade,
+  reservation_key text not null unique,
+  status text not null default 'reserved'
+    check (status in ('reserved', 'partially_settled', 'settled', 'released')),
+  reserved_credits bigint not null check (reserved_credits >= 0),
+  settled_credits bigint not null default 0 check (settled_credits >= 0),
+  released_credits bigint not null default 0 check (released_credits >= 0),
+  estimated_cost_microusd bigint not null default 0 check (estimated_cost_microusd >= 0),
+  estimate_json jsonb not null default '{}',
+  metadata_json jsonb not null default '{}',
+  expires_at timestamptz not null default (now() + interval '2 hours'),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (settled_credits + released_credits <= reserved_credits)
+);
+
+alter table usage_events
+  add column if not exists reservation_id uuid references credit_reservations(id) on delete set null;
+
 create table if not exists credit_purchases (
   id uuid primary key,
   user_id uuid not null references users(id) on delete cascade,
@@ -260,3 +281,24 @@ create unique index if not exists credit_purchases_payment_idx
   where provider_payment_id is not null;
 create index if not exists credit_ledger_user_created_idx
   on credit_ledger(user_id, created_at desc);
+create index if not exists credit_reservations_user_status_idx
+  on credit_reservations(user_id, status, updated_at desc);
+
+create table if not exists provider_cost_events (
+  id uuid primary key default uuid_generate_v4(),
+  project_id uuid references projects(id) on delete set null,
+  version_id uuid references project_versions(id) on delete set null,
+  scene_number integer,
+  provider text not null,
+  model text not null,
+  operation text not null,
+  outcome text not null check (outcome in ('succeeded', 'failed')),
+  cost_microusd bigint not null check (cost_microusd >= 0),
+  cost_source text not null default 'catalog_estimate',
+  idempotency_key text not null unique,
+  metadata_json jsonb not null default '{}',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists provider_cost_events_project_created_idx
+  on provider_cost_events(project_id, created_at desc);

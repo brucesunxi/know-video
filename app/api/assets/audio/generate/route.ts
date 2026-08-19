@@ -7,6 +7,8 @@ import { loadCurrentProjectForEdit, persistGeneratedSceneAssets } from "@/lib/pr
 import type { Scene } from "@/lib/types";
 import { isNarrationVoice } from "@/lib/voice-profiles";
 import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
+import { InsufficientCreditsError, releaseCreditReservation, reserveAdditionalCredits, reserveCredits } from "@/lib/billing/usage";
+import { estimateBilling } from "@/lib/billing/estimate";
 
 const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
@@ -61,6 +63,28 @@ export async function POST(request: Request) {
   const requestedSceneNumbers = body.sceneNumbers?.length
     ? body.sceneNumbers
     : project.currentVersion.scenes.map((scene) => scene.sceneNumber);
+  const estimatedAudioSeconds = Math.max(1, requestedSceneNumbers.reduce((sum, sceneNumber) => {
+    const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === sceneNumber);
+    return sum + Math.max(5, Math.ceil((scene?.durationSeconds ?? 0) * 1.2));
+  }, 0));
+  const billingOperationId = body.billingRequestId
+    ?? billingIdempotencyKey("speech", [body.projectId, body.versionId, "generate", ...requestedSceneNumbers]);
+  const reservationKey = `asset-audio:${billingOperationId}`;
+  const initialEstimate = estimateBilling([{ resourceType: "speech", quantity: estimatedAudioSeconds }]);
+  try {
+    await reserveCredits({
+      userId: user.id,
+      reservationKey,
+      items: [{ resourceType: "speech", quantity: estimatedAudioSeconds }],
+      metadata: { projectId: body.projectId, versionId: body.versionId, requestedSceneNumbers }
+    });
+  } catch (error) {
+    if (error instanceof InsufficientCreditsError) {
+      return NextResponse.json({ error: error.message, code: "INSUFFICIENT_CREDITS", availableCredits: error.availableCredits, requiredCredits: error.requiredCredits }, { status: 402 });
+    }
+    throw error;
+  }
+  try {
   let updated = await generateProjectVoices(project, body.sceneNumbers, body.narrationVoice);
   let failed = audioFailedScenes(updated.currentVersion.scenes, requestedSceneNumbers, previousAudioKeys);
 
@@ -84,48 +108,63 @@ export async function POST(request: Request) {
   );
   console.info(`[audio-assets] Voice generation completed ${progress.completedSceneNumbers.length}/${progress.requestedSceneNumbers.length}; failed scenes: ${progress.failedSceneNumbers.join(",") || "none"}.`);
   const completedScenes = updated.currentVersion.scenes.filter((scene) => progress.completedSceneNumbers.includes(scene.sceneNumber));
-  const completedAudio = completedScenes
-    .map((scene) => scene.assets.find((asset) => asset.type === "audio" && asset.url))
-    .filter((asset) => Boolean(asset));
-  const completedAudioKeys = completedAudio.map((asset) => asset?.r2Key).filter((key): key is string => Boolean(key));
   const completedAudioSeconds = completedScenes.reduce((sum, scene) => {
     const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
     const duration = Number(audio?.metadata?.actualDurationSeconds ?? scene.durationSeconds);
     return sum + (Number.isFinite(duration) && duration > 0 ? duration : scene.durationSeconds);
   }, 0);
   if (completedAudioSeconds > 0) {
-    await recordUsageEvent({
-      userId: user.id,
-      projectId: body.projectId,
-      versionId: body.versionId,
-      resourceType: "speech",
-      quantity: completedAudioSeconds,
-      idempotencyKey: body.billingRequestId
-        ? `speech:${body.billingRequestId}`
-        : billingIdempotencyKey("speech", [body.projectId, body.versionId, ...completedAudioKeys]),
-      status: "settled",
-      metadata: {
-        requestedSceneNumbers,
-        completedSceneNumbers: progress.completedSceneNumbers,
-        failedSceneNumbers: progress.failedSceneNumbers,
-        narrationVoice: body.narrationVoice,
-        assetKeys: completedAudioKeys
-      }
+    const completedSceneUsage = completedScenes.map((scene) => {
+      const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
+      const duration = Number(audio?.metadata?.actualDurationSeconds ?? scene.durationSeconds);
+      return {
+        scene,
+        audio,
+        duration: Number.isFinite(duration) && duration > 0 ? duration : scene.durationSeconds
+      };
     });
+    const actualCredits = completedSceneUsage.reduce(
+      (sum, usage) => sum + estimateBilling([{ resourceType: "speech", quantity: usage.duration }]).maximumCredits,
+      0
+    );
+    const actualEstimate = estimateBilling([{ resourceType: "speech", quantity: Math.max(1, actualCredits) }]);
+    if (actualEstimate.maximumCredits > initialEstimate.maximumCredits) {
+      await reserveAdditionalCredits({
+        userId: user.id,
+        reservationKey,
+        adjustmentKey: `${billingOperationId}:actual-duration`,
+        credits: actualEstimate.maximumCredits - initialEstimate.maximumCredits,
+        estimatedCostUsd: Math.max(0, actualEstimate.estimatedProviderCostUsd - initialEstimate.estimatedProviderCostUsd),
+        metadata: { completedAudioSeconds }
+      });
+    }
+    for (const usage of completedSceneUsage) {
+      await recordUsageEvent({
+        userId: user.id,
+        projectId: body.projectId,
+        versionId: body.versionId,
+        reservationKey,
+        resourceType: "speech",
+        quantity: usage.duration,
+        idempotencyKey: body.billingRequestId
+          ? `speech:${body.billingRequestId}:scene:${usage.scene.sceneNumber}`
+          : billingIdempotencyKey("speech", [body.projectId, body.versionId, usage.scene.sceneNumber, usage.audio?.r2Key]),
+        status: "settled",
+        metadata: {
+          sceneNumber: usage.scene.sceneNumber,
+          requestedSceneNumbers,
+          failedSceneNumbers: progress.failedSceneNumbers,
+          narrationVoice: body.narrationVoice,
+          assetKey: usage.audio?.r2Key
+        }
+      });
+    }
+    await releaseCreditReservation({ userId: user.id, reservationKey, reason: "audio_batch_finished" });
   } else {
-    await recordUsageEvent({
+    await releaseCreditReservation({
       userId: user.id,
-      projectId: body.projectId,
-      versionId: body.versionId,
-      resourceType: "speech",
-      quantity: Math.max(1, requestedSceneNumbers.reduce((sum, sceneNumber) => {
-        const scene = project.currentVersion.scenes.find((item) => item.sceneNumber === sceneNumber);
-        return sum + (scene?.durationSeconds ?? 0);
-      }, 0)),
-      idempotencyKey: body.billingRequestId
-        ? `speech:${body.billingRequestId}`
-        : billingIdempotencyKey("speech", [body.projectId, body.versionId, "released", ...requestedSceneNumbers]),
-      status: "released",
+      reservationKey,
+      reason: "audio_generation_failed",
       metadata: { requestedSceneNumbers, failedSceneNumbers: progress.failedSceneNumbers, narrationVoice: body.narrationVoice }
     });
   }
@@ -146,4 +185,13 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ project: updated, ...progress });
+  } catch (error) {
+    await releaseCreditReservation({
+      userId: user.id,
+      reservationKey,
+      reason: "audio_generation_exception",
+      metadata: { requestedSceneNumbers, narrationVoice: body.narrationVoice }
+    }).catch(() => undefined);
+    throw error;
+  }
 }

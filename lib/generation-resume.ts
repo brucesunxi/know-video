@@ -4,7 +4,8 @@ export function isDeliverableVisualAsset(asset: SceneAsset) {
   if (!["image", "clip"].includes(asset.type) || !asset.url) return false;
   const source = String(asset.metadata?.source ?? "").toLowerCase();
   const model = String(asset.metadata?.model ?? "").toLowerCase();
-  return source !== "fallback-image" && model !== "local-svg-fallback";
+  const legacyQualityFallback = asset.metadata?.qualityFallback === true;
+  return source !== "fallback-image" && model !== "local-svg-fallback" && !legacyQualityFallback;
 }
 
 export function sceneHasVisualAsset(scene: Scene) {

@@ -647,6 +647,60 @@ export async function persistAssistantMessage(params: {
   };
 }
 
+export async function persistReadOnlyConversation(params: {
+  projectId: string;
+  versionId: string;
+  request: string;
+  response: string;
+}): Promise<ChatMessage[]> {
+  const userMessage: ChatMessage = {
+    id: crypto.randomUUID(),
+    role: "user",
+    type: "text",
+    content: params.request,
+    versionId: params.versionId
+  };
+  const assistantMessage: ChatMessage = {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    type: "text",
+    content: params.response,
+    versionId: params.versionId
+  };
+  if (!canPersist()) {
+    const current = getEphemeralProject(params.projectId, params.versionId);
+    if (current) saveEphemeralProject(current.project, {
+      messages: [...current.messages, userMessage, assistantMessage],
+      pendingPlan: current.pendingPlan
+    });
+    return [userMessage, assistantMessage];
+  }
+
+  const sql = getSql();
+  const results = await sql.transaction([
+    sql`
+      insert into chat_messages (id, project_id, version_id, role, message_type, content)
+      select ${userMessage.id}, ${params.projectId}, ${params.versionId}, 'user', 'text', ${params.request}
+      from projects
+      where id = ${params.projectId} and current_version_id = ${params.versionId}
+      returning id
+    `,
+    sql`
+      insert into chat_messages (id, project_id, version_id, role, message_type, content, metadata_json)
+      select
+        ${assistantMessage.id}, ${params.projectId}, ${params.versionId}, 'assistant', 'text', ${params.response},
+        ${JSON.stringify({ readOnlyDiagnostic: true })}
+      from projects
+      where id = ${params.projectId} and current_version_id = ${params.versionId}
+      returning id
+    `
+  ]);
+  if (!(results[0] as IdRow[])[0] || !(results[1] as IdRow[])[0]) {
+    throw new Error("视频版本已经发生变化，场景检查结果未能保存。");
+  }
+  return [userMessage, assistantMessage];
+}
+
 export async function persistCandidateEditConversation(params: {
   projectId: string;
   versionId: string;

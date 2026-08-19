@@ -1,5 +1,10 @@
 import { generateProjectVoices } from "@/lib/audio-assets";
-import { recordUsageEvent } from "@/lib/billing/usage";
+import {
+  recordUsageEvent,
+  releaseCreditReservation,
+  reserveAdditionalCredits
+} from "@/lib/billing/usage";
+import { estimateBilling } from "@/lib/billing/estimate";
 import {
   completeGenerationRequest,
   failGenerationRequest,
@@ -10,11 +15,13 @@ import { enqueueProjectMediaScene, type ProjectMediaMessage } from "@/lib/media-
 import { loadProjectForRender, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import { generateProjectStockClips, hasFreeStockVideoProvider } from "@/lib/stock-video-assets";
 import type { Project, SceneAsset } from "@/lib/types";
+import { sceneRequiresPremiumImage } from "@/lib/image-continuity";
+import { isDeliverableVisualAsset, sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
 
 function sceneAsset(project: Project, sceneNumber: number, type: SceneAsset["type"]) {
   return project.currentVersion.scenes
     .find((scene) => scene.sceneNumber === sceneNumber)
-    ?.assets.find((asset) => asset.type === type && asset.url);
+    ?.assets.find((asset) => asset.type === type && asset.url && (type !== "image" || isDeliverableVisualAsset(asset)));
 }
 
 async function requireCurrentProject(message: ProjectMediaMessage) {
@@ -25,10 +32,25 @@ async function requireCurrentProject(message: ProjectMediaMessage) {
 
 async function ensureSceneImage(message: ProjectMediaMessage, project: Project) {
   if (sceneAsset(project, message.sceneNumber, "image")) return project;
+  const targetScene = project.currentVersion.scenes.find((scene) => scene.sceneNumber === message.sceneNumber);
+  const quality = targetScene && sceneRequiresPremiumImage(targetScene) ? "premium" : "standard";
+  const resourceType = quality === "premium" ? "image_premium" : "image_standard";
+  if (quality === "premium" && message.billingReservationKey) {
+    const standardCredits = estimateBilling([{ resourceType: "image_standard", quantity: 1 }]).maximumCredits;
+    const premium = estimateBilling([{ resourceType: "image_premium", quantity: 1 }]);
+    await reserveAdditionalCredits({
+      userId: message.userId,
+      reservationKey: message.billingReservationKey,
+      adjustmentKey: `${message.requestId}:scene:${message.sceneNumber}:premium-upgrade`,
+      credits: premium.maximumCredits - standardCredits,
+      estimatedCostUsd: Math.max(0, premium.estimatedProviderCostUsd - estimateBilling([{ resourceType: "image_standard", quantity: 1 }]).estimatedProviderCostUsd),
+      metadata: { sceneNumber: message.sceneNumber, automaticPremiumUpgrade: true }
+    });
+  }
   const updated = await generateProjectSceneImages(project, {
     replaceExistingImages: true,
     sceneNumbers: [message.sceneNumber],
-    quality: "standard"
+    quality
   });
   const generated = sceneAsset(updated, message.sceneNumber, "image");
   if (!generated) throw new Error(`Scene ${message.sceneNumber} visual generation did not produce a usable image.`);
@@ -40,11 +62,25 @@ async function ensureSceneImage(message: ProjectMediaMessage, project: Project) 
     userId: message.userId,
     projectId: message.projectId,
     versionId: message.versionId,
-    resourceType: "image_standard",
+    reservationKey: message.billingReservationKey,
+    resourceType,
     quantity: 1,
-    idempotencyKey: `image_standard:${message.requestId}:scene:${message.sceneNumber}`,
+    idempotencyKey: `${resourceType}:${message.requestId}:scene:${message.sceneNumber}`,
     status: "settled",
-    metadata: { sceneNumber: message.sceneNumber, assetKey: generated.r2Key, source: "background_queue" }
+    actualCostUsd: Number(generated.metadata?.estimatedActualCostUsd) || undefined,
+    actualModel: typeof generated.metadata?.model === "string" ? generated.metadata.model : undefined,
+    actualProvider: String(generated.metadata?.model ?? "").startsWith("gpt-") ? "openai" : "cloudflare",
+    metadata: {
+      sceneNumber: message.sceneNumber,
+      assetKey: generated.r2Key,
+      source: "background_queue",
+      requestedQuality: "standard",
+      effectiveQuality: quality,
+      automaticPremiumUpgrade: quality === "premium",
+      providerRequestCount: generated.metadata?.providerRequestCount,
+      validationRequestCount: generated.metadata?.validationRequestCount,
+      internalRetriesNotCharged: Math.max(0, Number(generated.metadata?.providerRequestCount ?? 1) - 1)
+    }
   });
   return requireCurrentProject(message);
 }
@@ -71,6 +107,7 @@ async function ensureSceneNarration(message: ProjectMediaMessage, project: Proje
     userId: message.userId,
     projectId: message.projectId,
     versionId: message.versionId,
+    reservationKey: message.billingReservationKey,
     resourceType: "speech",
     quantity: duration,
     idempotencyKey: `speech:${message.requestId}:scene:${message.sceneNumber}`,
@@ -117,9 +154,7 @@ export async function processProjectMediaScene(message: ProjectMediaMessage) {
 
   const refreshed = await requireCurrentProject(message);
   const incomplete = refreshed.currentVersion.scenes.filter((scene) => {
-    const hasImage = scene.assets.some((asset) => asset.type === "image" && asset.url);
-    const hasAudio = scene.assets.some((asset) => asset.type === "audio" && asset.url);
-    return !hasImage || !hasAudio;
+    return !sceneHasVisualAsset(scene) || !sceneHasAudioAsset(scene);
   });
   if (incomplete.length > 0) {
     const first = incomplete.sort((a, b) => a.sceneNumber - b.sceneNumber)[0];
@@ -131,6 +166,14 @@ export async function processProjectMediaScene(message: ProjectMediaMessage) {
     projectId: message.projectId,
     engine: message.engine
   });
+  if (message.billingReservationKey) {
+    await releaseCreditReservation({
+      userId: message.userId,
+      reservationKey: message.billingReservationKey,
+      reason: "project_generation_completed",
+      metadata: { projectId: message.projectId, versionId: message.versionId }
+    });
+  }
 }
 
 export async function permanentlyFailProjectMedia(message: ProjectMediaMessage, error: unknown) {
@@ -139,4 +182,12 @@ export async function permanentlyFailProjectMedia(message: ProjectMediaMessage, 
     message.requestId,
     `后台已多次自动重试，但场景 ${message.sceneNumber} 的素材仍未完成：${reason}`
   );
+  if (message.billingReservationKey) {
+    await releaseCreditReservation({
+      userId: message.userId,
+      reservationKey: message.billingReservationKey,
+      reason: "project_media_permanently_failed",
+      metadata: { sceneNumber: message.sceneNumber, error: reason }
+    });
+  }
 }

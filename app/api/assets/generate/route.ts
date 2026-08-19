@@ -6,6 +6,8 @@ import { mediaGenerationFailureMessage, mediaGenerationProgress } from "@/lib/me
 import { loadCurrentProjectForEdit, loadProjectForRender, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import type { Scene } from "@/lib/types";
 import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
+import { InsufficientCreditsError, releaseCreditReservation, reserveCredits } from "@/lib/billing/usage";
+import { sceneRequiresPremiumImage } from "@/lib/image-continuity";
 
 const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
@@ -64,10 +66,32 @@ export async function POST(request: Request) {
     : project.currentVersion.scenes.map((scene) => scene.sceneNumber);
   // Persist small batches so a serverless timeout cannot discard an entire storyboard.
   const processingSceneNumbers = requestedSceneNumbers.slice(0, MAX_SCENES_PER_IMAGE_REQUEST);
+  const processingScenes = project.currentVersion.scenes.filter((scene) => processingSceneNumbers.includes(scene.sceneNumber));
+  const effectiveQuality = body.quality === "premium" || processingScenes.some(sceneRequiresPremiumImage)
+    ? "premium"
+    : "standard";
+  const imageResourceType = effectiveQuality === "premium" ? "image_premium" : "image_standard";
+  const billingOperationId = body.billingRequestId
+    ?? billingIdempotencyKey(imageResourceType, [body.projectId, body.versionId, "generate", ...processingSceneNumbers]);
+  const reservationKey = `asset-image:${billingOperationId}`;
+  try {
+    await reserveCredits({
+      userId: user.id,
+      reservationKey,
+      items: [{ resourceType: imageResourceType, quantity: processingSceneNumbers.length }],
+      metadata: { projectId: body.projectId, versionId: body.versionId, processingSceneNumbers, requestedQuality: body.quality, effectiveQuality }
+    });
+  } catch (error) {
+    if (error instanceof InsufficientCreditsError) {
+      return NextResponse.json({ error: error.message, code: "INSUFFICIENT_CREDITS", availableCredits: error.availableCredits, requiredCredits: error.requiredCredits }, { status: 402 });
+    }
+    throw error;
+  }
+  try {
   const updated = await generateProjectSceneImages(project, {
     replaceExistingImages: true,
     sceneNumbers: processingSceneNumbers,
-    quality: body.quality,
+    quality: effectiveQuality,
     variantKey: body.variantKey
   });
   let failedTargets = imageFailedScenes(updated.currentVersion.scenes, processingSceneNumbers, previousImageKeys);
@@ -78,6 +102,12 @@ export async function POST(request: Request) {
   });
   const persisted = await loadProjectForRender(body.projectId, body.versionId, user.id);
   if (!persisted) {
+    await releaseCreditReservation({
+      userId: user.id,
+      reservationKey,
+      reason: "image_persist_verification_failed",
+      metadata: { processingSceneNumbers, requestedQuality: body.quality, effectiveQuality }
+    });
     return NextResponse.json({ error: "画面已经生成，但重新读取项目失败，请刷新后重试。" }, { status: 409 });
   }
   const persistedFailedTargets = imageFailedScenes(
@@ -97,38 +127,44 @@ export async function POST(request: Request) {
   const completedImageKeys = completedScenes
     .map((scene) => scene.assets.find((asset) => asset.type === "image" && asset.url)?.r2Key)
     .filter((key): key is string => Boolean(key));
-  const imageResourceType = body.quality === "premium" ? "image_premium" : "image_standard";
   if (progress.completedSceneNumbers.length > 0) {
+    const generatedAssets = completedScenes
+      .map((scene) => scene.assets.find((asset) => asset.type === "image" && asset.url))
+      .filter((asset) => Boolean(asset));
     await recordUsageEvent({
       userId: user.id,
       projectId: body.projectId,
       versionId: body.versionId,
+      reservationKey,
       resourceType: imageResourceType,
       quantity: progress.completedSceneNumbers.length,
       idempotencyKey: body.billingRequestId
         ? `${imageResourceType}:${body.billingRequestId}`
         : billingIdempotencyKey(imageResourceType, [body.projectId, body.versionId, ...completedImageKeys]),
       status: "settled",
+      actualCostUsd: generatedAssets.reduce((sum, asset) => sum + Number(asset?.metadata?.estimatedActualCostUsd ?? 0), 0) || undefined,
+      actualModel: typeof generatedAssets[0]?.metadata?.model === "string" ? generatedAssets[0].metadata.model : undefined,
+      actualProvider: String(generatedAssets[0]?.metadata?.model ?? "").startsWith("gpt-") ? "openai" : "cloudflare",
       metadata: {
         requestedSceneNumbers: processingSceneNumbers,
         completedSceneNumbers: progress.completedSceneNumbers,
         failedSceneNumbers: progress.failedSceneNumbers,
-        quality: body.quality,
+        requestedQuality: body.quality,
+        effectiveQuality,
+        automaticPremiumUpgrade: body.quality !== effectiveQuality,
+        providerRequestCount: generatedAssets.reduce((sum, asset) => sum + Number(asset?.metadata?.providerRequestCount ?? 0), 0),
+        validationRequestCount: generatedAssets.reduce((sum, asset) => sum + Number(asset?.metadata?.validationRequestCount ?? 0), 0),
+        internalRetriesNotCharged: generatedAssets.reduce((sum, asset) => sum + Math.max(0, Number(asset?.metadata?.providerRequestCount ?? 1) - 1), 0),
         assetKeys: completedImageKeys
       }
     });
+    await releaseCreditReservation({ userId: user.id, reservationKey, reason: "image_batch_finished" });
   } else {
-    await recordUsageEvent({
+    await releaseCreditReservation({
       userId: user.id,
-      projectId: body.projectId,
-      versionId: body.versionId,
-      resourceType: imageResourceType,
-      quantity: processingSceneNumbers.length,
-      idempotencyKey: body.billingRequestId
-        ? `${imageResourceType}:${body.billingRequestId}`
-        : billingIdempotencyKey(imageResourceType, [body.projectId, body.versionId, "released", ...processingSceneNumbers]),
-      status: "released",
-      metadata: { requestedSceneNumbers: processingSceneNumbers, failedSceneNumbers: progress.failedSceneNumbers, quality: body.quality }
+      reservationKey,
+      reason: "image_generation_failed",
+      metadata: { requestedSceneNumbers: processingSceneNumbers, failedSceneNumbers: progress.failedSceneNumbers, requestedQuality: body.quality, effectiveQuality }
     });
   }
 
@@ -152,4 +188,13 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ project: persisted, ...progress });
+  } catch (error) {
+    await releaseCreditReservation({
+      userId: user.id,
+      reservationKey,
+      reason: "image_generation_exception",
+      metadata: { processingSceneNumbers, requestedQuality: body.quality, effectiveQuality }
+    }).catch(() => undefined);
+    throw error;
+  }
 }

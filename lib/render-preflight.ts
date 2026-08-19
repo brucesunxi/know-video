@@ -1,5 +1,6 @@
 import { productionAsset } from "@/lib/production-settings";
 import { auditProjectMedia } from "@/lib/project-media-audit";
+import { isDeliverableVisualAsset } from "@/lib/generation-resume";
 import type { Project, SceneAsset } from "@/lib/types";
 
 export type RenderInputAsset = {
@@ -13,7 +14,7 @@ export type RenderInputAsset = {
 export function renderInputAssets(project: Project) {
   return project.currentVersion.scenes.flatMap((scene): RenderInputAsset[] => {
     const clip = scene.assets.find((asset) => asset.type === "clip" && asset.url);
-    const image = scene.assets.find((asset) => asset.type === "image" && asset.url);
+    const image = scene.assets.find((asset) => asset.type === "image" && isDeliverableVisualAsset(asset));
     const audio = scene.assets.find((asset) => asset.type === "audio" && asset.url);
     return [
       ...(clip || image ? [{ sceneNumber: scene.sceneNumber, role: "visual" as const, scope: "scene" as const, label: `场景 ${scene.sceneNumber} 画面`, asset: (clip || image)! }] : []),

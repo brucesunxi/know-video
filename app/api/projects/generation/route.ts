@@ -3,6 +3,7 @@ import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { getGenerationRequest, listIncompleteGenerationRequests } from "@/lib/generation-requests";
 import { getProjectSnapshot } from "@/lib/project-store";
+import { sceneHasVisualAsset } from "@/lib/generation-resume";
 
 const requestIdSchema = z.string().uuid();
 
@@ -54,7 +55,7 @@ export async function GET(request: Request) {
       projectId: generation.projectId,
       progress: {
         scenes: scenes.length,
-        visuals: scenes.filter((scene) => scene.assets.some((asset) => asset.type === "image" && asset.url)).length,
+        visuals: scenes.filter(sceneHasVisualAsset).length,
         narrations: scenes.filter((scene) => scene.assets.some((asset) => asset.type === "audio" && asset.url)).length
       }
     }, { status: 202 });

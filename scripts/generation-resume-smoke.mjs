@@ -29,6 +29,8 @@ assert.equal(mediaAssetStatus([scenes[0]]), "ready");
 assert.equal(mediaAssetStatus([{ sceneNumber: 5, assets: [] }]), "failed");
 const fallback = { type: "image", url: "fallback", metadata: { source: "fallback-image", model: "local-svg-fallback" } };
 assert.equal(isDeliverableVisualAsset(fallback), false);
+const legacyQualityFallback = { type: "image", url: "legacy", metadata: { qualityFallback: true } };
+assert.equal(isDeliverableVisualAsset(legacyQualityFallback), false);
 assert.equal(sceneHasVisualAsset({ sceneNumber: 5, assets: [fallback] }), false);
 assert.deepEqual(Array.from(missingSceneAssetNumbers([{ sceneNumber: 5, assets: [fallback] }], "image")), [5]);
 

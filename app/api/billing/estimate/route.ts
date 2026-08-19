@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
+import { getCreditAccount } from "@/lib/billing/accounts";
 import { estimateBilling } from "@/lib/billing/estimate";
 import { billingResourceTypes } from "@/lib/billing/types";
 
@@ -12,8 +13,9 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  let user;
   try {
-    await requireCurrentUser();
+    user = await requireCurrentUser();
   } catch (error) {
     if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     throw error;
@@ -25,9 +27,14 @@ export async function POST(request: Request) {
   }
 
   const estimate = estimateBilling(parsed.data.items);
+  const account = await getCreditAccount(user.id);
   return NextResponse.json({
     estimateId: crypto.randomUUID(),
     ...estimate,
+    availableCredits: account.availableCredits,
+    reservedCredits: account.reservedCredits,
+    balanceSufficient: account.availableCredits >= estimate.maximumCredits,
+    shortfallCredits: Math.max(0, estimate.maximumCredits - account.availableCredits),
     expiresAt: new Date(Date.now() + 10 * 60_000).toISOString()
   });
 }

@@ -10,6 +10,7 @@ export type ProjectMediaMessage = {
   versionId: string;
   sceneNumber: number;
   engine: string;
+  billingReservationKey?: string;
   options?: GenerationOptions;
 };
 
