@@ -116,6 +116,9 @@ function publicEngine(engine: string) {
 
 function publicGenerationError(error: unknown) {
   if (error instanceof Error) {
+    if (/relation .* does not exist|column .* does not exist|neondberror|sqlstate|42p01|42703/i.test(error.message)) {
+      return "生成服务初始化没有完成，请重试。";
+    }
     if (/timeout|timed out|connection|fetch failed|econn|etimedout|network/i.test(error.message)) {
       return "脚本服务连接超时，请稍后重试。";
     }

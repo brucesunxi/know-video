@@ -38,6 +38,7 @@ export async function ensureCreditAccountSchema() {
           updated_at timestamptz not null default now()
         )
       `;
+      await sql`alter table credit_accounts add column if not exists reserved_credits bigint not null default 0`;
       await sql`
         create table if not exists credit_purchases (
           id uuid primary key,

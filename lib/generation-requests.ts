@@ -32,6 +32,14 @@ type GenerationRequestRow = {
 
 let schemaPromise: Promise<void> | undefined;
 
+function publicStoredError(error: string | null) {
+  if (!error) return undefined;
+  if (/relation .* does not exist|column .* does not exist|neondberror|sqlstate|42p01|42703/i.test(error)) {
+    return "生成服务初始化没有完成，请重试。";
+  }
+  return error;
+}
+
 async function ensureGenerationRequestsSchema() {
   if (!hasDatabaseUrl()) return;
   if (!schemaPromise) {
@@ -95,7 +103,7 @@ function toRecord(row: GenerationRequestRow): GenerationRequestRecord {
     options,
     projectId: row.project_id ?? undefined,
     engine: row.engine ?? undefined,
-    error: row.error ?? undefined,
+    error: publicStoredError(row.error),
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString()
   };
