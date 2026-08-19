@@ -245,6 +245,19 @@ export async function listIncompleteGenerationRequests(userId: string) {
   return rows.map(toRecord);
 }
 
+export async function deleteFailedGenerationRequest(id: string, userId: string) {
+  if (!hasDatabaseUrl()) return false;
+  await ensureGenerationRequestsSchema();
+  const rows = await getSql()`
+    delete from generation_requests
+    where id = ${id}
+      and user_id = ${userId}
+      and status = 'failed'
+    returning id
+  ` as Array<{ id: string }>;
+  return rows.length > 0;
+}
+
 export async function completeGenerationRequest(input: {
   id: string;
   projectId: string;

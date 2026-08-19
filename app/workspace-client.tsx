@@ -2047,6 +2047,7 @@ function Shell({
   busyAction,
   generationTasks,
   onNewVideo,
+  onDeleteGeneration,
   onOpenGeneration,
   onOpenProjects,
   onOpenStudio
@@ -2059,6 +2060,7 @@ function Shell({
   busyAction?: BusyAction;
   generationTasks: GenerationTaskListItem[];
   onNewVideo: () => void;
+  onDeleteGeneration: (task: GenerationTaskListItem) => Promise<boolean>;
   onOpenGeneration: (task: GenerationTaskListItem) => void;
   onOpenProjects: () => void;
   onOpenStudio: () => void;
@@ -2452,19 +2454,26 @@ function Shell({
                   {generationTasks.length > 0 ? (
                     <div className="kv-task-center-list">
                       {generationTasks.slice(0, 8).map((task) => (
-                        <button key={task.id} onClick={() => {
-                          setHomeDialog(undefined);
-                          onOpenGeneration(task);
-                        }} type="button">
-                          <i className={task.status}>{task.status === "pending" ? <Loader2 className="kv-spin" size={16} /> : <AlertCircle size={16} />}</i>
-                          <span>
-                            <strong>{generationTaskTitle(task, language)}</strong>
-                            <small>{task.status === "pending"
-                              ? text("正在生成脚本与分镜", "Building script and storyboard")
-                              : generationTaskFailureLabel(task.error, language)}</small>
-                          </span>
-                          <b>{task.status === "pending" ? text("查看进度", "View progress") : text("检查重试", "Review")}</b>
-                        </button>
+                        <div className="kv-task-center-item" key={task.id}>
+                          <button className="kv-task-center-open" onClick={() => {
+                            setHomeDialog(undefined);
+                            onOpenGeneration(task);
+                          }} type="button">
+                            <i className={task.status}>{task.status === "pending" ? <Loader2 className="kv-spin" size={16} /> : <AlertCircle size={16} />}</i>
+                            <span>
+                              <strong>{generationTaskTitle(task, language)}</strong>
+                              <small>{task.status === "pending"
+                                ? text("正在生成脚本与分镜", "Building script and storyboard")
+                                : generationTaskFailureLabel(task.error, language)}</small>
+                            </span>
+                            <b>{task.status === "pending" ? text("查看进度", "View progress") : text("检查重试", "Review")}</b>
+                          </button>
+                          {task.status === "failed" ? (
+                            <button aria-label={text("删除这条失败提示", "Delete this failed task")} className="kv-task-center-delete" onClick={() => void onDeleteGeneration(task)} title={text("删除提示", "Delete notification")} type="button">
+                              <Trash2 size={15} />
+                            </button>
+                          ) : null}
+                        </div>
                       ))}
                     </div>
                   ) : (
@@ -2518,6 +2527,7 @@ function ProjectLibrary({
   onQueryChange,
   onOpen,
   onOpenGeneration,
+  onDeleteGeneration,
   onCreate,
   onRename,
   onDelete,
@@ -2531,6 +2541,7 @@ function ProjectLibrary({
   onQueryChange: (value: string) => void;
   onOpen: (projectId: string) => void;
   onOpenGeneration: (task: GenerationTaskListItem) => void;
+  onDeleteGeneration: (task: GenerationTaskListItem) => Promise<boolean>;
   onCreate: () => void;
   onRename: (projectId: string, title: string) => Promise<boolean>;
   onDelete: (projectId: string) => Promise<boolean>;
@@ -2621,6 +2632,11 @@ function ProjectLibrary({
                       <b>{task.status === "pending" ? text("查看进度", "View progress") : text("检查并重试", "Review and retry")} <ArrowRight size={15} /></b>
                     </span>
                   </button>
+                  {task.status === "failed" ? (
+                    <button aria-label={text("删除这条失败提示", "Delete this failed task")} className="kv-generation-task-delete" disabled={actionBusy} onClick={() => void onDeleteGeneration(task)} title={text("删除提示", "Delete notification")} type="button">
+                      <Trash2 size={16} />
+                    </button>
+                  ) : null}
                   {task.status === "failed" && creditShortfallFromError(task.error) ? (
                     <CreditShortfallNotice compact message={task.error!} />
                   ) : null}
@@ -7903,6 +7919,28 @@ export function WorkspaceClient({
     }
   }
 
+  async function deleteGenerationTask(task: GenerationTaskListItem) {
+    if (task.status !== "failed") return false;
+    const confirmed = window.confirm(uiLanguage === "zh-CN"
+      ? `删除“${generationTaskTitle(task, uiLanguage)}”这条失败提示？删除后无法恢复。`
+      : `Delete the failed task “${generationTaskTitle(task, uiLanguage)}”? This cannot be undone.`);
+    if (!confirmed) return false;
+    setProjectActionBusy(true);
+    setErrorMessage(undefined);
+    try {
+      const response = await fetch(`/api/projects/generation?requestId=${encodeURIComponent(task.id)}`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({})) as { deleted?: boolean; error?: string };
+      if (!response.ok || !data.deleted) throw new Error(data.error || "失败任务删除失败。");
+      setGenerationTasks((current) => current.filter((item) => item.id !== task.id));
+      return true;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "失败任务删除失败。");
+      return false;
+    } finally {
+      setProjectActionBusy(false);
+    }
+  }
+
   return (
     <UiLanguageContext.Provider value={{ language: uiLanguage, setLanguage: changeUiLanguage }}>
     <Shell
@@ -7910,6 +7948,7 @@ export function WorkspaceClient({
       currentUser={currentUser}
       generationTasks={generationTasks}
       onNewVideo={resetToBrief}
+      onDeleteGeneration={deleteGenerationTask}
       onOpenGeneration={(task) => void openGenerationTask(task)}
       onOpenProjects={() => void openProjects()}
       onOpenStudio={() => {
@@ -7967,6 +8006,7 @@ export function WorkspaceClient({
           isLoading={projectsLoading}
           onCreate={resetToBrief}
           onDelete={deleteProject}
+          onDeleteGeneration={deleteGenerationTask}
           onOpenGeneration={(task) => void openGenerationTask(task)}
           onOpen={(projectId) => void openProject(projectId)}
           onQueryChange={setProjectQuery}

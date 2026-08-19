@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
-import { getGenerationRequest, listIncompleteGenerationRequests } from "@/lib/generation-requests";
+import { deleteFailedGenerationRequest, getGenerationRequest, listIncompleteGenerationRequests } from "@/lib/generation-requests";
 import { getProjectSnapshot } from "@/lib/project-store";
 import { sceneHasVisualAsset } from "@/lib/generation-resume";
 
@@ -61,4 +61,23 @@ export async function GET(request: Request) {
     }, { status: 202 });
   }
   return NextResponse.json({ status: "pending" }, { status: 202 });
+}
+
+export async function DELETE(request: Request) {
+  let user;
+  try {
+    user = await requireCurrentUser();
+  } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
+    throw error;
+  }
+  const parsed = requestIdSchema.safeParse(new URL(request.url).searchParams.get("requestId"));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "生成任务标识无效。" }, { status: 400 });
+  }
+  const deleted = await deleteFailedGenerationRequest(parsed.data, user.id);
+  if (!deleted) {
+    return NextResponse.json({ error: "只能删除属于你的失败任务。" }, { status: 404 });
+  }
+  return NextResponse.json({ deleted: true });
 }

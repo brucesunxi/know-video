@@ -1250,22 +1250,49 @@ html[data-theme="dark"] .kv-task-bell b {
   overflow-y: auto;
 }
 
-.kv-task-center-list > button {
+.kv-task-center-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.kv-task-center-open {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-2);
+  border: 0;
+  background: transparent;
   color: var(--text);
   padding: 11px;
   text-align: left;
 }
 
-.kv-task-center-list > button:hover {
+.kv-task-center-item:hover {
   border-color: #8dd8cf;
+}
+
+.kv-task-center-open:hover {
   background: #f2fbf9;
+}
+
+.kv-task-center-delete {
+  display: grid;
+  width: 40px;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: #b42318;
+}
+
+.kv-task-center-delete:hover,
+.kv-task-center-delete:focus-visible {
+  background: #fee7e4;
 }
 
 .kv-task-center-list i {
@@ -1283,7 +1310,7 @@ html[data-theme="dark"] .kv-task-bell b {
   color: #b42318;
 }
 
-.kv-task-center-list > button > span {
+.kv-task-center-open > span {
   display: grid;
   min-width: 0;
   gap: 3px;
@@ -1757,14 +1784,14 @@ html[data-theme="dark"] .kv-generation-task-list article.failed {
   background: #2d1d1d;
 }
 
-html[data-theme="dark"] .kv-task-center-list > button,
+html[data-theme="dark"] .kv-task-center-item,
 html[data-theme="dark"] .kv-task-center-empty,
 html[data-theme="dark"] .kv-generation-task-filters {
   border-color: #394351;
   background: #1c222b;
 }
 
-html[data-theme="dark"] .kv-task-center-list > button:hover,
+html[data-theme="dark"] .kv-task-center-open:hover,
 html[data-theme="dark"] .kv-generation-task-filters button.active {
   background: #26303b;
   color: #eef3f8;
@@ -4171,8 +4198,14 @@ html[data-theme="dark"] .kv-user-menu {
 }
 
 .kv-generation-task-list article.failed {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   border-color: #f2c3bd;
   background: #fff7f5;
+}
+
+.kv-generation-task-list article.failed .kv-credit-shortfall {
+  grid-column: 1 / -1;
 }
 
 .kv-generation-task-icon {
@@ -4268,6 +4301,20 @@ html[data-theme="dark"] .kv-user-menu {
   gap: 5px;
   color: #0f766e;
   font-size: 13px;
+}
+
+.kv-generation-task-delete {
+  align-self: stretch;
+  border: 0;
+  border-left: 1px solid #f2c3bd;
+  background: transparent;
+  padding: 0 16px;
+  color: #b42318;
+}
+
+.kv-generation-task-delete:hover,
+.kv-generation-task-delete:focus-visible {
+  background: #fee7e4;
 }
 
 .kv-credit-shortfall {
@@ -9555,11 +9602,11 @@ html[data-theme="dark"] .kv-media-generation-counts > span {
     width: fit-content;
   }
 
-  .kv-task-center-list > button {
+  .kv-task-center-open {
     grid-template-columns: 30px minmax(0, 1fr);
   }
 
-  .kv-task-center-list > button > b {
+  .kv-task-center-open > b {
     grid-column: 2;
   }
 
