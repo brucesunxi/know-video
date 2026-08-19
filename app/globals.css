@@ -4270,6 +4270,66 @@ html[data-theme="dark"] .kv-user-menu {
   font-size: 13px;
 }
 
+.kv-credit-shortfall {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #f3c276;
+  border-radius: 8px;
+  background: #fff9ed;
+  padding: 14px 16px;
+  color: #8a4b08;
+}
+
+.kv-credit-shortfall > svg {
+  color: #c46a0a;
+}
+
+.kv-credit-shortfall > div {
+  min-width: 0;
+}
+
+.kv-credit-shortfall strong,
+.kv-credit-shortfall span {
+  display: block;
+}
+
+.kv-credit-shortfall strong {
+  color: #633806;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.kv-credit-shortfall span {
+  margin-top: 3px;
+  color: #85571e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.kv-credit-shortfall button {
+  border: 1px solid #d87912;
+  border-radius: 7px;
+  background: #fff;
+  padding: 9px 12px;
+  color: #8a4b08;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.kv-credit-shortfall button:hover,
+.kv-credit-shortfall button:focus-visible {
+  background: #8a4b08;
+  color: #fff;
+}
+
+.kv-credit-shortfall.compact {
+  margin: 0 16px 14px 62px;
+  padding: 10px 12px;
+}
+
 .kv-project-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -9688,6 +9748,17 @@ html[data-theme="dark"] .kv-media-generation-counts > span {
 
   .kv-generation-task-action small {
     white-space: normal;
+  }
+
+  .kv-credit-shortfall,
+  .kv-credit-shortfall.compact {
+    grid-template-columns: auto minmax(0, 1fr);
+    margin: 0 12px 12px;
+  }
+
+  .kv-credit-shortfall button {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .kv-brief-main {

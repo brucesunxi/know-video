@@ -10,6 +10,7 @@ const images = fs.readFileSync(new URL("../lib/image-assets.ts", import.meta.url
 const audioRoute = fs.readFileSync(new URL("../app/api/assets/audio/generate/route.ts", import.meta.url), "utf8");
 const videoRoute = fs.readFileSync(new URL("../app/api/assets/video/generate/route.ts", import.meta.url), "utf8");
 const estimateRoute = fs.readFileSync(new URL("../app/api/billing/estimate/route.ts", import.meta.url), "utf8");
+const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.meta.url), "utf8");
 
 assert.match(schema, /create table if not exists credit_reservations/);
 assert.match(schema, /create table if not exists provider_cost_events/);
@@ -45,6 +46,10 @@ assert.match(videoRoute, /scene:\$\{sceneNumber\}/);
 assert.match(videoRoute, /video_generation_exception/);
 assert.match(estimateRoute, /balanceSufficient/);
 assert.match(estimateRoute, /shortfallCredits/);
+assert.match(workspace, /function creditShortfallFromError/);
+assert.match(workspace, /余额不足，还差/);
+assert.match(workspace, /充值后请重新提交；失败任务不会扣费/);
+assert.match(workspace, /know-video:open-credits/);
 
 for (const route of [
   "../app/api/assets/generate/route.ts",

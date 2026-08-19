@@ -948,6 +948,62 @@ function generationTaskTitle(task: GenerationTaskListItem, language: UiLanguage)
   return date ? `${base} · ${date}` : base;
 }
 
+type CreditShortfall = {
+  requiredCredits: number;
+  availableCredits: number;
+  shortfallCredits: number;
+};
+
+function creditShortfallFromError(message?: string): CreditShortfall | undefined {
+  if (!message) return undefined;
+  const chinese = message.match(/Credits\s*不足[：:]\s*需要\s*([\d,]+)[，,]\s*当前可用\s*([\d,]+)/iu);
+  const english = message.match(/insufficient\s+credits[^\d]*([\d,]+)[^\d]+(?:available|balance)[^\d]*([\d,]+)/iu);
+  const match = chinese ?? english;
+  if (!match) return undefined;
+  const requiredCredits = Number(match[1].replaceAll(",", ""));
+  const availableCredits = Number(match[2].replaceAll(",", ""));
+  if (!Number.isFinite(requiredCredits) || !Number.isFinite(availableCredits)) return undefined;
+  return {
+    requiredCredits,
+    availableCredits,
+    shortfallCredits: Math.max(0, requiredCredits - availableCredits)
+  };
+}
+
+function generationTaskFailureLabel(error: string | undefined, language: UiLanguage) {
+  const shortage = creditShortfallFromError(error);
+  if (!shortage) return localizedErrorMessage(error || (language === "zh-CN" ? "生成没有完成，请重新提交。" : "Generation did not finish. Please submit it again."), language);
+  return language === "zh-CN"
+    ? `Credits 不足，还差 ${shortage.shortfallCredits.toLocaleString("en-US")}。本次需要 ${shortage.requiredCredits.toLocaleString("en-US")}，当前可用 ${shortage.availableCredits.toLocaleString("en-US")}。`
+    : `Not enough credits. Add ${shortage.shortfallCredits.toLocaleString("en-US")} more. This video needs ${shortage.requiredCredits.toLocaleString("en-US")}; ${shortage.availableCredits.toLocaleString("en-US")} are available.`;
+}
+
+function openCreditsDialog() {
+  window.dispatchEvent(new Event("know-video:open-credits"));
+}
+
+function CreditShortfallNotice({ message, compact = false }: { message: string; compact?: boolean }) {
+  const { text } = useUiCopy();
+  const shortage = creditShortfallFromError(message);
+  if (!shortage) return null;
+  return (
+    <div className={`kv-credit-shortfall${compact ? " compact" : ""}`} role="alert">
+      <AlertCircle size={compact ? 18 : 22} />
+      <div>
+        <strong>{text(
+          `余额不足，还差 ${shortage.shortfallCredits.toLocaleString("en-US")} Credits`,
+          `${shortage.shortfallCredits.toLocaleString("en-US")} more credits required`
+        )}</strong>
+        <span>{text(
+          `本次生成需要 ${shortage.requiredCredits.toLocaleString("en-US")}，当前可用 ${shortage.availableCredits.toLocaleString("en-US")}。充值后请重新提交；失败任务不会扣费。`,
+          `This video needs ${shortage.requiredCredits.toLocaleString("en-US")}; ${shortage.availableCredits.toLocaleString("en-US")} are available. Add credits, then submit again. Failed tasks are not charged.`
+        )}</span>
+      </div>
+      <button onClick={openCreditsDialog} type="button">{text("购买 Credits", "Buy credits")}</button>
+    </div>
+  );
+}
+
 function generationTaskSpecs(task: GenerationTaskListItem, language: UiLanguage) {
   const options = task.options;
   if (!options) return [];
@@ -2044,6 +2100,14 @@ function Shell({
     void loadCreditAccount();
   }, []);
   useEffect(() => {
+    const openCredits = () => {
+      void loadCreditAccount();
+      setHomeDialog("pricing");
+    };
+    window.addEventListener("know-video:open-credits", openCredits);
+    return () => window.removeEventListener("know-video:open-credits", openCredits);
+  }, []);
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const billingResult = params.get("billing");
     const purchaseId = params.get("purchaseId");
@@ -2397,7 +2461,7 @@ function Shell({
                             <strong>{generationTaskTitle(task, language)}</strong>
                             <small>{task.status === "pending"
                               ? text("正在生成脚本与分镜", "Building script and storyboard")
-                              : localizedErrorMessage(task.error || text("生成没有完成，请重新提交。", "Generation did not finish. Please submit it again."), language)}</small>
+                              : generationTaskFailureLabel(task.error, language)}</small>
                           </span>
                           <b>{task.status === "pending" ? text("查看进度", "View progress") : text("检查重试", "Review")}</b>
                         </button>
@@ -2545,7 +2609,7 @@ function ProjectLibrary({
                       <strong>{generationTaskTitle(task, language)}</strong>
                       <span>{task.status === "pending"
                         ? text("正在后台生成脚本与分镜", "Building the script and storyboard in the background")
-                        : localizedErrorMessage(task.error || text("生成没有完成，请重新提交。", "Generation did not finish. Please submit it again."), language)}</span>
+                        : generationTaskFailureLabel(task.error, language)}</span>
                       {generationTaskSpecs(task, language).length > 0 ? (
                         <span className="kv-generation-task-specs">
                           {generationTaskSpecs(task, language).map((spec) => <em key={spec}>{spec}</em>)}
@@ -2557,6 +2621,9 @@ function ProjectLibrary({
                       <b>{task.status === "pending" ? text("查看进度", "View progress") : text("检查并重试", "Review and retry")} <ArrowRight size={15} /></b>
                     </span>
                   </button>
+                  {task.status === "failed" && creditShortfallFromError(task.error) ? (
+                    <CreditShortfallNotice compact message={task.error!} />
+                  ) : null}
                 </article>
               )) : <div className="kv-generation-task-empty">{text("这个状态下暂无任务。", "No tasks in this status.")}</div>}
               </div>
@@ -3122,7 +3189,9 @@ function BriefScreen({
             </div>
           </div>
         </details>
-        {errorMessage ? (
+        {errorMessage && creditShortfallFromError(errorMessage) ? (
+          <CreditShortfallNotice message={errorMessage} />
+        ) : errorMessage ? (
           <div className="kv-inline-error" role="alert">
             <AlertCircle size={18} />
             <span>{localizedErrorMessage(errorMessage, language)}</span>
