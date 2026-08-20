@@ -1,6 +1,7 @@
 import { generateProjectVoices } from "@/lib/audio-assets";
 import {
   recordUsageEvent,
+  refundCreditReservation,
   releaseCreditReservation,
   reserveAdditionalCredits
 } from "@/lib/billing/usage";
@@ -18,6 +19,13 @@ import type { Project, SceneAsset } from "@/lib/types";
 import { sceneRequiresPremiumImage } from "@/lib/image-continuity";
 import { isDeliverableVisualAsset, sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
 
+export class ProjectMediaQualityExhaustedError extends Error {
+  constructor(sceneNumber: number) {
+    super(`Scene ${sceneNumber} visual generation did not produce a usable image.`);
+    this.name = "ProjectMediaQualityExhaustedError";
+  }
+}
+
 function sceneAsset(project: Project, sceneNumber: number, type: SceneAsset["type"]) {
   return project.currentVersion.scenes
     .find((scene) => scene.sceneNumber === sceneNumber)
@@ -30,10 +38,16 @@ async function requireCurrentProject(message: ProjectMediaMessage) {
   return project;
 }
 
-async function ensureSceneImage(message: ProjectMediaMessage, project: Project) {
+async function ensureSceneImage(message: ProjectMediaMessage, project: Project, deliveryCount: number) {
   if (sceneAsset(project, message.sceneNumber, "image")) return project;
   const targetScene = project.currentVersion.scenes.find((scene) => scene.sceneNumber === message.sceneNumber);
-  const quality = targetScene && sceneRequiresPremiumImage(targetScene) ? "premium" : "standard";
+  // A second queue delivery means the standard model already exhausted its
+  // internal quality candidates. Escalate once instead of repeating the same
+  // model for many deliveries and leaving the task looking stuck.
+  const automaticPremiumUpgrade = deliveryCount >= 2;
+  const quality = targetScene && (sceneRequiresPremiumImage(targetScene) || automaticPremiumUpgrade)
+    ? "premium"
+    : "standard";
   const resourceType = quality === "premium" ? "image_premium" : "image_standard";
   if (quality === "premium" && message.billingReservationKey) {
     const standardCredits = estimateBilling([{ resourceType: "image_standard", quantity: 1 }]).maximumCredits;
@@ -53,7 +67,7 @@ async function ensureSceneImage(message: ProjectMediaMessage, project: Project) 
     quality
   });
   const generated = sceneAsset(updated, message.sceneNumber, "image");
-  if (!generated) throw new Error(`Scene ${message.sceneNumber} visual generation did not produce a usable image.`);
+  if (!generated) throw new ProjectMediaQualityExhaustedError(message.sceneNumber);
   await persistGeneratedSceneAssets(message.versionId, updated.currentVersion.scenes, {
     replaceImages: true,
     sceneNumbers: [message.sceneNumber]
@@ -137,10 +151,10 @@ async function addFreeStockMotion(message: ProjectMediaMessage, project: Project
   return requireCurrentProject(message);
 }
 
-export async function processProjectMediaScene(message: ProjectMediaMessage) {
+export async function processProjectMediaScene(message: ProjectMediaMessage, deliveryCount = 1) {
   await touchGenerationRequest(message.requestId);
   let project = await requireCurrentProject(message);
-  project = await ensureSceneImage(message, project);
+  project = await ensureSceneImage(message, project, deliveryCount);
   project = await ensureSceneNarration(message, project);
   project = await addFreeStockMotion(message, project);
 
@@ -183,7 +197,7 @@ export async function permanentlyFailProjectMedia(message: ProjectMediaMessage, 
     `后台已多次自动重试，但场景 ${message.sceneNumber} 的素材仍未完成：${reason}`
   );
   if (message.billingReservationKey) {
-    await releaseCreditReservation({
+    await refundCreditReservation({
       userId: message.userId,
       reservationKey: message.billingReservationKey,
       reason: "project_media_permanently_failed",

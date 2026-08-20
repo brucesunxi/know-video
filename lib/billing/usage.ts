@@ -295,6 +295,78 @@ export async function releaseCreditReservation(input: {
   return { released: Boolean(rows[0]), credits: Number(rows[0]?.released_credits ?? 0) } as const;
 }
 
+export async function refundCreditReservation(input: {
+  userId: string;
+  reservationKey: string;
+  reason: string;
+  metadata?: Record<string, unknown>;
+}) {
+  if (!hasDatabaseUrl()) return { refunded: false } as const;
+  await ensureUsageSchema();
+  const refundMetadata = JSON.stringify({
+    refundReason: input.reason,
+    customerChargeRefunded: true,
+    ...input.metadata
+  });
+  const rows = await getSql()`
+    with reservation_lock as (
+      select pg_advisory_xact_lock(hashtext(${input.reservationKey}))
+    ), target as (
+      select reservation.*
+      from credit_reservations reservation, reservation_lock
+      where reservation.reservation_key = ${input.reservationKey}
+        and reservation.user_id = ${input.userId}
+        and (
+          reservation.status in ('reserved', 'partially_settled', 'settled')
+          or (reservation.status = 'released' and reservation.settled_credits > 0)
+        )
+    ), released_events as (
+      update usage_events event
+      set status = 'released',
+        settled_credits = 0,
+        metadata_json = event.metadata_json || ${refundMetadata}::jsonb
+      from target
+      where event.reservation_id = target.id
+        and event.status = 'settled'
+      returning event.id
+    ), refunded_reservation as (
+      update credit_reservations reservation
+      set settled_credits = 0,
+        released_credits = reservation.reserved_credits,
+        status = 'released',
+        metadata_json = reservation.metadata_json || ${refundMetadata}::jsonb,
+        updated_at = now()
+      from target
+      where reservation.id = target.id
+      returning reservation.user_id, reservation.reservation_key,
+        target.reserved_credits - target.released_credits as refund_credits,
+        target.reserved_credits - target.settled_credits - target.released_credits as reserved_balance_release,
+        target.settled_credits as consumed_credits_refund
+    ), credited as (
+      update credit_accounts account
+      set available_credits = account.available_credits + refunded.refund_credits,
+        reserved_credits = greatest(0, account.reserved_credits - refunded.reserved_balance_release),
+        lifetime_consumed = greatest(0, account.lifetime_consumed - refunded.consumed_credits_refund),
+        updated_at = now()
+      from refunded_reservation refunded
+      where account.user_id = refunded.user_id
+      returning account.available_credits, refunded.*
+    ), ledger_entry as (
+      insert into credit_ledger (user_id, event_type, credits_delta, balance_after, source_id, metadata_json)
+      select user_id, 'generation_refund', refund_credits, available_credits,
+        'refund:' || reservation_key, ${refundMetadata}::jsonb
+      from credited
+      on conflict (source_id) do nothing
+    )
+    select refund_credits, consumed_credits_refund from credited
+  ` as Array<{ refund_credits: string | number; consumed_credits_refund: string | number }>;
+  return {
+    refunded: Boolean(rows[0]),
+    credits: Number(rows[0]?.refund_credits ?? 0),
+    reversedSettledCredits: Number(rows[0]?.consumed_credits_refund ?? 0)
+  } as const;
+}
+
 async function pricingRuleId(resourceType: BillingResourceType) {
   const line = estimateBilling([{ resourceType, quantity: 1 }]).lines[0];
   const catalog = billingCatalogItem(resourceType);

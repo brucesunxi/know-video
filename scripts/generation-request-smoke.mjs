@@ -48,6 +48,8 @@ assert.match(generationRoute, /deleteFailedGenerationRequest\(parsed\.data, user
 assert.match(schema, /generation_requests \([\s\S]*?user_id uuid references users\(id\)/);
 assert.match(schema, /generation_requests \([\s\S]*?options_json jsonb/);
 assert.match(source, /operator is not unique/);
+assert.match(source, /refundCreditReservation/);
+assert.match(source, /reason: "project_generation_timed_out"/);
 const options = {
   duration: "30",
   sceneCount: "5",

@@ -28,15 +28,23 @@ assert.match(usage, /'reserve_adjustment', -\(\$\{input\.credits\}::bigint\)/);
 assert.doesNotMatch(usage, /'reserve_adjustment', -\$\{input\.credits\}/);
 assert.match(usage, /lifetime_consumed = account\.lifetime_consumed \+/);
 assert.match(usage, /export async function releaseCreditReservation/);
+assert.match(usage, /export async function refundCreditReservation/);
+assert.match(usage, /event\.status = 'settled'/);
+assert.match(usage, /set status = 'released',[\s\S]*settled_credits = 0/);
+assert.match(usage, /available_credits = account\.available_credits \+ refunded\.refund_credits/);
+assert.match(usage, /lifetime_consumed = greatest\(0, account\.lifetime_consumed - refunded\.consumed_credits_refund\)/);
+assert.match(usage, /'generation_refund'/);
 assert.match(usage, /on conflict \(idempotency_key\) do nothing/);
 
 assert.match(projects, /projectEstimateItems/);
 assert.match(projects, /reserveCredits\(\{/);
 assert.match(projects, /INSUFFICIENT_CREDITS/);
 assert.match(projects, /operator is not unique/);
+assert.match(projects, /refundCreditReservation\(\{[\s\S]*reason: "project_generation_failed"/);
 assert.match(background, /reservationKey: message\.billingReservationKey/);
 assert.match(background, /project_generation_completed/);
 assert.match(background, /project_media_permanently_failed/);
+assert.match(background, /refundCreditReservation\(\{[\s\S]*reason: "project_media_permanently_failed"/);
 assert.match(background, /automaticPremiumUpgrade/);
 
 assert.match(images, /providerRequestCount/);

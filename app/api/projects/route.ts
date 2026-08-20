@@ -26,6 +26,7 @@ import {
   InsufficientCreditsError,
   billingIdempotencyKey,
   recordUsageEvent,
+  refundCreditReservation,
   releaseCreditReservation,
   reserveAdditionalCredits,
   reserveCredits
@@ -339,7 +340,7 @@ async function failBackgroundGeneration(body: ProjectGenerationInput, error: unk
   if (body.requestId) {
     await failGenerationRequest(body.requestId, publicGenerationError(error)).catch(() => undefined);
     if (userId) {
-      await releaseCreditReservation({
+      await refundCreditReservation({
         userId,
         reservationKey: projectReservationKey(body.requestId),
         reason: "project_generation_failed",

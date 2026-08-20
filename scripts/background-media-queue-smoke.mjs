@@ -16,8 +16,14 @@ assert.match(worker, /if \(sceneAsset\(project, message\.sceneNumber, "image"\)\
 assert.match(worker, /if \(sceneAsset\(project, message\.sceneNumber, "audio"\)\) return project/);
 assert.match(worker, /enqueueProjectMediaScene\(\{ \.\.\.message, sceneNumber: nextSceneNumber \}\)/);
 assert.match(worker, /completeGenerationRequest/);
-assert.match(consumer, /metadata\.deliveryCount >= 6/);
-assert.match(requests, /interval '24 hours'/);
+assert.match(worker, /automaticPremiumUpgrade = deliveryCount >= 2/);
+assert.match(worker, /ProjectMediaQualityExhaustedError/);
+assert.match(worker, /ensureSceneImage\(message, project, deliveryCount\)/);
+assert.match(consumer, /processProjectMediaScene\(message, metadata\.deliveryCount\)/);
+assert.match(consumer, /error instanceof ProjectMediaQualityExhaustedError/);
+assert.match(consumer, /metadata\.deliveryCount >= 2/);
+assert.match(consumer, /metadata\.deliveryCount >= 4/);
+assert.match(requests, /ATTACHED_PROJECT_STALE_INTERVAL = "45 minutes"/);
 assert.equal(
   vercel.functions["app/api/queues/project-media/route.ts"].experimentalTriggers[0].topic,
   "project-media-generation"

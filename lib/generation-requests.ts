@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { refundCreditReservation } from "@/lib/billing/usage";
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import type { GenerationOptions, GenerationReferenceAsset } from "@/lib/types";
 
@@ -31,6 +32,7 @@ type GenerationRequestRow = {
 };
 
 let schemaPromise: Promise<void> | undefined;
+const ATTACHED_PROJECT_STALE_INTERVAL = "45 minutes";
 
 function publicStoredError(error: string | null) {
   if (!error) return undefined;
@@ -171,7 +173,7 @@ export async function getGenerationRequest(id: string, userId: string) {
   if (!hasDatabaseUrl()) return undefined;
   await ensureGenerationRequestsSchema();
   const sql = getSql();
-  await sql`
+  const expired = await sql`
     update generation_requests
     set status = 'failed', error = '生成任务运行超时，请重新提交。', updated_at = now()
     where id = ${id}
@@ -179,9 +181,17 @@ export async function getGenerationRequest(id: string, userId: string) {
       and status = 'pending'
       and (
         (project_id is null and updated_at < now() - interval '15 minutes')
-        or (project_id is not null and updated_at < now() - interval '24 hours')
+        or (project_id is not null and updated_at < now() - ${ATTACHED_PROJECT_STALE_INTERVAL}::interval)
       )
-  `;
+    returning id
+  ` as Array<{ id: string }>;
+  if (expired[0]) {
+    await refundCreditReservation({
+      userId,
+      reservationKey: `project-generation:${expired[0].id}`,
+      reason: "project_generation_timed_out"
+    }).catch((error) => console.error("[generation-requests] Unable to refund timed-out generation:", error));
+  }
   const rows = await sql`
     select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
     from generation_requests
@@ -225,16 +235,22 @@ export async function listIncompleteGenerationRequests(userId: string) {
   if (!hasDatabaseUrl()) return [];
   await ensureGenerationRequestsSchema();
   const sql = getSql();
-  await sql`
+  const expired = await sql`
     update generation_requests
     set status = 'failed', error = '生成任务运行超时，请重新提交。', updated_at = now()
     where user_id = ${userId}
       and status = 'pending'
       and (
         (project_id is null and updated_at < now() - interval '15 minutes')
-        or (project_id is not null and updated_at < now() - interval '24 hours')
+        or (project_id is not null and updated_at < now() - ${ATTACHED_PROJECT_STALE_INTERVAL}::interval)
       )
-  `;
+    returning id
+  ` as Array<{ id: string }>;
+  await Promise.all(expired.map((request) => refundCreditReservation({
+    userId,
+    reservationKey: `project-generation:${request.id}`,
+    reason: "project_generation_timed_out"
+  }).catch((error) => console.error("[generation-requests] Unable to refund timed-out generation:", error))));
   const rows = await sql`
     select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
     from generation_requests
