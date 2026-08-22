@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { PublicLanguage } from "@/lib/public-language";
+import { persistUiLanguage } from "@/lib/ui-language-client";
 
 type LoginScreenProps = {
   configured: boolean;
   error?: string;
+  initialLanguage: PublicLanguage;
 };
 
-const UI_LANGUAGE_STORAGE_KEY = "know-video:ui-language";
 type LoginLanguage = "zh-CN" | "en";
 
 const errorCopy: Record<string, [string, string]> = {
@@ -19,22 +21,21 @@ const errorCopy: Record<string, [string, string]> = {
   access_denied: ["你取消了 Google 授权。", "You cancelled Google authorization."]
 };
 
-export function LoginScreen({ configured, error }: LoginScreenProps) {
-  const [language, setLanguage] = useState<LoginLanguage>("zh-CN");
+export function LoginScreen({ configured, error, initialLanguage }: LoginScreenProps) {
+  const [language, setLanguage] = useState<LoginLanguage>(initialLanguage);
   const text = (chinese: string, english: string) => language === "zh-CN" ? chinese : english;
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
-    if (saved === "zh-CN" || saved === "en") setLanguage(saved);
-  }, []);
+    persistUiLanguage(initialLanguage);
+  }, [initialLanguage]);
 
   function changeLanguage(next: LoginLanguage) {
     setLanguage(next);
-    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, next);
+    persistUiLanguage(next);
   }
 
   return (
-    <main className="kv-login-page">
+    <main className="kv-login-page" lang={language}>
       <button
         aria-label={text("切换到英文界面", "Switch to Chinese interface")}
         className="kv-ui-language-toggle kv-login-language-toggle"

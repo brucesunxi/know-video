@@ -2,6 +2,7 @@ import { getCurrentProjectSnapshot } from "@/lib/project-store";
 import { WorkspaceClient } from "@/app/workspace-client";
 import { authIsConfigured, getCurrentUser } from "@/lib/auth";
 import { LoginScreen } from "@/app/login-screen";
+import { getPublicLanguage } from "@/lib/public-language";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +13,8 @@ export default async function Home({
 }) {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
-    const params = await searchParams;
-    return <LoginScreen configured={authIsConfigured()} error={params.auth_error} />;
+    const [params, language] = await Promise.all([searchParams, getPublicLanguage()]);
+    return <LoginScreen configured={authIsConfigured()} error={params.auth_error} initialLanguage={language} />;
   }
 
   const { project, messages, pendingPlan, source } = await getCurrentProjectSnapshot(currentUser.id);

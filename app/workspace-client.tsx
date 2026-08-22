@@ -82,12 +82,12 @@ import {
 } from "@/lib/voice-profiles";
 import { VIDEO_FPS } from "@/video/config";
 import { creditPacks, usdPrice } from "@/lib/billing/packs";
+import { persistUiLanguage, UI_LANGUAGE_STORAGE_KEY } from "@/lib/ui-language-client";
 import type { ChatMessage, EditChange, EditPlan, GenerationOptions, GenerationReferenceAsset, GenerationTaskListItem, LocalMotionIntensity, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
 type Stage = "brief" | "generating" | "projects" | "studio";
 type UiLanguage = "zh-CN" | "en";
-const UI_LANGUAGE_STORAGE_KEY = "know-video:ui-language";
 const UiLanguageContext = createContext<{
   language: UiLanguage;
   setLanguage: (language: UiLanguage) => void;
@@ -5949,8 +5949,7 @@ export function WorkspaceClient({
 
   function changeUiLanguage(language: UiLanguage) {
     setUiLanguage(language);
-    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, language);
-    document.documentElement.lang = language;
+    persistUiLanguage(language);
   }
 
   const generationPrompt = useMemo(() => briefPrompt.trim(), [briefPrompt]);

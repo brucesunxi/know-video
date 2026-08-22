@@ -5,12 +5,18 @@ const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.
 const player = fs.readFileSync(new URL("../app/video-player.tsx", import.meta.url), "utf8");
 const voices = fs.readFileSync(new URL("../lib/voice-profiles.ts", import.meta.url), "utf8");
 const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+const uiLanguageClient = fs.readFileSync(
+  new URL("../lib/ui-language-client.ts", import.meta.url),
+  "utf8",
+);
 
 assert.match(workspace, /type UiLanguage = "zh-CN" \| "en"/);
-assert.match(workspace, /UI_LANGUAGE_STORAGE_KEY = "know-video:ui-language"/);
+assert.match(workspace, /UI_LANGUAGE_STORAGE_KEY/);
+assert.match(uiLanguageClient, /UI_LANGUAGE_STORAGE_KEY = "know-video:ui-language"/);
 assert.match(workspace, /UiLanguageContext\.Provider/);
-assert.match(workspace, /window\.localStorage\.setItem\(UI_LANGUAGE_STORAGE_KEY, language\)/);
-assert.match(workspace, /document\.documentElement\.lang = language/);
+assert.match(workspace, /persistUiLanguage\(language\)/);
+assert.match(uiLanguageClient, /window\.localStorage\.setItem\(UI_LANGUAGE_STORAGE_KEY, language\)/);
+assert.match(uiLanguageClient, /document\.documentElement\.lang = language/);
 assert.match(workspace, /className="kv-ui-language-toggle"/);
 assert.match(workspace, /切换为英文界面/);
 assert.match(workspace, /Switch interface to Chinese/);

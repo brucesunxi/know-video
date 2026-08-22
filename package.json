@@ -114,6 +114,7 @@
     "db:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
     "services:check": "node --env-file=.env.local scripts/diagnose-services.mjs",
     "auth:smoke": "node scripts/auth-smoke.mjs",
+    "login:language:smoke": "node scripts/login-language-smoke.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

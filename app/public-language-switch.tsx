@@ -2,6 +2,7 @@
 
 import { Globe2 } from "lucide-react";
 import type { PublicLanguage } from "@/lib/public-language";
+import { persistUiLanguage } from "@/lib/ui-language-client";
 import styles from "@/app/public-site.module.css";
 
 export function PublicLanguageSwitch({ language }: { language: PublicLanguage }) {
@@ -9,7 +10,7 @@ export function PublicLanguageSwitch({ language }: { language: PublicLanguage })
   const label = language === "zh-CN" ? "English" : "中文";
 
   function switchLanguage() {
-    document.cookie = `kv_public_language=${nextLanguage}; path=/; max-age=31536000; samesite=lax`;
+    persistUiLanguage(nextLanguage);
     window.location.reload();
   }
 
