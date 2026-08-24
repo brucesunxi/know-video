@@ -43,6 +43,8 @@ assert.match(imageAssets, /evaluateCloudflareImageSemantics/);
 assert.match(imageAssets, /text-free-semantic-pass-style-fallback/);
 assert.match(imageAssets, /qualityGate: styleFallback/);
 assert.match(imageAssets, /inspection === "style_mismatch" && allowStyleFallback/);
+assert.match(imageAssets, /inspection-fallback-semantic/);
+assert.match(imageAssets, /validator formatting glitches/);
 assert.doesNotMatch(imageAssets, /betterTextFreeCandidate/);
 assert.match(imageAssets, /composition_duplicate/);
 assert.match(imageAssets, /ADJACENT_SCENE_DUPLICATE_THRESHOLD/);

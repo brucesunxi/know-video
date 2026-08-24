@@ -89,6 +89,58 @@ function retryDelay(attempt: number) {
   return 700 * (2 ** attempt) + Math.floor(Math.random() * 250);
 }
 
+async function runVisionVerdict<T>(options: {
+  body: Buffer;
+  question: string;
+  maxTokens: number;
+  parse: (payload: unknown) => T | undefined;
+  inconclusiveMessage: string;
+}) {
+  const model = getOptionalEnv("CLOUDFLARE_VISION_MODEL") || DEFAULT_VISION_MODEL;
+  const normalized = await sharp(options.body)
+    .rotate()
+    .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
+    .toBuffer();
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(endpoint(model), {
+        method: "POST",
+        headers: {
+          ...authorizationHeaders(),
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          image: `data:image/jpeg;base64,${normalized.toString("base64")}`,
+          task: "query",
+          question: attempt === 0
+            ? options.question
+            : `${options.question}\nReturn only one of the exact verdict labels requested above, with no explanation or punctuation.`,
+          reasoning: false,
+          temperature: 0,
+          max_tokens: options.maxTokens,
+          stream: false
+        }),
+        signal: AbortSignal.timeout(35_000)
+      });
+      if (!response.ok) throw await responseError(response);
+      const payload = await response.json() as unknown;
+      const verdict = options.parse(payload);
+      if (verdict !== undefined) return { verdict, model };
+      lastError = new Error(options.inconclusiveMessage);
+    } catch (error) {
+      lastError = error;
+      const status = (error as { status?: number }).status;
+      if (status && !retryableStatus(status)) throw error;
+    }
+    if (attempt === 0) await wait(350);
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(options.inconclusiveMessage);
+}
+
 async function wait(milliseconds: number) {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -200,90 +252,37 @@ export async function analyzeCloudflareImage(body: Buffer) {
 }
 
 export async function detectCloudflareImageText(body: Buffer) {
-  const model = getOptionalEnv("CLOUDFLARE_VISION_MODEL") || DEFAULT_VISION_MODEL;
-  const normalized = await sharp(body)
-    .rotate()
-    .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
-    .toBuffer();
-  const response = await fetch(endpoint(model), {
-    method: "POST",
-    headers: {
-      ...authorizationHeaders(),
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      image: `data:image/jpeg;base64,${normalized.toString("base64")}`,
-      task: "query",
-      question: "Perform a high-recall text inspection over the entire image, including foreground and background, screens, posters, colored panels, packaging, walls, clothing, and the bottom and right edges. Answer TEXT_PRESENT if there is any word, letter, number, caption, headline, sign, label, logo, watermark, signature, interface copy, or a sequence of malformed or fake glyphs intended to resemble writing. Misspelled, cropped, blurry, nonsensical, or partially occluded writing still counts as TEXT_PRESENT. Do not classify isolated object outlines or ordinary texture marks as text. Answer exactly TEXT_PRESENT or TEXT_FREE.",
-      reasoning: false,
-      temperature: 0,
-      max_tokens: 12,
-      stream: false
-    }),
-    signal: AbortSignal.timeout(35_000)
+  const result = await runVisionVerdict({
+    body,
+    question: "Perform a high-recall text inspection over the entire image, including foreground and background, screens, posters, colored panels, packaging, walls, clothing, and the bottom and right edges. Answer TEXT_PRESENT if there is any word, letter, number, caption, headline, sign, label, logo, watermark, signature, interface copy, or a sequence of malformed or fake glyphs intended to resemble writing. Misspelled, cropped, blurry, nonsensical, or partially occluded writing still counts as TEXT_PRESENT. Do not classify isolated object outlines or ordinary texture marks as text. Answer exactly TEXT_PRESENT or TEXT_FREE.",
+    maxTokens: 12,
+    parse: parseImageTextPresence,
+    inconclusiveMessage: "AI vision service returned an inconclusive text inspection"
   });
-  if (!response.ok) throw await responseError(response);
-  const payload = await response.json() as unknown;
-  const hasText = parseImageTextPresence(payload);
-  if (hasText === undefined) throw new Error("AI vision service returned an inconclusive text inspection");
-  return { hasText, model };
+  return { hasText: result.verdict, model: result.model };
 }
 
 export async function evaluateCloudflareImageSemantics(body: Buffer, expectedScene: string) {
-  const model = getOptionalEnv("CLOUDFLARE_VISION_MODEL") || DEFAULT_VISION_MODEL;
-  const normalized = await sharp(body)
-    .rotate()
-    .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
-    .toBuffer();
-  const response = await fetch(endpoint(model), {
-    method: "POST",
-    headers: {
-      ...authorizationHeaders(),
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      image: `data:image/jpeg;base64,${normalized.toString("base64")}`,
-      task: "query",
-      question: [
+  const result = await runVisionVerdict({
+    body,
+    question: [
         "Judge whether this generated film frame visibly matches the expected scene below.",
         `EXPECTED SCENE: ${expectedScene.slice(0, 2800)}`,
         "Answer SEMANTIC_MATCH only when the central subject, action, and setting or concrete visual metaphor are recognizable and materially connected to the expected scene.",
         "Answer SEMANTIC_MISMATCH when the image is mainly a color palette, pattern sheet, material swatch, decorative abstract geometry, generic background, unrelated subject, or merely matches the requested art style without depicting the scene content.",
         "Do not require readable text. Judge visible meaning, not typography. Answer exactly SEMANTIC_MATCH or SEMANTIC_MISMATCH."
       ].join("\n"),
-      reasoning: false,
-      temperature: 0,
-      max_tokens: 16,
-      stream: false
-    }),
-    signal: AbortSignal.timeout(35_000)
+    maxTokens: 16,
+    parse: parseImageSemanticMatch,
+    inconclusiveMessage: "AI vision service returned an inconclusive semantic inspection"
   });
-  if (!response.ok) throw await responseError(response);
-  const payload = await response.json() as unknown;
-  const matches = parseImageSemanticMatch(payload);
-  if (matches === undefined) throw new Error("AI vision service returned an inconclusive semantic inspection");
-  return { matches, model };
+  return { matches: result.verdict, model: result.model };
 }
 
 export async function inspectCloudflareGeneratedImage(body: Buffer, expectedScene: string) {
-  const model = getOptionalEnv("CLOUDFLARE_VISION_MODEL") || DEFAULT_VISION_MODEL;
-  const normalized = await sharp(body)
-    .rotate()
-    .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
-    .toBuffer();
-  const response = await fetch(endpoint(model), {
-    method: "POST",
-    headers: {
-      ...authorizationHeaders(),
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      image: `data:image/jpeg;base64,${normalized.toString("base64")}`,
-      task: "query",
-      question: [
+  const result = await runVisionVerdict({
+    body,
+    question: [
         "Inspect this generated film frame against the expected scene below.",
         `EXPECTED SCENE: ${expectedScene.slice(0, 2800)}`,
         "Answer TEXT_PRESENT if there is readable text, a logo, watermark, signature, or clustered fake writing.",
@@ -293,18 +292,11 @@ export async function inspectCloudflareGeneratedImage(body: Buffer, expectedScen
         "Answer IMAGE_PASS only when the image is text-free, uses the exact locked rendering medium, and its concrete visible meaning materially matches the expected scene.",
         "Answer exactly TEXT_PRESENT, STYLE_MISMATCH, SEMANTIC_MISMATCH, or IMAGE_PASS."
       ].join("\n"),
-      reasoning: false,
-      temperature: 0,
-      max_tokens: 16,
-      stream: false
-    }),
-    signal: AbortSignal.timeout(35_000)
+    maxTokens: 16,
+    parse: parseGeneratedImageInspection,
+    inconclusiveMessage: "AI vision service returned an inconclusive generated-image inspection"
   });
-  if (!response.ok) throw await responseError(response);
-  const payload = await response.json() as unknown;
-  const verdict = parseGeneratedImageInspection(payload);
-  if (!verdict) throw new Error("AI vision service returned an inconclusive generated-image inspection");
-  return { verdict, model };
+  return { verdict: result.verdict, model: result.model };
 }
 
 export async function transcribeCloudflareAudio(body: Buffer, language?: "zh" | "en") {

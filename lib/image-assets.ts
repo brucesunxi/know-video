@@ -523,6 +523,30 @@ async function generateSceneImage(
           : await inspectGeneratedImage(normalized.body, scene, project);
       } catch (error) {
         if (!(error instanceof GeneratedImageQualityError) || error.code !== "semantic_check_failed") throw error;
+        // The dedicated text gate above already passed. If the combined
+        // validator is temporarily inconclusive, keep a premium candidate only
+        // after a separate semantic check confirms the actual scene meaning.
+        // This prevents validator formatting glitches from turning a usable,
+        // text-free frame into a permanently missing scene.
+        if (allowStyleFallback && hasCloudflareAI()) {
+          try {
+            const semanticCheck = await trackedValidation(
+              `${qualityAttempt}:inspection-fallback-semantic`,
+              () => evaluateCloudflareImageSemantics(normalized.body, expectedSceneSemantics(scene, project))
+            );
+            if (semanticCheck.matches && !styleFallback) {
+              styleFallback = {
+                body: normalized.body,
+                metadata: normalized.metadata,
+                model: generatedModel,
+                prompt: effectivePrompt,
+                seed
+              };
+            }
+          } catch (fallbackError) {
+            console.warn(`[image-assets] Scene ${scene.sceneNumber} independent semantic fallback was unavailable:`, fallbackError);
+          }
+        }
         if (qualityAttempt < MAX_IMAGE_QUALITY_ATTEMPTS - 1) {
           console.warn(`[image-assets] Scene ${scene.sceneNumber} inspection was unavailable; retrying with a new candidate.`);
           continue;
