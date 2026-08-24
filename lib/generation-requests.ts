@@ -201,6 +201,70 @@ export async function getGenerationRequest(id: string, userId: string) {
   return rows[0] ? toRecord(rows[0]) : undefined;
 }
 
+export async function getGenerationRequestBeforeExpiry(id: string, userId: string) {
+  if (!hasDatabaseUrl()) return undefined;
+  await ensureGenerationRequestsSchema();
+  const rows = await getSql()`
+    select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
+    from generation_requests
+    where id = ${id} and user_id = ${userId}
+    limit 1
+  ` as GenerationRequestRow[];
+  return rows[0] ? toRecord(rows[0]) : undefined;
+}
+
+export async function listCompletedPendingGenerationRequests(userId: string) {
+  if (!hasDatabaseUrl()) return [];
+  await ensureGenerationRequestsSchema();
+  const rows = await getSql()`
+    select
+      gr.id,
+      gr.user_id,
+      gr.prompt,
+      gr.options_json,
+      gr.request_fingerprint,
+      gr.status,
+      gr.project_id,
+      gr.engine,
+      gr.error,
+      gr.created_at,
+      gr.updated_at
+    from generation_requests gr
+    join projects p on p.id = gr.project_id and p.user_id = ${userId}
+    where gr.user_id = ${userId}
+      and gr.status = 'pending'
+      and p.current_version_id is not null
+      and exists (
+        select 1 from scenes scene where scene.version_id = p.current_version_id
+      )
+      and not exists (
+        select 1
+        from scenes scene
+        where scene.version_id = p.current_version_id
+          and (
+            not exists (
+              select 1
+              from scene_assets visual_asset
+              where visual_asset.scene_id = scene.id
+                and visual_asset.asset_type in ('image', 'clip')
+                and coalesce(visual_asset.metadata_json->>'source', '') <> 'fallback-image'
+                and coalesce(visual_asset.metadata_json->>'model', '') <> 'local-svg-fallback'
+                and coalesce(visual_asset.metadata_json->>'qualityFallback', 'false') <> 'true'
+            )
+            or not exists (
+              select 1
+              from scene_assets audio_asset
+              where audio_asset.scene_id = scene.id
+                and audio_asset.asset_type = 'audio'
+            )
+          )
+      )
+    order by gr.updated_at desc
+    limit 20
+  ` as GenerationRequestRow[];
+  return rows.map(toRecord);
+}
+
 export async function getProjectGenerationOptions(projectId: string, userId: string) {
   if (!hasDatabaseUrl()) return undefined;
   await ensureGenerationRequestsSchema();

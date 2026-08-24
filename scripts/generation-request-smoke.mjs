@@ -9,6 +9,7 @@ const styles = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "
 const source = fs.readFileSync(new URL("../lib/generation-requests.ts", import.meta.url), "utf8");
 const projectsRoute = fs.readFileSync(new URL("../app/api/projects/route.ts", import.meta.url), "utf8");
 const generationRoute = fs.readFileSync(new URL("../app/api/projects/generation/route.ts", import.meta.url), "utf8");
+const reconciliation = fs.readFileSync(new URL("../lib/generation-reconciliation.ts", import.meta.url), "utf8");
 const schema = fs.readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8");
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
@@ -40,9 +41,19 @@ assert.match(projectsRoute, /attachGenerationRequestProject/);
 assert.match(projectsRoute, /enqueueProjectMediaScene/);
 assert.match(projectsRoute, /return NextResponse\.json\(\{ status: "pending", requestId \}, \{ status: 202 \}\)/);
 assert.match(projectsRoute, /listIncompleteGenerationRequests\(user\.id\)/);
+assert.match(projectsRoute, /listCompletedPendingGenerationRequests\(user\.id\)/);
+assert.match(projectsRoute, /reconcileCompletedGenerationRequests\(candidates, user\.id\)/);
 assert.match(generationRoute, /getGenerationRequest\(parsed\.data, user\.id\)/);
+assert.match(generationRoute, /getGenerationRequestBeforeExpiry\(parsed\.data, user\.id\)/);
+assert.match(generationRoute, /reconcileCompletedGenerationRequest/);
+assert.match(generationRoute, /sceneHasAudioAsset/);
+assert.match(generationRoute, /listCompletedPendingGenerationRequests\(user\.id\)/);
 assert.match(generationRoute, /if \(!requestId\)/);
 assert.match(generationRoute, /generationRequests: await listIncompleteGenerationRequests\(user\.id\)/);
+assert.match(reconciliation, /sceneHasVisualAsset\(scene\) && sceneHasAudioAsset\(scene\)/);
+assert.match(reconciliation, /reason: "project_generation_reconciled"/);
+assert.match(source, /not exists \([\s\S]*?scene_assets visual_asset/);
+assert.match(source, /scene_assets audio_asset/);
 assert.match(generationRoute, /export async function DELETE/);
 assert.match(generationRoute, /deleteFailedGenerationRequest\(parsed\.data, user\.id\)/);
 assert.match(schema, /generation_requests \([\s\S]*?user_id uuid references users\(id\)/);
@@ -125,8 +136,8 @@ assert.match(workspace, /生成任务中心/);
 assert.match(workspace, /const \[taskFilter, setTaskFilter\]/);
 assert.match(workspace, /function deleteGenerationTask\(task: GenerationTaskListItem\)/);
 assert.match(workspace, /删除这条失败提示/);
-assert.match(workspace, /window\.setInterval\(\(\) => void refreshTasks\(\), 8_000\)/);
-assert.match(workspace, /stage === "projects" \? "\/api\/projects" : "\/api\/projects\/generation"/);
+assert.match(workspace, /hasRunningGenerationTasks\s*\? window\.setInterval\(\(\) => void refreshTasks\(\), 15_000\)\s*:\s*undefined/);
+assert.match(workspace, /stage === "projects" && !hasRunningGenerationTasks/);
 assert.match(workspace, /setGenerationStatus\("任务已转入后台生成"\)/);
 assert.match(workspace, /await openProjects\(\);\s+return;/);
 assert.match(workspace, /约 \$\{secondsPerScene\} 秒\/幕/);

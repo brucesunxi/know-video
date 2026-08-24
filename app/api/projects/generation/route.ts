@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
-import { deleteFailedGenerationRequest, getGenerationRequest, listIncompleteGenerationRequests } from "@/lib/generation-requests";
+import {
+  deleteFailedGenerationRequest,
+  getGenerationRequest,
+  getGenerationRequestBeforeExpiry,
+  listCompletedPendingGenerationRequests,
+  listIncompleteGenerationRequests
+} from "@/lib/generation-requests";
+import {
+  reconcileCompletedGenerationRequest,
+  reconcileCompletedGenerationRequests
+} from "@/lib/generation-reconciliation";
 import { getProjectSnapshot } from "@/lib/project-store";
-import { sceneHasVisualAsset } from "@/lib/generation-resume";
+import { sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
 
 const requestIdSchema = z.string().uuid();
 
@@ -17,13 +27,21 @@ export async function GET(request: Request) {
   }
   const requestId = new URL(request.url).searchParams.get("requestId");
   if (!requestId) {
+    const candidates = await listCompletedPendingGenerationRequests(user.id);
+    await reconcileCompletedGenerationRequests(candidates, user.id);
     return NextResponse.json({ generationRequests: await listIncompleteGenerationRequests(user.id) });
   }
   const parsed = requestIdSchema.safeParse(requestId);
   if (!parsed.success) {
     return NextResponse.json({ error: "生成任务标识无效。" }, { status: 400 });
   }
-  const generation = await getGenerationRequest(parsed.data, user.id);
+  const beforeExpiry = await getGenerationRequestBeforeExpiry(parsed.data, user.id);
+  const reconciled = beforeExpiry
+    ? await reconcileCompletedGenerationRequest(beforeExpiry, user.id)
+    : undefined;
+  const generation = reconciled?.status === "pending"
+    ? await getGenerationRequest(parsed.data, user.id) ?? reconciled
+    : reconciled ?? await getGenerationRequest(parsed.data, user.id);
   if (!generation) {
     return NextResponse.json({ error: "没有找到生成任务。" }, { status: 404 });
   }

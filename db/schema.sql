@@ -160,6 +160,7 @@ alter table generation_requests
 create index if not exists project_versions_project_id_idx on project_versions(project_id);
 create index if not exists projects_user_id_updated_idx on projects(user_id, updated_at desc);
 create index if not exists scenes_version_id_idx on scenes(version_id);
+create index if not exists scene_assets_scene_id_idx on scene_assets(scene_id);
 create index if not exists chat_messages_project_id_idx on chat_messages(project_id);
 create index if not exists edit_plans_project_id_idx on edit_plans(project_id);
 create index if not exists render_jobs_version_id_idx on render_jobs(version_id);

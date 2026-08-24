@@ -15,8 +15,10 @@ import {
   completeGenerationRequest,
   failGenerationRequest,
   generationRequestFingerprint,
+  listCompletedPendingGenerationRequests,
   listIncompleteGenerationRequests
 } from "@/lib/generation-requests";
+import { reconcileCompletedGenerationRequests } from "@/lib/generation-reconciliation";
 import { enqueueProjectMediaScene } from "@/lib/media-generation-queue";
 import { persistGeneratedProject } from "@/lib/project-mutations";
 import { getProjectSnapshot, listProjects } from "@/lib/project-store";
@@ -100,6 +102,8 @@ export const maxDuration = 300;
 export async function GET() {
   try {
     const user = await requireCurrentUser();
+    const candidates = await listCompletedPendingGenerationRequests(user.id);
+    await reconcileCompletedGenerationRequests(candidates, user.id);
     const [projects, generationRequests] = await Promise.all([
       listProjects(user.id),
       listIncompleteGenerationRequests(user.id)

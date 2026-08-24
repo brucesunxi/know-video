@@ -1936,7 +1936,7 @@ async function waitForRenderJob(
     if (Date.now() - startedAt > 45 * 60 * 1000) {
       throw new Error("视频渲染超时，请稍后在项目中重试导出。");
     }
-    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    await new Promise((resolve) => window.setTimeout(resolve, 5000));
     if (isCancelled()) return undefined;
     try {
       const response = await fetch(`/api/render-jobs?id=${encodeURIComponent(jobId)}`, { cache: "no-store" });
@@ -5922,6 +5922,7 @@ export function WorkspaceClient({
   const recoveringRenderRef = useRef<string>();
   const recoveringGenerationRef = useRef(false);
   const cancelledRenderIdsRef = useRef(new Set<string>());
+  const hasRunningGenerationTasks = generationTasks.some((task) => task.status === "pending");
 
   useEffect(() => {
     const stored = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
@@ -5936,7 +5937,11 @@ export function WorkspaceClient({
     const refreshTasks = async () => {
       if (document.visibilityState === "hidden") return;
       try {
-        const response = await fetch(stage === "projects" ? "/api/projects" : "/api/projects/generation", { cache: "no-store" });
+        const endpoint =
+          stage === "projects" && !hasRunningGenerationTasks
+            ? "/api/projects"
+            : "/api/projects/generation";
+        const response = await fetch(endpoint, { cache: "no-store" });
         const data = await response.json().catch(() => ({})) as { projects?: ProjectListItem[]; generationRequests?: GenerationTaskListItem[] };
         if (!cancelled && response.ok) {
           setGenerationTasks(data.generationRequests ?? []);
@@ -5947,17 +5952,21 @@ export function WorkspaceClient({
       }
     };
     void refreshTasks();
-    const interval = window.setInterval(() => void refreshTasks(), 8_000);
+    const interval = hasRunningGenerationTasks
+      ? window.setInterval(() => void refreshTasks(), 15_000)
+      : undefined;
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") void refreshTasks();
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      if (interval !== undefined) {
+        window.clearInterval(interval);
+      }
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [stage]);
+  }, [hasRunningGenerationTasks, stage]);
 
   function changeUiLanguage(language: UiLanguage) {
     setUiLanguage(language);
@@ -7040,7 +7049,7 @@ export function WorkspaceClient({
 
   useEffect(() => {
     if (!exportsOpen || !renderJobs.some((job) => job.status === "queued" || job.status === "running")) return;
-    const interval = window.setInterval(() => void loadRenderJobs(true), 3000);
+    const interval = window.setInterval(() => void loadRenderJobs(true), 5000);
     return () => window.clearInterval(interval);
   }, [exportsOpen, project.id, renderJobs.some((job) => job.status === "queued" || job.status === "running")]);
 
