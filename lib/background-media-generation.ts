@@ -64,7 +64,10 @@ async function ensureSceneImage(message: ProjectMediaMessage, project: Project, 
   const updated = await generateProjectSceneImages(project, {
     replaceExistingImages: true,
     sceneNumbers: [message.sceneNumber],
-    quality
+    quality,
+    // Only the automatically upgraded premium pass may use the guarded
+    // fallback. Standard generation must still satisfy the strict style gate.
+    allowStyleFallback: automaticPremiumUpgrade
   });
   const generated = sceneAsset(updated, message.sceneNumber, "image");
   if (!generated) throw new ProjectMediaQualityExhaustedError(message.sceneNumber);
@@ -191,7 +194,9 @@ export async function processProjectMediaScene(message: ProjectMediaMessage, del
 }
 
 export async function permanentlyFailProjectMedia(message: ProjectMediaMessage, error: unknown) {
-  const reason = error instanceof Error ? error.message : "Unknown media generation failure";
+  const reason = error instanceof ProjectMediaQualityExhaustedError
+    ? `场景 ${message.sceneNumber} 的候选画面均未通过内容与风格质量检查。`
+    : error instanceof Error ? error.message : "Unknown media generation failure";
   await failGenerationRequest(
     message.requestId,
     `后台已多次自动重试，但场景 ${message.sceneNumber} 的素材仍未完成：${reason}`

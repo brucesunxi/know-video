@@ -340,6 +340,18 @@ function localizedRuntimeLabel(value: string, language: UiLanguage) {
 }
 
 function localizedErrorMessage(value: string, language: UiLanguage) {
+  const mediaQualityFailure = value.match(/^后台已多次自动重试，但场景 (\d+) 的素材仍未完成：场景 \d+ 的候选画面均未通过内容与风格质量检查。$/u);
+  if (mediaQualityFailure) {
+    return language === "zh-CN"
+      ? `场景 ${mediaQualityFailure[1]} 的候选画面未通过内容与风格检查。系统已自动重试，您可以检查该场景后重新生成画面。`
+      : `Scene ${mediaQualityFailure[1]} did not pass the visual content and style checks after automatic retries. Review the scene or retry its visual.`;
+  }
+  const legacyMediaQualityFailure = value.match(/^后台已多次自动重试，但场景 (\d+) 的素材仍未完成：Scene \d+ visual generation did not produce a usable image\.$/u);
+  if (legacyMediaQualityFailure) {
+    return language === "zh-CN"
+      ? `场景 ${legacyMediaQualityFailure[1]} 在自动重试后仍未生成可用画面。请检查该场景或重新生成画面。`
+      : `Scene ${legacyMediaQualityFailure[1]} did not produce a usable visual after automatic retries. Review the scene or retry its visual.`;
+  }
   if (language === "zh-CN") return value;
   const fixed: Record<string, string> = {
     "生成任务运行超时，请重新提交。": "Script and storyboard generation timed out before the project could be saved. Review the request and try again.",

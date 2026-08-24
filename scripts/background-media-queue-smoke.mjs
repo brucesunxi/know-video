@@ -19,6 +19,8 @@ assert.match(worker, /completeGenerationRequest/);
 assert.match(worker, /automaticPremiumUpgrade = deliveryCount >= 2/);
 assert.match(worker, /ProjectMediaQualityExhaustedError/);
 assert.match(worker, /ensureSceneImage\(message, project, deliveryCount\)/);
+assert.match(worker, /allowStyleFallback: automaticPremiumUpgrade/);
+assert.match(worker, /候选画面均未通过内容与风格质量检查/);
 assert.match(consumer, /processProjectMediaScene\(message, metadata\.deliveryCount\)/);
 assert.match(consumer, /error instanceof ProjectMediaQualityExhaustedError/);
 assert.match(consumer, /metadata\.deliveryCount >= 2/);

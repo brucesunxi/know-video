@@ -91,6 +91,7 @@ assert.match(workspace, /generationRequests\?: GenerationTaskListItem\[\]/);
 assert.match(workspace, /function generationTaskTitle\(task: GenerationTaskListItem, language: UiLanguage\)/);
 assert.match(workspace, /function generationTaskSpecs\(task: GenerationTaskListItem, language: UiLanguage\)/);
 assert.match(workspace, /function generationTaskProgressLabel\(task: GenerationTaskListItem, language: UiLanguage, background = false\)/);
+assert.match(workspace, /did not pass the visual content and style checks after automatic retries/);
 assert.match(workspace, /if \(task\.projectId\)/);
 assert.match(workspace, /正在后台生成场景画面与配音/);
 assert.match(workspace, /Generating scene visuals and narration in the background/);

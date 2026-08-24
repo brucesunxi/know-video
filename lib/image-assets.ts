@@ -1,6 +1,12 @@
 import OpenAI from "openai";
 import sharp from "sharp";
-import { detectCloudflareImageText, generateCloudflareImage, hasCloudflareAI, inspectCloudflareGeneratedImage } from "@/lib/cloudflare-ai";
+import {
+  detectCloudflareImageText,
+  evaluateCloudflareImageSemantics,
+  generateCloudflareImage,
+  hasCloudflareAI,
+  inspectCloudflareGeneratedImage
+} from "@/lib/cloudflare-ai";
 import { sceneReferenceAssets } from "@/lib/attachment-context";
 import { getOptionalEnv } from "@/lib/env";
 import {
@@ -339,7 +345,8 @@ async function generateSceneImage(
   references: ImageReference[],
   variantKey = "primary",
   visualInstruction?: string,
-  comparisonImages: SceneComparisonImage[] = []
+  comparisonImages: SceneComparisonImage[] = [],
+  allowStyleFallback = false
 ): Promise<{ asset: SceneAsset } | undefined> {
   const effectiveQuality: ImageQuality = quality === "premium" || sceneRequiresPremiumImage(scene)
     ? "premium"
@@ -353,6 +360,13 @@ async function generateSceneImage(
   let qualityMetadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"] | undefined;
   let closestScene: { score: number; sceneNumber: number } | undefined;
   let duplicateWasDetected = false;
+  let styleFallback: {
+    body: Buffer;
+    metadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"];
+    model: string;
+    prompt: string;
+    seed: number;
+  } | undefined;
   let providerRequestCount = 0;
   let validationRequestCount = 0;
   const costRunId = crypto.randomUUID();
@@ -522,6 +536,25 @@ async function generateSceneImage(
         const qualityError = inspection === "semantic_mismatch"
           ? new GeneratedImageQualityError("生成画面与当前场景内容不匹配。", "semantic_mismatch")
           : new GeneratedImageQualityError("生成画面偏离项目锁定的视觉风格。", "style_mismatch");
+        // The combined verdict is deliberately conservative. On the premium
+        // pass, retain a text-free style mismatch only when a separate check
+        // confirms that the concrete scene meaning is present. Text, duplicate
+        // compositions, and semantic mismatches remain hard failures.
+        if (inspection === "style_mismatch" && allowStyleFallback && hasCloudflareAI()) {
+          const semanticCheck = await trackedValidation(
+            `${qualityAttempt}:style-fallback-semantic`,
+            () => evaluateCloudflareImageSemantics(normalized.body, expectedSceneSemantics(scene, project))
+          );
+          if (semanticCheck.matches && !styleFallback) {
+            styleFallback = {
+              body: normalized.body,
+              metadata: normalized.metadata,
+              model: generatedModel,
+              prompt: effectivePrompt,
+              seed
+            };
+          }
+        }
         if (qualityAttempt < MAX_IMAGE_QUALITY_ATTEMPTS - 1) {
           console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${qualityError.code}); retrying:`, qualityError.message);
           continue;
@@ -537,6 +570,14 @@ async function generateSceneImage(
       if (!(error instanceof GeneratedImageQualityError) || qualityAttempt === MAX_IMAGE_QUALITY_ATTEMPTS - 1) throw error;
       console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${error.code}); retrying:`, error.message);
     }
+  }
+  if ((!body || !qualityMetadata) && styleFallback) {
+    body = styleFallback.body;
+    qualityMetadata = styleFallback.metadata;
+    model = styleFallback.model;
+    prompt = styleFallback.prompt;
+    seed = styleFallback.seed;
+    console.warn(`[image-assets] Scene ${scene.sceneNumber} accepted a premium style fallback after independent semantic validation.`);
   }
   if (!body || !qualityMetadata) return undefined;
 
@@ -563,7 +604,9 @@ async function generateSceneImage(
       closestSceneNumber: closestScene?.sceneNumber,
       closestSceneSimilarity: closestScene?.score,
       candidateInstruction: visualInstruction || undefined,
-      qualityGate: "strict-semantic-style-pass",
+      qualityGate: styleFallback && body === styleFallback.body
+        ? "text-free-semantic-pass-style-fallback"
+        : "strict-semantic-style-pass",
       providerRequestCount,
       validationRequestCount,
       estimatedActualCostUsd: Number((
@@ -585,6 +628,7 @@ export async function generateProjectSceneImages(
     candidate?: boolean;
     variantKey?: string;
     visualInstruction?: string;
+    allowStyleFallback?: boolean;
   } = {}
 ) {
   const credentialIssue = imageCredentialIssue();
@@ -630,7 +674,8 @@ export async function generateProjectSceneImages(
           references,
           options.variantKey,
           options.visualInstruction,
-          comparisonImages
+          comparisonImages,
+          options.allowStyleFallback
         );
         if (!generated) return;
 
