@@ -254,7 +254,7 @@ export async function analyzeCloudflareImage(body: Buffer) {
 export async function detectCloudflareImageText(body: Buffer) {
   const result = await runVisionVerdict({
     body,
-    question: "Perform a high-recall text inspection over the entire image, including foreground and background, screens, posters, colored panels, packaging, walls, clothing, and the bottom and right edges. Answer TEXT_PRESENT if there is any word, letter, number, caption, headline, sign, label, logo, watermark, signature, interface copy, or a sequence of malformed or fake glyphs intended to resemble writing. Misspelled, cropped, blurry, nonsensical, or partially occluded writing still counts as TEXT_PRESENT. Do not classify isolated object outlines or ordinary texture marks as text. Answer exactly TEXT_PRESENT or TEXT_FREE.",
+    question: "This is a 2x2 inspection sheet containing the full generated frame plus enlarged overlapping regions from that same frame. Perform a high-recall text inspection across every tile. Answer TEXT_PRESENT if any tile contains any word, letter, number, caption, headline, sign, label, logo, watermark, signature, interface copy, or clustered malformed/fake glyphs intended to resemble writing. Misspelled, cropped, blurry, nonsensical, partially occluded, or duplicated writing still counts as TEXT_PRESENT. Do not classify isolated object outlines or ordinary texture marks as text. Answer exactly TEXT_PRESENT or TEXT_FREE.",
     maxTokens: 12,
     parse: parseImageTextPresence,
     inconclusiveMessage: "AI vision service returned an inconclusive text inspection"

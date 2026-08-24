@@ -182,10 +182,11 @@ async function inspectGeneratedImage(body: Buffer, scene: Scene, project: Projec
 
 async function generatedImageContainsAnyText(body: Buffer) {
   try {
+    const inspectionBody = await buildTextInspectionSheet(body);
     // Keep image generation and validation on Cloudflare when it is configured.
     // Falling through to OpenAI here can reject otherwise valid Cloudflare output
     // because of an unrelated OpenAI quota or billing issue.
-    if (hasCloudflareAI()) return (await detectCloudflareImageText(body)).hasText;
+    if (hasCloudflareAI()) return (await detectCloudflareImageText(inspectionBody)).hasText;
     const apiKey = getOptionalEnv("OPENAI_API_KEY");
     if (apiKey?.startsWith("sk-")) {
       const client = new OpenAI({ apiKey });
@@ -206,7 +207,7 @@ async function generatedImageContainsAnyText(body: Buffer) {
                 "Return TEXT_FREE only when there are no writing-like character sequences anywhere. Answer exactly TEXT_PRESENT or TEXT_FREE."
               ].join(" ")
             },
-            { type: "image_url", image_url: { url: `data:image/png;base64,${body.toString("base64")}`, detail: "high" } }
+            { type: "image_url", image_url: { url: `data:image/png;base64,${inspectionBody.toString("base64")}`, detail: "high" } }
           ]
         }]
       } as never);
@@ -219,6 +220,39 @@ async function generatedImageContainsAnyText(body: Buffer) {
   } catch (error) {
     throw new GeneratedImageQualityError("无法确认生成画面是否完全无文字。", "text_check_failed", { cause: error });
   }
+}
+
+async function buildTextInspectionSheet(body: Buffer) {
+  const source = sharp(body).rotate();
+  const metadata = await source.metadata();
+  const width = metadata.width ?? 1280;
+  const height = metadata.height ?? 720;
+  const cropWidth = Math.max(1, Math.round(width * 0.72));
+  const cropHeight = Math.max(1, Math.round(height * 0.72));
+  const left = Math.max(0, Math.round((width - cropWidth) / 2));
+  const topPositions = [
+    0,
+    Math.max(0, Math.round((height - cropHeight) / 2)),
+    Math.max(0, height - cropHeight)
+  ];
+  const tile = (input: sharp.Sharp) => input
+    .resize(640, 360, { fit: "cover", position: "centre" })
+    .png()
+    .toBuffer();
+  const [full, upper, center, lower] = await Promise.all([
+    tile(sharp(body).rotate()),
+    tile(sharp(body).rotate().extract({ left, top: topPositions[0], width: cropWidth, height: cropHeight })),
+    tile(sharp(body).rotate().extract({ left, top: topPositions[1], width: cropWidth, height: cropHeight })),
+    tile(sharp(body).rotate().extract({ left, top: topPositions[2], width: cropWidth, height: cropHeight }))
+  ]);
+  return sharp({
+    create: { width: 1280, height: 720, channels: 3, background: "#808080" }
+  }).composite([
+    { input: full, left: 0, top: 0 },
+    { input: upper, left: 640, top: 0 },
+    { input: center, left: 0, top: 360 },
+    { input: lower, left: 640, top: 360 }
+  ]).png().toBuffer();
 }
 
 async function loadImageReference(asset: SceneAsset | undefined, role: ImageReference["role"]) {

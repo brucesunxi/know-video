@@ -7,6 +7,10 @@ const qualitySource = fs.readFileSync(new URL("../lib/storyboard-quality.ts", im
   .replace(/^import type .*$/gm, "")
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"@\/lib\/brief-semantics";\n?/m, "");
 assert.doesNotMatch(qualitySource, /voiceover is too short for the available scene duration/);
+const aiVideoSource = fs.readFileSync(new URL("../lib/ai-video.ts", import.meta.url), "utf8");
+assert.match(aiVideoSource, /function treatmentLanguageIssues/);
+assert.match(aiVideoSource, /Treatment failed required narration constraints/);
+assert.match(aiVideoSource, /Final storyboard failed requested-language checks/);
 const source = `${semanticsSource}\n${qualitySource}`;
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 }

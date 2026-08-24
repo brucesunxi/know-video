@@ -321,6 +321,22 @@ function treatmentNarrationIssues(treatment: Treatment, targetDuration: number) 
   return issues;
 }
 
+function treatmentLanguageIssues(treatment: Treatment, options?: GenerationOptions) {
+  if (!options?.language) return [];
+  const spokenAndDisplayCopy = [
+    treatment.workingTitle,
+    ...treatment.beats.map((beat) => beat.narrationLine)
+  ];
+  if (options.language === "英文") {
+    return spokenAndDisplayCopy.some((value) => /\p{Script=Han}/u.test(value))
+      ? ["treatment title or narration is not fully localized in English"]
+      : [];
+  }
+  return spokenAndDisplayCopy.some((value) => !looksSimplifiedChineseLocalized(value))
+    ? ["treatment title or narration is not fully localized in Chinese"]
+    : [];
+}
+
 function generationFallbackReason(error: unknown) {
   if (error instanceof z.ZodError) return "AI returned incomplete structured JSON";
   if (error instanceof Error) return error.message || error.name;
@@ -1094,7 +1110,10 @@ async function createTreatment(
     throw new Error(`Director treatment returned ${treatment.beats.length} beats; expected ${sceneCount}`);
   }
   treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
-  const narrationIssues = treatmentNarrationIssues(treatment, targetDuration);
+  const narrationIssues = [
+    ...treatmentNarrationIssues(treatment, targetDuration),
+    ...treatmentLanguageIssues(treatment, options)
+  ];
   if (narrationIssues.length > 0 && Date.now() < deadline) {
     const repair = await textModel.client.chat.completions.create({
       model: textModel.model,
@@ -1109,6 +1128,7 @@ async function createTreatment(
             "Keep workingTitle anchored to the client's actual promoted subject. A visual style is not the subject and cannot replace it in the title.",
             "Preserve the client's industry. Never rewrite a game, course, retail product, or entertainment property with unrelated enterprise-software language.",
             "Rewrite every narrationLine as concise, natural, audience-facing commercial narration grounded in its sourceFact.",
+            `Write workingTitle and every narrationLine entirely in the requested ${options?.language ?? "language"}. Translate the client's meaning when the request itself uses another language; never preserve source-language fragments in those fields.`,
             "Do not start multiple narrationLine values with the same product name or category; vary the first phrase of every beat.",
             "Do not invent proof, metrics, customers, awards, or capabilities. Return strict JSON only."
           ].join(" ")
@@ -1126,12 +1146,15 @@ async function createTreatment(
       workingTitle: ensureBriefFaithfulProjectTitle(treatment.workingTitle, prompt, options?.language !== "英文")
     };
     treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
-    const remainingNarrationIssues = treatmentNarrationIssues(treatment, targetDuration);
+    const remainingNarrationIssues = [
+      ...treatmentNarrationIssues(treatment, targetDuration),
+      ...treatmentLanguageIssues(treatment, options)
+    ];
     if (treatment.beats.length !== sceneCount || remainingNarrationIssues.length > 0) {
-      console.warn(`[ai-video] Treatment narration still needed local constraints after AI repair: ${remainingNarrationIssues.join(", ") || "beat count mismatch"}.`);
+      throw new Error(`Treatment failed required narration constraints: ${remainingNarrationIssues.join(", ") || "beat count mismatch"}`);
     }
   } else if (narrationIssues.length > 0) {
-    console.warn(`[ai-video] Skipping treatment AI repair to preserve the project-generation time budget: ${narrationIssues.join(", ")}.`);
+    throw new Error(`Treatment time budget exhausted with required narration constraints: ${narrationIssues.join(", ")}`);
   }
   return treatment;
 }
@@ -1295,6 +1318,12 @@ export async function createStoryboardProject(
       ...scene,
       style: { ...scene.style, narrationVoice, narrationLanguage: options?.language }
     }));
+    const finalLanguageIssues = blockingStoryboardIssues(
+      storyboardQualityIssues(scenes, options, projectTitle, prompt)
+    ).filter((issue) => issue.includes("localized in") || issue.includes("title is not localized"));
+    if (finalLanguageIssues.length > 0) {
+      throw new Error(`Final storyboard failed requested-language checks: ${finalLanguageIssues.join(", ")}`);
+    }
     return {
       engine: textModel.engine,
       project: {

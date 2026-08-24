@@ -15,6 +15,9 @@ assert.match(route, /mediaGenerationProgress\(\s*processingSceneNumbers,/);
 assert.match(imageAssets, /inspectGeneratedImage/);
 assert.match(imageAssets, /inspectCloudflareGeneratedImage/);
 assert.match(imageAssets, /generatedImageContainsAnyText/);
+assert.match(imageAssets, /buildTextInspectionSheet/);
+assert.match(imageAssets, /const \[full, upper, center, lower\]/);
+assert.match(imageAssets, /detectCloudflareImageText\(inspectionBody\)/);
 const textInspection = imageAssets.slice(
   imageAssets.indexOf("async function generatedImageContainsAnyText"),
   imageAssets.indexOf("async function loadImageReference")

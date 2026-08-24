@@ -387,6 +387,22 @@ function localizedSystemMessage(value: string, language: UiLanguage) {
   return fixed[value] ?? localizedRuntimeLabel(value, language);
 }
 
+function isStaleGenerationProgressMessage(value: string) {
+  return /^脚本和 \d+ 个分镜已经完成，正在继续生成画面与配音。$/u.test(value)
+    || /^The script and \d+ scenes are ready\. Visuals and narration are still being generated\.$/u.test(value);
+}
+
+function withoutStaleGenerationProgress(messages: ChatMessage[]) {
+  return messages.filter((message) => (
+    message.role !== "assistant" || !isStaleGenerationProgressMessage(message.content)
+  ));
+}
+
+function projectRequiredMediaReady(project: Project) {
+  return missingSceneAssetNumbers(project.currentVersion.scenes, "image").length === 0
+    && missingSceneAssetNumbers(project.currentVersion.scenes, "audio").length === 0;
+}
+
 function localizedVoiceCopy(profile: (typeof narrationVoiceProfiles)[number], language: UiLanguage) {
   return language === "zh-CN"
     ? {
@@ -5868,7 +5884,11 @@ export function WorkspaceClient({
   const [briefAttachments, setBriefAttachments] = useState<File[]>([]);
   const [chatAttachments, setChatAttachments] = useState<File[]>([]);
   const [chatInput, setChatInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => (
+    projectRequiredMediaReady(initialProject)
+      ? withoutStaleGenerationProgress(initialMessages)
+      : initialMessages
+  ));
   const [selectedScene, setSelectedScene] = useState(1);
   const [pendingPlan, setPendingPlan] = useState<EditPlan | undefined>(initialPendingPlan);
   const [isBusy, setIsBusy] = useState(false);
@@ -6217,7 +6237,7 @@ export function WorkspaceClient({
     setProgress(96);
     setGenerationIssues(issues);
     setErrorMessage(undefined);
-    setMessages((current) => [...current, {
+    setMessages((current) => [...withoutStaleGenerationProgress(current), {
       id: crypto.randomUUID(),
       role: "assistant",
       type: "text",
