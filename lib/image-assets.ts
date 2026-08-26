@@ -64,10 +64,9 @@ function buildSceneImagePrompt(
 
 function buildBrandSafeImagePrompt(scene: Scene, project: Project) {
   return enforceTextFreeImagePrompt([
-    `Create a brand-safe 16:9 cinematic key visual for the commercial film "${imageSafeSemanticText(project.title)}".`,
+    "Create a brand-safe 16:9 cinematic key visual for one natural commercial-film scene.",
     projectVisualIdentity(project),
     exactVisualStyleDirection(projectLockedVisualStyle(project) ?? scene.style),
-    `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
     `Scene meaning: ${imageSafeSemanticText(scene.voiceover)} ${imageSafeSemanticText(scene.visualPrompt)}`,
     "Use a brand-neutral educational or commercial scene with concrete subject matter and purposeful action, rendered only in the locked style above.",
     `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
@@ -79,8 +78,6 @@ function buildBrandSafeImagePrompt(scene: Scene, project: Project) {
 function buildUltraSafeSceneImagePrompt(scene: Scene, project: Project) {
   return enforceTextFreeImagePrompt([
     "Create a safe 16:9 educational commercial background plate.",
-    `Topic: ${imageSafeSemanticText(project.title)}.`,
-    `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
     exactVisualStyleDirection(projectLockedVisualStyle(project) ?? scene.style),
     `Meaning to visualize: ${imageSafeSemanticText(scene.voiceover)}.`,
     semanticFallbackComposition(scene),
@@ -119,7 +116,7 @@ function correctionReferenceDirection(references: ImageReference[]) {
 
 function buildTextSafeCorrectionPrompt(scene: Scene, project: Project, references: ImageReference[]) {
   return enforceTextFreeImagePrompt([
-    `Create a polished 16:9 scene illustration for ${imageSafeSemanticText(project.title)}.`,
+    "Create a polished, completely text-free 16:9 scene illustration.",
     projectVisualIdentity(project),
     exactVisualStyleDirection(projectLockedVisualStyle(project) ?? scene.style),
     correctionReferenceDirection(references),
@@ -172,6 +169,18 @@ type ImageReference = {
 type SceneComparisonImage = {
   body: Buffer;
   sceneNumber: number;
+};
+
+type GeneratedImageCandidate = {
+  body: Buffer;
+  metadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"];
+  model: string;
+  prompt: string;
+  seed: number;
+};
+
+type TextFreeImageCandidate = GeneratedImageCandidate & {
+  textFreeVerified: true;
 };
 
 const MAX_IMAGE_QUALITY_ATTEMPTS = 4;
@@ -471,22 +480,12 @@ async function generateSceneImage(
   let qualityMetadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"] | undefined;
   let closestScene: { score: number; sceneNumber: number } | undefined;
   let duplicateWasDetected = false;
-  let styleFallback: {
-    body: Buffer;
-    metadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"];
-    model: string;
-    prompt: string;
-    seed: number;
-  } | undefined;
-  let completionFallback: {
-    body: Buffer;
-    metadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"];
-    model: string;
-    prompt: string;
-    seed: number;
+  let styleFallback: TextFreeImageCandidate | undefined;
+  let completionFallback: TextFreeImageCandidate & {
     score: number;
     reason: string;
   } | undefined;
+  let textFreeVerified = false;
   let usedStyleFallback = false;
   let usedCompletionFallback = false;
   let completionFallbackReason: string | undefined;
@@ -636,34 +635,30 @@ async function generateSceneImage(
         prompt: effectivePrompt,
         seed
       };
-      // Keep a technically valid frame as the last-resort delivery candidate.
-      // Later gates raise its score as it clears text, duplicate, semantic, and
-      // style checks. This makes validation corrective instead of destructive.
-      rememberCompletionFallback(normalizedCandidate, "technical_only");
-      // Text is a hard safety boundary. Semantic/style inspection is kept
-      // strict during the primary pass. The premium completion pass may still
-      // choose this frame only when every stronger candidate was unavailable.
+      // Text is an absolute delivery boundary. An unverified candidate is never
+      // retained, even during the premium completion-rescue pass.
       const containsText = hasCloudflareAI()
         ? await trackedValidation(`${qualityAttempt}:text`, () => generatedImageContainsAnyText(normalized.body))
         : await generatedImageContainsAnyText(normalized.body);
       if (containsText) {
-        rememberCompletionFallback(normalizedCandidate, "text_detected");
         throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。", "text_detected");
       }
+      const textFreeCandidate: TextFreeImageCandidate = {
+        ...normalizedCandidate,
+        textFreeVerified: true
+      };
 
       const nearest = await nearestSceneSimilarity(normalized.body, comparisonImages);
       if (nearest && nearest.score >= ADJACENT_SCENE_DUPLICATE_THRESHOLD) {
         duplicateWasDetected = true;
         closestScene = nearest;
-        rememberCompletionFallback(normalizedCandidate, "composition_duplicate");
+        rememberCompletionFallback(textFreeCandidate, "composition_duplicate");
         throw new GeneratedImageQualityError(
           `生成画面与分镜 ${nearest.sceneNumber} 的构图过于相似。`,
           "composition_duplicate"
         );
       }
       if (!closestScene || (nearest && nearest.score > closestScene.score)) closestScene = nearest;
-      rememberCompletionFallback(normalizedCandidate, "text_free_nonduplicate");
-
       let inspection: Awaited<ReturnType<typeof inspectGeneratedImage>>;
       try {
         inspection = hasCloudflareAI()
@@ -671,7 +666,7 @@ async function generateSceneImage(
           : await inspectGeneratedImage(normalized.body, scene, project);
       } catch (error) {
         if (!(error instanceof GeneratedImageQualityError) || error.code !== "semantic_check_failed") throw error;
-        rememberCompletionFallback(normalizedCandidate, "semantic_check_failed");
+        rememberCompletionFallback(textFreeCandidate, "semantic_check_failed");
         // The dedicated text gate above already passed. If the combined
         // validator is temporarily inconclusive, keep a premium candidate only
         // after a separate semantic check confirms the actual scene meaning.
@@ -684,14 +679,8 @@ async function generateSceneImage(
               () => evaluateCloudflareImageSemantics(normalized.body, essentialSceneSemantics(scene, project))
             );
             if (semanticCheck.matches && !styleFallback) {
-              styleFallback = {
-                body: normalized.body,
-                metadata: normalized.metadata,
-                model: generatedModel,
-                prompt: effectivePrompt,
-                seed
-              };
-              rememberCompletionFallback(normalizedCandidate, "semantic_pass_style_unverified");
+              styleFallback = textFreeCandidate;
+              rememberCompletionFallback(textFreeCandidate, "semantic_pass_style_unverified");
             }
           } catch (fallbackError) {
             console.warn(`[image-assets] Scene ${scene.sceneNumber} independent semantic fallback was unavailable:`, fallbackError);
@@ -704,10 +693,8 @@ async function generateSceneImage(
         break;
       }
       if (inspection === "text_present") {
-        // The dedicated high-resolution text pass already returned text-free.
-        // Keep this contradictory combined verdict below every independently
-        // text-free semantic candidate, but above a wholly unverified frame.
-        rememberCompletionFallback(normalizedCandidate, "combined_text_disagreement");
+        // A positive signal from either detector rejects the candidate. The
+        // completion fallback must never overrule this disagreement.
         throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。", "text_detected");
       }
       if (inspection === "semantic_mismatch" || inspection === "style_mismatch") {
@@ -715,7 +702,7 @@ async function generateSceneImage(
           ? new GeneratedImageQualityError("生成画面与当前场景内容不匹配。", "semantic_mismatch")
           : new GeneratedImageQualityError("生成画面偏离项目锁定的视觉风格。", "style_mismatch");
         rememberCompletionFallback(
-          normalizedCandidate,
+          textFreeCandidate,
           inspection === "style_mismatch" ? "style_mismatch" : "semantic_mismatch"
         );
         // The combined verdict is deliberately conservative. On the premium
@@ -728,14 +715,8 @@ async function generateSceneImage(
             () => evaluateCloudflareImageSemantics(normalized.body, essentialSceneSemantics(scene, project))
           );
           if (semanticCheck.matches && !styleFallback) {
-            styleFallback = {
-              body: normalized.body,
-              metadata: normalized.metadata,
-              model: generatedModel,
-              prompt: effectivePrompt,
-              seed
-            };
-            rememberCompletionFallback(normalizedCandidate, "semantic_pass_style_mismatch");
+            styleFallback = textFreeCandidate;
+            rememberCompletionFallback(textFreeCandidate, "semantic_pass_style_mismatch");
           }
         }
         if (qualityAttempt < qualityAttemptLimit - 1) {
@@ -748,6 +729,7 @@ async function generateSceneImage(
       qualityMetadata = normalized.metadata;
       model = generatedModel;
       prompt = effectivePrompt;
+      textFreeVerified = true;
       break;
     } catch (error) {
       if (!(error instanceof GeneratedImageQualityError)) {
@@ -773,6 +755,7 @@ async function generateSceneImage(
     prompt = styleFallback.prompt;
     seed = styleFallback.seed;
     usedStyleFallback = true;
+    textFreeVerified = styleFallback.textFreeVerified;
     console.warn(`[image-assets] Scene ${scene.sceneNumber} accepted a premium style fallback after independent semantic validation.`);
   }
   if ((!body || !qualityMetadata) && allowCompletionFallback && completionFallback) {
@@ -782,10 +765,14 @@ async function generateSceneImage(
     prompt = completionFallback.prompt;
     seed = completionFallback.seed;
     usedCompletionFallback = true;
+    textFreeVerified = completionFallback.textFreeVerified;
     completionFallbackReason = completionFallback.reason;
     console.warn(`[image-assets] Scene ${scene.sceneNumber} delivered the best retained completion candidate (${completionFallback.reason}, score ${completionFallback.score}).`);
   }
   if (!body || !qualityMetadata) return undefined;
+  if (!textFreeVerified) {
+    throw new GeneratedImageQualityError("生成画面未通过无文字验证。", "text_check_failed");
+  }
 
   const key = `generated/${project.id}/${project.currentVersion.id}/scene-${scene.sceneNumber}-${crypto.randomUUID()}.png`;
   const uploaded = await uploadToR2({
@@ -806,6 +793,7 @@ async function generateSceneImage(
       prompt,
       seed,
       ...qualityMetadata,
+      textFreeVerified: true,
       referenceKeys: usableReferences.map((reference) => reference.r2Key),
       closestSceneNumber: closestScene?.sceneNumber,
       closestSceneSimilarity: closestScene?.score,

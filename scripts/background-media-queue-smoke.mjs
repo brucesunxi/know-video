@@ -19,7 +19,7 @@ assert.match(worker, /enqueueProjectMediaScene\(\{ \.\.\.message, sceneNumber: n
 assert.match(worker, /completeGenerationRequest/);
 assert.match(worker, /const completionRescue = deliveryCount >= 2/);
 assert.match(worker, /const requiresPremium = Boolean/);
-assert.match(worker, /let quality = requiresPremium \|\| completionRescue/);
+assert.match(worker, /let quality[^=]*= requiresPremium \|\| completionRescue/);
 assert.match(worker, /error instanceof InsufficientCreditsError/);
 assert.match(worker, /continuing with the funded standard model/);
 assert.match(worker, /ProjectMediaQualityExhaustedError/);
@@ -31,6 +31,7 @@ assert.match(worker, /if \(narrationError && \(!refreshedScene \|\| !sceneHasAud
 assert.match(worker, /free stock lookup failed; local motion remains active/);
 assert.match(worker, /allowStyleFallback: completionRescue/);
 assert.match(worker, /allowCompletionFallback: completionRescue/);
+assert.match(worker, /hard text-free gate/);
 assert.match(worker, /background-\$\{quality\}-completion-rescue-\$\{deliveryCount\}/);
 assert.match(worker, /maxQualityAttempts: completionRescue \? 2 : 3/);
 assert.match(worker, /qualityGate: generated\.metadata\?\.qualityGate/);

@@ -36,9 +36,8 @@ export function parseCloudflareVisionDescription(payload: unknown) {
 export function parseImageTextPresence(payload: unknown) {
   const description = normalizedVerdict(payload);
   if (!description) return undefined;
-  if (/(?:^|_)TEXT_FREE(?:_|$)/u.test(description)
-    || /(?:^|_)NO_(?:VISIBLE_)?TEXT(?:_|$)/u.test(description)
-    || /(?:^|_)NO_TEXT_(?:IS_)?PRESENT(?:_|$)/u.test(description)) return false;
+  if (["TEXT_FREE", "NO_VISIBLE_TEXT", "NO_TEXT_PRESENT", "NO_TEXT_IS_PRESENT"].includes(description)) return false;
+  // Fail closed if a verbose or contradictory answer contains both labels.
   if (/(?:^|_)TEXT_PRESENT(?:_|$)/u.test(description) || /(?:^|_)TEXT_DETECTED(?:_|$)/u.test(description)) return true;
   return undefined;
 }

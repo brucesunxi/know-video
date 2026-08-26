@@ -4,8 +4,13 @@ export function isDeliverableVisualAsset(asset: SceneAsset) {
   if (!["image", "clip"].includes(asset.type) || !asset.url) return false;
   const source = String(asset.metadata?.source ?? "").toLowerCase();
   const model = String(asset.metadata?.model ?? "").toLowerCase();
+  const completionFallbackReason = String(asset.metadata?.completionFallbackReason ?? "").toLowerCase();
   const legacyQualityFallback = asset.metadata?.qualityFallback === true;
-  return source !== "fallback-image" && model !== "local-svg-fallback" && !legacyQualityFallback;
+  const unsafeCompletionFallback = ["technical_only", "text_detected", "combined_text_disagreement"].includes(completionFallbackReason);
+  return source !== "fallback-image"
+    && model !== "local-svg-fallback"
+    && !legacyQualityFallback
+    && !unsafeCompletionFallback;
 }
 
 export function sceneHasVisualAsset(scene: Scene) {

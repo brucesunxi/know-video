@@ -31,6 +31,18 @@ const fallback = { type: "image", url: "fallback", metadata: { source: "fallback
 assert.equal(isDeliverableVisualAsset(fallback), false);
 const legacyQualityFallback = { type: "image", url: "legacy", metadata: { qualityFallback: true } };
 assert.equal(isDeliverableVisualAsset(legacyQualityFallback), false);
+for (const completionFallbackReason of ["technical_only", "text_detected", "combined_text_disagreement"]) {
+  assert.equal(isDeliverableVisualAsset({
+    type: "image",
+    url: `unsafe-${completionFallbackReason}`,
+    metadata: { source: "generated-image", completionFallbackReason }
+  }), false);
+}
+assert.equal(isDeliverableVisualAsset({
+  type: "image",
+  url: "verified",
+  metadata: { source: "generated-image", textFreeVerified: true }
+}), true);
 assert.equal(sceneHasVisualAsset({ sceneNumber: 5, assets: [fallback] }), false);
 assert.deepEqual(Array.from(missingSceneAssetNumbers([{ sceneNumber: 5, assets: [fallback] }], "image")), [5]);
 

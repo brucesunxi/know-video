@@ -83,8 +83,8 @@ async function ensureSceneImage(message: ProjectMediaMessage, project: Project, 
     // had enough headroom for the optional premium model upgrade.
     allowStyleFallback: completionRescue,
     // Once the standard pass has tried strict candidates, the premium rescue
-    // may deliver the strongest technically valid candidate instead of
-    // allowing a conservative vision verdict to leave the scene empty.
+    // may relax semantic/style checks, but only after the image has passed the
+    // hard text-free gate.
     allowCompletionFallback: completionRescue,
     // Keep the bounded background path below five provider candidates per
     // scene. Internal quality retries remain cost monitoring only.

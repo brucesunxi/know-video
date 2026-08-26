@@ -32,6 +32,7 @@ assert.equal(parseImageTextPresence({ answer: "Text-free." }), false);
 assert.equal(parseImageTextPresence({ answer: "No visible text" }), false);
 assert.equal(parseImageTextPresence({ answer: "No text present" }), false);
 assert.equal(parseImageTextPresence({ answer: "Text detected" }), true);
+assert.equal(parseImageTextPresence({ answer: "TEXT_PRESENT; this is not TEXT_FREE" }), true);
 assert.equal(parseImageTextPresence({ answer: "The image is unclear." }), undefined);
 assert.equal(parseImageSemanticMatch({ answer: "SEMANTIC_MATCH" }), true);
 assert.equal(parseImageSemanticMatch({ result: { answer: "SEMANTIC_MISMATCH" } }), false);

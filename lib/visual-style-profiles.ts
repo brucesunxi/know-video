@@ -80,7 +80,7 @@ export function visualStyleDirection(style?: GenerationOptions["style"]) {
 const exactVisualStyleContracts: Record<string, string> = {
   chalkboard: "2D chalk drawing only: hand-drawn powdery chalk strokes on a dark green or charcoal board, imperfect diagrams and arrows, no photography, no 3D rendering, no glossy materials.",
   "simple-line": "2D minimal line illustration only: clean thin outlines, simplified human figures, generous white space and very limited flat accent colors, no photography, no 3D volume, no painterly shading.",
-  collage: "2D paper collage only: visibly cut paper edges, layered printed textures, torn shapes and handcrafted depth, no photorealistic scene, no smooth 3D objects.",
+  collage: "2D paper collage only: visibly cut unprinted paper edges, layered solid-color paper and natural fiber textures, torn shapes and handcrafted depth. No newspapers, magazines, printed fragments, typography, headline-like shapes, letters, numbers, posters, photorealistic scenes, or smooth 3D objects.",
   "comic-book": "2D comic-book illustration only: bold ink contours, halftone texture, borderless cinematic composition, dramatic expressions and flat high-contrast color, no speech bubbles, sound-effect lettering, panel captions, photography or 3D render.",
   memphis: "2D contemporary business illustration only: friendly simplified people, crisp vector-like forms, soft flat colors and restrained geometric accents, no photography or 3D render.",
   isometric: "2D isometric illustration only: consistent 30-degree axonometric geometry, modular spaces and objects, clean flat shading, no perspective photography or cinematic lens effects.",

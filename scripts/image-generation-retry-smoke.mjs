@@ -66,18 +66,23 @@ assert.match(imageAssets, /if \(styleFallback \|\| \(allowCompletionFallback && 
 assert.match(imageAssets, /rememberCompletionFallback/);
 assert.match(imageAssets, /best-candidate-completion-fallback/);
 assert.match(imageAssets, /completionFallbackReason/);
-assert.match(imageAssets, /technical_only/);
-assert.match(imageAssets, /text_free_nonduplicate/);
 assert.match(imageAssets, /semantic_pass_style_mismatch/);
 assert.match(imageAssets, /allowCompletionFallback && \(styleFallback \|\| completionFallback\)/);
 assert.match(imageAssets, /shouldUseImageCompletionFallback/);
+assert.match(imageAssets, /type TextFreeImageCandidate/);
+assert.match(imageAssets, /const textFreeCandidate: TextFreeImageCandidate/);
+assert.match(imageAssets, /textFreeVerified: true/);
+assert.match(imageAssets, /if \(!textFreeVerified\)/);
+assert.doesNotMatch(imageAssets, /rememberCompletionFallback\(normalizedCandidate/);
+assert.doesNotMatch(imageAssets, /rememberCompletionFallback\([^\n]+, "text_detected"\)/);
 assert.match(completionPolicy, /IMAGE_COMPLETION_FALLBACK_SCORES/);
-assert.match(completionPolicy, /technical_only: 10/);
+assert.doesNotMatch(completionPolicy, /technical_only|text_detected|combined_text_disagreement|text_free_nonduplicate/);
 assert.match(completionPolicy, /semantic_pass_style_mismatch: 90/);
 assert.match(completionPolicy, /updatesSameCandidate/);
 assert.match(continuity, /LIBRARY \/ READING SEMANTIC FIDELITY/);
 assert.match(continuity, /Primary camera blueprint/);
 assert.match(continuity, /All visible books must have completely plain, unmarked covers and spines/);
+assert.doesNotMatch(continuity, /Project subject for semantic context only/);
 assert.match(imageAssets, /mapWithConcurrency\(targets, 1/);
 assert.match(imageAssets, /currentVersion: \{ \.\.\.project\.currentVersion, scenes \}/);
 

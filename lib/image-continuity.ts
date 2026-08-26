@@ -9,15 +9,21 @@ export const TEXT_FREE_IMAGE_DIRECTION = [
   "Render absolutely no words, letters, numbers, captions, labels, typography, signatures, watermarks, logos, brand names, interface copy, or text-like glyphs anywhere in the image.",
   "Any screen, sign, poster, document, package, badge, button, chart, or interface must use only clean unlabeled geometry, blank surfaces, icons, color blocks, lines, and diagrams without characters.",
   "Do not invent pseudo-writing, scrambled lettering, lorem ipsum, fake Chinese characters, or decorative symbols that resemble text.",
+  "Never render the project name, scene title, narration, slogan, call to action, or any phrase from the prompt as visible copy.",
   "Do not compose the frame as an advertisement, poster, title card, presentation, mood board, magazine spread, split-screen graphic, or branded campaign layout. Show one natural diegetic scene instead.",
   "Do not add graphic overlays, lower thirds, headline areas, text panels, colored copy boxes, or blank poster-like regions intended for writing.",
   "If an object normally contains writing, turn it away from camera, crop out its written area, or replace that area with a completely blank surface.",
-  "Names and written content mentioned above are semantic context only and must not be painted into the image. The video renderer will add all readable titles, captions, labels, and logos later.",
+  "Names and written content mentioned anywhere else in the prompt are semantic context only and must not be painted into the image. The video renderer will add all readable titles, captions, labels, and logos later.",
   "Before finishing, inspect every pixel of the frame and remove all writing-like marks. A visually strong image containing even one character or fake glyph is invalid."
 ].join("\n");
 
 export function enforceTextFreeImagePrompt(prompt: string) {
-  return `${prompt.trim()}\n${TEXT_FREE_IMAGE_DIRECTION}`;
+  return [
+    TEXT_FREE_IMAGE_DIRECTION,
+    "SCENE CONTENT TO VISUALIZE WITHOUT WRITING:",
+    prompt.trim(),
+    "FINAL DELIVERY CHECK: return one natural scene with zero visible words, letters, numbers, logos, fake glyphs, title cards, or text-like marks."
+  ].join("\n\n");
 }
 
 export function sceneRequiresPremiumImage(scene: Pick<Scene, "title" | "voiceover" | "visualPrompt">) {
@@ -69,7 +75,6 @@ export function projectVisualIdentity(project: Project) {
     .slice(0, 5);
   const exactStyle = exactVisualStyleDirection(project.currentVersion.scenes[0]?.style);
   return [
-    `Project subject for semantic context only: ${imageSafeSemanticText(project.title)}. Never display this title in the frame.`,
     exactStyle,
     `Locked palette: ${palettes.join(", ")}.`,
     ...continuity,
@@ -181,8 +186,6 @@ export function sceneImagePrompt(
   revisionInstruction?: string
 ) {
   const palette = scene.style.palette.join(", ");
-  const safeTitle = imageSafeSemanticText(scene.title);
-  const safeProjectTitle = imageSafeSemanticText(project.title);
   const safeVisualPrompt = imageSafeSemanticText(scene.visualPrompt);
   const safeMotionPrompt = imageSafeSemanticText(scene.motionPrompt);
   const revision = normalizeVisualRevisionInstruction(revisionInstruction);
@@ -199,7 +202,7 @@ export function sceneImagePrompt(
   const isCinematic = !lockedStyle.visualStyleId || lockedStyle.visualStyleId === "cinematic-realism";
 
   return enforceTextFreeImagePrompt([
-    `Create a polished, completely text-free 16:9 background plate for a commercial film about ${safeProjectTitle}.`,
+    "Create a polished, completely text-free 16:9 background plate for one natural commercial-film scene.",
     "CONTENT LOCK — HIGHEST SEMANTIC PRIORITY:",
     `The finished frame must visibly communicate this narration: ${imageSafeSemanticText(scene.voiceover)}`,
     `Required concrete scene content: ${safeVisualPrompt}`,
@@ -208,7 +211,6 @@ export function sceneImagePrompt(
     exactStyle ? `STYLE LOCK — HIGHEST VISUAL PRIORITY:\n${exactStyle}` : "",
     sceneAttachmentSummary(scene) ?? "",
     referenceDirection,
-    `Scene ${scene.sceneNumber} semantic focus only, never a visible title: ${safeTitle}.`,
     `Visual direction: ${safeVisualPrompt}`,
     semanticSceneDirection(scene),
     sceneVisualDiversityDirection(scene, project.currentVersion.scenes.length),

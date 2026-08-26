@@ -12,12 +12,8 @@ vm.runInNewContext(output, { module, exports: module.exports });
 
 const { imageCompletionFallbackScore, shouldUseImageCompletionFallback } = module.exports;
 const orderedReasons = [
-  "technical_only",
-  "text_detected",
   "composition_duplicate",
-  "combined_text_disagreement",
   "semantic_mismatch",
-  "text_free_nonduplicate",
   "semantic_check_failed",
   "style_mismatch",
   "semantic_pass_style_unverified",
@@ -27,8 +23,8 @@ const orderedReasons = [
 const scores = orderedReasons.map(imageCompletionFallbackScore);
 assert.deepEqual(scores, [...scores].sort((left, right) => left - right));
 assert.equal(new Set(scores).size, scores.length);
-assert.ok(imageCompletionFallbackScore("text_free_nonduplicate") > imageCompletionFallbackScore("composition_duplicate"));
 assert.ok(imageCompletionFallbackScore("style_mismatch") > imageCompletionFallbackScore("semantic_mismatch"));
+assert.doesNotMatch(source, /technical_only|text_detected|combined_text_disagreement|text_free_nonduplicate/);
 assert.equal(shouldUseImageCompletionFallback(undefined, { seed: 1, prompt: "a", score: 10 }), true);
 assert.equal(shouldUseImageCompletionFallback(
   { seed: 1, prompt: "a", score: 50 },

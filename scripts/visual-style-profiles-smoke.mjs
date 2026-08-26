@@ -21,6 +21,7 @@ assert.match(visualStyleDirection("温暖自然"), /warm|window light|human-cent
 assert.equal(Object.keys(visualStyleProfiles).length, 4);
 assert.match(exactVisualStyleDirection({ visualStyleId: "pixel-art", visualStyleLabel: "像素游戏" }), /STRICT 2D PIXEL ART ONLY/);
 assert.match(exactVisualStyleDirection({ visualStyleId: "chalkboard" }), /chalk drawing only/i);
+assert.match(exactVisualStyleDirection({ visualStyleId: "collage" }), /No newspapers, magazines, printed fragments, typography/);
 
 const aiVideo = fs.readFileSync(new URL("../lib/ai-video.ts", import.meta.url), "utf8");
 const videoBrain = fs.readFileSync(new URL("../lib/video-brain.ts", import.meta.url), "utf8");
