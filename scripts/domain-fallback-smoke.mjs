@@ -121,4 +121,29 @@ assert.match(inventoryVisuals, /订单|调拨|补货/u);
 assert.match(inventoryVisuals, /路线|路径/u);
 assert.match(inventoryVisuals, /不使用孤立方块|业务因果一眼可见/u);
 
+const englishRestaurant = videoBrainModule.exports.generateProjectFromPrompt(
+  "生成一个餐馆的介绍的视频",
+  undefined,
+  {
+    duration: "30",
+    sceneCount: "5",
+    language: "英文",
+    style: "电影质感",
+    motion: "camera"
+  }
+);
+const restaurantCopy = [
+  englishRestaurant.title,
+  ...englishRestaurant.currentVersion.scenes.flatMap((scene) => [scene.title, scene.voiceover])
+].join("\n");
+const restaurantVisuals = englishRestaurant.currentVersion.scenes.map((scene) => scene.visualPrompt).join("\n");
+assert.equal(englishRestaurant.title, "Restaurant Introduction");
+assert.equal(englishRestaurant.currentVersion.scenes.length, 5);
+assert.doesNotMatch(restaurantCopy, /\p{Script=Han}/u);
+assert.match(restaurantCopy, /meal|ingredients|service|table|restaurant/i);
+assert.doesNotMatch(restaurantCopy, /video|storyboard|workflow|approval|risk|evidence/i);
+assert.match(restaurantVisuals, /restaurant|culinary|dining/i);
+assert.doesNotMatch(restaurantVisuals, /dashboard|workflow|approval|enterprise/i);
+assert.ok(englishRestaurant.currentVersion.scenes.every((scene) => scene.style.narrationLanguage === "英文"));
+
 console.log("Domain-aware fallback smoke passed.");

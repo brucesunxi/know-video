@@ -9,7 +9,8 @@ import {
   extractBriefFacts,
   extractBriefSubject,
   extractBriefVisualConcepts,
-  isVideoCreationProductBrief
+  isVideoCreationProductBrief,
+  localizedBriefSubject
 } from "@/lib/brief-semantics";
 import { visualStyleDirection, visualStyleProfile } from "@/lib/visual-style-profiles";
 
@@ -236,6 +237,25 @@ function domainFallbackNarrations(
       "After checkout, clear progress and delivery reduce uncertainty.",
       "The result is more than a purchase: it is a smooth, trustworthy experience.",
       `Explore ${subject} and find the choice that fits.`
+    ];
+  }
+
+  if (domain === "hospitality") {
+    const spokenSubject = chinese ? subject : `${subject.charAt(0).toUpperCase()}${subject.slice(1)}`;
+    return chinese ? [
+      `${spokenSubject}从推门的一刻开始，用空间、灯光和香气建立第一印象。`,
+      "新鲜食材在厨房里经过细致准备，每一道菜都保留真实的质感与温度。",
+      "从火候、摆盘到上桌，清楚可见的用心让风味有了值得期待的理由。",
+      "自然周到的服务连接每个用餐时刻，让相聚可以放松，也更有记忆点。",
+      "这里提供的不只是一顿饭，更是一段由味道、氛围与陪伴共同完成的体验。",
+      `走进${spokenSubject}，把下一次相聚留给一桌认真准备的好味道。`
+    ] : [
+      `${spokenSubject} makes its first impression through a welcoming room, warm light, and the promise of a memorable meal.`,
+      "Fresh ingredients are prepared with care, preserving the texture, color, and character of every dish.",
+      "From precise cooking to the final plate, thoughtful craft turns each course into something worth anticipating.",
+      "Attentive service connects every moment at the table, giving guests space to relax and enjoy one another.",
+      "The result is more than a meal: it is an experience shaped by flavor, atmosphere, and time shared together.",
+      `Visit ${spokenSubject} and make the next gathering one to remember.`
     ];
   }
 
@@ -496,7 +516,7 @@ export function generateProjectFromPrompt(
     };
   }
 
-  const briefSubject = extractBriefSubject(prompt, chinese);
+  const briefSubject = localizedBriefSubject(prompt, chinese);
   const briefFacts = extractBriefFacts(prompt, chinese);
   const briefConcepts = extractBriefVisualConcepts(prompt, chinese);
   const conceptSuffix = visualConceptSuffix(prompt, chinese);
@@ -507,12 +527,18 @@ export function generateProjectFromPrompt(
     ? title
     : fallbackDomain === "gaming"
       ? (chinese ? `${briefSubject} 游戏预告` : `${briefSubject} Game Trailer`)
+      : fallbackDomain === "hospitality"
+        ? (chinese ? `${briefSubject}介绍` : `${briefSubject.charAt(0).toUpperCase()}${briefSubject.slice(1)} Introduction`)
       : (chinese ? `${briefSubject} 产品介绍` : `${briefSubject} Product Film`);
   const fallbackTitle = ensureBriefFaithfulProjectTitle(fallbackTitleCandidate, prompt, chinese);
   const fallbackTitles = fallbackDomain === "gaming"
     ? (chinese
         ? ["进入游戏", "玩法上手", "挑战升级", "策略变化", "赢得成果", "开始下一局"]
         : ["Enter the Game", "Learn the Loop", "Raise the Challenge", "Change the Strategy", "Earn the Result", "Start the Next Run"])
+    : fallbackDomain === "hospitality"
+      ? (chinese
+          ? ["欢迎到店", "新鲜准备", "匠心烹制", "用心服务", "共享时刻", "期待相聚"]
+          : ["A Warm Welcome", "Freshly Prepared", "Crafted with Care", "Thoughtful Service", "Time Together", "Your Table Awaits"])
     : (chinese
         ? ["开场钩子", "问题情境", "解决路径", "效果证明", "价值升华", "成果收束"]
         : ["Opening Hook", "Problem Context", "Solution Flow", "Proof Moment", "Human Outcome", "Final Resolve"]);
@@ -527,6 +553,8 @@ export function generateProjectFromPrompt(
       voiceover: fallbackFact(0, `${briefSubject}，让企业最重要的价值被清楚看见。`, `${briefSubject} makes the company's most important value clear.`),
       visualPrompt: fallbackDomain === "gaming"
         ? `${tone} cinematic opening gameplay frame for ${briefSubject}, one recognizable player-controlled character entering a specific playable world, a clear objective visible ahead, foreground interactive props, layered level depth, no office or enterprise dashboard.${conceptSuffix}${styleSuffix}`
+        : fallbackDomain === "hospitality"
+          ? `${tone} cinematic restaurant opening, guests entering a welcoming dining room, a beautifully set table in the foreground, attentive host in the midground, layered interior depth, warm practical lighting, natural materials, no signs or visible text.${styleSuffix}`
         : `${tone} opening cinematic frame for ${briefSubject}, strong product signal, real environment, one clear hero subject.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Camera pushes in slowly while the headline resolves and supporting UI details fade into place.",
       durationSeconds: 6,
@@ -540,6 +568,8 @@ export function generateProjectFromPrompt(
       voiceover: fallbackFact(1, `面对复杂业务，${briefSubject}帮助团队更早识别问题并建立清晰共识。`, `In complex work, ${briefSubject} helps teams identify problems earlier and build shared clarity.`),
       visualPrompt: fallbackDomain === "gaming"
         ? `${tone} playable tutorial encounter for ${briefSubject}: the player character performs the core action, the environment responds instantly, obstacles and objective are readable through space and motion, no business workflow imagery.${conceptSuffix}${styleSuffix}`
+        : fallbackDomain === "hospitality"
+          ? `${tone} overhead culinary preparation scene, fresh vegetables, herbs, proteins, and clean tools arranged with purpose, chef hands working in the midground, active professional kitchen behind, soft directional light, tactile food detail, no labels or text.${styleSuffix}`
         : `${tone} problem scene for ${briefSubject}: a real user faces the central challenge stated in the brief, expressed through concrete objects, environment, and action.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Cards drift apart, warning states appear, then pause for emphasis.",
       durationSeconds: 7,
@@ -553,6 +583,8 @@ export function generateProjectFromPrompt(
       voiceover: fallbackFact(2, `${briefSubject}把关键流程连接起来，让每一步都有依据、责任与行动路径。`, `${briefSubject} connects the critical workflow so every step has evidence, ownership, and a path to action.`),
       visualPrompt: fallbackDomain === "gaming"
         ? `${tone} escalating gameplay scene for ${briefSubject}: a richer level opens around the player character, hazards and rewards create a clear route, one decisive action changes the encounter, strong foreground-midground-background depth.${conceptSuffix}${styleSuffix}`
+        : fallbackDomain === "hospitality"
+          ? `${tone} medium close culinary scene, chef finishing a carefully plated dish at the pass, food sharp in the foreground, precise hands and rising steam in the midground, softly layered kitchen behind, appetizing color and controlled highlights, no text.${styleSuffix}`
         : `${tone} solution scene for ${briefSubject}: the product's concrete mechanism connects the user's starting problem to a visible improved state through one clear action.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Steps connect from left to right, then the active step expands.",
       durationSeconds: 8,
@@ -566,6 +598,8 @@ export function generateProjectFromPrompt(
       voiceover: fallbackFact(3, `从分散信息到可验证成果，${briefSubject}让改进过程清晰、可信并且可追溯。`, `From scattered information to verifiable outcomes, ${briefSubject} makes improvement clear, credible, and traceable.`),
       visualPrompt: fallbackDomain === "gaming"
         ? `${tone} strategic gameplay variation for ${briefSubject}: two visible player choices produce meaningfully different routes or outcomes inside the same coherent game world, readable action and environmental feedback.${conceptSuffix}${styleSuffix}`
+        : fallbackDomain === "hospitality"
+          ? `${tone} wide dining service scene, server placing the finished dish for relaxed guests, tableware and food in the foreground, natural human interaction in the midground, welcoming restaurant depth behind, warm balanced lighting, candid premium atmosphere, no text.${styleSuffix}`
         : `${tone} proof scene for ${briefSubject}: the brief's promised change is visible in a specific result, user reaction, or before-after condition.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Before state compresses, after state slides in with highlighted metrics.",
       durationSeconds: 7,
@@ -579,6 +613,8 @@ export function generateProjectFromPrompt(
       voiceover: fallbackFact(4, `最终，团队获得的不只是效率，更是更稳定的判断、更顺畅的协作和更可靠的结果。`, `The result is more than efficiency: teams gain stronger decisions, smoother collaboration, and more reliable outcomes.`),
       visualPrompt: fallbackDomain === "gaming"
         ? `${tone} earned gameplay outcome for ${briefSubject}: the player character completes the objective, reward feedback and world reaction make success unmistakable, emotional close-up with the level still visible behind.${conceptSuffix}${styleSuffix}`
+        : fallbackDomain === "hospitality"
+          ? `${tone} intimate close-up of guests sharing a genuine moment over finished dishes, expressive faces in the midground, food and glassware providing foreground depth, warm restaurant ambience behind, natural skin tones, no signage or text.${styleSuffix}`
         : `${tone} closing outcome scene for ${briefSubject}: the promised human or customer outcome is fully visible in a calm, concrete, believable environment.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "Logo and takeaway fade in, background elements settle, then hold.",
       durationSeconds: 6,
@@ -592,6 +628,8 @@ export function generateProjectFromPrompt(
       voiceover: fallbackFact(5, `${briefSubject}，让真正重要的工作持续向前。`, `${briefSubject} keeps the work that matters moving forward.`),
       visualPrompt: fallbackDomain === "gaming"
         ? `${tone} final game trailer frame for ${briefSubject}: recognizable hero character, resolved level objective, one enticing unexplored path or next challenge, coherent world identity, cinematic hold, no enterprise visual language.${conceptSuffix}${styleSuffix}`
+        : fallbackDomain === "hospitality"
+          ? `${tone} final restaurant hero frame, an inviting table ready for the next guests, carefully plated dishes and warm candlelight in the foreground, open dining room in the midground, entrance glow beyond, refined natural materials, cinematic depth, no logo or visible text.${styleSuffix}`
         : `${tone} closing cinematic frame for ${briefSubject}, one concrete hero subject, resolved environment, strong visual identity, premium spacing, no generic presentation layout.${conceptSuffix}${styleSuffix}`,
       motionPrompt: "The final subject settles into a clean hero composition, environmental motion slows, and the camera holds for a confident finish.",
       durationSeconds: 6,

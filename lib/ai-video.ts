@@ -337,6 +337,16 @@ function treatmentLanguageIssues(treatment: Treatment, options?: GenerationOptio
     : [];
 }
 
+function treatmentDomainIssues(treatment: Treatment, prompt: string) {
+  if (detectBriefDomain(prompt) !== "hospitality") return [];
+  const narration = treatment.beats.map((beat) => beat.narrationLine).join(" ");
+  const unrelatedBusinessLanguage = /(?:审批|责任链|证据包|治理|工作流|风险信号|项目压力|approval|accountability chain|evidence packet|governance|workflow|risk signal|project pressure)/iu.test(narration)
+    && !/(?:审批|治理|工作流|风险|approval|governance|workflow|risk)/iu.test(prompt);
+  return unrelatedBusinessLanguage
+    ? ["hospitality narration uses unrelated enterprise language"]
+    : [];
+}
+
 function generationFallbackReason(error: unknown) {
   if (error instanceof z.ZodError) return "AI returned incomplete structured JSON";
   if (error instanceof Error) return error.message || error.name;
@@ -1050,9 +1060,12 @@ async function createTreatment(
     ? `Each narrationLine is final spoken copy: approximately ${Math.max(3, Math.floor(averageSceneSeconds * 1.15))}-${Math.max(4, Math.floor(averageSceneSeconds * 2.2))} English words.`
     : `Each narrationLine is final spoken copy: approximately ${Math.max(8, Math.floor(averageSceneSeconds * 2.9))}-${Math.max(12, Math.floor(averageSceneSeconds * 4.25))} Chinese characters, excluding punctuation.`;
   const conceptDirection = briefVisualConceptDirection(prompt, options);
-  const domainDirection = detectBriefDomain(prompt) === "gaming"
+  const briefDomain = detectBriefDomain(prompt);
+  const domainDirection = briefDomain === "gaming"
     ? "This is a game trailer or gameplay introduction, not a product explainer. Write about the playable fantasy, player agency, core loop, challenge, progression, feedback, and invitation to play. Never frame the game as a business product, solution, platform, service, workflow, or efficiency tool."
-    : "";
+    : briefDomain === "hospitality"
+      ? "This is a restaurant, cafe, hotel, or hospitality introduction. Build the story from the arrival, atmosphere, food or guest experience, preparation or service, shared human moment, and invitation to visit. Use only facts supplied by the client; when details are absent, describe the experience without inventing a cuisine, signature dish, award, price, location, or claim. Never import enterprise governance, approval, workflow, risk, evidence, software, or video-production language."
+      : "";
   const completion = await textModel.client.chat.completions.create({
     model: textModel.model,
     response_format: { type: "json_object" },
@@ -1112,7 +1125,8 @@ async function createTreatment(
   treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
   const narrationIssues = [
     ...treatmentNarrationIssues(treatment, targetDuration),
-    ...treatmentLanguageIssues(treatment, options)
+    ...treatmentLanguageIssues(treatment, options),
+    ...treatmentDomainIssues(treatment, prompt)
   ];
   if (narrationIssues.length > 0 && Date.now() < deadline) {
     const repair = await textModel.client.chat.completions.create({
@@ -1148,7 +1162,8 @@ async function createTreatment(
     treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
     const remainingNarrationIssues = [
       ...treatmentNarrationIssues(treatment, targetDuration),
-      ...treatmentLanguageIssues(treatment, options)
+      ...treatmentLanguageIssues(treatment, options),
+      ...treatmentDomainIssues(treatment, prompt)
     ];
     if (treatment.beats.length !== sceneCount || remainingNarrationIssues.length > 0) {
       throw new Error(`Treatment failed required narration constraints: ${remainingNarrationIssues.join(", ") || "beat count mismatch"}`);

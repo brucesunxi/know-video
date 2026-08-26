@@ -196,6 +196,12 @@ export function storyboardQualityIssues(
       const productFraming = gamingProductFramingPatterns.some((pattern) => pattern.test(output) && !pattern.test(brief));
       if (productFraming) issues.push("game is framed as a product explainer");
     }
+    if (detectBriefDomain(brief) === "hospitality") {
+      const output = `${projectTitle ?? ""}\n${scenes.map((scene) => `${scene.voiceover}\n${baseVisualPrompt(scene)}`).join("\n")}`;
+      const unrelatedBusinessLanguage = /(?:审批|责任链|证据包|治理|工作流|风险信号|项目压力|approval|accountability chain|evidence packet|governance|workflow|risk signal|project pressure)/iu.test(output)
+        && !/(?:审批|治理|工作流|风险|approval|governance|workflow|risk)/iu.test(brief);
+      if (unrelatedBusinessLanguage) issues.push("hospitality story uses unrelated enterprise language");
+    }
     const subject = extractBriefSubject(brief, options?.language !== "英文");
     const isDistinctBrand = /^[A-Z][A-Z0-9_-]{2,}$/u.test(subject);
     const narration = `${projectTitle ?? ""} ${scenes.map((scene) => scene.voiceover).join(" ")}`.toLowerCase();

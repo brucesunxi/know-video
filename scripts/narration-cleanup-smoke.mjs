@@ -26,5 +26,18 @@ assert.equal(
   sanitizeNarrationForSpeech("Create freely. Create freely. Share the result."),
   "Create freely. Share the result."
 );
+assert.equal(
+  sanitizeNarrationForSpeech("这是一段关于餐馆介绍的视频。暖光与香气，从推门的一刻迎接每位客人。"),
+  "暖光与香气，从推门的一刻迎接每位客人。"
+);
+assert.equal(
+  sanitizeNarrationForSpeech("在这个视频中，我们将介绍一家餐馆。Fresh ingredients are prepared with care."),
+  "Fresh ingredients are prepared with care."
+);
+assert.equal(
+  sanitizeNarrationForSpeech("This video is about a restaurant introduction. A warm welcome begins at the door."),
+  "A warm welcome begins at the door."
+);
+assert.equal(sanitizeNarrationForSpeech("本视频将为您介绍这家餐馆。"), "");
 
 console.log("Narration cleanup smoke checks passed.");

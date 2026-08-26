@@ -28,7 +28,7 @@ async function generateOpenAISpeech(
     voice: voice as "alloy",
     input: text,
     response_format: "wav",
-    instructions: `${direction} Use one consistent natural speaking pace. Clear pronunciation, no sound effects. Do not speed up or slow down to match a target duration.`
+    instructions: `${direction} Speak only the exact input text. Never add an introduction, summary, title, label, commentary, or closing phrase. Use one consistent natural speaking pace. Clear pronunciation, no sound effects. Do not speed up or slow down to match a target duration.`
   });
   const body = Buffer.from(await result.arrayBuffer());
   const inspection = assertUsableSpeechAudio(body, {
@@ -70,6 +70,9 @@ async function generateSceneVoice(
   let rate: number | undefined;
   let actualDurationSeconds: number | undefined;
   const voiceover = sanitizeNarrationForSpeech(scene.voiceover);
+  if (!voiceover) {
+    throw new Error(`Scene ${scene.sceneNumber} narration contains only video-description meta commentary`);
+  }
   const expectedTextDurationSeconds = estimateNarrationSeconds(voiceover);
   const selectedVoice = narrationVoice ?? scene.style.narrationVoice ?? DEFAULT_NARRATION_VOICE;
   const profile = narrationVoiceProfile(selectedVoice);

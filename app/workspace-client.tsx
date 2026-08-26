@@ -5225,6 +5225,7 @@ function StudioScreen({
   onGenerateClip,
   onGenerateClips,
   onRegenerateAudio,
+  onRepairNarration,
   onExport,
   exportProgress,
   activeRenderJobId,
@@ -5287,6 +5288,7 @@ function StudioScreen({
   onGenerateClip: (sceneNumber: number) => void;
   onGenerateClips: (sceneNumbers: number[]) => void;
   onRegenerateAudio: (sceneNumbers?: number[]) => void;
+  onRepairNarration: () => void;
   onExport: () => void;
   exportProgress?: number;
   activeRenderJobId?: string;
@@ -5569,6 +5571,18 @@ function StudioScreen({
                 )}</span>
               </div>
             </div>
+            <button
+              className="kv-language-repair-action"
+              disabled={isBusy || Boolean(pendingPlan)}
+              onClick={onRepairNarration}
+              type="button"
+            >
+              <Languages size={16} />
+              {text(
+                `重写全片${expectedNarrationLanguage}旁白`,
+                `Rewrite all narration in ${expectedNarrationLanguage === "英文" ? "English" : "Chinese"}`
+              )}
+            </button>
           </section>
         ) : null}
         {!requiredMediaGenerationInProgress && (exportBlockers.length > 0 || generationIssue.clip.length > 0) ? (
@@ -6519,10 +6533,12 @@ export function WorkspaceClient({
     }
   }
 
-  async function submitChat(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const attachments = [...chatAttachments];
-    const request = chatInput.trim() || (attachments.length > 0 ? `请结合本次上传的参考素材，重新设计场景 ${selectedScene}。` : "");
+  async function submitChat(event?: FormEvent<HTMLFormElement>, requestedText?: string) {
+    event?.preventDefault();
+    const attachments = requestedText ? [] : [...chatAttachments];
+    const request = requestedText?.trim()
+      || chatInput.trim()
+      || (attachments.length > 0 ? `请结合本次上传的参考素材，重新设计场景 ${selectedScene}。` : "");
     if (!request) return;
     if (pendingPlan && attachments.length > 0) {
       setErrorMessage("请先应用或取消当前修改方案，再添加新的参考素材。");
@@ -8029,6 +8045,13 @@ export function WorkspaceClient({
             setPendingVideoGeneration({ sceneNumbers });
           }}
           onRegenerateAudio={regenerateAudio}
+          onRepairNarration={() => {
+            const target = generationOptions.language;
+            const request = target === "英文"
+              ? "请根据最初的视频需求和当前分镜主题，重写全片标题、所有场景标题和旁白为自然英文。不要直译现有错误文案；旁白必须忠实介绍实际主题，删除与主题无关的视频制作、企业治理或工作流内容，并为所有场景重新生成英文配音和字幕。"
+              : "请根据最初的视频需求和当前分镜主题，重写全片标题、所有场景标题和旁白为自然中文。不要直译现有错误文案；旁白必须忠实介绍实际主题，删除与主题无关的视频制作、企业治理或工作流内容，并为所有场景重新生成中文配音和字幕。";
+            void submitChat(undefined, request);
+          }}
           onExport={exportVideo}
           exportProgress={exportProgress}
           activeRenderJobId={activeRenderJobId}

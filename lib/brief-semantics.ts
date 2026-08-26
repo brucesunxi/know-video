@@ -10,10 +10,14 @@ const directProductionCommandPattern = /^(?:请|请帮|帮我|给我|需要|我�
 const productionSettingPattern = /^(?:视频)?(?:时长|长度|比例|画幅|横屏|竖屏|分辨率|格式|风格|节奏|语速|配音|旁白|字幕|场景数|镜头数|分镜数|duration|aspect ratio|resolution|format|style|pace|voice|captions?|scenes?|shots?)\s*(?:为|是|要|需要|:|：|=)?/iu;
 
 const metaNarrationPatterns = [
+  /^(?:这|本)(?:是)?(?:一)?(?:支|个|段)?关于.{1,24}的(?:视频|短片|影片)/u,
+  /^(?:以下|接下来|现在)?(?:这|本)(?:是|将是|会是)?(?:一|这)?(?:支|个|段)?(?:关于.{0,24}的)?(?:视频|短片|影片)(?:将会?|会|主要|旨在|用于|通过)?(?:为您|向您)?(?:介绍|展示|呈现|讲述|带您了解|聚焦)/u,
+  /^(?:在)?(?:这|本)(?:支|个|段)?(?:视频|短片|影片)(?:中|里)[，,:：]?/u,
   /(?:这|本|整)(?:支|个|段)?(?:视频|短片|影片).{0,16}(?:展示|呈现|介绍|讲述|带来|开始|结束|值得)/u,
   /(?:视频|画面|镜头|分镜).{0,14}(?:展示|呈现|聚焦|回到|切换|说明|介绍|生成|拆成|收束)/u,
   /(?:观众|viewer).{0,16}(?:继续看|看到|理解这支|keep watching)/iu,
   /(?:the|this)\s+(?:video|film|scene|shot).{0,18}(?:shows?|presents?|introduces?|frames?|returns?|opens?|closes?)/iu,
+  /^(?:(?:in|through)\s+)?this\s+(?:video|film|short)(?:\s+(?:is|will be))?(?:\s+(?:about|an? introduction to))?|^(?:here is|the following is)\s+an?\s+.{0,24}(?:video|film)/iu,
   /(?:camera|shot|scene|storyboard).{0,14}(?:shows?|presents?|explains?|moves?|cuts?|generated)/iu
 ];
 
@@ -25,6 +29,7 @@ export type BriefDomain =
   | "gaming"
   | "education"
   | "commerce"
+  | "hospitality"
   | "entertainment"
   | "business"
   | "general";
@@ -41,6 +46,10 @@ const briefDomainPatterns: Array<[BriefDomain, RegExp]> = [
   [
     "commerce",
     /(?:电商|商品|购物|零售|店铺|库存|订单|物流|跨境|消费者|commerce|e-?commerce|retail|shop|store|inventory|order|logistics)/iu
+  ],
+  [
+    "hospitality",
+    /(?:餐馆|餐厅|饭店|酒楼|咖啡店|咖啡馆|酒店|旅馆|民宿|菜品|厨师|用餐|餐饮|restaurant|cafe|coffee shop|hotel|hospitality|dining|cuisine|chef)/iu
   ],
   [
     "entertainment",
@@ -129,7 +138,7 @@ const subjectTranslations: Array<[RegExp, string, string]> = [
   [/学校/u, "学校", "school"],
   [/课程/u, "课程", "course"],
   [/咖啡店|咖啡馆/u, "咖啡店", "coffee shop"],
-  [/餐厅|饭店/u, "餐厅", "restaurant"],
+  [/餐馆|餐厅|饭店|酒楼/u, "餐厅", "restaurant"],
   [/酒店|旅馆/u, "酒店", "hotel"],
   [/公司|企业/u, "公司", "company"],
   [/产品/u, "产品", "product"],
@@ -142,6 +151,23 @@ function translatedSubject(subject: string, chinese: boolean) {
   const translation = subjectTranslations.find(([pattern]) => pattern.test(subject));
   if (!translation) return subject;
   return chinese ? translation[1] : translation[2];
+}
+
+export function localizedBriefSubject(prompt: string, chinese = true) {
+  const subject = extractBriefSubject(prompt, chinese);
+  const localized = translatedSubject(subject, chinese);
+  if (chinese || !/\p{Script=Han}/u.test(localized)) return localized;
+
+  const domainFallbacks: Record<BriefDomain, string> = {
+    gaming: "game",
+    education: "learning experience",
+    commerce: "customer offering",
+    hospitality: "hospitality experience",
+    entertainment: "entertainment experience",
+    business: "business offering",
+    general: "featured experience"
+  };
+  return domainFallbacks[detectBriefDomain(prompt)];
 }
 
 export function projectTitleRepresentsBrief(title: string, prompt: string, chinese = true) {

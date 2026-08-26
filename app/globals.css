@@ -5096,6 +5096,25 @@ html[data-theme="dark"] .kv-user-menu {
   line-height: 1.5;
 }
 
+.kv-language-repair-action {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #b8791d;
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px 11px;
+  color: #7a4b08;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.kv-language-repair-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .kv-export-blocker-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
