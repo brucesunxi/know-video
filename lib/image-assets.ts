@@ -16,6 +16,7 @@ import {
   projectVisualIdentity,
   sceneRequiresPremiumImage,
   sceneImagePrompt,
+  sceneVisualDiversityDirection,
   stableImageSeed,
   type ImageReferenceRole
 } from "@/lib/image-continuity";
@@ -84,16 +85,46 @@ function buildUltraSafeSceneImagePrompt(scene: Scene, project: Project) {
   ].join("\n"));
 }
 
-function buildTextSafeCorrectionPrompt(scene: Scene, project: Project) {
+function textSafePhysicalObjectDirection(scene: Scene) {
+  const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`;
+  if (/(?:图书馆|书店|阅览|阅读|书架|借阅|还书|library|bookstore|reading|bookshelf|borrowing books|returning books)/iu.test(description)) {
+    return [
+      "LIBRARY TEXT-SAFE OBJECT RULE: books, shelves, and reading furniture are required semantic objects and must remain visible.",
+      "Render every book cover and spine as a completely plain unmarked color or material surface. Remove titles, labels, numbers, barcodes, decorative line clusters, and writing-like marks while preserving recognizable book shapes and shelf depth."
+    ].join("\n");
+  }
+  return [
+    "Keep every physical object that is essential to the scene's subject, action, and setting.",
+    "Avoid front-facing written surfaces when they are not essential. When an essential object normally carries writing, turn that surface away from camera or render it as one clean, completely blank material or color area without glyph-like decoration."
+  ].join("\n");
+}
+
+function correctionReferenceDirection(references: ImageReference[]) {
+  const styleAnchorCount = references.filter((reference) => reference.role === "style-anchor").length;
+  const hasCurrentReference = references.some((reference) => reference.role === "current");
+  return [
+    styleAnchorCount > 0
+      ? `The ${styleAnchorCount} attached project frame${styleAnchorCount === 1 ? " is a" : "s are"} STYLE-ONLY anchor${styleAnchorCount === 1 ? "" : "s"}. Match their shared rendering medium, line treatment, texture, palette behavior, and lighting, but copy none of their subjects, objects, camera angles, poses, foreground silhouettes, or layouts.`
+      : "",
+    hasCurrentReference
+      ? "The attached current-scene reference may preserve subject identity, but the corrected frame must still obey this scene's distinct camera blueprint."
+      : ""
+  ].filter(Boolean).join("\n");
+}
+
+function buildTextSafeCorrectionPrompt(scene: Scene, project: Project, references: ImageReference[]) {
   return enforceTextFreeImagePrompt([
     `Create a polished 16:9 scene illustration for ${imageSafeSemanticText(project.title)}.`,
     projectVisualIdentity(project),
     exactVisualStyleDirection(projectLockedVisualStyle(project) ?? scene.style),
+    correctionReferenceDirection(references),
     `Scene meaning: ${imageSafeSemanticText(scene.voiceover)} ${imageSafeSemanticText(scene.visualPrompt)}`,
     semanticFallbackComposition(scene),
+    sceneVisualDiversityDirection(scene, project.currentVersion.scenes.length),
     `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
     "Build the meaning with recognizable people, environments, actions, and physical objects instead of written information.",
-    "TEXT-SAFE COMPOSITION: do not include screens, phones facing camera, documents, books, signs, posters, whiteboards, blackboards, dashboards, charts, diagrams, forms, packaging, badges, uniforms with markings, storefronts, vehicle markings, or decorative glyphs.",
+    textSafePhysicalObjectDirection(scene),
+    "TEXT-SAFE COMPOSITION: do not include front-facing screens, phones, signs, posters, whiteboards, blackboards, dashboards, charts, forms, labels, badges, storefront lettering, vehicle markings, or decorative glyphs. Necessary physical objects may remain only with completely blank written surfaces.",
     "Use natural scene depth and a single clear action. Keep all surfaces plain and uninterrupted. Do not arrange blank rectangles or lines in a way that resembles an interface, document, chart, or writing.",
     "The final frame must remain rich and specific to this scene while containing no typography or writing-like marks."
   ].join("\n"));
@@ -101,6 +132,17 @@ function buildTextSafeCorrectionPrompt(scene: Scene, project: Project) {
 
 function semanticFallbackComposition(scene: Scene) {
   const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`;
+  if (/(?:图书馆|书店|阅览|阅读|书架|借阅|还书|library|bookstore|reading|bookshelf|borrowing books|returning books)/iu.test(description)) {
+    const beats = [
+      "a deep entrance view introducing the library with an off-center reader and layered aisles",
+      "a side-angle reader selecting a single book from a shelf framed by a different foreground bay",
+      "a high three-quarter reading-table detail with hands, open blank pages, and distant shelves",
+      "an over-the-shoulder borrowing, returning, guidance, or quiet study interaction away from the entrance",
+      "an asymmetrical closing view from inside a deep aisle or reading area, seen from behind a reader with a clear path forward"
+    ];
+    const beat = beats[Math.min(beats.length - 1, Math.max(0, scene.sceneNumber - 1) % beats.length)];
+    return `Composition: ${beat}. Keep books and shelves recognizable, but make every cover and spine completely plain and unmarked with no title-like decoration.`;
+  }
   if (/(?:方块|沙盒|游戏|课程|编程|voxel|sandbox|game|course|programming)/iu.test(description)) {
     return "Composition: a different voxel-learning beat for this scene, such as a planning desk with unlabeled colored blocks, an abstract block-building workspace, a simple logic circuit made of cubes and light paths, or a finished voxel world display with no characters or logos.";
   }
@@ -138,6 +180,16 @@ function expectedSceneSemantics(scene: Scene, project: Project) {
     `Narrative meaning: ${imageSafeSemanticText(scene.voiceover)}.`,
     `Required visible content: ${imageSafeSemanticText(scene.visualPrompt)}.`
   ].join("\n").slice(0, 3600);
+}
+
+function essentialSceneSemantics(scene: Scene, project: Project) {
+  return [
+    `Project topic: ${imageSafeSemanticText(project.title)}.`,
+    `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
+    `Essential visible meaning: ${imageSafeSemanticText(scene.voiceover)}.`,
+    semanticFallbackComposition(scene),
+    "Accept a concrete, recognizable visual interpretation of this beat even if it does not literally depict every descriptive phrase."
+  ].join("\n").slice(0, 2400);
 }
 
 async function inspectGeneratedImage(body: Buffer, scene: Scene, project: Project) {
@@ -304,25 +356,42 @@ function sameLockedStyle(left: Scene, right: Scene) {
   return left.style.visualStylePrompt?.trim() === right.style.visualStylePrompt?.trim();
 }
 
-async function loadProjectStyleAnchorReference(project: Project, scene: Scene) {
+async function loadProjectStyleAnchorReferences(project: Project, scene: Scene) {
   const lockedStyle = projectLockedVisualStyle(project);
-  if (!lockedStyle || lockedStyle.visualStyleId === "cinematic-realism") return undefined;
-  const anchorScene = project.currentVersion.scenes
+  if (!lockedStyle || lockedStyle.visualStyleId === "cinematic-realism") return [];
+  const anchorScenes = project.currentVersion.scenes
     .filter((candidate) => candidate.sceneNumber !== scene.sceneNumber && sameLockedStyle(candidate, scene))
-    .sort((left, right) => left.sceneNumber - right.sceneNumber)
-    .find((candidate) => candidate.assets.some((asset) => (
+    .filter((candidate) => candidate.assets.some((asset) => (
       asset.type === "image"
       && asset.metadata?.source === "generated-image"
       && asset.url
       && asset.r2Key
-    )));
-  const anchorAsset = anchorScene?.assets.find((asset) => (
-    asset.type === "image"
-    && asset.metadata?.source === "generated-image"
-    && asset.url
-    && asset.r2Key
-  ));
-  return loadImageReference(anchorAsset, "style-anchor");
+    )))
+    .sort((left, right) => {
+      const leftDistance = Math.abs(left.sceneNumber - scene.sceneNumber);
+      const rightDistance = Math.abs(right.sceneNumber - scene.sceneNumber);
+      return leftDistance - rightDistance || right.sceneNumber - left.sceneNumber;
+    });
+  if (anchorScenes.length === 0) return [];
+
+  const nearest = anchorScenes[0];
+  const contrasting = anchorScenes
+    .slice(1)
+    .sort((left, right) => (
+      Math.abs(right.sceneNumber - nearest.sceneNumber)
+      - Math.abs(left.sceneNumber - nearest.sceneNumber)
+    ))[0];
+  const selected = [nearest, contrasting].filter(Boolean) as Scene[];
+  const references = await Promise.all(selected.map((anchorScene) => {
+    const anchorAsset = anchorScene.assets.find((asset) => (
+      asset.type === "image"
+      && asset.metadata?.source === "generated-image"
+      && asset.url
+      && asset.r2Key
+    ));
+    return loadImageReference(anchorAsset, "style-anchor");
+  }));
+  return references.filter(Boolean) as ImageReference[];
 }
 
 async function loadProjectComparisonImages(project: Project, scene: Scene) {
@@ -380,13 +449,15 @@ async function generateSceneImage(
   variantKey = "primary",
   visualInstruction?: string,
   comparisonImages: SceneComparisonImage[] = [],
-  allowStyleFallback = false
+  allowStyleFallback = false,
+  maxQualityAttempts = MAX_IMAGE_QUALITY_ATTEMPTS
 ): Promise<{ asset: SceneAsset } | undefined> {
   const effectiveQuality: ImageQuality = quality === "premium" || sceneRequiresPremiumImage(scene)
     ? "premium"
     : "standard";
   const usableReferences = hasCloudflareAI() ? references : [];
-  const baseSeed = stableImageSeed(`${project.id}:${scene.sceneNumber}:${variantKey}`);
+  const baseSeed = stableImageSeed(`${project.id}:${scene.sceneNumber}:${effectiveQuality}:${variantKey}`);
+  const qualityAttemptLimit = Math.max(1, Math.min(MAX_IMAGE_QUALITY_ATTEMPTS, maxQualityAttempts));
   let prompt = buildSceneImagePrompt(scene, project, usableReferences, visualInstruction);
   let body: Buffer | undefined;
   let model = "";
@@ -455,19 +526,19 @@ async function generateSceneImage(
       });
     }
   };
-  for (let qualityAttempt = 0; qualityAttempt < MAX_IMAGE_QUALITY_ATTEMPTS; qualityAttempt += 1) {
+  for (let qualityAttempt = 0; qualityAttempt < qualityAttemptLimit; qualityAttempt += 1) {
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
     const duplicateCorrection = duplicateWasDetected
-      ? "COMPOSITION REJECTION: the prior candidate was too similar to another scene. Re-stage this beat from a substantially different camera height, shot size, subject arrangement, foreground silhouette, and background. Do not reuse the same tabletop, centered object group, horizon, pose, or color-block placement."
+      ? "COMPOSITION REJECTION: the prior candidate copied another scene or a style anchor too closely. Keep the attached anchors because their shared medium defines the project style, but treat every anchor composition as a negative example. Re-stage this beat from a substantially different camera height, shot size, camera side, subject action, foreground silhouette, and background. Do not reuse the same tabletop, centered object group, aisle view, horizon, pose, or color-block placement."
       : "";
-    const attemptPrompt = qualityAttempt === MAX_IMAGE_QUALITY_ATTEMPTS - 1
-      ? `${buildTextSafeCorrectionPrompt(scene, project)}\n${duplicateCorrection}`
+    const attemptPrompt = qualityAttempt === qualityAttemptLimit - 1
+      ? `${buildTextSafeCorrectionPrompt(scene, project, usableReferences)}\n${duplicateCorrection}`
       : enforceTextFreeImagePrompt(qualityAttempt === 0
         ? prompt
         : `${prompt}\n${duplicateCorrection}\nQuality correction attempt ${qualityAttempt + 1}: the prior candidate was rejected. Rebuild the composition as a fully resolved, information-rich frame in the exact locked rendering medium. The actual scene subject, action, environment, and narrative cause-and-effect must be immediately recognizable; a palette sheet, pattern, material sample, abstract shapes, or style demonstration is invalid. Remove every word, letter, number, logo, watermark, fake glyph, and writing-like mark; use blank surfaces and purely pictorial objects instead. Keep clear subject separation and meaningful foreground, midground, and background. Do not switch to photography, 3D, voxel, low-poly, or another illustration style. Avoid empty gradients or featureless surfaces.`);
-    const attemptReferences = duplicateWasDetected
-      ? usableReferences.filter((reference) => reference.role !== "style-anchor")
-      : usableReferences;
+    // Multiple anchors expose the shared art direction. Keep them after a
+    // duplicate rejection and reject their layouts in the prompt instead.
+    const attemptReferences = usableReferences;
     let generatedBody: Buffer;
     let generatedModel: string;
     let effectivePrompt = attemptPrompt;
@@ -566,7 +637,7 @@ async function generateSceneImage(
           try {
             const semanticCheck = await trackedValidation(
               `${qualityAttempt}:inspection-fallback-semantic`,
-              () => evaluateCloudflareImageSemantics(normalized.body, expectedSceneSemantics(scene, project))
+              () => evaluateCloudflareImageSemantics(normalized.body, essentialSceneSemantics(scene, project))
             );
             if (semanticCheck.matches && !styleFallback) {
               styleFallback = {
@@ -581,7 +652,7 @@ async function generateSceneImage(
             console.warn(`[image-assets] Scene ${scene.sceneNumber} independent semantic fallback was unavailable:`, fallbackError);
           }
         }
-        if (qualityAttempt < MAX_IMAGE_QUALITY_ATTEMPTS - 1) {
+        if (qualityAttempt < qualityAttemptLimit - 1) {
           console.warn(`[image-assets] Scene ${scene.sceneNumber} inspection was unavailable; retrying with a new candidate.`);
           continue;
         }
@@ -601,7 +672,7 @@ async function generateSceneImage(
         if (inspection === "style_mismatch" && allowStyleFallback && hasCloudflareAI()) {
           const semanticCheck = await trackedValidation(
             `${qualityAttempt}:style-fallback-semantic`,
-            () => evaluateCloudflareImageSemantics(normalized.body, expectedSceneSemantics(scene, project))
+            () => evaluateCloudflareImageSemantics(normalized.body, essentialSceneSemantics(scene, project))
           );
           if (semanticCheck.matches && !styleFallback) {
             styleFallback = {
@@ -613,7 +684,7 @@ async function generateSceneImage(
             };
           }
         }
-        if (qualityAttempt < MAX_IMAGE_QUALITY_ATTEMPTS - 1) {
+        if (qualityAttempt < qualityAttemptLimit - 1) {
           console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${qualityError.code}); retrying:`, qualityError.message);
           continue;
         }
@@ -625,7 +696,13 @@ async function generateSceneImage(
       prompt = effectivePrompt;
       break;
     } catch (error) {
-      if (!(error instanceof GeneratedImageQualityError) || qualityAttempt === MAX_IMAGE_QUALITY_ATTEMPTS - 1) throw error;
+      if (!(error instanceof GeneratedImageQualityError)) throw error;
+      if (qualityAttempt === qualityAttemptLimit - 1) {
+        // A later rejected candidate must not erase an earlier premium frame
+        // that already cleared the hard text, duplicate, and semantic gates.
+        if (styleFallback) break;
+        throw error;
+      }
       console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${error.code}); retrying:`, error.message);
     }
   }
@@ -687,6 +764,7 @@ export async function generateProjectSceneImages(
     variantKey?: string;
     visualInstruction?: string;
     allowStyleFallback?: boolean;
+    maxQualityAttempts?: number;
   } = {}
 ) {
   const credentialIssue = imageCredentialIssue();
@@ -722,9 +800,9 @@ export async function generateProjectSceneImages(
           currentVersion: { ...project.currentVersion, scenes }
         };
         const currentReference = await loadSceneImageReference(scene, "current");
-        const styleAnchorReference = await loadProjectStyleAnchorReference(workingProject, scene);
+        const styleAnchorReferences = await loadProjectStyleAnchorReferences(workingProject, scene);
         const comparisonImages = await loadProjectComparisonImages(workingProject, scene);
-        const references = [currentReference, styleAnchorReference].filter(Boolean) as ImageReference[];
+        const references = [currentReference, ...styleAnchorReferences].filter(Boolean) as ImageReference[];
         const generated = await generateSceneImage(
           scene,
           workingProject,
@@ -733,7 +811,8 @@ export async function generateProjectSceneImages(
           options.variantKey,
           options.visualInstruction,
           comparisonImages,
-          options.allowStyleFallback
+          options.allowStyleFallback,
+          options.maxQualityAttempts
         );
         if (!generated) return;
 

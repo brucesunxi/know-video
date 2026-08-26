@@ -3,6 +3,7 @@ import fs from "node:fs";
 
 const route = fs.readFileSync(new URL("../app/api/assets/generate/route.ts", import.meta.url), "utf8");
 const imageAssets = fs.readFileSync(new URL("../lib/image-assets.ts", import.meta.url), "utf8");
+const continuity = fs.readFileSync(new URL("../lib/image-continuity.ts", import.meta.url), "utf8");
 
 assert.match(route, /function imageFailedScenes/);
 assert.match(route, /MAX_SCENES_PER_IMAGE_REQUEST = 1/);
@@ -33,8 +34,8 @@ assert.ok(
 );
 assert.match(imageAssets, /misspelled, cropped, blurry, nonsensical/);
 assert.match(imageAssets, /palette sheet, pattern, material sample, abstract shapes, or style demonstration is invalid/);
-assert.match(imageAssets, /qualityAttempt < MAX_IMAGE_QUALITY_ATTEMPTS/);
-assert.match(imageAssets, /qualityAttempt === MAX_IMAGE_QUALITY_ATTEMPTS - 1/);
+assert.match(imageAssets, /qualityAttempt < qualityAttemptLimit/);
+assert.match(imageAssets, /qualityAttempt === qualityAttemptLimit - 1/);
 assert.match(imageAssets, /TEXT-SAFE COMPOSITION/);
 assert.match(imageAssets, /生成画面包含文字或类似文字的符号/);
 assert.match(imageAssets, /生成画面与当前场景内容不匹配/);
@@ -51,7 +52,18 @@ assert.match(imageAssets, /validator formatting glitches/);
 assert.doesNotMatch(imageAssets, /betterTextFreeCandidate/);
 assert.match(imageAssets, /composition_duplicate/);
 assert.match(imageAssets, /ADJACENT_SCENE_DUPLICATE_THRESHOLD/);
-assert.match(imageAssets, /reference\.role !== "style-anchor"/);
+assert.match(imageAssets, /loadProjectStyleAnchorReferences/);
+assert.match(imageAssets, /const selected = \[nearest, contrasting\]/);
+assert.match(imageAssets, /const attemptReferences = usableReferences/);
+assert.doesNotMatch(imageAssets, /reference\.role !== "style-anchor"/);
+assert.match(imageAssets, /LIBRARY TEXT-SAFE OBJECT RULE/);
+assert.match(imageAssets, /every book cover and spine as a completely plain unmarked/);
+assert.doesNotMatch(imageAssets, /documents, books, signs/);
+assert.match(imageAssets, /essentialSceneSemantics/);
+assert.match(imageAssets, /if \(styleFallback\) break/);
+assert.match(continuity, /LIBRARY \/ READING SEMANTIC FIDELITY/);
+assert.match(continuity, /Primary camera blueprint/);
+assert.match(continuity, /All visible books must have completely plain, unmarked covers and spines/);
 assert.match(imageAssets, /mapWithConcurrency\(targets, 1/);
 assert.match(imageAssets, /currentVersion: \{ \.\.\.project\.currentVersion, scenes \}/);
 

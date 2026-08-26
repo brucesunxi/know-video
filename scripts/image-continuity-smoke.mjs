@@ -167,4 +167,34 @@ assert.doesNotMatch(minecraftPrompt, /我的世界/);
 assert.doesNotMatch(minecraftPrompt, /孩子|小朋友/);
 assert.match(sceneVisualDiversityDirection(minecraftScene, 5), /redstone-like circuits/);
 
+const librarySceneOne = {
+  ...scene,
+  sceneNumber: 1,
+  title: "图书馆入口",
+  voiceover: "走进明亮安静的图书馆。",
+  visualPrompt: "读者进入图书馆，在书架间开始探索。"
+};
+const librarySceneFive = {
+  ...librarySceneOne,
+  sceneNumber: 5,
+  title: "阅读旅程继续",
+  voiceover: "在阅读空间中发现下一本好书。",
+  visualPrompt: "读者从书架深处走向新的阅读区域。"
+};
+const libraryProject = {
+  ...project,
+  title: "图书馆产品介绍",
+  currentVersion: { ...project.currentVersion, scenes: [librarySceneOne, librarySceneFive] }
+};
+const libraryPrompt = sceneImagePrompt(librarySceneFive, libraryProject, ["style-anchor", "style-anchor"]);
+assert.match(libraryPrompt, /LIBRARY \/ READING SEMANTIC FIDELITY/);
+assert.match(libraryPrompt, /Books and shelving are essential scene objects/);
+assert.match(libraryPrompt, /completely plain, unmarked covers and spines/);
+assert.notEqual(
+  sceneVisualDiversityDirection(librarySceneOne, 5),
+  sceneVisualDiversityDirection(librarySceneFive, 5)
+);
+assert.match(sceneVisualDiversityDirection(librarySceneOne, 5), /wide establishing view from the entrance/);
+assert.match(sceneVisualDiversityDirection(librarySceneFive, 5), /closing outcome from inside a deep aisle/);
+
 console.log("Image continuity smoke checks passed.");

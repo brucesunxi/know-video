@@ -65,9 +65,15 @@ async function ensureSceneImage(message: ProjectMediaMessage, project: Project, 
     replaceExistingImages: true,
     sceneNumbers: [message.sceneNumber],
     quality,
+    variantKey: automaticPremiumUpgrade
+      ? `background-premium-rescue-${deliveryCount}`
+      : "background-standard",
     // Only the automatically upgraded premium pass may use the guarded
     // fallback. Standard generation must still satisfy the strict style gate.
-    allowStyleFallback: automaticPremiumUpgrade
+    allowStyleFallback: automaticPremiumUpgrade,
+    // A final queue rescue uses fresh seeds but only two candidates. This
+    // raises completion odds without repeating another full four-image pass.
+    maxQualityAttempts: deliveryCount >= 3 ? 2 : undefined
   });
   const generated = sceneAsset(updated, message.sceneNumber, "image");
   if (!generated) throw new ProjectMediaQualityExhaustedError(message.sceneNumber);
@@ -157,9 +163,37 @@ async function addFreeStockMotion(message: ProjectMediaMessage, project: Project
 export async function processProjectMediaScene(message: ProjectMediaMessage, deliveryCount = 1) {
   await touchGenerationRequest(message.requestId);
   let project = await requireCurrentProject(message);
-  project = await ensureSceneImage(message, project, deliveryCount);
-  project = await ensureSceneNarration(message, project);
-  project = await addFreeStockMotion(message, project);
+  let imageError: unknown;
+  let narrationError: unknown;
+
+  try {
+    project = await ensureSceneImage(message, project, deliveryCount);
+  } catch (error) {
+    imageError = error;
+    project = await requireCurrentProject(message);
+  }
+
+  // Narration is independent from the visual candidate. Complete and persist
+  // it even when this delivery needs to retry the image, then skip it on the
+  // next delivery instead of leaving both assets missing.
+  try {
+    project = await ensureSceneNarration(message, project);
+  } catch (error) {
+    narrationError = error;
+    project = await requireCurrentProject(message);
+  }
+
+  try {
+    project = await addFreeStockMotion(message, project);
+  } catch (error) {
+    // Free stock is optional because local camera motion remains available.
+    console.warn(`[background-media] Scene ${message.sceneNumber} free stock lookup failed; local motion remains active:`, error);
+    project = await requireCurrentProject(message);
+  }
+
+  const refreshedScene = project.currentVersion.scenes.find((scene) => scene.sceneNumber === message.sceneNumber);
+  if (imageError && (!refreshedScene || !sceneHasVisualAsset(refreshedScene))) throw imageError;
+  if (narrationError && (!refreshedScene || !sceneHasAudioAsset(refreshedScene))) throw narrationError;
 
   const sceneNumbers = project.currentVersion.scenes.map((scene) => scene.sceneNumber).sort((a, b) => a - b);
   const currentIndex = sceneNumbers.indexOf(message.sceneNumber);

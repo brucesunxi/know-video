@@ -103,6 +103,14 @@ function semanticSceneDirection(scene: Scene) {
   const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`.toLowerCase();
   const courseDirection = educationGameCourseDirection(description, scene);
   if (courseDirection) return courseDirection;
+  if (/(?:图书馆|书店|阅览|阅读|书架|借阅|还书|library|bookstore|reading|bookshelf|borrowing books|returning books)/iu.test(description)) {
+    return [
+      "LIBRARY / READING SEMANTIC FIDELITY:",
+      "Keep the library setting immediately recognizable through shelves, books, reading tables, quiet study areas, book selection, borrowing, returning, or reading actions required by this scene.",
+      "Books and shelving are essential scene objects and must not be removed merely to avoid typography. Render every cover and spine as a clean unmarked color or material surface with no title, label, number, barcode, decorative stripe sequence, or writing-like mark.",
+      "Vary the reader action, aisle, furniture, camera side, and shot scale across scenes; do not turn every beat into the same centered bookshelf or reading-table hero image."
+    ].join("\n");
+  }
   if (/(?:跨境|库存|仓库|仓储|订单|物流|调拨|补货|缺货|积压|cross[- ]?border|inventory|warehouse|order|logistics|replenish|stock)/iu.test(description)) {
     return [
       "BUSINESS SEMANTIC FIDELITY:",
@@ -128,7 +136,23 @@ function semanticSceneDirection(scene: Scene) {
 export function sceneVisualDiversityDirection(scene: Pick<Scene, "sceneNumber" | "title" | "voiceover" | "visualPrompt">, sceneCount = 5) {
   const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`.toLowerCase();
   const courseLike = /(?:minecraft|我的世界|方块|沙盒|游戏|玩家|玩法|关卡|课程|课堂|老师|教师|学生|学习|教学|training|course|classroom|teacher|student|learning|game|gameplay|sandbox|block)/iu.test(description);
+  const libraryLike = /(?:图书馆|书店|阅览|阅读|书架|借阅|还书|library|bookstore|reading|bookshelf|borrowing books|returning books)/iu.test(description);
   const sceneNumber = Math.max(1, Number(scene.sceneNumber) || 1);
+  if (libraryLike) {
+    const beats = [
+      "wide establishing view from the entrance with deep aisle perspective and an off-center human focal point",
+      "medium side-angle view of a reader selecting one plain-spined book from a shelf, with foreground shelf framing",
+      "top-down or high three-quarter detail of hands reading or researching at a table, with shelves only in the distant background",
+      "over-the-shoulder or lateral view of a borrowing, returning, guidance, or quiet study interaction at a different location",
+      "closing outcome from inside a deep aisle or reading area, framed asymmetrically from behind a reader with a clear path into the library"
+    ];
+    return [
+      "SCENE DIFFERENTIATION:",
+      `This is scene ${sceneNumber} of ${sceneCount}. Primary camera blueprint: ${beats[Math.min(beats.length - 1, (sceneNumber - 1) % beats.length)]}.`,
+      "Do not reuse another scene's entrance view, centered shelf wall, tabletop arrangement, subject pose, camera height, or foreground silhouette.",
+      "All visible books must have completely plain, unmarked covers and spines."
+    ].join("\n");
+  }
   if (courseLike) {
     const beats = [
       "opening hook: learner curiosity, teacher or mentor setting up the challenge, classroom or desk context",
