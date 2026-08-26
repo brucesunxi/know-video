@@ -1,5 +1,6 @@
 import { generateProjectVoices } from "@/lib/audio-assets";
 import {
+  InsufficientCreditsError,
   recordUsageEvent,
   refundCreditReservation,
   releaseCreditReservation,
@@ -44,36 +45,50 @@ async function ensureSceneImage(message: ProjectMediaMessage, project: Project, 
   // A second queue delivery means the standard model already exhausted its
   // internal quality candidates. Escalate once instead of repeating the same
   // model for many deliveries and leaving the task looking stuck.
-  const automaticPremiumUpgrade = deliveryCount >= 2;
-  const quality = targetScene && (sceneRequiresPremiumImage(targetScene) || automaticPremiumUpgrade)
+  const completionRescue = deliveryCount >= 2;
+  const requiresPremium = Boolean(targetScene && sceneRequiresPremiumImage(targetScene));
+  let quality: "standard" | "premium" = requiresPremium || completionRescue
     ? "premium"
     : "standard";
-  const resourceType = quality === "premium" ? "image_premium" : "image_standard";
   if (quality === "premium" && message.billingReservationKey) {
     const standardCredits = estimateBilling([{ resourceType: "image_standard", quantity: 1 }]).maximumCredits;
     const premium = estimateBilling([{ resourceType: "image_premium", quantity: 1 }]);
-    await reserveAdditionalCredits({
-      userId: message.userId,
-      reservationKey: message.billingReservationKey,
-      adjustmentKey: `${message.requestId}:scene:${message.sceneNumber}:premium-upgrade`,
-      credits: premium.maximumCredits - standardCredits,
-      estimatedCostUsd: Math.max(0, premium.estimatedProviderCostUsd - estimateBilling([{ resourceType: "image_standard", quantity: 1 }]).estimatedProviderCostUsd),
-      metadata: { sceneNumber: message.sceneNumber, automaticPremiumUpgrade: true }
-    });
+    try {
+      await reserveAdditionalCredits({
+        userId: message.userId,
+        reservationKey: message.billingReservationKey,
+        adjustmentKey: `${message.requestId}:scene:${message.sceneNumber}:premium-upgrade`,
+        credits: premium.maximumCredits - standardCredits,
+        estimatedCostUsd: Math.max(0, premium.estimatedProviderCostUsd - estimateBilling([{ resourceType: "image_standard", quantity: 1 }]).estimatedProviderCostUsd),
+        metadata: { sceneNumber: message.sceneNumber, automaticPremiumUpgrade: completionRescue && !requiresPremium }
+      });
+    } catch (error) {
+      if (!(error instanceof InsufficientCreditsError) || requiresPremium || !completionRescue) throw error;
+      // The user already funded the standard image in the original reservation.
+      // A best-effort model upgrade must never turn that funded video into a
+      // failed task, so continue with standard generation and settle standard.
+      quality = "standard";
+      console.warn(`[background-media] Scene ${message.sceneNumber} premium rescue had no additional credit headroom; continuing with the funded standard model.`);
+    }
   }
+  const resourceType = quality === "premium" ? "image_premium" : "image_standard";
   const updated = await generateProjectSceneImages(project, {
     replaceExistingImages: true,
     sceneNumbers: [message.sceneNumber],
     quality,
-    variantKey: automaticPremiumUpgrade
-      ? `background-premium-rescue-${deliveryCount}`
+    variantKey: completionRescue
+      ? `background-${quality}-completion-rescue-${deliveryCount}`
       : "background-standard",
-    // Only the automatically upgraded premium pass may use the guarded
-    // fallback. Standard generation must still satisfy the strict style gate.
-    allowStyleFallback: automaticPremiumUpgrade,
-    // A final queue rescue uses fresh seeds but only two candidates. This
-    // raises completion odds without repeating another full four-image pass.
-    maxQualityAttempts: deliveryCount >= 3 ? 2 : undefined
+    // The rescue pass may use guarded fallbacks regardless of whether billing
+    // had enough headroom for the optional premium model upgrade.
+    allowStyleFallback: completionRescue,
+    // Once the standard pass has tried strict candidates, the premium rescue
+    // may deliver the strongest technically valid candidate instead of
+    // allowing a conservative vision verdict to leave the scene empty.
+    allowCompletionFallback: completionRescue,
+    // Keep the bounded background path below five provider candidates per
+    // scene. Internal quality retries remain cost monitoring only.
+    maxQualityAttempts: completionRescue ? 2 : 3
   });
   const generated = sceneAsset(updated, message.sceneNumber, "image");
   if (!generated) throw new ProjectMediaQualityExhaustedError(message.sceneNumber);
@@ -99,7 +114,9 @@ async function ensureSceneImage(message: ProjectMediaMessage, project: Project, 
       source: "background_queue",
       requestedQuality: "standard",
       effectiveQuality: quality,
-      automaticPremiumUpgrade: quality === "premium",
+      automaticPremiumUpgrade: quality === "premium" && completionRescue && !requiresPremium,
+      qualityGate: generated.metadata?.qualityGate,
+      completionFallbackReason: generated.metadata?.completionFallbackReason,
       providerRequestCount: generated.metadata?.providerRequestCount,
       validationRequestCount: generated.metadata?.validationRequestCount,
       internalRetriesNotCharged: Math.max(0, Number(generated.metadata?.providerRequestCount ?? 1) - 1)
@@ -195,9 +212,10 @@ export async function processProjectMediaScene(message: ProjectMediaMessage, del
   if (imageError && (!refreshedScene || !sceneHasVisualAsset(refreshedScene))) throw imageError;
   if (narrationError && (!refreshedScene || !sceneHasAudioAsset(refreshedScene))) throw narrationError;
 
-  const sceneNumbers = project.currentVersion.scenes.map((scene) => scene.sceneNumber).sort((a, b) => a - b);
-  const currentIndex = sceneNumbers.indexOf(message.sceneNumber);
-  const nextSceneNumber = currentIndex >= 0 ? sceneNumbers[currentIndex + 1] : undefined;
+  const nextSceneNumber = project.currentVersion.scenes
+    .filter((scene) => scene.sceneNumber > message.sceneNumber)
+    .filter((scene) => !sceneHasVisualAsset(scene) || !sceneHasAudioAsset(scene))
+    .sort((left, right) => left.sceneNumber - right.sceneNumber)[0]?.sceneNumber;
   if (nextSceneNumber) {
     await enqueueProjectMediaScene({ ...message, sceneNumber: nextSceneNumber });
     return;
@@ -209,7 +227,15 @@ export async function processProjectMediaScene(message: ProjectMediaMessage, del
   });
   if (incomplete.length > 0) {
     const first = incomplete.sort((a, b) => a.sceneNumber - b.sceneNumber)[0];
-    await enqueueProjectMediaScene({ ...message, sceneNumber: first.sceneNumber });
+    const recoveryPass = (message.recoveryPass ?? 0) + 1;
+    if (recoveryPass > 2) {
+      throw new Error(`Project media remained incomplete after ${recoveryPass - 1} recovery passes.`);
+    }
+    await enqueueProjectMediaScene({
+      ...message,
+      sceneNumber: first.sceneNumber,
+      recoveryPass
+    });
     return;
   }
   await completeGenerationRequest({

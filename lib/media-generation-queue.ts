@@ -12,11 +12,12 @@ export type ProjectMediaMessage = {
   engine: string;
   billingReservationKey?: string;
   options?: GenerationOptions;
+  recoveryPass?: number;
 };
 
 export async function enqueueProjectMediaScene(message: ProjectMediaMessage) {
   return send(PROJECT_MEDIA_TOPIC, message, {
-    idempotencyKey: `${message.requestId}:scene:${message.sceneNumber}`,
+    idempotencyKey: `${message.requestId}:pass:${message.recoveryPass ?? 0}:scene:${message.sceneNumber}`,
     retentionSeconds: 7 * 24 * 60 * 60
   });
 }

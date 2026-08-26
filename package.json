@@ -45,6 +45,7 @@
     "image:similarity:smoke": "node scripts/image-similarity-smoke.mjs",
     "image:candidates:smoke": "node scripts/image-candidates-smoke.mjs",
     "image:generation-retry:smoke": "node scripts/image-generation-retry-smoke.mjs",
+    "image:completion-policy:smoke": "node scripts/image-completion-policy-smoke.mjs",
     "visual:candidate-ui:smoke": "node scripts/visual-candidate-ui-smoke.mjs",
     "candidate:intent:smoke": "node scripts/candidate-edit-intent-smoke.mjs",
     "speech:timing:smoke": "node scripts/speech-timing-smoke.mjs",
