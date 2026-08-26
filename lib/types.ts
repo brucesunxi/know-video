@@ -56,6 +56,8 @@ export type SceneStructureMutation =
     }
   | { operation: "delete"; sceneNumber: number; sceneId?: string };
 
+export type GenerationVisualStyleSource = "auto" | "template" | "manual";
+
 export type GenerationOptions = {
   duration: "15" | "30" | "45" | "60";
   sceneCount: "auto" | "3" | "5" | "6";
@@ -64,6 +66,7 @@ export type GenerationOptions = {
   visualStyleId?: string;
   visualStyleLabel?: string;
   visualStylePrompt?: string;
+  visualStyleSource?: GenerationVisualStyleSource;
   motion: "camera" | "stock";
   narrationVoice?: NarrationVoice;
 };

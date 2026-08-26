@@ -60,6 +60,7 @@ const requestSchema = z.object({
     visualStyleId: z.string().trim().min(1).max(80).optional(),
     visualStyleLabel: z.string().trim().min(1).max(80).optional(),
     visualStylePrompt: z.string().trim().min(1).max(800).optional(),
+    visualStyleSource: z.enum(["auto", "template", "manual"]).optional(),
     motion: z.enum(["camera", "stock"]),
     narrationVoice: z.enum(NARRATION_VOICE_IDS).optional()
   }).optional(),

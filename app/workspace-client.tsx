@@ -609,7 +609,7 @@ type BriefTemplateStyle = {
   styleId: string;
   context: string;
 };
-type BriefStyleSource = "auto" | "template" | "manual";
+type BriefStyleSource = NonNullable<GenerationOptions["visualStyleSource"]>;
 
 const briefTemplateRoleLabels: Record<BriefTemplateRole, string> = {
   style: "Style",
@@ -863,13 +863,18 @@ function visualStyleById(styleId: string) {
   return briefVisualStyles.find((style) => style.id === styleId) ?? briefVisualStyles[0];
 }
 
-function optionsWithVisualStyle(options: GenerationOptions, style: BriefVisualStyle): GenerationOptions {
+function optionsWithVisualStyle(
+  options: GenerationOptions,
+  style: BriefVisualStyle,
+  source: BriefStyleSource
+): GenerationOptions {
   return {
     ...options,
     style: style.tone,
     visualStyleId: style.id,
     visualStyleLabel: style.label,
-    visualStylePrompt: style.prompt
+    visualStylePrompt: style.prompt,
+    visualStyleSource: source
   };
 }
 
@@ -885,6 +890,29 @@ function inferVisualStyleForPrompt(value: string) {
   if (/流程|系统|架构|预算|审批|模块|process|workflow|system/.test(text)) return visualStyleById("isometric");
   if (/品牌|新品|发布|宣传|launch|brand|promo/.test(text)) return visualStyleById("collage");
   return visualStyleById("product-ui");
+}
+
+function visualStyleSourceForOptions(prompt: string, options: GenerationOptions): BriefStyleSource {
+  if (options.visualStyleSource) return options.visualStyleSource;
+  if (!options.visualStyleId || options.visualStyleId === inferVisualStyleForPrompt(prompt).id) return "auto";
+  return "manual";
+}
+
+function defaultGenerationOptions(prompt = ""): GenerationOptions {
+  return optionsWithVisualStyle({
+    duration: "30",
+    sceneCount: "auto",
+    language: "中文",
+    style: "极简高级",
+    motion: "camera",
+    narrationVoice: DEFAULT_NARRATION_VOICE
+  }, inferVisualStyleForPrompt(prompt), "auto");
+}
+
+function resolvedGenerationOptions(prompt: string, options: GenerationOptions): GenerationOptions {
+  const source = visualStyleSourceForOptions(prompt, options);
+  if (source !== "auto") return { ...options, visualStyleSource: source };
+  return optionsWithVisualStyle(options, inferVisualStyleForPrompt(prompt), "auto");
 }
 
 function templateStyleFor(template: BriefTemplateCard) {
@@ -2725,7 +2753,6 @@ function BriefScreen({
   onOpenAttachmentPicker,
   onAddAttachments,
   onRemoveAttachment,
-  onUseExample,
   onSubmit,
   onOpenStudio,
   hasCurrentProject,
@@ -2741,7 +2768,6 @@ function BriefScreen({
   onOpenAttachmentPicker: () => void;
   onAddAttachments: (files: File[]) => void;
   onRemoveAttachment: (index: number) => void;
-  onUseExample: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onOpenStudio: () => void;
   hasCurrentProject: boolean;
@@ -2749,15 +2775,18 @@ function BriefScreen({
 }) {
   const { language, text } = useUiCopy();
   const reviewItems = generationReviewItems(prompt, options);
+  const inferredVisualStyle = inferVisualStyleForPrompt(prompt);
+  const styleSource = visualStyleSourceForOptions(prompt, options);
+  const selectedVisualStyle = styleSource === "auto"
+    ? inferredVisualStyle
+    : visualStyleById(options.visualStyleId ?? inferredVisualStyle.id);
   const [activeSettings, setActiveSettings] = useState<BriefSettingsPanel>();
   const [activeCategory, setActiveCategory] = useState<BriefCategory>(briefCategoryPills[0]);
   const [selectedTemplate, setSelectedTemplate] = useState<BriefTemplateCard>();
   const [selectedTemplateRole, setSelectedTemplateRole] = useState<BriefTemplateRole>("style");
-  const [styleMode, setStyleMode] = useState<BriefVisualStyleMode>("animated");
-  const [styleSource, setStyleSource] = useState<BriefStyleSource>("auto");
-  const [selectedStyleId, setSelectedStyleId] = useState(inferVisualStyleForPrompt(prompt).id);
-  const [draftStyleSource, setDraftStyleSource] = useState<BriefStyleSource>("auto");
-  const [draftStyleId, setDraftStyleId] = useState(inferVisualStyleForPrompt(prompt).id);
+  const [styleMode, setStyleMode] = useState<BriefVisualStyleMode>(selectedVisualStyle.mode);
+  const [draftStyleSource, setDraftStyleSource] = useState<BriefStyleSource>(styleSource);
+  const [draftStyleId, setDraftStyleId] = useState(selectedVisualStyle.id);
   const [avatarMode, setAvatarMode] = useState<BriefAvatarMode>("none");
   const [brandMode, setBrandMode] = useState<BriefBrandKitMode>("none");
   const [selectedVoice, setSelectedVoice] = useState<NarrationVoice>(options.narrationVoice ?? DEFAULT_NARRATION_VOICE);
@@ -2778,8 +2807,6 @@ function BriefScreen({
     return `${copy.label} ${copy.useCase} ${copy.description}`.toLocaleLowerCase().includes(voiceQuery.trim().toLocaleLowerCase());
   });
   const visibleTemplateCards = briefTemplateCards[activeCategory];
-  const inferredVisualStyle = inferVisualStyleForPrompt(prompt);
-  const selectedVisualStyle = styleSource === "auto" ? inferredVisualStyle : visualStyleById(selectedStyleId);
   const draftVisualStyle = draftStyleSource === "auto" ? inferredVisualStyle : visualStyleById(draftStyleId);
   const visibleVisualStyles = briefVisualStyles.filter((style) => style.mode === styleMode);
   const showStyleReference = styleSource !== "auto" && styleSource !== "template";
@@ -2794,11 +2821,14 @@ function BriefScreen({
 
   useEffect(() => {
     if (activeSettings !== "style") return;
-    const currentStyle = styleSource === "auto" ? inferredVisualStyle : visualStyleById(selectedStyleId);
     setDraftStyleSource(styleSource);
-    setDraftStyleId(currentStyle.id);
-    setStyleMode(currentStyle.mode);
+    setDraftStyleId(selectedVisualStyle.id);
+    setStyleMode(selectedVisualStyle.mode);
   }, [activeSettings]);
+
+  useEffect(() => {
+    setStyleMode(selectedVisualStyle.mode);
+  }, [selectedVisualStyle.id]);
 
   async function toggleBriefVoicePreview(voice: NarrationVoice) {
     if (previewingVoice === voice) {
@@ -2877,9 +2907,8 @@ function BriefScreen({
     onPromptChange(value);
     if (styleSource === "auto") {
       const inferred = inferVisualStyleForPrompt(value);
-      setSelectedStyleId(inferred.id);
       setStyleMode(inferred.mode);
-      onOptionsChange(optionsWithVisualStyle(options, inferred));
+      onOptionsChange(optionsWithVisualStyle(options, inferred, "auto"));
     }
   }
 
@@ -2889,28 +2918,24 @@ function BriefScreen({
     const templateStyle = templateStyleFor(firstTemplate);
     setSelectedTemplate(firstTemplate);
     setSelectedTemplateRole("style");
-    setStyleSource("template");
-    setSelectedStyleId(templateStyle.id);
     setStyleMode(templateStyle.mode);
-    onOptionsChange(optionsWithVisualStyle(options, templateStyle));
-    onUseExample(templatePromptForRole(firstTemplate, "style", templateStyle, language));
+    onOptionsChange(optionsWithVisualStyle(options, templateStyle, "template"));
+    onPromptChange(templatePromptForRole(firstTemplate, "style", templateStyle, language));
   }
 
   function chooseTemplate(template: BriefTemplateCard) {
     const templateStyle = templateStyleFor(template);
     setSelectedTemplate(template);
     setSelectedTemplateRole("style");
-    setStyleSource("template");
-    setSelectedStyleId(templateStyle.id);
     setStyleMode(templateStyle.mode);
-    onOptionsChange(optionsWithVisualStyle(options, templateStyle));
-    onUseExample(templatePromptForRole(template, "style", templateStyle, language));
+    onOptionsChange(optionsWithVisualStyle(options, templateStyle, "template"));
+    onPromptChange(templatePromptForRole(template, "style", templateStyle, language));
   }
 
   function chooseTemplateRole(role: BriefTemplateRole) {
     setSelectedTemplateRole(role);
-    if (selectedTemplate && role === "style") onOptionsChange(optionsWithVisualStyle(options, selectedVisualStyle));
-    if (selectedTemplate) onUseExample(templatePromptForRole(selectedTemplate, role, selectedVisualStyle, language));
+    if (selectedTemplate && role === "style") onOptionsChange(optionsWithVisualStyle(options, selectedVisualStyle, styleSource));
+    if (selectedTemplate) onPromptChange(templatePromptForRole(selectedTemplate, role, selectedVisualStyle, language));
   }
 
   function draftVisualStyleChoice(style: BriefVisualStyle) {
@@ -2941,11 +2966,9 @@ function BriefScreen({
 
   function confirmVisualStyle() {
     const style = draftStyleSource === "auto" ? inferVisualStyleForPrompt(prompt) : visualStyleById(draftStyleId);
-    setStyleSource(draftStyleSource);
-    setSelectedStyleId(style.id);
     setStyleMode(style.mode);
-    onOptionsChange(optionsWithVisualStyle(options, style));
-    onUseExample(promptWithStyle(style));
+    onOptionsChange(optionsWithVisualStyle(options, style, draftStyleSource));
+    onPromptChange(promptWithStyle(style));
     setActiveSettings(undefined);
   }
 
@@ -2956,19 +2979,15 @@ function BriefScreen({
     onPromptChange(nextPrompt);
     if (styleSource === "template") {
       const inferred = inferVisualStyleForPrompt(nextPrompt);
-      setStyleSource("auto");
-      setSelectedStyleId(inferred.id);
       setStyleMode(inferred.mode);
-      onOptionsChange(optionsWithVisualStyle(options, inferred));
+      onOptionsChange(optionsWithVisualStyle(options, inferred, "auto"));
     }
   }
 
   function removeStyleReference() {
     const inferred = inferVisualStyleForPrompt(prompt);
-    setStyleSource("auto");
-    setSelectedStyleId(inferred.id);
     setStyleMode(inferred.mode);
-    onOptionsChange(optionsWithVisualStyle(options, inferred));
+    onOptionsChange(optionsWithVisualStyle(options, inferred, "auto"));
   }
 
   function clipboardFiles(event: ReactClipboardEvent<HTMLElement>) {
@@ -3139,7 +3158,7 @@ function BriefScreen({
             return (
               <button key={card.title} onClick={() => {
                 const examples = language === "zh-CN" ? promptExamples : promptExamplesEnglish;
-                onUseExample(card.title === "Explain a concept" ? examples[0] : card.title === "Turn a doc into video" ? examples[1] : examples[2]);
+                updatePrompt(card.title === "Explain a concept" ? examples[0] : card.title === "Turn a doc into video" ? examples[1] : examples[2]);
               }} type="button">
                 <i><Icon size={18} /></i>
                 <span><strong>{language === "zh-CN" ? briefWorkflowLocalized[card.title]?.[0] : card.title}</strong><small>{language === "zh-CN" ? card.detail : briefWorkflowLocalized[card.title]?.[1]}</small></span>
@@ -5896,6 +5915,7 @@ export function WorkspaceClient({
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("zh-CN");
   const [briefPrompt, setBriefPrompt] = useState("");
   const [briefAttachments, setBriefAttachments] = useState<File[]>([]);
+  const [briefSessionKey, setBriefSessionKey] = useState(0);
   const [chatAttachments, setChatAttachments] = useState<File[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(() => (
@@ -5929,17 +5949,7 @@ export function WorkspaceClient({
   const [candidateToCompare, setCandidateToCompare] = useState<{ sceneNumber: number; assetId: string }>();
   const [productionOpen, setProductionOpen] = useState(false);
   const [productionUploadType, setProductionUploadType] = useState<"logo" | "music">();
-  const [generationOptions, setGenerationOptions] = useState<GenerationOptions>({
-    duration: "30",
-    sceneCount: "auto",
-    language: "中文",
-    style: "电影质感",
-    visualStyleId: "cinematic-realism",
-    visualStyleLabel: "电影纪实",
-    visualStylePrompt: "电影纪实风格：真实人物、浅景深、自然光影、现场空间和稳定镜头语言。",
-    motion: "camera",
-    narrationVoice: DEFAULT_NARRATION_VOICE
-  });
+  const [generationOptions, setGenerationOptions] = useState<GenerationOptions>(() => defaultGenerationOptions());
   const [pendingVideoGeneration, setPendingVideoGeneration] = useState<{ sceneNumbers: number[] }>();
   const [motionGenerationMode, setMotionGenerationMode] = useState<"local" | "stock">("local");
   const [localMotionIntensity, setLocalMotionIntensity] = useState<LocalMotionIntensity>("standard");
@@ -6431,6 +6441,7 @@ export function WorkspaceClient({
     event.preventDefault();
     const prompt = contentPromptForGeneration(generationPrompt);
     if (!prompt) return;
+    const submittedOptions = resolvedGenerationOptions(generationPrompt, generationOptions);
     const startedAt = Date.now();
     const requestId = crypto.randomUUID();
     const uploadedReferences: GenerationReferenceAsset[] = [];
@@ -6438,6 +6449,7 @@ export function WorkspaceClient({
 
     setIsBusy(true);
     setErrorMessage(undefined);
+    setGenerationOptions(submittedOptions);
     setGenerationStartedAt(startedAt);
     setProgress(8);
     setGenerationStatus("正在理解视频需求");
@@ -6477,7 +6489,7 @@ export function WorkspaceClient({
       const pendingSession: PendingGenerationSession = {
         requestId,
         prompt,
-        options: generationOptions,
+        options: submittedOptions,
         startedAt
       };
       savePendingGenerationSession(pendingSession);
@@ -6487,7 +6499,7 @@ export function WorkspaceClient({
         const response = await fetch("/api/projects", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ prompt, options: generationOptions, requestId, referenceAssets: uploadedReferences }),
+          body: JSON.stringify({ prompt, options: submittedOptions, requestId, referenceAssets: uploadedReferences }),
           signal: AbortSignal.timeout(90_000)
         });
         const result = await response.json().catch(() => ({})) as StoryboardGenerationResponse;
@@ -6510,7 +6522,7 @@ export function WorkspaceClient({
         await openProjects();
         return;
       }
-      await continueGeneratedProject(data, generationOptions, data.recovered === true);
+      await continueGeneratedProject(data, submittedOptions, data.recovered === true);
     } catch (error) {
       console.error(error);
       if (uploadedReferences.length > 0 && !projectRequestStarted) {
@@ -7748,6 +7760,12 @@ export function WorkspaceClient({
   }
 
   function resetToBrief() {
+    setBriefPrompt("");
+    setBriefAttachments([]);
+    setGenerationOptions(defaultGenerationOptions());
+    setBriefSessionKey((current) => current + 1);
+    setGenerationStartedAt(undefined);
+    setProgress(0);
     setStage("brief");
     setPendingPlan(undefined);
     setChatInput("");
@@ -7784,6 +7802,9 @@ export function WorkspaceClient({
     const prompt = task.prompt?.trim() ?? "";
     if (task.status === "failed") {
       setBriefPrompt(prompt);
+      setBriefAttachments([]);
+      setGenerationOptions(resolvedGenerationOptions(prompt, task.options ?? defaultGenerationOptions(prompt)));
+      setBriefSessionKey((current) => current + 1);
       setErrorMessage(task.error || "生成没有完成，请检查需求后重试。");
       setStage("brief");
       return;
@@ -7984,7 +8005,7 @@ export function WorkspaceClient({
           onPromptChange={setBriefPrompt}
           onRemoveAttachment={(index) => setBriefAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index))}
           onSubmit={createVideo}
-          onUseExample={setBriefPrompt}
+          key={briefSessionKey}
           prompt={briefPrompt}
           options={generationOptions}
           hasCurrentProject={projectSource !== "empty"}

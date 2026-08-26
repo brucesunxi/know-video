@@ -87,6 +87,10 @@ assert.notEqual(first, withReference);
 
 assert.match(workspace, /function plannedSceneCount/);
 assert.match(workspace, /function generationReviewItems/);
+assert.match(workspace, /function defaultGenerationOptions\(prompt = ""\)/);
+assert.match(workspace, /function resolvedGenerationOptions\(prompt: string, options: GenerationOptions\)/);
+assert.match(workspace, /visualStyleSource: source/);
+assert.match(projectsRoute, /visualStyleSource: z\.enum\(\["auto", "template", "manual"\]\)\.optional\(\)/);
 assert.match(workspace, /const reviewItems = generationReviewItems\(prompt, options\)/);
 assert.match(workspace, /aria-label=\{text\("生成前审阅清单", "Pre-generation review checklist"\)\}/);
 assert.match(workspace, /生成前审阅/);
@@ -123,6 +127,13 @@ assert.equal(
   "制作工地安全简报。"
 );
 assert.match(workspace, /function openGenerationTask\(task: GenerationTaskListItem\)/);
+assert.match(workspace, /setGenerationOptions\(resolvedGenerationOptions\(prompt, task\.options \?\? defaultGenerationOptions\(prompt\)\)\)/);
+assert.match(workspace, /setGenerationOptions\(defaultGenerationOptions\(\)\)/);
+assert.match(workspace, /const submittedOptions = resolvedGenerationOptions\(generationPrompt, generationOptions\)/);
+assert.match(workspace, /options: submittedOptions/);
+assert.match(workspace, /JSON\.stringify\(\{ prompt, options: submittedOptions/);
+assert.match(workspace, /updatePrompt\(card\.title === "Explain a concept"/);
+assert.doesNotMatch(workspace, /onUseExample/);
 assert.match(workspace, /onOpenGeneration: \(task: GenerationTaskListItem\) => void/);
 assert.match(workspace, /刷新状态/);
 assert.match(workspace, /localizedGenerationPrompt\(task\.prompt\?\.trim\(\) \?\? "", language\)/);
