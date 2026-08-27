@@ -49,6 +49,7 @@
     "image:similarity:smoke": "node scripts/image-similarity-smoke.mjs",
     "image:candidates:smoke": "node scripts/image-candidates-smoke.mjs",
     "image:generation-retry:smoke": "node scripts/image-generation-retry-smoke.mjs",
+    "image:local-style:smoke": "node scripts/local-stock-image-style-smoke.mjs",
     "image:cloudflare-policy:smoke": "node scripts/cloudflare-image-policy-smoke.mjs",
     "visual:candidate-ui:smoke": "node scripts/visual-candidate-ui-smoke.mjs",
     "candidate:intent:smoke": "node scripts/candidate-edit-intent-smoke.mjs",

@@ -93,6 +93,19 @@ assert.match(imageAssets, /useStockContentGuide/);
 assert.match(imageAssets, /loadFreeStockImageGuide/);
 assert.match(imageAssets, /acceptVerifiedStockRescue/);
 assert.match(imageAssets, /verified-stock-rescue/);
+assert.match(imageAssets, /normalizeFreeStockImageStyle/);
+assert.match(imageAssets, /local-style-normalized-stock-rescue/);
+assert.match(imageAssets, /local_style_normalized_stock_rescue/);
+assert.match(imageAssets, /localStyleNormalized/);
+assert.match(imageAssets, /const semanticInspectionBody = directPhotographicStock/);
+assert.match(imageAssets, /evaluateCloudflareImageSemantics\(\s*semanticInspectionBody/);
+assert.ok(
+  imageAssets.indexOf("await acceptVerifiedStockRescue(completionStockGuide, -1)")
+    < imageAssets.indexOf("for (let qualityAttempt = 0;"),
+  "The zero-cost completion rescue must run before another paid provider attempt"
+);
+assert.match(imageAssets, /!stockRescueAttemptedBeforeGeneration && await acceptVerifiedStockRescue/);
+assert.doesNotMatch(imageAssets, /reference\.role !== "content-guide"[\s\S]{0,100}!styleAllowsFreeStockVideo/);
 assert.match(imageAssets, /source: usedVerifiedStockRescue \? "free-stock-image" : "generated-image"/);
 assert.match(imageAssets, /styleAllowsFreeStockVideo\(lockedStyle\)/);
 assert.match(imageAssets, /const pendingCostEvents: ProviderCostAttemptInput\[\] = \[\]/);

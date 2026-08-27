@@ -64,6 +64,9 @@ assert.match(imageSection, /sceneHasVisualAsset\(targetScene\)[\s\S]*settleBackg
 assert.match(narrationSection, /if \(existingAudio\)[\s\S]*settleBackgroundNarrationUsage/);
 assert.ok(imageSection.indexOf("tagAssetForBackgroundBilling") < imageSection.indexOf("persistGeneratedSceneAssets"));
 assert.ok(imageSection.indexOf("persistGeneratedSceneAssets") < imageSection.indexOf("settleBackgroundImageUsage(message, generated)"));
+assert.match(imageSection, /const freeStockRescue = generated\.metadata\?\.source === "free-stock-image"/);
+assert.match(imageSection, /if \(!freeStockRescue\) \{[\s\S]*tagAssetForBackgroundBilling/);
+assert.match(imageSection, /if \(!freeStockRescue\) await settleBackgroundImageUsage\(message, generated\)/);
 assert.ok(narrationSection.indexOf("tagAssetForBackgroundBilling") < narrationSection.indexOf("persistGeneratedSceneAssets"));
 assert.ok(narrationSection.indexOf("persistGeneratedSceneAssets") < narrationSection.indexOf("settleBackgroundNarrationUsage(message, generated)"));
 assert.equal((narrationSection.match(/persistGeneratedSceneAssets/g) ?? []).length, 1);

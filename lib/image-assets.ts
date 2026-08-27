@@ -36,6 +36,7 @@ import {
   POSSIBLE_SCENE_DUPLICATE_THRESHOLD
 } from "@/lib/image-similarity";
 import { mediaAssetStatus } from "@/lib/generation-resume";
+import { normalizeFreeStockImageStyle } from "@/lib/local-stock-image-style";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
 import { loadFreeStockImageGuide } from "@/lib/stock-image-guides";
 import { styleAllowsFreeStockVideo } from "@/lib/style-motion-policy";
@@ -55,7 +56,8 @@ type ImageIndependentRecoveryReason =
   | "semantic_mismatch"
   | "semantic_check_failed"
   | "style_mismatch"
-  | "verified_stock_rescue";
+  | "verified_stock_rescue"
+  | "local_style_normalized_stock_rescue";
 
 function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
   if (hasCloudflareAI()) return undefined;
@@ -578,6 +580,7 @@ async function generateSceneImage(
   let textFreeVerified = false;
   let usedIndependentRecovery = false;
   let usedVerifiedStockRescue = false;
+  let usedLocalStyleNormalization = false;
   let completionFallbackReason: ImageIndependentRecoveryReason | undefined;
   let stockRescueMetadata: Record<string, unknown> | undefined;
   let providerRequestCount = 0;
@@ -738,10 +741,16 @@ async function generateSceneImage(
       || !hasCloudflareAI()
       || !reference?.deliveryBody
       || reference.role !== "content-guide"
-      || !styleAllowsFreeStockVideo(lockedStyle)
     ) return false;
     try {
-      const normalized = await normalizeGeneratedImage(reference.deliveryBody);
+      const directPhotographicStock = styleAllowsFreeStockVideo(lockedStyle);
+      const styled = directPhotographicStock
+        ? { body: reference.deliveryBody, mode: "photographic" as const }
+        : await normalizeFreeStockImageStyle(reference.deliveryBody, lockedStyle);
+      const normalized = await normalizeGeneratedImage(styled.body);
+      const semanticInspectionBody = directPhotographicStock
+        ? normalized.body
+        : (await normalizeGeneratedImage(reference.deliveryBody)).body;
       const containsText = await trackedValidation(
         `${qualityAttempt}:stock-rescue:text`,
         () => generatedImageContainsAnyText(normalized.body, deadlineMs)
@@ -767,25 +776,23 @@ async function generateSceneImage(
       }
       if (compositionDuplicate) return false;
 
-      const [semanticCheck, styleCheck] = await Promise.all([
-        trackedValidation(
-          `${qualityAttempt}:stock-rescue:semantic`,
-          () => evaluateCloudflareImageSemantics(
-            normalized.body,
-            essentialSceneSemantics(scene, project),
-            visionDeadlineOptions(deadlineMs)
-          )
-        ),
-        trackedValidation(
-          `${qualityAttempt}:stock-rescue:style`,
-          () => evaluateCloudflareImageStyle(
-            normalized.body,
-            expectedStyle,
-            visionDeadlineOptions(deadlineMs)
-          )
+      const semanticCheck = await trackedValidation(
+        `${qualityAttempt}:stock-rescue:semantic`,
+        () => evaluateCloudflareImageSemantics(
+          semanticInspectionBody,
+          essentialSceneSemantics(scene, project),
+          visionDeadlineOptions(deadlineMs)
         )
-      ]);
-      if (!semanticCheck.matches || !styleCheck.matches) return false;
+      );
+      const styleMatches = !directPhotographicStock || (await trackedValidation(
+        `${qualityAttempt}:stock-rescue:style`,
+        () => evaluateCloudflareImageStyle(
+          normalized.body,
+          expectedStyle,
+          visionDeadlineOptions(deadlineMs)
+        )
+      )).matches;
+      if (!semanticCheck.matches || !styleMatches) return false;
 
       body = normalized.body;
       qualityMetadata = normalized.metadata;
@@ -796,16 +803,23 @@ async function generateSceneImage(
       textFreeVerified = true;
       usedIndependentRecovery = true;
       usedVerifiedStockRescue = true;
-      completionFallbackReason = "verified_stock_rescue";
+      usedLocalStyleNormalization = !directPhotographicStock;
+      completionFallbackReason = directPhotographicStock
+        ? "verified_stock_rescue"
+        : "local_style_normalized_stock_rescue";
       stockRescueMetadata = {
         stockProvider: reference.metadata?.provider,
         stockProviderId: reference.metadata?.providerId,
         stockSourcePageUrl: reference.metadata?.sourcePageUrl,
         stockSearchQuery: reference.metadata?.searchQuery,
+        localStyleNormalized: !directPhotographicStock,
+        localStyleMode: styled.mode,
         costUsd: 0
       };
       if (nearest) closestScene = nearest;
-      console.warn(`[image-assets] Scene ${scene.sceneNumber} completed with a verified free stock still after generated candidates were rejected.`);
+      console.warn(
+        `[image-assets] Scene ${scene.sceneNumber} completed with a verified free stock still${directPhotographicStock ? "" : ` normalized as ${styled.mode}`} after generated candidates were rejected.`
+      );
       return true;
     } catch (error) {
       if (error instanceof OperationDeadlineExceededError) throw error;
@@ -814,7 +828,12 @@ async function generateSceneImage(
     }
   };
   try {
-  for (let qualityAttempt = 0; qualityAttempt < qualityAttemptLimit; qualityAttempt += 1) {
+    const completionStockGuide = usableReferences.find((reference) => reference.role === "content-guide");
+    const stockRescueAttemptedBeforeGeneration = Boolean(allowCompletionFallback && completionStockGuide);
+    const completedFromStock = stockRescueAttemptedBeforeGeneration
+      ? await acceptVerifiedStockRescue(completionStockGuide, -1)
+      : false;
+  for (let qualityAttempt = 0; !completedFromStock && qualityAttempt < qualityAttemptLimit; qualityAttempt += 1) {
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
     const recoveryModelAttempt = allowCompletionFallback
       && effectiveQuality === "premium"
@@ -1011,7 +1030,7 @@ async function generateSceneImage(
       lastQualityError = error;
       if (qualityAttempt === qualityAttemptLimit - 1) {
         const stockGuide = attemptReferences.find((reference) => reference.role === "content-guide");
-        if (await acceptVerifiedStockRescue(stockGuide, qualityAttempt)) break;
+        if (!stockRescueAttemptedBeforeGeneration && await acceptVerifiedStockRescue(stockGuide, qualityAttempt)) break;
         throw error;
       }
       console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${error.code}); retrying:`, error.message);
@@ -1062,7 +1081,9 @@ async function generateSceneImage(
       candidateInstruction: visualInstruction || undefined,
       qualityGate: usedIndependentRecovery
         ? usedVerifiedStockRescue
-          ? "verified-stock-rescue"
+          ? usedLocalStyleNormalization
+            ? "local-style-normalized-stock-rescue"
+            : "verified-stock-rescue"
           : "independent-semantic-style-recovery"
         : "strict-semantic-style-pass",
       completionFallbackReason,
