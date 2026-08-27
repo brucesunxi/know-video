@@ -204,25 +204,28 @@ async function ensureSceneImage(
   }
   const generated = sceneAsset(updated, message.sceneNumber, "image");
   if (!generated) throw new Error(`Scene ${message.sceneNumber} image generation returned no deliverable asset.`);
-  const tagged = tagAssetForBackgroundBilling({
-    ...generated,
-    metadata: {
-      ...generated.metadata,
-      backgroundRequestedQuality: attemptPlan.requestedQuality,
-      backgroundEffectiveQuality: quality,
-      backgroundAutomaticPremiumUpgrade: quality === "premium" && completionRescue && !requiresPremium
-    }
-  }, {
-    requestId: message.requestId,
-    resourceType,
-    quantity: 1
-  });
-  generated.metadata = tagged.metadata;
+  const freeStockRescue = generated.metadata?.source === "free-stock-image";
+  if (!freeStockRescue) {
+    const tagged = tagAssetForBackgroundBilling({
+      ...generated,
+      metadata: {
+        ...generated.metadata,
+        backgroundRequestedQuality: attemptPlan.requestedQuality,
+        backgroundEffectiveQuality: quality,
+        backgroundAutomaticPremiumUpgrade: quality === "premium" && completionRescue && !requiresPremium
+      }
+    }, {
+      requestId: message.requestId,
+      resourceType,
+      quantity: 1
+    });
+    generated.metadata = tagged.metadata;
+  }
   await persistGeneratedSceneAssets(message.versionId, updated.currentVersion.scenes, {
     replaceImages: true,
     sceneNumbers: [message.sceneNumber]
   });
-  await settleBackgroundImageUsage(message, generated);
+  if (!freeStockRescue) await settleBackgroundImageUsage(message, generated);
   return updated;
 }
 
@@ -316,8 +319,32 @@ export async function processProjectMediaScene(message: ProjectMediaSceneMessage
     return;
   }
   let project = await requireCurrentProject(message);
+  let stockAttemptedBeforeImage = false;
   let imageError: unknown;
   let narrationError: unknown;
+
+  const initialScene = project.currentVersion.scenes.find((scene) => scene.sceneNumber === message.sceneNumber);
+  const shouldTryStockBeforeImage = Boolean(
+    initialScene
+    && !sceneHasVisualAsset(initialScene)
+    && (
+      message.options?.motion === "stock"
+      || deliveryCount >= 2
+      || (message.recoveryPass ?? 0) > 0
+    )
+  );
+  if (shouldTryStockBeforeImage && canStartStockWork()) {
+    stockAttemptedBeforeImage = true;
+    try {
+      project = await addFreeStockMotion(message, project, {
+        forceRecoveryFallback: deliveryCount >= 2 || (message.recoveryPass ?? 0) > 0,
+        deadlineMs: callbackWorkDeadline
+      });
+    } catch (error) {
+      console.warn(`[background-media] Scene ${message.sceneNumber} free stock preflight failed; continuing with image generation:`, error);
+      project = await requireCurrentProject(message);
+    }
+  }
 
   try {
     project = await ensureSceneImage(message, project, deliveryCount, callbackWorkDeadline);
@@ -344,7 +371,7 @@ export async function processProjectMediaScene(message: ProjectMediaSceneMessage
     console.warn(`[background-media] Scene ${message.sceneNumber} narration was deferred to keep this queue callback inside its execution budget.`);
   }
 
-  if (canStartStockWork()) {
+  if (!stockAttemptedBeforeImage && canStartStockWork()) {
     try {
       project = await addFreeStockMotion(message, project, {
         forceRecoveryFallback: imageError instanceof ProjectMediaQualityExhaustedError

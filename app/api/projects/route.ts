@@ -41,6 +41,7 @@ import { hasDatabaseUrl } from "@/lib/db";
 import { NARRATION_VOICE_IDS } from "@/lib/types";
 import { contentPromptForGeneration } from "@/lib/generation-prompt";
 import { sceneRequiresPremiumImage } from "@/lib/image-continuity";
+import { resolveAutoVisualStyleOptions } from "@/lib/visual-style-inference";
 
 const referenceAssetSchema = z.object({
   key: z.string().min(1).max(800),
@@ -375,7 +376,12 @@ export async function POST(request: Request) {
     const user = await requireCurrentUser();
     billingUserId = user.id;
     body = requestSchema.parse(await request.json());
-    body = { ...body, prompt: contentPromptForGeneration(body.prompt) };
+    const generationPrompt = contentPromptForGeneration(body.prompt);
+    body = {
+      ...body,
+      prompt: generationPrompt,
+      options: resolveAutoVisualStyleOptions(generationPrompt, body.options)
+    };
     if (body.prompt.length < 4) {
       return NextResponse.json({ error: "请先描述视频要表达的具体内容，风格选择不能代替内容需求。" }, { status: 400 });
     }

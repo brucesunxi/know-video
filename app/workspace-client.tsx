@@ -83,6 +83,7 @@ import {
 import { VIDEO_FPS } from "@/video/config";
 import { creditPacks, usdPrice } from "@/lib/billing/packs";
 import { persistUiLanguage, UI_LANGUAGE_STORAGE_KEY } from "@/lib/ui-language-client";
+import { inferAutoVisualStyleId } from "@/lib/visual-style-inference";
 import type { ChatMessage, EditChange, EditPlan, GenerationOptions, GenerationReferenceAsset, GenerationTaskListItem, LocalMotionIntensity, NarrationVoice, ProductionSettings, Project, ProjectListItem, ProjectVersion, ProjectVersionPreview, ProjectVersionSummary, RenderJob, Scene, SceneAsset, SceneTransitionKind } from "@/lib/types";
 
 type Source = "database" | "empty" | "mock";
@@ -880,17 +881,7 @@ function optionsWithVisualStyle(
 }
 
 function inferVisualStyleForPrompt(value: string) {
-  const text = value.toLocaleLowerCase();
-  if (/安全|风险|预警|钓鱼|合规|工地|hazard|risk|safety|phishing/.test(text)) return visualStyleById("safety-poster");
-  if (/游戏|少儿|儿童|minecraft|像素|game|kids|pixel/.test(text)) return visualStyleById("pixel-art");
-  if (/课程|教学|解释|概念|培训|课堂|education|lesson|training|explain/.test(text)) return visualStyleById("chalkboard");
-  if (/客服|客户|服务|情绪|沟通|support|customer|service/.test(text)) return visualStyleById("simple-line");
-  if (/产品|saas|工具|界面|平台|软件|dashboard|app|ui/.test(text)) return visualStyleById("product-ui");
-  if (/地产|房源|楼盘|社区|空间|real estate|property|house/.test(text)) return visualStyleById("cinematic-realism");
-  if (/社媒|短视频|爆点|营销|活动|social|tiktok|reels|campaign/.test(text)) return visualStyleById("comic-book");
-  if (/流程|系统|架构|预算|审批|模块|process|workflow|system/.test(text)) return visualStyleById("isometric");
-  if (/品牌|新品|发布|宣传|launch|brand|promo/.test(text)) return visualStyleById("collage");
-  return visualStyleById("product-ui");
+  return visualStyleById(inferAutoVisualStyleId(value));
 }
 
 function visualStyleSourceForOptions(prompt: string, options: GenerationOptions): BriefStyleSource {
@@ -7855,12 +7846,14 @@ export function WorkspaceClient({
     setProjectsLoading(true);
     setErrorMessage(undefined);
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { cache: "no-store" });
+      const repairQuery = failedGenerationTaskId ? "?repairFailedAutoStyle=1" : "";
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}${repairQuery}`, { cache: "no-store" });
       const data = await response.json() as {
         project?: Project;
         messages?: ChatMessage[];
         pendingPlan?: EditPlan;
         generationOptions?: GenerationOptions;
+        autoVisualStyleRepaired?: boolean;
         error?: string;
       };
       if (!response.ok || !data.project || !data.messages) throw new Error(data.error || "项目读取失败。");
@@ -7868,6 +7861,7 @@ export function WorkspaceClient({
         || missingSceneAssetNumbers(data.project.currentVersion.scenes, "audio").length > 0;
       if (data.generationOptions && missingRequiredMedia) {
         setIsBusy(true);
+        if (data.autoVisualStyleRepaired) setGenerationStatus("已修正自动画面风格，正在统一重建场景画面");
         await continueGeneratedProject({
           project: data.project,
           messages: data.messages,

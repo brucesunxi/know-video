@@ -22,7 +22,12 @@ const STOP_WORDS = new Set([
 ]);
 
 const CHINESE_STOCK_TERMS: Array<[RegExp, string]> = [
-  [/包子|包子铺|馒头|面点|饺子|蒸笼/u, "steamed bao buns bamboo basket kitchen cooking"],
+  [/包子|包子铺|馒头|面点|饺子|蒸笼/u, "steamed buns bamboo steamer cooking"],
+  [/包子|包子铺|馒头|面点|饺子|蒸笼/u, "dumpling chef kitchen food preparation"],
+  [/包子|包子铺|馒头|面点|饺子|蒸笼/u, "asian bakery kitchen cooking"],
+  [/图书馆|书店|阅览|阅读|书架|借阅|还书/u, "library bookshelves people reading"],
+  [/图书馆|书店|阅览|阅读|书架|借阅|还书/u, "reader choosing book library shelves"],
+  [/图书馆|书店|阅览|阅读|书架|借阅|还书/u, "quiet library study reading room"],
   [/幼儿园|学前|儿童|孩子/u, "kindergarten classroom children learning"],
   [/学校|课堂|教育|学习/u, "classroom students learning"],
   [/咖啡|烘焙|咖啡店/u, "coffee shop barista roasting coffee"],
@@ -35,7 +40,8 @@ const CHINESE_STOCK_TERMS: Array<[RegExp, string]> = [
   [/医疗|医院|医生|健康/u, "doctor patient modern hospital"],
   [/科技|软件|编程|电脑/u, "software developer working computer"],
   [/游戏|电竞/u, "gamer playing computer game"],
-  [/餐厅|美食|厨房/u, "restaurant chef cooking kitchen"],
+  [/餐厅|餐馆|饭店|美食|厨房|厨师/u, "restaurant chef cooking kitchen"],
+  [/餐厅|餐馆|饭店|美食|厨房|厨师/u, "food preparation professional kitchen"],
   [/旅行|旅游|酒店/u, "travel destination hotel guests"],
   [/制造|工厂|生产线/u, "factory workers production line"],
   [/农业|农场|种植/u, "farmer working sustainable farm"],

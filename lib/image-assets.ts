@@ -38,6 +38,7 @@ import {
 import { mediaAssetStatus } from "@/lib/generation-resume";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
 import { loadFreeStockImageGuide } from "@/lib/stock-image-guides";
+import { styleAllowsFreeStockVideo } from "@/lib/style-motion-policy";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 import { exactVisualStyleDirection } from "@/lib/visual-style-profiles";
 import { billingCatalogItem } from "@/lib/billing/catalog";
@@ -50,7 +51,11 @@ import {
   OperationDeadlineExceededError
 } from "@/lib/operation-deadline";
 
-type ImageIndependentRecoveryReason = "semantic_mismatch" | "semantic_check_failed" | "style_mismatch";
+type ImageIndependentRecoveryReason =
+  | "semantic_mismatch"
+  | "semantic_check_failed"
+  | "style_mismatch"
+  | "verified_stock_rescue";
 
 function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
   if (hasCloudflareAI()) return undefined;
@@ -225,6 +230,7 @@ function isSafetyFiltered(error: unknown) {
 type ImageQuality = "standard" | "premium";
 type ImageReference = {
   body: Buffer;
+  deliveryBody?: Buffer;
   contentType: "image/jpeg";
   role: ImageReferenceRole;
   r2Key: string;
@@ -571,7 +577,9 @@ async function generateSceneImage(
   let lastQualityError: GeneratedImageQualityError | undefined;
   let textFreeVerified = false;
   let usedIndependentRecovery = false;
+  let usedVerifiedStockRescue = false;
   let completionFallbackReason: ImageIndependentRecoveryReason | undefined;
+  let stockRescueMetadata: Record<string, unknown> | undefined;
   let providerRequestCount = 0;
   let validationRequestCount = 0;
   let providerCostUsd = 0;
@@ -719,6 +727,90 @@ async function generateSceneImage(
     if (recoveryReason) {
       usedIndependentRecovery = true;
       completionFallbackReason = recoveryReason;
+    }
+  };
+  const acceptVerifiedStockRescue = async (
+    reference: ImageReference | undefined,
+    qualityAttempt: number
+  ) => {
+    if (
+      !allowCompletionFallback
+      || !hasCloudflareAI()
+      || !reference?.deliveryBody
+      || reference.role !== "content-guide"
+      || !styleAllowsFreeStockVideo(lockedStyle)
+    ) return false;
+    try {
+      const normalized = await normalizeGeneratedImage(reference.deliveryBody);
+      const containsText = await trackedValidation(
+        `${qualityAttempt}:stock-rescue:text`,
+        () => generatedImageContainsAnyText(normalized.body, deadlineMs)
+      );
+      if (containsText) return false;
+
+      const nearest = await nearestSceneSimilarity(normalized.body, comparisonImages);
+      let compositionDuplicate = Boolean(nearest && nearest.score >= ADJACENT_SCENE_DUPLICATE_THRESHOLD);
+      if (
+        nearest
+        && !compositionDuplicate
+        && nearest.score >= POSSIBLE_SCENE_DUPLICATE_THRESHOLD
+      ) {
+        const composition = await trackedValidation(
+          `${qualityAttempt}:stock-rescue:composition:${nearest.sceneNumber}`,
+          () => evaluateCloudflareImageComposition(
+            normalized.body,
+            nearest.body,
+            visionDeadlineOptions(deadlineMs)
+          )
+        );
+        compositionDuplicate = !composition.distinct;
+      }
+      if (compositionDuplicate) return false;
+
+      const [semanticCheck, styleCheck] = await Promise.all([
+        trackedValidation(
+          `${qualityAttempt}:stock-rescue:semantic`,
+          () => evaluateCloudflareImageSemantics(
+            normalized.body,
+            essentialSceneSemantics(scene, project),
+            visionDeadlineOptions(deadlineMs)
+          )
+        ),
+        trackedValidation(
+          `${qualityAttempt}:stock-rescue:style`,
+          () => evaluateCloudflareImageStyle(
+            normalized.body,
+            expectedStyle,
+            visionDeadlineOptions(deadlineMs)
+          )
+        )
+      ]);
+      if (!semanticCheck.matches || !styleCheck.matches) return false;
+
+      body = normalized.body;
+      qualityMetadata = normalized.metadata;
+      model = `${String(reference.metadata?.provider ?? "free")}-stock-image`;
+      prompt = `Verified free stock rescue: ${String(reference.metadata?.searchQuery ?? "scene content")}`;
+      seed = baseSeed;
+      acceptedReferences = [reference];
+      textFreeVerified = true;
+      usedIndependentRecovery = true;
+      usedVerifiedStockRescue = true;
+      completionFallbackReason = "verified_stock_rescue";
+      stockRescueMetadata = {
+        stockProvider: reference.metadata?.provider,
+        stockProviderId: reference.metadata?.providerId,
+        stockSourcePageUrl: reference.metadata?.sourcePageUrl,
+        stockSearchQuery: reference.metadata?.searchQuery,
+        costUsd: 0
+      };
+      if (nearest) closestScene = nearest;
+      console.warn(`[image-assets] Scene ${scene.sceneNumber} completed with a verified free stock still after generated candidates were rejected.`);
+      return true;
+    } catch (error) {
+      if (error instanceof OperationDeadlineExceededError) throw error;
+      console.warn(`[image-assets] Scene ${scene.sceneNumber} free stock still rescue was unavailable:`, error);
+      return false;
     }
   };
   try {
@@ -918,6 +1010,8 @@ async function generateSceneImage(
       lastQualityRejection = error.code;
       lastQualityError = error;
       if (qualityAttempt === qualityAttemptLimit - 1) {
+        const stockGuide = attemptReferences.find((reference) => reference.role === "content-guide");
+        if (await acceptVerifiedStockRescue(stockGuide, qualityAttempt)) break;
         throw error;
       }
       console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${error.code}); retrying:`, error.message);
@@ -951,7 +1045,7 @@ async function generateSceneImage(
     r2Key: uploaded.key,
     url: assetUrlForKey(uploaded.key, uploaded.publicUrl),
     metadata: {
-      source: "generated-image",
+      source: usedVerifiedStockRescue ? "free-stock-image" : "generated-image",
       model,
       quality: effectiveQuality,
       prompt,
@@ -967,12 +1061,15 @@ async function generateSceneImage(
       compositionReviewThreshold: POSSIBLE_SCENE_DUPLICATE_THRESHOLD,
       candidateInstruction: visualInstruction || undefined,
       qualityGate: usedIndependentRecovery
-        ? "independent-semantic-style-recovery"
+        ? usedVerifiedStockRescue
+          ? "verified-stock-rescue"
+          : "independent-semantic-style-recovery"
         : "strict-semantic-style-pass",
       completionFallbackReason,
       providerRequestCount,
       validationRequestCount,
       estimatedActualCostUsd: Number((providerCostUsd + validationCostUsd).toFixed(6)),
+      ...stockRescueMetadata,
       sceneNumber: scene.sceneNumber
     }
   };
@@ -1069,7 +1166,8 @@ export async function generateProjectSceneImages(
                   providerId: guide.providerId,
                   sourcePageUrl: guide.pageUrl,
                   searchQuery: guide.query
-                }
+                },
+                deliveryBody: guide.deliveryBody
               };
             }
           } catch (error) {

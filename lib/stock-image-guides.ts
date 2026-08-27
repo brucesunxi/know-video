@@ -18,6 +18,7 @@ type StockImageGuideOptions = {
 
 export type StockImageGuide = {
   body: Buffer;
+  deliveryBody: Buffer;
   contentType: "image/jpeg";
   referenceKey: string;
   provider: StockImageGuideCandidate["provider"];
@@ -99,7 +100,7 @@ function candidateReferenceKey(candidate: StockImageGuideCandidate) {
 
 async function findGuideCandidate(scene: Scene, options: StockImageGuideOptions) {
   const excluded = new Set(options.excludedReferenceKeys ?? []);
-  for (const query of stockSearchTerms(scene).slice(0, 1)) {
+  for (const query of stockSearchTerms(scene).slice(0, 3)) {
     const settled = await Promise.allSettled([
       searchPexelsImages(query),
       searchPixabayImages(query)
@@ -131,14 +132,22 @@ export async function loadFreeStockImageGuide(
   if (source.byteLength < 5_000 || source.byteLength > 15_000_000) {
     throw new Error("Free stock image has an invalid file size");
   }
-  const body = await sharp(source, { failOn: "warning" })
-    .rotate()
-    // Cloudflare requires every FLUX.2 input image to be smaller than 512x512.
-    .resize(480, 270, { fit: "cover", position: "attention" })
-    .jpeg({ quality: 84, chromaSubsampling: "4:2:0" })
-    .toBuffer();
+  const [body, deliveryBody] = await Promise.all([
+    sharp(source, { failOn: "warning" })
+      .rotate()
+      // Cloudflare requires every FLUX.2 input image to be smaller than 512x512.
+      .resize(480, 270, { fit: "cover", position: "attention" })
+      .jpeg({ quality: 84, chromaSubsampling: "4:2:0" })
+      .toBuffer(),
+    sharp(source, { failOn: "warning" })
+      .rotate()
+      .resize(1280, 720, { fit: "cover", position: "attention" })
+      .png({ compressionLevel: 8, adaptiveFiltering: true })
+      .toBuffer()
+  ]);
   return {
     body,
+    deliveryBody,
     contentType: "image/jpeg",
     referenceKey: candidateReferenceKey(candidate),
     provider: candidate.provider,

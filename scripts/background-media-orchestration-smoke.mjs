@@ -63,6 +63,9 @@ let imageSettlementFailures;
 let narrationSettlementFailures;
 let imageQualityFailures;
 let generationRecord;
+let stockProviderAvailable;
+let stockClipOutcomes;
+let stockGenerationCount;
 
 function reset(sceneCount = 1) {
   state = newProject(sceneCount);
@@ -79,6 +82,9 @@ function reset(sceneCount = 1) {
   imageSettlementFailures = 0;
   narrationSettlementFailures = 0;
   imageQualityFailures = new Map();
+  stockProviderAvailable = false;
+  stockClipOutcomes = [];
+  stockGenerationCount = 0;
   generationRecord = {
     id: "request-1",
     status: "pending",
@@ -145,6 +151,28 @@ async function generateProjectVoices(project, sceneNumbers) {
   return updated;
 }
 
+async function generateProjectStockClips(project, sceneNumbers) {
+  stockGenerationCount += 1;
+  const sceneNumber = sceneNumbers[0];
+  if (!stockClipOutcomes.shift()) {
+    return {
+      project,
+      failures: [{ sceneNumber, error: new Error("no stock match") }],
+      styleProtectedSceneNumbers: []
+    };
+  }
+  const updated = clone(project);
+  const scene = updated.currentVersion.scenes.find((candidate) => candidate.sceneNumber === sceneNumber);
+  scene.assets = [{
+    id: `clip-${sceneNumber}`,
+    type: "clip",
+    r2Key: `stock/clip-${sceneNumber}.mp4`,
+    url: `/clip-${sceneNumber}.mp4`,
+    metadata: { source: "free-stock-video", costUsd: 0 }
+  }, ...scene.assets.filter((asset) => asset.type !== "clip")];
+  return { project: updated, failures: [], styleProtectedSceneNumbers: [] };
+}
+
 async function recordUsageEvent(input) {
   usageAttempts.set(input.idempotencyKey, (usageAttempts.get(input.idempotencyKey) ?? 0) + 1);
   if (input.resourceType.startsWith("image_") && imageSettlementFailures > 0) {
@@ -194,12 +222,8 @@ const mocks = {
     getProjectSnapshot: async () => ({ project: clone(state), messages: [] })
   },
   "@/lib/stock-video-assets": {
-    generateProjectStockClips: async (project) => ({
-      project,
-      failures: [],
-      styleProtectedSceneNumbers: []
-    }),
-    hasFreeStockVideoProvider: () => false
+    generateProjectStockClips,
+    hasFreeStockVideoProvider: () => stockProviderAvailable
   },
   "@/lib/image-continuity": { sceneRequiresPremiumImage: () => false },
   "@/lib/image-quality": {
@@ -265,6 +289,29 @@ assert.equal(state.currentVersion.scenes.every((scene) => (
   scene.assets.some((asset) => asset.type === "image")
   && scene.assets.some((asset) => asset.type === "audio")
 )), true);
+
+reset(1);
+stockProviderAvailable = true;
+stockClipOutcomes = [true];
+await processProjectMediaScene(message(1, { options: { motion: "stock", language: "中文" } }), 1);
+assert.equal(stockGenerationCount, 1);
+assert.equal(imageGenerationCount, 0);
+assert.equal(state.currentVersion.scenes[0].assets.some((asset) => asset.type === "clip"), true);
+assert.equal(usageByKey.has("speech:request-1:scene:1"), true);
+assert.equal([...usageByKey.values()].some((usage) => usage.resourceType.startsWith("image_")), false);
+assert.equal(completedCount, 1);
+
+reset(1);
+stockProviderAvailable = true;
+stockClipOutcomes = [false, true];
+imageQualityFailures.set(1, 1);
+await processProjectMediaScene(message(1), 1);
+assert.deepEqual(enqueued.map((item) => [item.sceneNumber, item.recoveryPass]), [[1, 1]]);
+await processProjectMediaScene(enqueued.shift(), 1);
+assert.equal(stockGenerationCount, 2);
+assert.equal(imageGenerationCount, 1);
+assert.equal(state.currentVersion.scenes[0].assets.some((asset) => asset.type === "clip"), true);
+assert.equal(completedCount, 1);
 
 reset(1);
 imageSettlementFailures = 1;

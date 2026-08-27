@@ -4,8 +4,10 @@ import { authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { ensureBriefFaithfulProjectTitle, projectTitleMistakesStyleForSubject } from "@/lib/brief-semantics";
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { getProjectGenerationRequest } from "@/lib/generation-requests";
+import { persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import { getProjectSnapshot } from "@/lib/project-store";
 import { deleteR2Objects } from "@/lib/r2";
+import { repairLegacyAutoVisualStyle } from "@/lib/visual-style-inference";
 
 const renameSchema = z.object({ title: z.string().trim().min(1).max(120) });
 
@@ -18,8 +20,12 @@ function routeError(error: unknown, fallback: string) {
   return NextResponse.json({ error: fallback }, { status: 500 });
 }
 
+function isVisualStyleGenerationFailure(error?: string) {
+  return /候选画面均未通过内容与风格质量检查|visual content and style checks|visual generation did not produce a usable image/iu.test(error ?? "");
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ projectId: string }> }
 ) {
   let user;
@@ -30,25 +36,56 @@ export async function GET(
     throw error;
   }
   const { projectId } = await context.params;
-  const snapshot = await getProjectSnapshot(projectId, user.id);
+  let snapshot = await getProjectSnapshot(projectId, user.id);
   if (!snapshot) {
     return NextResponse.json({ error: "项目不存在或已经被删除。" }, { status: 404 });
   }
   const generation = await getProjectGenerationRequest(projectId, user.id);
   const originalPrompt = generation?.prompt
     ?? snapshot.messages.find((message) => message.role === "user")?.content;
+  let generationOptions = generation?.options;
+  let autoVisualStyleRepaired = false;
+  const repairFailedAutoStyle = new URL(request.url).searchParams.get("repairFailedAutoStyle") === "1";
+  if (
+    repairFailedAutoStyle
+    && generation?.status === "failed"
+    && isVisualStyleGenerationFailure(generation.error)
+    && originalPrompt
+  ) {
+    const repair = repairLegacyAutoVisualStyle(snapshot.project, originalPrompt, generation.options);
+    if (repair) {
+      await persistGeneratedSceneAssets(
+        repair.project.currentVersion.id,
+        repair.project.currentVersion.scenes,
+        { replaceImages: true, updateStyles: true }
+      );
+      if (hasDatabaseUrl()) {
+        await getSql()`
+          update generation_requests
+          set options_json = ${JSON.stringify(repair.options)}::jsonb
+          where id = ${generation.id}
+            and project_id = ${projectId}
+            and user_id = ${user.id}
+            and status = 'failed'
+        `;
+      }
+      snapshot = await getProjectSnapshot(projectId, user.id) ?? snapshot;
+      generationOptions = repair.options;
+      autoVisualStyleRepaired = true;
+    }
+  }
   if (
     originalPrompt
     && projectTitleMistakesStyleForSubject(
       snapshot.project.title,
       originalPrompt,
-      generation?.options?.language !== "英文"
+      generationOptions?.language !== "英文"
     )
   ) {
     const repairedTitle = ensureBriefFaithfulProjectTitle(
       snapshot.project.title,
       originalPrompt,
-      generation?.options?.language !== "英文"
+      generationOptions?.language !== "英文"
     );
     if (repairedTitle !== snapshot.project.title && hasDatabaseUrl()) {
       await getSql()`
@@ -59,7 +96,7 @@ export async function GET(
       snapshot.project = { ...snapshot.project, title: repairedTitle };
     }
   }
-  return NextResponse.json({ ...snapshot, generationOptions: generation?.options });
+  return NextResponse.json({ ...snapshot, generationOptions, autoVisualStyleRepaired });
 }
 
 export async function PATCH(

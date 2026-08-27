@@ -124,23 +124,27 @@ export async function POST(request: Request) {
     failedTargets.map((scene) => scene.sceneNumber)
   );
   const completedScenes = persisted.currentVersion.scenes.filter((scene) => progress.completedSceneNumbers.includes(scene.sceneNumber));
-  const completedImageKeys = completedScenes
-    .map((scene) => scene.assets.find((asset) => asset.type === "image" && asset.url)?.r2Key)
-    .filter((key): key is string => Boolean(key));
-  if (progress.completedSceneNumbers.length > 0) {
-    const generatedAssets = completedScenes
+  const billableCompletedScenes = completedScenes.filter((scene) => (
+    scene.assets.find((asset) => asset.type === "image" && asset.url)?.metadata?.source !== "free-stock-image"
+  ));
+  const freeStockRescueSceneNumbers = completedScenes
+    .filter((scene) => !billableCompletedScenes.includes(scene))
+    .map((scene) => scene.sceneNumber);
+  if (billableCompletedScenes.length > 0) {
+    const generatedAssets = billableCompletedScenes
       .map((scene) => scene.assets.find((asset) => asset.type === "image" && asset.url))
       .filter((asset) => Boolean(asset));
+    const billableImageKeys = generatedAssets.map((asset) => asset?.r2Key).filter((key): key is string => Boolean(key));
     await recordUsageEvent({
       userId: user.id,
       projectId: body.projectId,
       versionId: body.versionId,
       reservationKey,
       resourceType: imageResourceType,
-      quantity: progress.completedSceneNumbers.length,
+      quantity: billableCompletedScenes.length,
       idempotencyKey: body.billingRequestId
         ? `${imageResourceType}:${body.billingRequestId}`
-        : billingIdempotencyKey(imageResourceType, [body.projectId, body.versionId, ...completedImageKeys]),
+        : billingIdempotencyKey(imageResourceType, [body.projectId, body.versionId, ...billableImageKeys]),
       status: "settled",
       actualCostUsd: generatedAssets.reduce((sum, asset) => sum + Number(asset?.metadata?.estimatedActualCostUsd ?? 0), 0) || undefined,
       actualModel: typeof generatedAssets[0]?.metadata?.model === "string" ? generatedAssets[0].metadata.model : undefined,
@@ -148,6 +152,8 @@ export async function POST(request: Request) {
       metadata: {
         requestedSceneNumbers: processingSceneNumbers,
         completedSceneNumbers: progress.completedSceneNumbers,
+        billedSceneNumbers: billableCompletedScenes.map((scene) => scene.sceneNumber),
+        freeStockRescueSceneNumbers,
         failedSceneNumbers: progress.failedSceneNumbers,
         requestedQuality: body.quality,
         effectiveQuality,
@@ -155,9 +161,11 @@ export async function POST(request: Request) {
         providerRequestCount: generatedAssets.reduce((sum, asset) => sum + Number(asset?.metadata?.providerRequestCount ?? 0), 0),
         validationRequestCount: generatedAssets.reduce((sum, asset) => sum + Number(asset?.metadata?.validationRequestCount ?? 0), 0),
         internalRetriesNotCharged: generatedAssets.reduce((sum, asset) => sum + Math.max(0, Number(asset?.metadata?.providerRequestCount ?? 1) - 1), 0),
-        assetKeys: completedImageKeys
+        assetKeys: billableImageKeys
       }
     });
+  }
+  if (progress.completedSceneNumbers.length > 0) {
     await releaseCreditReservation({ userId: user.id, reservationKey, reason: "image_batch_finished" });
   } else {
     await releaseCreditReservation({

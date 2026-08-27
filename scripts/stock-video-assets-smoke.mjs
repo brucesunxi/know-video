@@ -37,7 +37,20 @@ assert.deepEqual(Array.from(stockSearchTerms(scene({
   title: "包子铺宣传片",
   voiceover: "现包现蒸，热气腾腾。",
   visualPrompt: "师傅打开竹蒸笼。"
-}))), ["steamed bao buns bamboo basket kitchen cooking"]);
+}))), [
+  "steamed buns bamboo steamer cooking",
+  "dumpling chef kitchen food preparation",
+  "asian bakery kitchen cooking"
+]);
+assert.deepEqual(Array.from(stockSearchTerms(scene({
+  title: "图书馆宣传片",
+  voiceover: "读者在书架间找到想读的书。",
+  visualPrompt: "安静阅览室和纵深书架。"
+}))), [
+  "library bookshelves people reading",
+  "reader choosing book library shelves",
+  "quiet library study reading room"
+]);
 assert.deepEqual(Array.from(stockSearchTerms(scene({ style: { stockSearchTerms: ["children painting classroom", "teacher reading story"] } }))), [
   "children painting classroom",
   "teacher reading story"
