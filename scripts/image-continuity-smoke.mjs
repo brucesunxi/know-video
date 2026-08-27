@@ -207,4 +207,14 @@ assert.notEqual(
 assert.match(sceneVisualDiversityDirection(librarySceneOne, 5), /wide establishing view from the entrance/);
 assert.match(sceneVisualDiversityDirection(librarySceneFive, 5), /closing outcome from inside a deep aisle/);
 
+const genericSceneTwo = { ...scene, sceneNumber: 2 };
+const genericSceneFour = { ...scene, sceneNumber: 4 };
+assert.match(sceneVisualDiversityDirection(genericSceneTwo, 5), /medium side-angle action shot/);
+assert.match(sceneVisualDiversityDirection(genericSceneFour, 5), /over-the-shoulder, profile, or lateral interaction shot/);
+assert.match(sceneVisualDiversityDirection(genericSceneTwo, 5), /must not remain in the same seated pose/);
+assert.notEqual(
+  sceneVisualDiversityDirection(genericSceneTwo, 5),
+  sceneVisualDiversityDirection(genericSceneFour, 5)
+);
+
 console.log("Image continuity smoke checks passed.");

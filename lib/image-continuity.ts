@@ -172,10 +172,18 @@ export function sceneVisualDiversityDirection(scene: Pick<Scene, "sceneNumber" |
       "Do not reuse the same exterior voxel landscape or the same classroom table composition from other scenes."
     ].join("\n");
   }
+  const beats = [
+    "wide establishing view that reveals the environment and places the main subject off-center in a clear situation",
+    "medium side-angle action shot with a new foreground object and the subject actively handling or changing something",
+    "high-angle, top-down, or close detail shot focused on hands, tools, materials, or a concrete process rather than the same face",
+    "over-the-shoulder, profile, or lateral interaction shot from the opposite camera side in a different part of the environment",
+    "wide or medium-wide outcome shot showing a visible result, changed state, or forward path from a new camera position"
+  ];
   return [
     "SCENE DIFFERENTIATION:",
-    `This is scene ${sceneNumber} of ${sceneCount}. Make its location, camera distance, subject action, foreground object, and background clearly different from adjacent scenes while preserving the shared art direction.`,
-    "Avoid making another version of the same hero image."
+    `This is scene ${sceneNumber} of ${sceneCount}. Primary camera blueprint: ${beats[(sceneNumber - 1) % beats.length]}.`,
+    "A recurring protagonist may preserve identity, but must not remain in the same seated pose, at the same table, in the same room framing, or at the same camera height for another scene.",
+    "Change the subject action, camera side, shot scale, foreground silhouette, middle-ground staging, and background arrangement. Avoid making another version of the same hero image."
   ].join("\n");
 }
 

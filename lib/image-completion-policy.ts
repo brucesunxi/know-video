@@ -1,18 +1,12 @@
 export type ImageCompletionFallbackReason =
-  | "composition_duplicate"
   | "semantic_mismatch"
   | "semantic_check_failed"
-  | "style_mismatch"
-  | "semantic_pass_style_unverified"
-  | "semantic_pass_style_mismatch";
+  | "style_mismatch";
 
 const IMAGE_COMPLETION_FALLBACK_SCORES: Record<ImageCompletionFallbackReason, number> = {
-  composition_duplicate: 25,
   semantic_mismatch: 45,
   semantic_check_failed: 55,
-  style_mismatch: 70,
-  semantic_pass_style_unverified: 85,
-  semantic_pass_style_mismatch: 90
+  style_mismatch: 70
 };
 
 export function imageCompletionFallbackScore(reason: ImageCompletionFallbackReason) {

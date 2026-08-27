@@ -29,11 +29,11 @@ assert.match(worker, /project = await ensureSceneNarration\(message, project\)/)
 assert.match(worker, /if \(imageError && \(!refreshedScene \|\| !sceneHasVisualAsset\(refreshedScene\)\)\) throw imageError/);
 assert.match(worker, /if \(narrationError && \(!refreshedScene \|\| !sceneHasAudioAsset\(refreshedScene\)\)\) throw narrationError/);
 assert.match(worker, /free stock lookup failed; local motion remains active/);
-assert.match(worker, /allowStyleFallback: completionRescue/);
 assert.match(worker, /allowCompletionFallback: completionRescue/);
-assert.match(worker, /hard text-free gate/);
+assert.doesNotMatch(worker, /allowStyleFallback/);
+assert.match(worker, /known style mismatch or repeated composition is never/);
 assert.match(worker, /background-\$\{quality\}-completion-rescue-\$\{deliveryCount\}/);
-assert.match(worker, /maxQualityAttempts: completionRescue \? 2 : 3/);
+assert.match(worker, /maxQualityAttempts: completionRescue \? 3 : 2/);
 assert.match(worker, /qualityGate: generated\.metadata\?\.qualityGate/);
 assert.match(worker, /completionFallbackReason: generated\.metadata\?\.completionFallbackReason/);
 assert.match(worker, /const recoveryPass = \(message\.recoveryPass \?\? 0\) \+ 1/);
@@ -42,7 +42,7 @@ assert.match(worker, /sceneNumber: first\.sceneNumber,[\s\S]*recoveryPass/);
 assert.match(worker, /候选画面均未通过内容与风格质量检查/);
 assert.match(consumer, /processProjectMediaScene\(message, metadata\.deliveryCount\)/);
 assert.match(consumer, /error instanceof ProjectMediaQualityExhaustedError/);
-assert.match(consumer, /metadata\.deliveryCount >= 3/);
+assert.match(consumer, /metadata\.deliveryCount >= 2/);
 assert.match(consumer, /metadata\.deliveryCount >= 4/);
 assert.match(requests, /ATTACHED_PROJECT_STALE_INTERVAL = "45 minutes"/);
 assert.equal(

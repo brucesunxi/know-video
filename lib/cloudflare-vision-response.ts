@@ -50,6 +50,22 @@ export function parseImageSemanticMatch(payload: unknown) {
   return undefined;
 }
 
+export function parseImageStyleMatch(payload: unknown) {
+  const description = normalizedVerdict(payload);
+  if (!description) return undefined;
+  if (/(?:^|_)STYLE_MISMATCH(?:_|$)/u.test(description)) return false;
+  if (/(?:^|_)STYLE_MATCH(?:_|$)/u.test(description)) return true;
+  return undefined;
+}
+
+export function parseImageCompositionDistinct(payload: unknown) {
+  const description = normalizedVerdict(payload);
+  if (!description) return undefined;
+  if (/(?:^|_)COMPOSITION_DUPLICATE(?:_|$)/u.test(description)) return false;
+  if (/(?:^|_)COMPOSITION_DISTINCT(?:_|$)/u.test(description)) return true;
+  return undefined;
+}
+
 export function parseGeneratedImageInspection(payload: unknown) {
   const description = normalizedVerdict(payload);
   if (!description) return undefined;

@@ -2,7 +2,9 @@ import OpenAI from "openai";
 import sharp from "sharp";
 import {
   detectCloudflareImageText,
+  evaluateCloudflareImageComposition,
   evaluateCloudflareImageSemantics,
+  evaluateCloudflareImageStyle,
   generateCloudflareImage,
   hasCloudflareAI,
   inspectCloudflareGeneratedImage
@@ -20,8 +22,16 @@ import {
   stableImageSeed,
   type ImageReferenceRole
 } from "@/lib/image-continuity";
-import { GeneratedImageQualityError, normalizeGeneratedImage } from "@/lib/image-quality";
-import { ADJACENT_SCENE_DUPLICATE_THRESHOLD, imagePerceptualSimilarity } from "@/lib/image-similarity";
+import {
+  GeneratedImageQualityError,
+  normalizeGeneratedImage,
+  type GeneratedImageQualityErrorCode
+} from "@/lib/image-quality";
+import {
+  ADJACENT_SCENE_DUPLICATE_THRESHOLD,
+  imagePerceptualSimilarity,
+  POSSIBLE_SCENE_DUPLICATE_THRESHOLD
+} from "@/lib/image-similarity";
 import { mediaAssetStatus } from "@/lib/generation-resume";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
@@ -154,6 +164,41 @@ function semanticFallbackComposition(scene: Scene) {
   return "Composition: a scene-specific metaphor with a distinct foreground object, middle-ground action, and background environment that matches the narration.";
 }
 
+function qualityRecoveryDirection(
+  code: GeneratedImageQualityErrorCode | undefined,
+  scene: Scene,
+  project: Project
+) {
+  if (!code) return "";
+  const lockedStyle = projectLockedVisualStyle(project) ?? scene.style;
+  const exactStyle = exactVisualStyleDirection(lockedStyle) || `${lockedStyle.theme}; ${lockedStyle.mood}`;
+  if (code === "style_mismatch") {
+    return [
+      "STYLE REJECTION: the previous candidate used the wrong visible rendering medium.",
+      `Rebuild every visible element in this exact locked style: ${exactStyle}`,
+      "Do not preserve the rejected candidate's photographic-versus-illustrated nature, dimensionality, line treatment, texture, or material treatment when any of those conflict with the locked style."
+    ].join("\n");
+  }
+  if (code === "composition_duplicate") {
+    return [
+      "COMPOSITION REJECTION: the previous candidate repeated another scene's shot concept.",
+      sceneVisualDiversityDirection(scene, project.currentVersion.scenes.length),
+      "Keep recurring identity only. Replace the pose, action, camera side, camera height, shot size, foreground silhouette, tabletop or room layout, and background arrangement."
+    ].join("\n");
+  }
+  if (code === "semantic_mismatch" || code === "semantic_check_failed") {
+    return [
+      "CONTENT REJECTION: the previous candidate did not clearly communicate this scene's actual narrative beat.",
+      `Required visible meaning: ${imageSafeSemanticText(scene.voiceover)} ${imageSafeSemanticText(scene.visualPrompt)}`,
+      "Use a concrete subject, purposeful action, recognizable environment, and visible cause-and-effect instead of a generic portrait, style sample, or decorative scene."
+    ].join("\n");
+  }
+  if (code === "text_detected" || code === "text_check_failed") {
+    return "TEXT REJECTION: remove every written or writing-like mark and redesign written surfaces as plain, completely blank physical materials.";
+  }
+  return "QUALITY REJECTION: rebuild the frame from a substantially different composition while preserving the required subject, action, and exact locked style.";
+}
+
 function isSafetyFiltered(error: unknown) {
   return (error as { code?: string }).code === "3030";
 }
@@ -192,7 +237,8 @@ function expectedSceneSemantics(scene: Scene, project: Project) {
     `LOCKED VISUAL STYLE: ${exactVisualStyleDirection(lockedStyle) || `${lockedStyle.theme}; ${lockedStyle.mood}`}.`,
     `Scene ${scene.sceneNumber}: ${imageSafeSemanticText(scene.title)}.`,
     `Narrative meaning: ${imageSafeSemanticText(scene.voiceover)}.`,
-    `Required visible content: ${imageSafeSemanticText(scene.visualPrompt)}.`
+    `Required visible content: ${imageSafeSemanticText(scene.visualPrompt)}.`,
+    sceneVisualDiversityDirection(scene, project.currentVersion.scenes.length)
   ].join("\n").slice(0, 3600);
 }
 
@@ -370,42 +416,34 @@ function sameLockedStyle(left: Scene, right: Scene) {
   return left.style.visualStylePrompt?.trim() === right.style.visualStylePrompt?.trim();
 }
 
+const TRUSTED_STYLE_ANCHOR_GATES = new Set([
+  "strict-semantic-style-pass",
+  "independent-semantic-style-recovery"
+]);
+
+function isTrustedStyleAnchorAsset(asset: SceneAsset) {
+  return asset.type === "image"
+    && asset.metadata?.source === "generated-image"
+    && asset.metadata?.textFreeVerified === true
+    && TRUSTED_STYLE_ANCHOR_GATES.has(String(asset.metadata?.qualityGate ?? ""))
+    && Boolean(asset.url && asset.r2Key);
+}
+
 async function loadProjectStyleAnchorReferences(project: Project, scene: Scene) {
   const lockedStyle = projectLockedVisualStyle(project);
   if (!lockedStyle || lockedStyle.visualStyleId === "cinematic-realism") return [];
   const anchorScenes = project.currentVersion.scenes
     .filter((candidate) => candidate.sceneNumber !== scene.sceneNumber && sameLockedStyle(candidate, scene))
-    .filter((candidate) => candidate.assets.some((asset) => (
-      asset.type === "image"
-      && asset.metadata?.source === "generated-image"
-      && asset.url
-      && asset.r2Key
-    )))
-    .sort((left, right) => {
-      const leftDistance = Math.abs(left.sceneNumber - scene.sceneNumber);
-      const rightDistance = Math.abs(right.sceneNumber - scene.sceneNumber);
-      return leftDistance - rightDistance || right.sceneNumber - left.sceneNumber;
-    });
+    .filter((candidate) => candidate.assets.some(isTrustedStyleAnchorAsset))
+    .sort((left, right) => left.sceneNumber - right.sceneNumber);
   if (anchorScenes.length === 0) return [];
 
-  const nearest = anchorScenes[0];
-  const contrasting = anchorScenes
-    .slice(1)
-    .sort((left, right) => (
-      Math.abs(right.sceneNumber - nearest.sceneNumber)
-      - Math.abs(left.sceneNumber - nearest.sceneNumber)
-    ))[0];
-  const selected = [nearest, contrasting].filter(Boolean) as Scene[];
-  const references = await Promise.all(selected.map((anchorScene) => {
-    const anchorAsset = anchorScene.assets.find((asset) => (
-      asset.type === "image"
-      && asset.metadata?.source === "generated-image"
-      && asset.url
-      && asset.r2Key
-    ));
-    return loadImageReference(anchorAsset, "style-anchor");
-  }));
-  return references.filter(Boolean) as ImageReference[];
+  // One canonical, strictly approved frame is a clearer style authority than a
+  // collection that may drift scene by scene. Composition is varied by prompt
+  // and checked separately below.
+  const anchorAsset = anchorScenes[0].assets.find(isTrustedStyleAnchorAsset);
+  const reference = await loadImageReference(anchorAsset, "style-anchor");
+  return reference ? [reference] : [];
 }
 
 async function loadProjectComparisonImages(project: Project, scene: Scene) {
@@ -431,10 +469,10 @@ async function loadProjectComparisonImages(project: Project, scene: Scene) {
 }
 
 async function nearestSceneSimilarity(body: Buffer, comparisons: SceneComparisonImage[]) {
-  let nearest: { score: number; sceneNumber: number } | undefined;
+  let nearest: { score: number; sceneNumber: number; body: Buffer } | undefined;
   for (const comparison of comparisons) {
     const score = await imagePerceptualSimilarity(body, comparison.body);
-    if (!nearest || score > nearest.score) nearest = { score, sceneNumber: comparison.sceneNumber };
+    if (!nearest || score > nearest.score) nearest = { score, sceneNumber: comparison.sceneNumber, body: comparison.body };
   }
   return nearest;
 }
@@ -463,7 +501,6 @@ async function generateSceneImage(
   variantKey = "primary",
   visualInstruction?: string,
   comparisonImages: SceneComparisonImage[] = [],
-  allowStyleFallback = false,
   allowCompletionFallback = false,
   maxQualityAttempts = MAX_IMAGE_QUALITY_ATTEMPTS
 ): Promise<{ asset: SceneAsset } | undefined> {
@@ -480,17 +517,18 @@ async function generateSceneImage(
   let qualityMetadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"] | undefined;
   let closestScene: { score: number; sceneNumber: number } | undefined;
   let duplicateWasDetected = false;
-  let styleFallback: TextFreeImageCandidate | undefined;
   let completionFallback: TextFreeImageCandidate & {
     score: number;
-    reason: string;
+    reason: ImageCompletionFallbackReason;
   } | undefined;
+  let lastQualityRejection: GeneratedImageQualityErrorCode | undefined;
+  let lastQualityError: GeneratedImageQualityError | undefined;
   let textFreeVerified = false;
-  let usedStyleFallback = false;
-  let usedCompletionFallback = false;
-  let completionFallbackReason: string | undefined;
+  let usedIndependentRecovery = false;
+  let completionFallbackReason: ImageCompletionFallbackReason | undefined;
   let providerRequestCount = 0;
   let validationRequestCount = 0;
+  const canonicalStyleAnchorKey = usableReferences.find((reference) => reference.role === "style-anchor")?.r2Key;
   const costRunId = crypto.randomUUID();
   const rememberCompletionFallback = (
     candidate: Omit<NonNullable<typeof completionFallback>, "score" | "reason">,
@@ -555,17 +593,22 @@ async function generateSceneImage(
   };
   for (let qualityAttempt = 0; qualityAttempt < qualityAttemptLimit; qualityAttempt += 1) {
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
+    const recoveryDirection = qualityRecoveryDirection(lastQualityRejection, scene, project);
+    // Image references strongly influence both style and layout. After a
+    // duplicate rejection, temporarily remove style-only anchors so the next
+    // seed can genuinely re-stage the shot. A later style rejection restores
+    // the canonical anchor automatically.
+    const attemptReferences = lastQualityRejection === "composition_duplicate"
+      ? usableReferences.filter((reference) => reference.role === "current")
+      : usableReferences;
     const duplicateCorrection = duplicateWasDetected
-      ? "COMPOSITION REJECTION: the prior candidate copied another scene or a style anchor too closely. Keep the attached anchors because their shared medium defines the project style, but treat every anchor composition as a negative example. Re-stage this beat from a substantially different camera height, shot size, camera side, subject action, foreground silhouette, and background. Do not reuse the same tabletop, centered object group, aisle view, horizon, pose, or color-block placement."
+      ? "COMPOSITION REJECTION: a prior candidate copied another scene too closely. Re-stage this beat from a substantially different camera height, shot size, camera side, subject action, foreground silhouette, and background. Do not reuse the same tabletop, centered object group, aisle view, horizon, pose, or color-block placement."
       : "";
     const attemptPrompt = qualityAttempt === qualityAttemptLimit - 1
-      ? `${buildTextSafeCorrectionPrompt(scene, project, usableReferences)}\n${duplicateCorrection}`
+      ? `${buildTextSafeCorrectionPrompt(scene, project, attemptReferences)}\n${recoveryDirection}\n${duplicateCorrection}`
       : enforceTextFreeImagePrompt(qualityAttempt === 0
         ? prompt
-        : `${prompt}\n${duplicateCorrection}\nQuality correction attempt ${qualityAttempt + 1}: the prior candidate was rejected. Rebuild the composition as a fully resolved, information-rich frame in the exact locked rendering medium. The actual scene subject, action, environment, and narrative cause-and-effect must be immediately recognizable; a palette sheet, pattern, material sample, abstract shapes, or style demonstration is invalid. Remove every word, letter, number, logo, watermark, fake glyph, and writing-like mark; use blank surfaces and purely pictorial objects instead. Keep clear subject separation and meaningful foreground, midground, and background. Do not switch to photography, 3D, voxel, low-poly, or another illustration style. Avoid empty gradients or featureless surfaces.`);
-    // Multiple anchors expose the shared art direction. Keep them after a
-    // duplicate rejection and reject their layouts in the prompt instead.
-    const attemptReferences = usableReferences;
+        : `${prompt}\n${recoveryDirection}\n${duplicateCorrection}\nQuality correction attempt ${qualityAttempt + 1}: the prior candidate was rejected. Rebuild the composition as a fully resolved, information-rich frame in the exact locked rendering medium. The actual scene subject, action, environment, and narrative cause-and-effect must be immediately recognizable; a palette sheet, pattern, material sample, abstract shapes, or style demonstration is invalid. Remove every word, letter, number, logo, watermark, fake glyph, and writing-like mark; use blank surfaces and purely pictorial objects instead. Keep clear subject separation and meaningful foreground, midground, and background. Avoid empty gradients or featureless surfaces.`);
     let generatedBody: Buffer;
     let generatedModel: string;
     let effectivePrompt = attemptPrompt;
@@ -649,10 +692,27 @@ async function generateSceneImage(
       };
 
       const nearest = await nearestSceneSimilarity(normalized.body, comparisonImages);
-      if (nearest && nearest.score >= ADJACENT_SCENE_DUPLICATE_THRESHOLD) {
+      let compositionDuplicate = Boolean(nearest && nearest.score >= ADJACENT_SCENE_DUPLICATE_THRESHOLD);
+      if (
+        nearest
+        && !compositionDuplicate
+        && nearest.score >= POSSIBLE_SCENE_DUPLICATE_THRESHOLD
+        && hasCloudflareAI()
+      ) {
+        let compositionReview;
+        try {
+          compositionReview = await trackedValidation(
+            `${qualityAttempt}:composition:${nearest.sceneNumber}`,
+            () => evaluateCloudflareImageComposition(normalized.body, nearest.body)
+          );
+        } catch (error) {
+          throw new GeneratedImageQualityError("无法确认生成画面与其他分镜的构图差异。", "semantic_check_failed", { cause: error });
+        }
+        compositionDuplicate = !compositionReview.distinct;
+      }
+      if (nearest && compositionDuplicate) {
         duplicateWasDetected = true;
         closestScene = nearest;
-        rememberCompletionFallback(textFreeCandidate, "composition_duplicate");
         throw new GeneratedImageQualityError(
           `生成画面与分镜 ${nearest.sceneNumber} 的构图过于相似。`,
           "composition_duplicate"
@@ -667,30 +727,7 @@ async function generateSceneImage(
       } catch (error) {
         if (!(error instanceof GeneratedImageQualityError) || error.code !== "semantic_check_failed") throw error;
         rememberCompletionFallback(textFreeCandidate, "semantic_check_failed");
-        // The dedicated text gate above already passed. If the combined
-        // validator is temporarily inconclusive, keep a premium candidate only
-        // after a separate semantic check confirms the actual scene meaning.
-        // This prevents validator formatting glitches from turning a usable,
-        // text-free frame into a permanently missing scene.
-        if (allowStyleFallback && hasCloudflareAI()) {
-          try {
-            const semanticCheck = await trackedValidation(
-              `${qualityAttempt}:inspection-fallback-semantic`,
-              () => evaluateCloudflareImageSemantics(normalized.body, essentialSceneSemantics(scene, project))
-            );
-            if (semanticCheck.matches && !styleFallback) {
-              styleFallback = textFreeCandidate;
-              rememberCompletionFallback(textFreeCandidate, "semantic_pass_style_unverified");
-            }
-          } catch (fallbackError) {
-            console.warn(`[image-assets] Scene ${scene.sceneNumber} independent semantic fallback was unavailable:`, fallbackError);
-          }
-        }
-        if (qualityAttempt < qualityAttemptLimit - 1) {
-          console.warn(`[image-assets] Scene ${scene.sceneNumber} inspection was unavailable; retrying with a new candidate.`);
-          continue;
-        }
-        break;
+        throw error;
       }
       if (inspection === "text_present") {
         // A positive signal from either detector rejects the candidate. The
@@ -705,25 +742,7 @@ async function generateSceneImage(
           textFreeCandidate,
           inspection === "style_mismatch" ? "style_mismatch" : "semantic_mismatch"
         );
-        // The combined verdict is deliberately conservative. On the premium
-        // pass, retain a text-free style mismatch only when a separate check
-        // confirms that the concrete scene meaning is present. Text, duplicate
-        // compositions, and semantic mismatches remain hard failures.
-        if (inspection === "style_mismatch" && allowStyleFallback && hasCloudflareAI()) {
-          const semanticCheck = await trackedValidation(
-            `${qualityAttempt}:style-fallback-semantic`,
-            () => evaluateCloudflareImageSemantics(normalized.body, essentialSceneSemantics(scene, project))
-          );
-          if (semanticCheck.matches && !styleFallback) {
-            styleFallback = textFreeCandidate;
-            rememberCompletionFallback(textFreeCandidate, "semantic_pass_style_mismatch");
-          }
-        }
-        if (qualityAttempt < qualityAttemptLimit - 1) {
-          console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${qualityError.code}); retrying:`, qualityError.message);
-          continue;
-        }
-        break;
+        throw qualityError;
       }
       body = normalized.body;
       qualityMetadata = normalized.metadata;
@@ -733,43 +752,60 @@ async function generateSceneImage(
       break;
     } catch (error) {
       if (!(error instanceof GeneratedImageQualityError)) {
-        if (allowCompletionFallback && (styleFallback || completionFallback)) {
-          console.warn(`[image-assets] Scene ${scene.sceneNumber} provider retry failed after a usable candidate was retained; delivering the retained candidate.`, error);
+        if (allowCompletionFallback && completionFallback) {
+          console.warn(`[image-assets] Scene ${scene.sceneNumber} provider retry failed after a recoverable candidate was retained; independently verifying it.`, error);
           break;
         }
         throw error;
       }
+      lastQualityRejection = error.code;
+      lastQualityError = error;
       if (qualityAttempt === qualityAttemptLimit - 1) {
-        // A later rejected candidate must not erase an earlier premium frame
-        // that already cleared the hard text, duplicate, and semantic gates.
-        if (styleFallback || (allowCompletionFallback && completionFallback)) break;
+        if (allowCompletionFallback && completionFallback) break;
         throw error;
       }
       console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${error.code}); retrying:`, error.message);
     }
   }
-  if ((!body || !qualityMetadata) && styleFallback) {
-    body = styleFallback.body;
-    qualityMetadata = styleFallback.metadata;
-    model = styleFallback.model;
-    prompt = styleFallback.prompt;
-    seed = styleFallback.seed;
-    usedStyleFallback = true;
-    textFreeVerified = styleFallback.textFreeVerified;
-    console.warn(`[image-assets] Scene ${scene.sceneNumber} accepted a premium style fallback after independent semantic validation.`);
+  if ((!body || !qualityMetadata) && allowCompletionFallback && completionFallback && hasCloudflareAI()) {
+    const retainedCandidate = completionFallback;
+    const lockedStyle = projectLockedVisualStyle(project) ?? scene.style;
+    const expectedStyle = exactVisualStyleDirection(lockedStyle) || `${lockedStyle.theme}; ${lockedStyle.mood}`;
+    try {
+      // A rejected candidate is never delivered merely because it is the best
+      // available one. It must pass two focused, independent checks after the
+      // text and cross-scene composition gates have already passed.
+      const [semanticCheck, styleCheck] = await Promise.all([
+        trackedValidation(
+          `recovery:${retainedCandidate.reason}:semantic`,
+          () => evaluateCloudflareImageSemantics(retainedCandidate.body, essentialSceneSemantics(scene, project))
+        ),
+        trackedValidation(
+          `recovery:${retainedCandidate.reason}:style`,
+          () => evaluateCloudflareImageStyle(retainedCandidate.body, expectedStyle)
+        )
+      ]);
+      if (semanticCheck.matches && styleCheck.matches) {
+        body = retainedCandidate.body;
+        qualityMetadata = retainedCandidate.metadata;
+        model = retainedCandidate.model;
+        prompt = retainedCandidate.prompt;
+        seed = retainedCandidate.seed;
+        usedIndependentRecovery = true;
+        textFreeVerified = retainedCandidate.textFreeVerified;
+        completionFallbackReason = retainedCandidate.reason;
+        console.warn(`[image-assets] Scene ${scene.sceneNumber} accepted a retained candidate only after independent semantic and style verification (${retainedCandidate.reason}).`);
+      } else {
+        console.warn(`[image-assets] Scene ${scene.sceneNumber} rejected the retained candidate after independent verification (semantic=${semanticCheck.matches}, style=${styleCheck.matches}).`);
+      }
+    } catch (error) {
+      console.warn(`[image-assets] Scene ${scene.sceneNumber} retained-candidate verification was unavailable:`, error);
+    }
   }
-  if ((!body || !qualityMetadata) && allowCompletionFallback && completionFallback) {
-    body = completionFallback.body;
-    qualityMetadata = completionFallback.metadata;
-    model = completionFallback.model;
-    prompt = completionFallback.prompt;
-    seed = completionFallback.seed;
-    usedCompletionFallback = true;
-    textFreeVerified = completionFallback.textFreeVerified;
-    completionFallbackReason = completionFallback.reason;
-    console.warn(`[image-assets] Scene ${scene.sceneNumber} delivered the best retained completion candidate (${completionFallback.reason}, score ${completionFallback.score}).`);
+  if (!body || !qualityMetadata) {
+    if (lastQualityError) throw lastQualityError;
+    return undefined;
   }
-  if (!body || !qualityMetadata) return undefined;
   if (!textFreeVerified) {
     throw new GeneratedImageQualityError("生成画面未通过无文字验证。", "text_check_failed");
   }
@@ -795,13 +831,13 @@ async function generateSceneImage(
       ...qualityMetadata,
       textFreeVerified: true,
       referenceKeys: usableReferences.map((reference) => reference.r2Key),
+      canonicalStyleAnchorKey,
       closestSceneNumber: closestScene?.sceneNumber,
       closestSceneSimilarity: closestScene?.score,
+      compositionReviewThreshold: POSSIBLE_SCENE_DUPLICATE_THRESHOLD,
       candidateInstruction: visualInstruction || undefined,
-      qualityGate: usedStyleFallback
-        ? "text-free-semantic-pass-style-fallback"
-        : usedCompletionFallback
-          ? "best-candidate-completion-fallback"
+      qualityGate: usedIndependentRecovery
+        ? "independent-semantic-style-recovery"
         : "strict-semantic-style-pass",
       completionFallbackReason,
       providerRequestCount,
@@ -825,7 +861,6 @@ export async function generateProjectSceneImages(
     candidate?: boolean;
     variantKey?: string;
     visualInstruction?: string;
-    allowStyleFallback?: boolean;
     allowCompletionFallback?: boolean;
     maxQualityAttempts?: number;
   } = {}
@@ -874,7 +909,6 @@ export async function generateProjectSceneImages(
           options.variantKey,
           options.visualInstruction,
           comparisonImages,
-          options.allowStyleFallback,
           options.allowCompletionFallback,
           options.maxQualityAttempts
         );

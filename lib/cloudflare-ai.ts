@@ -2,7 +2,14 @@ import { getOptionalEnv } from "@/lib/env";
 import { assertUsableSpeechAudio } from "@/lib/audio-quality";
 import { isMp4Buffer, parseCloudflareVideoUrl } from "@/lib/cloudflare-video-response";
 import { parseCloudflareTranscript, type CloudflareTranscriptionResult } from "@/lib/cloudflare-transcription";
-import { parseCloudflareVisionDescription, parseGeneratedImageInspection, parseImageSemanticMatch, parseImageTextPresence } from "@/lib/cloudflare-vision-response";
+import {
+  parseCloudflareVisionDescription,
+  parseGeneratedImageInspection,
+  parseImageCompositionDistinct,
+  parseImageSemanticMatch,
+  parseImageStyleMatch,
+  parseImageTextPresence
+} from "@/lib/cloudflare-vision-response";
 import {
   VIDEO_GENERATION_DURATION_SECONDS,
   VIDEO_GENERATION_MODEL,
@@ -277,6 +284,54 @@ export async function evaluateCloudflareImageSemantics(body: Buffer, expectedSce
     inconclusiveMessage: "AI vision service returned an inconclusive semantic inspection"
   });
   return { matches: result.verdict, model: result.model };
+}
+
+export async function evaluateCloudflareImageStyle(body: Buffer, expectedStyle: string) {
+  const result = await runVisionVerdict({
+    body,
+    question: [
+      "Judge only the visible rendering medium and art treatment of this generated film frame.",
+      `REQUIRED STYLE: ${expectedStyle.slice(0, 1800)}`,
+      "Answer STYLE_MATCH only when the frame visibly uses that same medium, including its photographic-versus-illustrated nature, dimensionality, line treatment, texture, material treatment, and lighting language.",
+      "Answer STYLE_MISMATCH for any medium substitution, including photography instead of illustration, illustration instead of photography, flat vector art instead of paper collage, 3D instead of 2D, or materially different texture and line treatment.",
+      "Ignore scene subject and wording. Answer exactly STYLE_MATCH or STYLE_MISMATCH."
+    ].join("\n"),
+    maxTokens: 12,
+    parse: parseImageStyleMatch,
+    inconclusiveMessage: "AI vision service returned an inconclusive style inspection"
+  });
+  return { matches: result.verdict, model: result.model };
+}
+
+async function buildCompositionComparisonSheet(candidate: Buffer, existing: Buffer) {
+  const [left, right] = await Promise.all([
+    sharp(candidate).rotate().resize(640, 360, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer(),
+    sharp(existing).rotate().resize(640, 360, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer()
+  ]);
+  return sharp({
+    create: { width: 1280, height: 360, channels: 3, background: "#808080" }
+  }).composite([
+    { input: left, left: 0, top: 0 },
+    { input: right, left: 640, top: 0 }
+  ]).jpeg({ quality: 92, chromaSubsampling: "4:4:4" }).toBuffer();
+}
+
+export async function evaluateCloudflareImageComposition(candidate: Buffer, existing: Buffer) {
+  const sheet = await buildCompositionComparisonSheet(candidate, existing);
+  const result = await runVisionVerdict({
+    body: sheet,
+    question: [
+      "Compare the two film frames shown side by side. The left half is a new candidate and the right half is an existing scene from the same video.",
+      "Answer COMPOSITION_DUPLICATE when they repeat substantially the same shot concept: the same main subject pose or action, camera side, height, angle, shot size, foreground silhouette, tabletop or room layout, and background arrangement.",
+      "Changing color, clothing, lighting, crop, rendering style, or small props does not make a repeated seated pose or repeated camera setup distinct.",
+      "A recurring person or object alone is allowed when the action, staging, camera position, shot scale, foreground, and environment create a clearly different narrative beat.",
+      "Answer COMPOSITION_DISTINCT only for visibly different staging and camera grammar. Answer exactly COMPOSITION_DUPLICATE or COMPOSITION_DISTINCT."
+    ].join("\n"),
+    maxTokens: 16,
+    parse: parseImageCompositionDistinct,
+    inconclusiveMessage: "AI vision service returned an inconclusive composition comparison"
+  });
+  return { distinct: result.verdict, model: result.model };
 }
 
 export async function inspectCloudflareGeneratedImage(body: Buffer, expectedScene: string) {

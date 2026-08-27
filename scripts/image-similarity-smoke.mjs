@@ -15,7 +15,11 @@ vm.runInNewContext(output, {
   exports: module.exports,
   require: (name) => name === "sharp" ? sharp : (() => { throw new Error(`Unexpected import: ${name}`); })()
 });
-const { ADJACENT_SCENE_DUPLICATE_THRESHOLD, imagePerceptualSimilarity } = module.exports;
+const {
+  ADJACENT_SCENE_DUPLICATE_THRESHOLD,
+  imagePerceptualSimilarity,
+  POSSIBLE_SCENE_DUPLICATE_THRESHOLD
+} = module.exports;
 
 async function frame({ accent = "#22c7b8", shift = 0, background = "#dce8ef" } = {}) {
   return sharp({
@@ -42,5 +46,7 @@ const differentScore = await imagePerceptualSimilarity(original, differentCompos
 assert.ok(nearScore >= ADJACENT_SCENE_DUPLICATE_THRESHOLD, `Expected near duplicate, got ${nearScore}`);
 assert.ok(differentScore < ADJACENT_SCENE_DUPLICATE_THRESHOLD, `Expected distinct frame, got ${differentScore}`);
 assert.ok(nearScore > differentScore + 0.15);
+assert.ok(POSSIBLE_SCENE_DUPLICATE_THRESHOLD < ADJACENT_SCENE_DUPLICATE_THRESHOLD);
+assert.ok(differentScore < POSSIBLE_SCENE_DUPLICATE_THRESHOLD, `Expected a genuinely different frame below review threshold, got ${differentScore}`);
 
 console.log("Image perceptual similarity smoke checks passed.");

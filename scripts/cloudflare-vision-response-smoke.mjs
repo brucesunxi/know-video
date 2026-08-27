@@ -9,7 +9,14 @@ const output = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 vm.runInNewContext(output, { module, exports: module.exports, require: () => ({}) });
-const { parseCloudflareVisionDescription, parseGeneratedImageInspection, parseImageSemanticMatch, parseImageTextPresence } = module.exports;
+const {
+  parseCloudflareVisionDescription,
+  parseGeneratedImageInspection,
+  parseImageCompositionDistinct,
+  parseImageSemanticMatch,
+  parseImageStyleMatch,
+  parseImageTextPresence
+} = module.exports;
 
 assert.equal(
   parseCloudflareVisionDescription({ answer: "  A player explores a neon game level.  " }),
@@ -37,6 +44,11 @@ assert.equal(parseImageTextPresence({ answer: "The image is unclear." }), undefi
 assert.equal(parseImageSemanticMatch({ answer: "SEMANTIC_MATCH" }), true);
 assert.equal(parseImageSemanticMatch({ result: { answer: "SEMANTIC_MISMATCH" } }), false);
 assert.equal(parseImageSemanticMatch({ answer: "The image is unclear." }), undefined);
+assert.equal(parseImageStyleMatch({ answer: "STYLE_MATCH" }), true);
+assert.equal(parseImageStyleMatch({ result: { answer: "STYLE_MISMATCH" } }), false);
+assert.equal(parseImageCompositionDistinct({ answer: "COMPOSITION_DISTINCT" }), true);
+assert.equal(parseImageCompositionDistinct({ result: { answer: "COMPOSITION_DUPLICATE" } }), false);
+assert.equal(parseImageCompositionDistinct({ answer: "The shots might be similar." }), undefined);
 assert.equal(parseGeneratedImageInspection({ answer: "IMAGE_PASS" }), "pass");
 assert.equal(parseGeneratedImageInspection({ answer: "Image pass." }), "pass");
 assert.equal(parseGeneratedImageInspection({ answer: "style-mismatch" }), "style_mismatch");

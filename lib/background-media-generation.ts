@@ -79,16 +79,13 @@ async function ensureSceneImage(message: ProjectMediaMessage, project: Project, 
     variantKey: completionRescue
       ? `background-${quality}-completion-rescue-${deliveryCount}`
       : "background-standard",
-    // The rescue pass may use guarded fallbacks regardless of whether billing
-    // had enough headroom for the optional premium model upgrade.
-    allowStyleFallback: completionRescue,
-    // Once the standard pass has tried strict candidates, the premium rescue
-    // may relax semantic/style checks, but only after the image has passed the
-    // hard text-free gate.
+    // The rescue pass can retain a candidate only for focused independent
+    // verification. A known style mismatch or repeated composition is never
+    // delivered merely to mark the project complete.
     allowCompletionFallback: completionRescue,
-    // Keep the bounded background path below five provider candidates per
-    // scene. Internal quality retries remain cost monitoring only.
-    maxQualityAttempts: completionRescue ? 2 : 3
+    // Rebalance the same five-candidate budget toward the reference-guided
+    // premium recovery pass: two standard candidates, then three targeted ones.
+    maxQualityAttempts: completionRescue ? 3 : 2
   });
   const generated = sceneAsset(updated, message.sceneNumber, "image");
   if (!generated) throw new ProjectMediaQualityExhaustedError(message.sceneNumber);

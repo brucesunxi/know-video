@@ -78,3 +78,7 @@ export async function imagePerceptualSimilarity(left: Buffer, right: Buffer) {
 }
 
 export const ADJACENT_SCENE_DUPLICATE_THRESHOLD = 0.89;
+// Frames above this lower threshold receive a semantic shot-composition review.
+// Pixel similarity alone misses the same pose and camera setup when the model
+// changes palette, lighting, clothing, or rendering medium.
+export const POSSIBLE_SCENE_DUPLICATE_THRESHOLD = 0.7;
