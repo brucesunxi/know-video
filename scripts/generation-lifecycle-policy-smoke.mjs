@@ -36,7 +36,12 @@ assert.match(reconciliation, /firstIncomplete/);
 assert.match(reconciliation, /await enqueueProjectGenerationWatchdog\(\{/);
 assert.match(reconciliation, /await enqueueProjectMediaScene\(\{/);
 assert.match(reconciliation, /await touchGenerationRequest\(generation\.id\)/);
+assert.match(reconciliation, /for \(const generation of generations\)/);
+assert.doesNotMatch(reconciliation, /Promise\.all\(generations/);
 assert.match(projects, /recoverStalledGenerationRequests\(generationRequests, user\.id\)/);
+assert.match(projects, /const projects = await listProjects\(user\.id\)/);
+assert.match(projects, /const generationRequests = await listIncompleteGenerationRequests\(user\.id\)/);
+assert.doesNotMatch(projects, /\[projects, generationRequests\] = await Promise\.all/);
 assert.match(generationRoute, /recoverStalledGenerationRequest\(reconciled, user\.id\)/);
 
 console.log("Generation lifecycle recovery policy smoke checks passed.");

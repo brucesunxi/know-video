@@ -54,7 +54,9 @@ export async function reconcileCompletedGenerationRequests(
   generations: GenerationRequestRecord[],
   userId: string
 ) {
-  await Promise.all(generations.map((generation) => finalizeCompletedGenerationRequest(generation, userId)));
+  for (const generation of generations) {
+    await finalizeCompletedGenerationRequest(generation, userId);
+  }
 }
 
 async function failedRecoveryRecord(
@@ -145,14 +147,16 @@ export async function recoverStalledGenerationRequests(
   userId: string,
   now = Date.now()
 ) {
-  return Promise.all(generations.map((generation) => (
-    generation.status === "pending"
+  const recovered: GenerationRequestRecord[] = [];
+  for (const generation of generations) {
+    recovered.push(generation.status === "pending"
       && generation.projectId
       && (
         generationMediaIsInactive(generation.updatedAt, now)
         || generationExceededRuntime(generation.createdAt, now)
       )
-      ? recoverStalledGenerationRequest(generation, userId, now)
-      : generation
-  )));
+      ? await recoverStalledGenerationRequest(generation, userId, now)
+      : generation);
+  }
+  return recovered;
 }

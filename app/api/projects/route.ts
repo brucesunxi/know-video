@@ -110,10 +110,8 @@ export async function GET() {
     const user = await requireCurrentUser();
     const candidates = await listCompletedPendingGenerationRequests(user.id);
     await reconcileCompletedGenerationRequests(candidates, user.id);
-    const [projects, generationRequests] = await Promise.all([
-      listProjects(user.id),
-      listIncompleteGenerationRequests(user.id)
-    ]);
+    const projects = await listProjects(user.id);
+    const generationRequests = await listIncompleteGenerationRequests(user.id);
     return NextResponse.json({
       projects,
       generationRequests: await recoverStalledGenerationRequests(generationRequests, user.id)
@@ -321,17 +319,24 @@ async function generateAndPersistProject(body: ProjectGenerationInput, userId: s
         .map((scene) => scene.sceneNumber)
         .sort((left, right) => left - right)[0];
       if (firstSceneNumber) {
-        await enqueueProjectMediaScene({
-          requestId,
-          userId,
-          projectId: persisted.project.id,
-          versionId: persisted.project.currentVersion.id,
-          sceneNumber: firstSceneNumber,
-          engine,
-          billingReservationKey: projectReservationKey(requestId),
-          options: body.options,
-          startedAt: Date.now()
-        });
+        try {
+          await enqueueProjectMediaScene({
+            requestId,
+            userId,
+            projectId: persisted.project.id,
+            versionId: persisted.project.currentVersion.id,
+            sceneNumber: firstSceneNumber,
+            engine,
+            billingReservationKey: projectReservationKey(requestId),
+            options: body.options,
+            startedAt: Date.now()
+          });
+        } catch (error) {
+          // The watchdog was scheduled before planning began. Keep the durable
+          // project pending so it can resume this handoff instead of turning a
+          // transient queue outage into a failed, half-created project.
+          console.error(`[projects] Initial media queue handoff failed for ${requestId}; watchdog recovery remains active:`, error);
+        }
       } else {
         await completeGenerationRequest({
           id: requestId,

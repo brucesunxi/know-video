@@ -456,6 +456,44 @@ export async function permanentlyFailProjectMedia(message: ProjectMediaSceneMess
   });
 }
 
+export async function permanentlyFailProjectGenerationWatchdog(
+  message: ProjectGenerationWatchdogMessage,
+  error: unknown
+) {
+  const generation = await getGenerationRequestBeforeExpiry(message.requestId, message.userId);
+  if (!generation) return;
+  const metadata = {
+    watchdogPass: message.watchdogPass ?? 0,
+    errorType: error instanceof Error ? error.name : "UnknownError",
+    terminalWatchdogFinalizer: true
+  };
+  if (generation.status === "ready") {
+    if (!generation.projectId) {
+      throw new Error(`Ready generation request ${message.requestId} has no project.`);
+    }
+    await completeGenerationRequest({
+      id: message.requestId,
+      userId: message.userId,
+      projectId: generation.projectId,
+      engine: generation.engine ?? "ai",
+      billingReservationKey: message.billingReservationKey,
+      releaseReason: "project_generation_watchdog_terminal_repair",
+      metadata
+    });
+    return;
+  }
+  await failGenerationRequest({
+    id: message.requestId,
+    userId: message.userId,
+    error: generation.status === "failed"
+      ? generation.error
+      : "后台状态检查连续失败，系统已停止本次任务并退回 Credits。请重新生成。",
+    billingReservationKey: message.billingReservationKey,
+    refundReason: "project_generation_watchdog_failed",
+    metadata
+  });
+}
+
 export async function processProjectGenerationWatchdog(message: ProjectGenerationWatchdogMessage) {
   const generation = await getGenerationRequestBeforeExpiry(message.requestId, message.userId);
   if (!generation) return;

@@ -74,7 +74,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "没有找到渲染项目。" }, { status: 404 });
     }
     const renderJobs = await listRenderJobs(projectId);
-    const recovered = await Promise.all(renderJobs.map((renderJob) => recoverStaleRenderJob(renderJob)));
+    const recovered = [];
+    for (const renderJob of renderJobs) {
+      recovered.push(await recoverStaleRenderJob(renderJob));
+    }
     return NextResponse.json({ renderJobs: recovered.map(publicRenderJob) });
   }
   if (!jobId || !z.string().uuid().safeParse(jobId).success) {

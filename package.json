@@ -99,6 +99,7 @@
     "project:delete:smoke": "node scripts/project-library-delete-smoke.mjs",
     "generation:request:smoke": "node scripts/generation-request-smoke.mjs",
     "generation:background-media:smoke": "node scripts/background-media-queue-smoke.mjs",
+    "generation:queue-terminal:smoke": "node scripts/queue-consumer-terminal-smoke.mjs",
     "generation:orchestration:smoke": "node scripts/background-media-orchestration-smoke.mjs",
     "generation:billing-recovery:smoke": "node scripts/background-media-billing-smoke.mjs",
     "generation:recovery-policy:smoke": "node scripts/background-recovery-policy-smoke.mjs",

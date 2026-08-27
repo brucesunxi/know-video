@@ -68,4 +68,17 @@ await assert.rejects(
 );
 assert.equal(attempts, 3);
 
+attempts = 0;
+await assert.rejects(
+  postRenderCallback(input, { jobId: "job", status: "ready", progress: 100, outputR2Key: "invalid-render.mp4" }, {
+    fetchImpl: async () => {
+      attempts += 1;
+      return { ok: false, status: 409, text: async () => "invalid render output" };
+    },
+    wait: async () => undefined
+  }),
+  /409/
+);
+assert.equal(attempts, 1);
+
 console.log("Render callback retry smoke checks passed.");

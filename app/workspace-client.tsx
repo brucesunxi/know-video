@@ -441,7 +441,30 @@ type MediaGenerationResponse = {
 const IMAGE_GENERATION_TIMEOUT_MS = 305_000;
 const AUDIO_GENERATION_TIMEOUT_MS = 305_000;
 const RENDER_JOB_POLL_INTERVAL_MS = 10_000;
+const RENDER_JOB_LIST_POLL_INTERVAL_MS = 30_000;
+const GENERATION_TASK_POLL_MAX_AGE_MS = 45 * 60_000;
 const AUTOMATIC_MEDIA_REPAIR_ATTEMPTS = 3;
+
+function generationTaskPollDelay(tasks: GenerationTaskListItem[], now = Date.now()) {
+  const pendingAges = tasks
+    .filter((task) => task.status === "pending")
+    .map((task) => Date.parse(task.createdAt ?? task.updatedAt))
+    .filter(Number.isFinite)
+    .map((startedAt) => Math.max(0, now - startedAt));
+  if (pendingAges.length === 0) return undefined;
+  const youngestTaskAge = Math.min(...pendingAges);
+  if (youngestTaskAge < 2 * 60_000) return 15_000;
+  if (youngestTaskAge < 8 * 60_000) return 30_000;
+  if (youngestTaskAge < 20 * 60_000) return 2 * 60_000;
+  if (youngestTaskAge < GENERATION_TASK_POLL_MAX_AGE_MS) return 5 * 60_000;
+  return undefined;
+}
+
+function renderJobPollDelay(elapsedMs: number) {
+  if (elapsedMs < 2 * 60_000) return RENDER_JOB_POLL_INTERVAL_MS;
+  if (elapsedMs < 10 * 60_000) return 30_000;
+  return 60_000;
+}
 
 async function generateImageScenesIndependently(input: {
   project: Project;
@@ -1973,7 +1996,7 @@ async function waitForRenderJob(
     if (Date.now() - startedAt > 45 * 60 * 1000) {
       throw new Error("视频渲染超时，请稍后在项目中重试导出。");
     }
-    await new Promise((resolve) => window.setTimeout(resolve, RENDER_JOB_POLL_INTERVAL_MS));
+    await new Promise((resolve) => window.setTimeout(resolve, renderJobPollDelay(Date.now() - startedAt)));
     if (isCancelled()) return undefined;
     try {
       const response = await fetch(`/api/render-jobs?id=${encodeURIComponent(jobId)}`, { cache: "no-store" });
@@ -5971,8 +5994,11 @@ export function WorkspaceClient({
 
   useEffect(() => {
     let cancelled = false;
+    let refreshTimer: number | undefined;
+    let refreshing = false;
+    let latestTasks = generationTasks;
     const refreshTasks = async () => {
-      if (document.visibilityState === "hidden") return;
+      if (document.visibilityState === "hidden") return latestTasks;
       try {
         const endpoint =
           stage === "projects" && !hasRunningGenerationTasks
@@ -5981,25 +6007,49 @@ export function WorkspaceClient({
         const response = await fetch(endpoint, { cache: "no-store" });
         const data = await response.json().catch(() => ({})) as { projects?: ProjectListItem[]; generationRequests?: GenerationTaskListItem[] };
         if (!cancelled && response.ok) {
-          setGenerationTasks(data.generationRequests ?? []);
+          latestTasks = data.generationRequests ?? [];
+          setGenerationTasks(latestTasks);
           if (stage === "projects" && data.projects) setProjects(data.projects);
         }
       } catch (error) {
         console.warn("[generation-tasks] Unable to refresh background tasks:", error);
       }
+      return latestTasks;
     };
-    void refreshTasks();
-    const interval = hasRunningGenerationTasks
-      ? window.setInterval(() => void refreshTasks(), 15_000)
-      : undefined;
+
+    const scheduleRefresh = () => {
+      if (cancelled) return;
+      const delay = generationTaskPollDelay(latestTasks);
+      if (delay === undefined) return;
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = undefined;
+        void refreshAndSchedule();
+      }, delay);
+    };
+    const refreshAndSchedule = async () => {
+      if (cancelled || refreshing) return;
+      if (refreshTimer !== undefined) {
+        window.clearTimeout(refreshTimer);
+        refreshTimer = undefined;
+      }
+      refreshing = true;
+      try {
+        await refreshTasks();
+      } finally {
+        refreshing = false;
+        scheduleRefresh();
+      }
+    };
+
+    void refreshAndSchedule();
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void refreshTasks();
+      if (document.visibilityState === "visible") void refreshAndSchedule();
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       cancelled = true;
-      if (interval !== undefined) {
-        window.clearInterval(interval);
+      if (refreshTimer !== undefined) {
+        window.clearTimeout(refreshTimer);
       }
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
@@ -7098,7 +7148,7 @@ export function WorkspaceClient({
       || activeRenderJobId
       || !renderJobs.some((job) => job.status === "queued" || job.status === "running")
     ) return;
-    const interval = window.setInterval(() => void loadRenderJobs(true), RENDER_JOB_POLL_INTERVAL_MS);
+    const interval = window.setInterval(() => void loadRenderJobs(true), RENDER_JOB_LIST_POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, [
     activeRenderJobId,

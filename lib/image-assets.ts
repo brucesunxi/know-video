@@ -35,7 +35,7 @@ import {
   imagePerceptualSimilarity,
   POSSIBLE_SCENE_DUPLICATE_THRESHOLD
 } from "@/lib/image-similarity";
-import { mediaAssetStatus } from "@/lib/generation-resume";
+import { isDeliverableVisualAsset, mediaAssetStatus } from "@/lib/generation-resume";
 import { normalizeFreeStockImageStyle } from "@/lib/local-stock-image-style";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
 import { loadFreeStockImageGuide } from "@/lib/stock-image-guides";
@@ -512,13 +512,12 @@ async function loadProjectComparisonImages(project: Project, scene: Scene) {
     })
     .slice(0, 4);
   const comparisons = await Promise.all(comparisonScenes.map(async (candidate) => {
-    const acceptedGeneratedImage = candidate.assets.find((asset) => (
+    const acceptedImage = candidate.assets.find((asset) => (
       asset.type === "image"
-      && asset.metadata?.source === "generated-image"
-      && asset.url
+      && isDeliverableVisualAsset(asset)
       && asset.r2Key
     ));
-    const reference = await loadImageReference(acceptedGeneratedImage, "style-anchor");
+    const reference = await loadImageReference(acceptedImage, "style-anchor");
     return reference ? { body: reference.body, sceneNumber: candidate.sceneNumber } : undefined;
   }));
   return comparisons.filter(Boolean) as SceneComparisonImage[];

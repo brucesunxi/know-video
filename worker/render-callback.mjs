@@ -17,10 +17,12 @@ export async function postRenderCallback(input, payload, options = {}) {
       });
       if (response.ok) return;
       const detail = (await response.text()).slice(0, 500);
-      throw new Error(`Render callback returned ${response.status}${detail ? `: ${detail}` : ""}`);
+      const callbackError = new Error(`Render callback returned ${response.status}${detail ? `: ${detail}` : ""}`);
+      callbackError.retryable = response.status >= 500 || [408, 425, 429].includes(response.status);
+      throw callbackError;
     } catch (error) {
       lastError = error;
-      if (attempt === maximumAttempts) break;
+      if (error?.retryable === false || attempt === maximumAttempts) break;
       await wait(Math.min(5_000, 750 * (2 ** (attempt - 1))));
     }
   }

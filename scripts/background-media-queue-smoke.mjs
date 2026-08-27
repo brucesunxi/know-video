@@ -105,6 +105,11 @@ assert.match(consumer, /processProjectMediaScene\(message, metadata\.deliveryCou
 assert.match(consumer, /message\.operation === "watchdog"/);
 assert.match(consumer, /processProjectGenerationWatchdog\(message\)/);
 assert.match(consumer, /Generation watchdog attempt/);
+assert.match(consumer, /permanentlyFailProjectGenerationWatchdog\(message, error\)/);
+assert.match(consumer, /permanentlyFailRenderWatchdog\(message\)/);
+assert.match(worker, /permanentlyFailProjectGenerationWatchdog[\s\S]*getGenerationRequestBeforeExpiry\(message\.requestId, message\.userId\)/);
+assert.match(worker, /generation\.status === "ready"[\s\S]*completeGenerationRequest/);
+assert.match(worker, /terminalWatchdogFinalizer: true/);
 assert.match(consumer, /error instanceof ProjectMediaQualityExhaustedError/);
 assert.match(consumer, /metadata\.deliveryCount >= 2/);
 assert.match(consumer, /message\.recoveryPass \?\? 0/);
@@ -114,6 +119,8 @@ assert.match(requests, /ATTACHED_PROJECT_STALE_INTERVAL = `\$\{GENERATION_MAX_RU
 assert.match(requests, /where id = \$\{input\.id\}[\s\S]*and status = 'pending'[\s\S]*returning id/);
 assert.match(requests, /returning id, created_at/);
 assert.match(requests, /pending: false as const/);
+assert.match(requests, /for \(const request of repairCandidates\)/);
+assert.doesNotMatch(requests, /Promise\.all\(repairCandidates/);
 assert.match(lifecycle, /GENERATION_MEDIA_INACTIVITY_MINUTES = 8/);
 assert.match(lifecycle, /GENERATION_MAX_RUNTIME_MINUTES = 40/);
 assert.match(lifecycle, /GENERATION_WATCHDOG_INITIAL_DELAY_SECONDS = 12 \* 60/);

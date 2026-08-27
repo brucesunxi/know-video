@@ -316,7 +316,7 @@ export async function listIncompleteGenerationRequests(userId: string) {
     order by request.updated_at
     limit 50
   ` as GenerationRequestRow[];
-  await Promise.all(repairCandidates.map(async (request) => {
+  for (const request of repairCandidates) {
     if (request.status === "ready" && request.project_id) {
       await completeGenerationRequest({
         id: request.id,
@@ -326,7 +326,7 @@ export async function listIncompleteGenerationRequests(userId: string) {
         releaseReason: "terminal_generation_billing_repair",
         metadata: { repairedTerminalBilling: true }
       });
-      return;
+      continue;
     }
     await failGenerationRequest({
       id: request.id,
@@ -338,7 +338,7 @@ export async function listIncompleteGenerationRequests(userId: string) {
       metadata: request.status === "failed" ? { repairedTerminalBilling: true } : undefined,
       staleOnly: request.status === "pending"
     });
-  }));
+  }
   const rows = await sql`
     select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
     from generation_requests

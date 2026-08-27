@@ -11,6 +11,7 @@ let expiredResult;
 let stoppedSandbox;
 let currentJob;
 let requeuedMessage;
+let updatedJob;
 const watchdogModule = { exports: {} };
 vm.runInNewContext(watchdogOutput, {
   module: watchdogModule,
@@ -24,7 +25,11 @@ vm.runInNewContext(watchdogOutput, {
     if (id.includes("render-jobs")) {
       return {
         expireRenderJobFromWatchdog: async () => expiredResult,
-        getRenderJob: async () => currentJob
+        getRenderJob: async () => currentJob,
+        updateRenderJob: async (input) => {
+          updatedJob = input;
+          return { id: input.jobId, status: input.status };
+        }
       };
     }
     if (id.includes("vercel-renderer")) return { stopRenderSandbox: async (name) => { stoppedSandbox = name; } };
@@ -46,6 +51,12 @@ assert.equal(requeuedMessage, undefined);
 expiredResult = { id: "job-1", status: "failed" };
 assert.equal(await watchdogModule.exports.processRenderJobWatchdog(message), true);
 assert.equal(stoppedSandbox, "sandbox:job-1");
+stoppedSandbox = undefined;
+assert.equal(await watchdogModule.exports.permanentlyFailRenderWatchdog(message), true);
+assert.equal(updatedJob.status, "failed");
+assert.equal(updatedJob.progress, 0);
+assert.match(updatedJob.error, /状态检查连续失败/);
+assert.equal(stoppedSandbox, "sandbox:job-1");
 
 const queue = fs.readFileSync(new URL("../lib/media-generation-queue.ts", import.meta.url), "utf8");
 const jobs = fs.readFileSync(new URL("../lib/render-jobs.ts", import.meta.url), "utf8");
@@ -58,6 +69,7 @@ assert.match(queue, /RENDER_JOB_WATCHDOG_INITIAL_DELAY_SECONDS/);
 assert.match(queue, /RENDER_JOB_WATCHDOG_RECHECK_DELAY_SECONDS/);
 assert.match(watchdogSource, /getRenderJob\(message\.jobId\)/);
 assert.match(watchdogSource, /watchdogPass: \(message\.watchdogPass \?\? 0\) \+ 1/);
+assert.match(watchdogSource, /export async function permanentlyFailRenderWatchdog/);
 assert.match(jobs, /export async function expireRenderJobFromWatchdog/);
 assert.match(jobs, /status in \('queued', 'running'\)/);
 assert.match(jobs, /RENDER_QUEUED_TIMEOUT/);
@@ -69,6 +81,8 @@ assert.match(route, /await enqueueRenderJobWatchdog\(\{/);
 assert.match(route, /await enqueueRenderJobWatchdog\([\s\S]*await startSandboxRender/);
 assert.match(route, /renderJobLooksStale\(renderJob\)/);
 assert.match(route, /expireRenderJobFromWatchdog\(\{/);
+assert.match(route, /for \(const renderJob of renderJobs\)/);
+assert.doesNotMatch(route, /Promise\.all\(renderJobs/);
 const watchdogIndex = route.indexOf("await enqueueRenderJobWatchdog({");
 const preflightIndex = route.indexOf("await Promise.all(readiness.inputs.map");
 assert.ok(watchdogIndex > 0 && watchdogIndex < preflightIndex, "Watchdog must be scheduled before storage preflight");
