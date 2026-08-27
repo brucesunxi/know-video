@@ -30,6 +30,11 @@ const scene = (overrides = {}) => ({
 });
 
 assert.deepEqual(Array.from(stockSearchTerms(scene())), ["kindergarten classroom children learning", "classroom students learning"]);
+assert.deepEqual(Array.from(stockSearchTerms(scene({
+  title: "包子铺宣传片",
+  voiceover: "现包现蒸，热气腾腾。",
+  visualPrompt: "师傅打开竹蒸笼。"
+}))), ["steamed bao buns bamboo basket kitchen cooking"]);
 assert.deepEqual(Array.from(stockSearchTerms(scene({ style: { stockSearchTerms: ["children painting classroom", "teacher reading story"] } }))), [
   "children painting classroom",
   "teacher reading story"
@@ -40,6 +45,9 @@ assert.equal(hasFreeStockVideoProvider(), true);
 assert.match(source, /api\.pexels\.com\/v1\/videos\/search/);
 assert.match(source, /costUsd: 0/);
 assert.match(source, /moneyprinterturbo-inspired-stock-cut/);
+assert.match(source, /recoveryFallback/);
+assert.match(source, /asset\.metadata\?\.source !== "free-stock-video"/);
+assert.match(source, /`\$\{provider\}:\$\{providerId\}`/);
 assert.match(source, /styleProtectedSceneNumbers/);
 assert.match(source, /styleAllowsFreeStockVideo\(scene\.style\)/);
 

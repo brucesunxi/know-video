@@ -15,7 +15,21 @@ vm.runInNewContext(output, {
   exports: module.exports,
   require: (specifier) => specifier === "sharp" ? sharp : {}
 });
-const { normalizeGeneratedImage } = module.exports;
+const {
+  GeneratedImageQualityError,
+  isDefinitiveGeneratedImageQualityRejection,
+  normalizeGeneratedImage
+} = module.exports;
+
+assert.equal(isDefinitiveGeneratedImageQualityRejection(
+  new GeneratedImageQualityError("style", "style_mismatch")
+), true);
+assert.equal(isDefinitiveGeneratedImageQualityRejection(
+  new GeneratedImageQualityError("vision unavailable", "semantic_check_failed")
+), false);
+assert.equal(isDefinitiveGeneratedImageQualityRejection(
+  new GeneratedImageQualityError("text inspection unavailable", "text_check_failed")
+), false);
 
 await assert.rejects(() => normalizeGeneratedImage(Buffer.from("not-an-image")), /文件过小/);
 

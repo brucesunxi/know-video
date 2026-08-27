@@ -10,7 +10,7 @@ assert.match(workspace, /function GenerationSpecStrip/);
 assert.match(workspace, /stage === "generating"\s*\? text\("新视频制作中", "Creating a new video"\)/);
 assert.match(workspace, /label: "正在创建新项目"/);
 assert.match(workspace, /label: "生成进度自动保存"/);
-assert.match(workspace, /projectStatusBadges\(project, source, stage\)/);
+assert.match(workspace, /projectStatusBadges\(project, source, stage, busyAction\)/);
 assert.match(workspace, /startedAt\?: number/);
 assert.match(workspace, /options: GenerationOptions/);
 assert.match(workspace, /setGenerationStartedAt\(pending\.startedAt\)/);

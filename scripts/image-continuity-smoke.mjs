@@ -38,7 +38,16 @@ vm.runInNewContext(output, {
     return {};
   }
 });
-const { enforceTextFreeImagePrompt, normalizeVisualRevisionInstruction, projectVisualIdentity, sceneImagePrompt, sceneRequiresPremiumImage, sceneVisualDiversityDirection, stableImageSeed } = module.exports;
+const {
+  enforceTextFreeImagePrompt,
+  normalizeVisualRevisionInstruction,
+  projectVisualIdentity,
+  sceneImagePrompt,
+  sceneIsFoodHospitality,
+  sceneRequiresPremiumImage,
+  sceneVisualDiversityDirection,
+  stableImageSeed
+} = module.exports;
 
 const scene = {
   id: "scene-1",
@@ -80,7 +89,7 @@ assert.match(projectVisualIdentity(project), /Locked palette: #07111d, #22c7b8, 
 
 const prompt = sceneImagePrompt(scene, project, ["current"]);
 assert.equal(prompt.startsWith("TEXT-FREE BACKGROUND PLATE — ABSOLUTE HIGHEST PRIORITY"), true);
-assert.match(prompt, /current version of this exact scene/);
+assert.match(prompt, /Input image 0 \(input_image_0\) is the current version of this exact scene/);
 assert.match(prompt, /Do not repeat the same layout/);
 assert.match(prompt, /SCENE DIFFERENTIATION/);
 assert.match(prompt, /Style is only the rendering language/);
@@ -104,8 +113,12 @@ const libraryTitlePrompt = sceneImagePrompt(scene, {
 assert.doesNotMatch(libraryTitlePrompt, /图书馆|把故事借回家/);
 
 const styleAnchorPrompt = sceneImagePrompt(scene, project, ["style-anchor"]);
-assert.match(styleAnchorPrompt, /STYLE-ONLY anchor from this project/);
+assert.match(styleAnchorPrompt, /Input image 0 \(input_image_0\) is the project's STYLE-ONLY anchor/);
 assert.match(styleAnchorPrompt, /Do not copy its subject, objects, layout, camera angle, pose, or background/);
+const guidedPrompt = sceneImagePrompt(scene, project, ["style-anchor", "content-guide"]);
+assert.match(guidedPrompt, /Input image 0 \(input_image_0\).*STYLE-ONLY anchor/);
+assert.match(guidedPrompt, /Input image 1 \(input_image_1\).*CONTENT-ONLY guide/);
+assert.doesNotMatch(guidedPrompt, /Input image 2/);
 
 const pixelScene = {
   ...scene,
@@ -206,6 +219,34 @@ assert.notEqual(
 );
 assert.match(sceneVisualDiversityDirection(librarySceneOne, 5), /wide establishing view from the entrance/);
 assert.match(sceneVisualDiversityDirection(librarySceneFive, 5), /closing outcome from inside a deep aisle/);
+
+const foodSceneTwo = {
+  ...scene,
+  sceneNumber: 2,
+  title: "包子铺的清晨",
+  voiceover: "师傅现包现蒸，让每一笼包子热气腾腾。",
+  visualPrompt: "包子铺厨房里，师傅包馅并打开竹蒸笼。"
+};
+const foodPrompt = sceneImagePrompt(foodSceneTwo, {
+  ...project,
+  title: "包子铺宣传片",
+  currentVersion: { ...project.currentVersion, scenes: [foodSceneTwo] }
+}, []);
+assert.match(foodPrompt, /FOOD \/ HOSPITALITY SEMANTIC FIDELITY/);
+assert.match(foodPrompt, /medium side-angle preparation action/);
+assert.match(foodPrompt, /Packaging, menus, storefronts, uniforms, and signs must be completely blank/i);
+assert.match(sceneVisualDiversityDirection(foodSceneTwo, 5), /hands kneading, filling, folding/);
+assert.equal(sceneIsFoodHospitality(foodSceneTwo), true);
+assert.equal(sceneIsFoodHospitality({
+  title: "客户服务平台",
+  voiceover: "帮助客服团队更快响应客户问题。",
+  visualPrompt: "客服人员在办公室协作处理客户请求。"
+}), false);
+assert.equal(sceneIsFoodHospitality({
+  title: "Software bundle",
+  voiceover: "Bundle customer-support tools into one workspace.",
+  visualPrompt: "A service team resolves customer requests in an office."
+}), false);
 
 const genericSceneTwo = { ...scene, sceneNumber: 2 };
 const genericSceneFour = { ...scene, sceneNumber: 4 };

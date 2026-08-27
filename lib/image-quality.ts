@@ -26,6 +26,10 @@ export class GeneratedImageQualityError extends Error {
   }
 }
 
+export function isDefinitiveGeneratedImageQualityRejection(error: GeneratedImageQualityError) {
+  return !["text_check_failed", "semantic_check_failed"].includes(error.code);
+}
+
 export async function normalizeGeneratedImage(body: Buffer) {
   if (body.length < 8_000) throw new GeneratedImageQualityError("生成图片文件过小。", "file_too_small");
 

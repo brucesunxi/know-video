@@ -85,4 +85,38 @@ for (const route of [
   assert.match(source, /recordUsageEvent/, route);
 }
 
+let providerCostTransactionCount = 0;
+let providerCostBatchSize = 0;
+const providerCostSql = () => Promise.resolve([]);
+providerCostSql.transaction = async (queries) => {
+  providerCostTransactionCount += 1;
+  providerCostBatchSize = queries.length;
+};
+const providerCosts = loadTypeScript("../lib/billing/provider-costs.ts", {
+  "@/lib/db": {
+    hasDatabaseUrl: () => true,
+    getSql: () => providerCostSql
+  }
+});
+const providerCostEvent = (idempotencyKey) => ({
+  projectId: "00000000-0000-4000-8000-000000000001",
+  versionId: "00000000-0000-4000-8000-000000000002",
+  sceneNumber: 1,
+  provider: "cloudflare",
+  model: "test-model",
+  operation: "image_quality_validation",
+  outcome: "succeeded",
+  costUsd: 0.001,
+  idempotencyKey
+});
+await providerCosts.recordProviderCostAttempts([
+  providerCostEvent("batch:1"),
+  providerCostEvent("batch:2")
+]);
+assert.equal(providerCostTransactionCount, 1);
+assert.equal(providerCostBatchSize, 2);
+await providerCosts.recordProviderCostAttempt(providerCostEvent("single:1"));
+assert.equal(providerCostTransactionCount, 2);
+assert.equal(providerCostBatchSize, 1);
+
 console.log("Billing phase-one smoke checks passed.");

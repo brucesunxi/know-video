@@ -22,7 +22,7 @@ assert.match(workspace, /导出会静音或缺旁白/);
 assert.match(workspace, /可基于画面生成/);
 assert.match(workspace, /生成本场景画面/);
 assert.match(workspace, /生成本场景配音/);
-assert.match(workspace, /生成动态镜头/);
+assert.match(workspace, /text\("生成动态", "Generate motion"\)/);
 assert.match(workspace, /onRegenerate=\{onRegenerate\}/);
 assert.match(workspace, /onRegenerateAudio=\{onRegenerateAudio\}/);
 assert.match(workspace, /onGenerateClip=\{onGenerateClip\}/);

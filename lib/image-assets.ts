@@ -16,6 +16,7 @@ import {
   imageSafeSemanticText,
   projectLockedVisualStyle,
   projectVisualIdentity,
+  sceneIsFoodHospitality,
   sceneRequiresPremiumImage,
   sceneImagePrompt,
   sceneVisualDiversityDirection,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/image-continuity";
 import {
   GeneratedImageQualityError,
+  isDefinitiveGeneratedImageQualityRejection,
   normalizeGeneratedImage,
   type GeneratedImageQualityErrorCode
 } from "@/lib/image-quality";
@@ -34,15 +36,16 @@ import {
 } from "@/lib/image-similarity";
 import { mediaAssetStatus } from "@/lib/generation-resume";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
+import { loadFreeStockImageGuide } from "@/lib/stock-image-guides";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 import { exactVisualStyleDirection } from "@/lib/visual-style-profiles";
 import { billingCatalogItem } from "@/lib/billing/catalog";
-import { recordProviderCostAttempt } from "@/lib/billing/provider-costs";
 import {
-  imageCompletionFallbackScore,
-  shouldUseImageCompletionFallback,
-  type ImageCompletionFallbackReason
-} from "@/lib/image-completion-policy";
+  recordProviderCostAttempts,
+  type ProviderCostAttemptInput
+} from "@/lib/billing/provider-costs";
+
+type ImageIndependentRecoveryReason = "semantic_mismatch" | "semantic_check_failed" | "style_mismatch";
 
 function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
   if (hasCloudflareAI()) return undefined;
@@ -112,16 +115,15 @@ function textSafePhysicalObjectDirection(scene: Scene) {
 }
 
 function correctionReferenceDirection(references: ImageReference[]) {
-  const styleAnchorCount = references.filter((reference) => reference.role === "style-anchor").length;
-  const hasCurrentReference = references.some((reference) => reference.role === "current");
-  return [
-    styleAnchorCount > 0
-      ? `The ${styleAnchorCount} attached project frame${styleAnchorCount === 1 ? " is a" : "s are"} STYLE-ONLY anchor${styleAnchorCount === 1 ? "" : "s"}. Match their shared rendering medium, line treatment, texture, palette behavior, and lighting, but copy none of their subjects, objects, camera angles, poses, foreground silhouettes, or layouts.`
-      : "",
-    hasCurrentReference
-      ? "The attached current-scene reference may preserve subject identity, but the corrected frame must still obey this scene's distinct camera blueprint."
-      : ""
-  ].filter(Boolean).join("\n");
+  return references.map((reference, index) => {
+    if (reference.role === "style-anchor") {
+      return `Input image ${index} (input_image_${index}) is STYLE-ONLY. Match its rendering medium, line treatment, texture, palette behavior, and lighting; copy none of its subject, pose, camera angle, foreground silhouette, or layout.`;
+    }
+    if (reference.role === "content-guide") {
+      return `Input image ${index} (input_image_${index}) is CONTENT-ONLY. Use its recognizable action, tools, food or product, and location logic, but replace its people, branding, written surfaces, exact layout, and rendering medium with the locked project style.`;
+    }
+    return `Input image ${index} (input_image_${index}) is the current scene. Preserve subject identity and environment continuity, but obey the new camera blueprint and do not copy a rejected composition.`;
+  }).join("\n");
 }
 
 function buildTextSafeCorrectionPrompt(scene: Scene, project: Project, references: ImageReference[]) {
@@ -144,6 +146,16 @@ function buildTextSafeCorrectionPrompt(scene: Scene, project: Project, reference
 
 function semanticFallbackComposition(scene: Scene) {
   const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`;
+  if (sceneIsFoodHospitality(scene)) {
+    const beats = [
+      "a wide real-shop or open-kitchen establishing view with staff beginning service and food clearly visible",
+      "a medium side-angle preparation action with hands kneading, filling, folding, cooking, or opening a steamer",
+      "a high-angle or macro process detail showing ingredients, steam, trays, bamboo baskets, plating, or finished food texture",
+      "an over-the-shoulder serving interaction where prepared food moves from staff to a customer",
+      "a welcoming outcome with fresh food, satisfied guests, and an active shop seen from a new camera position"
+    ];
+    return `Composition: ${beats[Math.min(beats.length - 1, Math.max(0, scene.sceneNumber - 1) % beats.length)]}. Keep menus, packages, signs, labels, and uniforms completely blank and unmarked.`;
+  }
   if (/(?:图书馆|书店|阅览|阅读|书架|借阅|还书|library|bookstore|reading|bookshelf|borrowing books|returning books)/iu.test(description)) {
     const beats = [
       "a deep entrance view introducing the library with an off-center reader and layered aisles",
@@ -209,6 +221,7 @@ type ImageReference = {
   contentType: "image/jpeg";
   role: ImageReferenceRole;
   r2Key: string;
+  metadata?: Record<string, unknown>;
 };
 
 type SceneComparisonImage = {
@@ -222,6 +235,7 @@ type GeneratedImageCandidate = {
   model: string;
   prompt: string;
   seed: number;
+  references: ImageReference[];
 };
 
 type TextFreeImageCandidate = GeneratedImageCandidate & {
@@ -377,7 +391,8 @@ async function loadImageReference(asset: SceneAsset | undefined, role: ImageRefe
     if (!bytes?.length) return undefined;
     const body = await sharp(bytes)
       .rotate()
-      .resize(512, 288, { fit: "cover" })
+      // FLUX.2 requires each multipart reference to be smaller than 512x512.
+      .resize(480, 270, { fit: "cover", position: "attention" })
       .jpeg({ quality: 82, chromaSubsampling: "4:2:0" })
       .toBuffer();
     return { body, contentType: "image/jpeg", role, r2Key: asset.r2Key } satisfies ImageReference;
@@ -502,7 +517,8 @@ async function generateSceneImage(
   visualInstruction?: string,
   comparisonImages: SceneComparisonImage[] = [],
   allowCompletionFallback = false,
-  maxQualityAttempts = MAX_IMAGE_QUALITY_ATTEMPTS
+  maxQualityAttempts = MAX_IMAGE_QUALITY_ATTEMPTS,
+  maxProviderAttempts = 2
 ): Promise<{ asset: SceneAsset } | undefined> {
   const effectiveQuality: ImageQuality = quality === "premium" || sceneRequiresPremiumImage(scene)
     ? "premium"
@@ -517,44 +533,54 @@ async function generateSceneImage(
   let qualityMetadata: Awaited<ReturnType<typeof normalizeGeneratedImage>>["metadata"] | undefined;
   let closestScene: { score: number; sceneNumber: number } | undefined;
   let duplicateWasDetected = false;
-  let completionFallback: TextFreeImageCandidate & {
-    score: number;
-    reason: ImageCompletionFallbackReason;
-  } | undefined;
   let lastQualityRejection: GeneratedImageQualityErrorCode | undefined;
   let lastQualityError: GeneratedImageQualityError | undefined;
   let textFreeVerified = false;
   let usedIndependentRecovery = false;
-  let completionFallbackReason: ImageCompletionFallbackReason | undefined;
+  let completionFallbackReason: ImageIndependentRecoveryReason | undefined;
   let providerRequestCount = 0;
   let validationRequestCount = 0;
-  const canonicalStyleAnchorKey = usableReferences.find((reference) => reference.role === "style-anchor")?.r2Key;
+  let providerCostUsd = 0;
+  let validationCostUsd = 0;
+  let acceptedReferences: ImageReference[] = [];
+  const lockedStyle = projectLockedVisualStyle(project) ?? scene.style;
+  const expectedStyle = exactVisualStyleDirection(lockedStyle) || `${lockedStyle.theme}; ${lockedStyle.mood}`;
   const costRunId = crypto.randomUUID();
-  const rememberCompletionFallback = (
-    candidate: Omit<NonNullable<typeof completionFallback>, "score" | "reason">,
-    reason: ImageCompletionFallbackReason
-  ) => {
-    if (!allowCompletionFallback) return;
-    const score = imageCompletionFallbackScore(reason);
-    if (shouldUseImageCompletionFallback(completionFallback, { ...candidate, score })) {
-      completionFallback = { ...candidate, score, reason };
-    }
-  };
+  const pendingCostEvents: ProviderCostAttemptInput[] = [];
   const trackedCloudflareImage = async (
     imagePrompt: string,
-    imageOptions: Parameters<typeof generateCloudflareImage>[2],
+    imageOptions: NonNullable<Parameters<typeof generateCloudflareImage>[2]>,
     requestLabel: string
   ) => {
-    providerRequestCount += 1;
     let outcome: "succeeded" | "failed" = "failed";
-    let actualModel = billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").model;
+    let callProviderAttempts = 1;
+    let actualModel = imageOptions.strategy === "recovery"
+      ? "@cf/black-forest-labs/flux-2-dev"
+      : billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").model;
+    let actualCostUsd = billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").estimatedProviderUsdPerUnit;
     try {
       const result = await generateCloudflareImage(imagePrompt, effectiveQuality, imageOptions);
       actualModel = result.model;
+      callProviderAttempts = result.providerAttempts;
+      actualCostUsd = result.estimatedCostUsd ?? actualCostUsd;
       outcome = "succeeded";
       return result;
+    } catch (error) {
+      const attemptError = error as {
+        providerAttempts?: number;
+        actualModel?: string;
+        estimatedCostUsd?: number;
+      };
+      callProviderAttempts = Math.max(1, Number(attemptError.providerAttempts) || callProviderAttempts);
+      actualModel = attemptError.actualModel || actualModel;
+      actualCostUsd = Number.isFinite(attemptError.estimatedCostUsd)
+        ? Number(attemptError.estimatedCostUsd)
+        : actualCostUsd * callProviderAttempts;
+      throw error;
     } finally {
-      await recordProviderCostAttempt({
+      providerRequestCount += callProviderAttempts;
+      providerCostUsd += actualCostUsd;
+      pendingCostEvents.push({
         projectId: project.id,
         versionId: project.currentVersion.id,
         sceneNumber: scene.sceneNumber,
@@ -562,9 +588,14 @@ async function generateSceneImage(
         model: actualModel,
         operation: "image_generation",
         outcome,
-        costUsd: billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").estimatedProviderUsdPerUnit,
+        costUsd: actualCostUsd,
         idempotencyKey: `${costRunId}:image:${requestLabel}`,
-        metadata: { effectiveQuality, variantKey }
+        metadata: {
+          effectiveQuality,
+          variantKey,
+          strategy: imageOptions.strategy ?? "default",
+          providerAttempts: callProviderAttempts
+        }
       });
     }
   };
@@ -577,7 +608,8 @@ async function generateSceneImage(
       return result;
     } finally {
       const vision = billingCatalogItem("vision_analysis");
-      await recordProviderCostAttempt({
+      validationCostUsd += vision.estimatedProviderUsdPerUnit;
+      pendingCostEvents.push({
         projectId: project.id,
         versionId: project.currentVersion.id,
         sceneNumber: scene.sceneNumber,
@@ -591,46 +623,104 @@ async function generateSceneImage(
       });
     }
   };
+  const independentlyVerifyCandidate = async (
+    candidate: TextFreeImageCandidate,
+    reason: ImageIndependentRecoveryReason,
+    qualityAttempt: number
+  ) => {
+    if (!allowCompletionFallback || !hasCloudflareAI()) return false;
+    try {
+      const [semanticCheck, styleCheck] = await Promise.all([
+        trackedValidation(
+          `${qualityAttempt}:focused:${reason}:semantic`,
+          () => evaluateCloudflareImageSemantics(candidate.body, essentialSceneSemantics(scene, project))
+        ),
+        trackedValidation(
+          `${qualityAttempt}:focused:${reason}:style`,
+          () => evaluateCloudflareImageStyle(candidate.body, expectedStyle)
+        )
+      ]);
+      const accepted = semanticCheck.matches && styleCheck.matches;
+      console.warn(
+        `[image-assets] Scene ${scene.sceneNumber} focused candidate review after ${reason}: semantic=${semanticCheck.matches}, style=${styleCheck.matches}, accepted=${accepted}.`
+      );
+      return accepted;
+    } catch (error) {
+      console.warn(`[image-assets] Scene ${scene.sceneNumber} focused candidate review after ${reason} was unavailable:`, error);
+      return false;
+    }
+  };
+  const acceptCandidate = (candidate: TextFreeImageCandidate, recoveryReason?: ImageIndependentRecoveryReason) => {
+    body = candidate.body;
+    qualityMetadata = candidate.metadata;
+    model = candidate.model;
+    prompt = candidate.prompt;
+    seed = candidate.seed;
+    acceptedReferences = candidate.references;
+    textFreeVerified = candidate.textFreeVerified;
+    if (recoveryReason) {
+      usedIndependentRecovery = true;
+      completionFallbackReason = recoveryReason;
+    }
+  };
+  try {
   for (let qualityAttempt = 0; qualityAttempt < qualityAttemptLimit; qualityAttempt += 1) {
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
+    const recoveryModelAttempt = allowCompletionFallback
+      && effectiveQuality === "premium"
+      && qualityAttempt === qualityAttemptLimit - 1;
     const recoveryDirection = qualityRecoveryDirection(lastQualityRejection, scene, project);
     // Image references strongly influence both style and layout. After a
     // duplicate rejection, temporarily remove style-only anchors so the next
     // seed can genuinely re-stage the shot. A later style rejection restores
     // the canonical anchor automatically.
-    const attemptReferences = lastQualityRejection === "composition_duplicate"
-      ? usableReferences.filter((reference) => reference.role === "current")
+    const attemptReferences = lastQualityRejection === "composition_duplicate" && !recoveryModelAttempt
+      ? usableReferences.filter((reference) => reference.role !== "style-anchor")
       : usableReferences;
     const duplicateCorrection = duplicateWasDetected
       ? "COMPOSITION REJECTION: a prior candidate copied another scene too closely. Re-stage this beat from a substantially different camera height, shot size, camera side, subject action, foreground silhouette, and background. Do not reuse the same tabletop, centered object group, aisle view, horizon, pose, or color-block placement."
       : "";
+    const attemptBasePrompt = qualityAttempt === 0
+      ? prompt
+      : buildSceneImagePrompt(scene, project, attemptReferences, visualInstruction);
     const attemptPrompt = qualityAttempt === qualityAttemptLimit - 1
       ? `${buildTextSafeCorrectionPrompt(scene, project, attemptReferences)}\n${recoveryDirection}\n${duplicateCorrection}`
-      : enforceTextFreeImagePrompt(qualityAttempt === 0
-        ? prompt
-        : `${prompt}\n${recoveryDirection}\n${duplicateCorrection}\nQuality correction attempt ${qualityAttempt + 1}: the prior candidate was rejected. Rebuild the composition as a fully resolved, information-rich frame in the exact locked rendering medium. The actual scene subject, action, environment, and narrative cause-and-effect must be immediately recognizable; a palette sheet, pattern, material sample, abstract shapes, or style demonstration is invalid. Remove every word, letter, number, logo, watermark, fake glyph, and writing-like mark; use blank surfaces and purely pictorial objects instead. Keep clear subject separation and meaningful foreground, midground, and background. Avoid empty gradients or featureless surfaces.`);
+      : qualityAttempt === 0
+        ? attemptBasePrompt
+        : `${attemptBasePrompt}\n\nQUALITY CORRECTION ATTEMPT ${qualityAttempt + 1}:\n${recoveryDirection}\n${duplicateCorrection}\nRebuild the frame with the required concrete subject, action, environment, and exact locked rendering medium. Preserve the zero-text delivery rule. Do not return a palette, pattern, material sample, style demonstration, or generic background.`;
     let generatedBody: Buffer;
     let generatedModel: string;
     let effectivePrompt = attemptPrompt;
+    let generationReferences = attemptReferences;
     try {
       if (hasCloudflareAI()) {
         let generated;
         try {
           generated = await trackedCloudflareImage(attemptPrompt, {
             seed,
-            references: attemptReferences
+            references: attemptReferences,
+            strategy: recoveryModelAttempt ? "recovery" : "default",
+            maxProviderAttempts
           }, `${qualityAttempt}:primary`);
         } catch (error) {
           if (!isSafetyFiltered(error)) throw error;
           effectivePrompt = buildBrandSafeImagePrompt(scene, project);
+          generationReferences = [];
           try {
-            generated = await trackedCloudflareImage(effectivePrompt, { seed }, `${qualityAttempt}:brand-safe`);
+            generated = await trackedCloudflareImage(effectivePrompt, {
+              seed,
+              strategy: recoveryModelAttempt ? "recovery" : "default",
+              maxProviderAttempts
+            }, `${qualityAttempt}:brand-safe`);
           } catch (fallbackError) {
             if (!isSafetyFiltered(fallbackError)) throw fallbackError;
             effectivePrompt = buildUltraSafeSceneImagePrompt(scene, project);
+            generationReferences = [];
             generated = await trackedCloudflareImage(effectivePrompt, {
               seed: (seed + 7_919) % 2_147_483_647 || 1,
-              guidance: 3
+              guidance: 3,
+              strategy: recoveryModelAttempt ? "recovery" : "default",
+              maxProviderAttempts
             }, `${qualityAttempt}:ultra-safe`);
           }
         }
@@ -651,7 +741,9 @@ async function generateSceneImage(
           } as never);
           openAiOutcome = "succeeded";
         } finally {
-          await recordProviderCostAttempt({
+          const estimatedOpenAiCostUsd = billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").estimatedProviderUsdPerUnit;
+          providerCostUsd += estimatedOpenAiCostUsd;
+          pendingCostEvents.push({
             projectId: project.id,
             versionId: project.currentVersion.id,
             sceneNumber: scene.sceneNumber,
@@ -659,14 +751,14 @@ async function generateSceneImage(
             model: imageModel(),
             operation: "image_generation",
             outcome: openAiOutcome,
-            costUsd: billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").estimatedProviderUsdPerUnit,
+            costUsd: estimatedOpenAiCostUsd,
             idempotencyKey: `${costRunId}:image:${qualityAttempt}:openai`,
             metadata: { effectiveQuality, variantKey, costSource: "catalog_estimate" }
           });
         }
         const image = result.data?.[0];
         const base64 = image ? (image as { b64_json?: string }).b64_json : undefined;
-        if (!base64) return undefined;
+        if (!base64) throw new Error("OpenAI image service returned no image");
         generatedBody = Buffer.from(base64, "base64");
         generatedModel = imageModel();
       }
@@ -676,7 +768,8 @@ async function generateSceneImage(
         metadata: normalized.metadata,
         model: generatedModel,
         prompt: effectivePrompt,
-        seed
+        seed,
+        references: generationReferences
       };
       // Text is an absolute delivery boundary. An unverified candidate is never
       // retained, even during the premium completion-rescue pass.
@@ -726,7 +819,10 @@ async function generateSceneImage(
           : await inspectGeneratedImage(normalized.body, scene, project);
       } catch (error) {
         if (!(error instanceof GeneratedImageQualityError) || error.code !== "semantic_check_failed") throw error;
-        rememberCompletionFallback(textFreeCandidate, "semantic_check_failed");
+        if (await independentlyVerifyCandidate(textFreeCandidate, "semantic_check_failed", qualityAttempt)) {
+          acceptCandidate(textFreeCandidate, "semantic_check_failed");
+          break;
+        }
         throw error;
       }
       if (inspection === "text_present") {
@@ -738,68 +834,24 @@ async function generateSceneImage(
         const qualityError = inspection === "semantic_mismatch"
           ? new GeneratedImageQualityError("生成画面与当前场景内容不匹配。", "semantic_mismatch")
           : new GeneratedImageQualityError("生成画面偏离项目锁定的视觉风格。", "style_mismatch");
-        rememberCompletionFallback(
-          textFreeCandidate,
-          inspection === "style_mismatch" ? "style_mismatch" : "semantic_mismatch"
-        );
-        throw qualityError;
-      }
-      body = normalized.body;
-      qualityMetadata = normalized.metadata;
-      model = generatedModel;
-      prompt = effectivePrompt;
-      textFreeVerified = true;
-      break;
-    } catch (error) {
-      if (!(error instanceof GeneratedImageQualityError)) {
-        if (allowCompletionFallback && completionFallback) {
-          console.warn(`[image-assets] Scene ${scene.sceneNumber} provider retry failed after a recoverable candidate was retained; independently verifying it.`, error);
+        const recoveryReason = inspection === "style_mismatch" ? "style_mismatch" : "semantic_mismatch";
+        if (await independentlyVerifyCandidate(textFreeCandidate, recoveryReason, qualityAttempt)) {
+          acceptCandidate(textFreeCandidate, recoveryReason);
           break;
         }
-        throw error;
+        throw qualityError;
       }
+      acceptCandidate(textFreeCandidate);
+      break;
+    } catch (error) {
+      if (!(error instanceof GeneratedImageQualityError)) throw error;
+      if (!isDefinitiveGeneratedImageQualityRejection(error)) throw error;
       lastQualityRejection = error.code;
       lastQualityError = error;
       if (qualityAttempt === qualityAttemptLimit - 1) {
-        if (allowCompletionFallback && completionFallback) break;
         throw error;
       }
       console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${error.code}); retrying:`, error.message);
-    }
-  }
-  if ((!body || !qualityMetadata) && allowCompletionFallback && completionFallback && hasCloudflareAI()) {
-    const retainedCandidate = completionFallback;
-    const lockedStyle = projectLockedVisualStyle(project) ?? scene.style;
-    const expectedStyle = exactVisualStyleDirection(lockedStyle) || `${lockedStyle.theme}; ${lockedStyle.mood}`;
-    try {
-      // A rejected candidate is never delivered merely because it is the best
-      // available one. It must pass two focused, independent checks after the
-      // text and cross-scene composition gates have already passed.
-      const [semanticCheck, styleCheck] = await Promise.all([
-        trackedValidation(
-          `recovery:${retainedCandidate.reason}:semantic`,
-          () => evaluateCloudflareImageSemantics(retainedCandidate.body, essentialSceneSemantics(scene, project))
-        ),
-        trackedValidation(
-          `recovery:${retainedCandidate.reason}:style`,
-          () => evaluateCloudflareImageStyle(retainedCandidate.body, expectedStyle)
-        )
-      ]);
-      if (semanticCheck.matches && styleCheck.matches) {
-        body = retainedCandidate.body;
-        qualityMetadata = retainedCandidate.metadata;
-        model = retainedCandidate.model;
-        prompt = retainedCandidate.prompt;
-        seed = retainedCandidate.seed;
-        usedIndependentRecovery = true;
-        textFreeVerified = retainedCandidate.textFreeVerified;
-        completionFallbackReason = retainedCandidate.reason;
-        console.warn(`[image-assets] Scene ${scene.sceneNumber} accepted a retained candidate only after independent semantic and style verification (${retainedCandidate.reason}).`);
-      } else {
-        console.warn(`[image-assets] Scene ${scene.sceneNumber} rejected the retained candidate after independent verification (semantic=${semanticCheck.matches}, style=${styleCheck.matches}).`);
-      }
-    } catch (error) {
-      console.warn(`[image-assets] Scene ${scene.sceneNumber} retained-candidate verification was unavailable:`, error);
     }
   }
   if (!body || !qualityMetadata) {
@@ -830,8 +882,10 @@ async function generateSceneImage(
       seed,
       ...qualityMetadata,
       textFreeVerified: true,
-      referenceKeys: usableReferences.map((reference) => reference.r2Key),
-      canonicalStyleAnchorKey,
+      referenceKeys: acceptedReferences.map((reference) => reference.r2Key),
+      canonicalStyleAnchorKey: acceptedReferences.find((reference) => reference.role === "style-anchor")?.r2Key,
+      contentGuideKey: acceptedReferences.find((reference) => reference.role === "content-guide")?.r2Key,
+      contentGuide: acceptedReferences.find((reference) => reference.role === "content-guide")?.metadata,
       closestSceneNumber: closestScene?.sceneNumber,
       closestSceneSimilarity: closestScene?.score,
       compositionReviewThreshold: POSSIBLE_SCENE_DUPLICATE_THRESHOLD,
@@ -842,14 +896,14 @@ async function generateSceneImage(
       completionFallbackReason,
       providerRequestCount,
       validationRequestCount,
-      estimatedActualCostUsd: Number((
-        providerRequestCount * billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").estimatedProviderUsdPerUnit
-        + validationRequestCount * billingCatalogItem("vision_analysis").estimatedProviderUsdPerUnit
-      ).toFixed(6)),
+      estimatedActualCostUsd: Number((providerCostUsd + validationCostUsd).toFixed(6)),
       sceneNumber: scene.sceneNumber
     }
   };
   return { asset };
+  } finally {
+    await recordProviderCostAttempts(pendingCostEvents);
+  }
 }
 
 export async function generateProjectSceneImages(
@@ -863,10 +917,22 @@ export async function generateProjectSceneImages(
     visualInstruction?: string;
     allowCompletionFallback?: boolean;
     maxQualityAttempts?: number;
+    useStockContentGuide?: boolean;
+    throwOnFailure?: boolean;
+    maxProviderAttempts?: number;
   } = {}
 ) {
   const credentialIssue = imageCredentialIssue();
   if (credentialIssue) {
+    if (options.throwOnFailure) {
+      const error = new Error(
+        credentialIssue === "missing_key"
+          ? "No image generation provider is configured."
+          : "The configured image generation credential is invalid."
+      ) as Error & { code?: string };
+      error.code = credentialIssue;
+      throw error;
+    }
     return {
       ...project,
       currentVersion: {
@@ -900,7 +966,46 @@ export async function generateProjectSceneImages(
         const currentReference = await loadSceneImageReference(scene, "current");
         const styleAnchorReferences = await loadProjectStyleAnchorReferences(workingProject, scene);
         const comparisonImages = await loadProjectComparisonImages(workingProject, scene);
-        const references = [currentReference, ...styleAnchorReferences].filter(Boolean) as ImageReference[];
+        let contentGuideReference: ImageReference | undefined;
+        if (options.useStockContentGuide) {
+          try {
+            const excludedContentGuideKeys = workingProject.currentVersion.scenes.flatMap((candidate) => (
+              candidate.sceneNumber === scene.sceneNumber
+                ? []
+                : candidate.assets.flatMap((asset) => {
+                    const key = asset.metadata?.contentGuideKey;
+                    return typeof key === "string" && key ? [key] : [];
+                  })
+            ));
+            const guide = await loadFreeStockImageGuide(scene, {
+              excludedReferenceKeys: excludedContentGuideKeys,
+              selectionKey: options.variantKey
+            });
+            if (guide) {
+              contentGuideReference = {
+                body: guide.body,
+                contentType: guide.contentType,
+                role: "content-guide",
+                r2Key: guide.referenceKey,
+                metadata: {
+                  provider: guide.provider,
+                  providerId: guide.providerId,
+                  sourcePageUrl: guide.pageUrl,
+                  searchQuery: guide.query
+                }
+              };
+            }
+          } catch (error) {
+            console.warn(`[image-assets] Scene ${scene.sceneNumber} free stock content guide was unavailable:`, error);
+          }
+        }
+        // Match the prompt and provider's zero-based reference contract: style
+        // authority first, then current/content guides.
+        const references = [
+          ...styleAnchorReferences,
+          currentReference,
+          contentGuideReference
+        ].filter(Boolean) as ImageReference[];
         const generated = await generateSceneImage(
           scene,
           workingProject,
@@ -910,7 +1015,8 @@ export async function generateProjectSceneImages(
           options.visualInstruction,
           comparisonImages,
           options.allowCompletionFallback,
-          options.maxQualityAttempts
+          options.maxQualityAttempts,
+          options.maxProviderAttempts
         );
         if (!generated) return;
 
@@ -932,6 +1038,7 @@ export async function generateProjectSceneImages(
         const qualityCode = error instanceof GeneratedImageQualityError ? error.code : undefined;
         console.error(`[image-assets] Scene ${scene.sceneNumber} image generation failed${qualityCode ? ` (${qualityCode})` : ""}:`, error);
         failures.push(classifyImageError(error));
+        if (options.throwOnFailure) throw error;
       }
   });
 

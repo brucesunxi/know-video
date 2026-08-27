@@ -20,6 +20,10 @@ import sharp from "sharp";
 
 const STANDARD_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const PREMIUM_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
+const RECOVERY_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-dev";
+const RECOVERY_IMAGE_STEPS = 8;
+const MAX_IMAGE_PROVIDER_ATTEMPTS = 2;
+const IMAGE_PROVIDER_TIMEOUT_MS = 75_000;
 const DEFAULT_TTS_MODEL = "@cf/myshell-ai/melotts";
 const DEFAULT_VISION_MODEL = "@cf/moondream/moondream3.1-9B-A2B";
 const DEFAULT_TRANSCRIPTION_MODEL = "@cf/openai/whisper-large-v3-turbo";
@@ -96,6 +100,54 @@ function retryDelay(attempt: number) {
   return 700 * (2 ** attempt) + Math.floor(Math.random() * 250);
 }
 
+export function estimateCloudflareImageRequestCost(input: {
+  model: string;
+  inputImageCount: number;
+  width?: number;
+  height?: number;
+  steps?: number;
+}) {
+  const width = input.width ?? 1280;
+  const height = input.height ?? 720;
+  const inputImageCount = Math.max(0, Math.min(4, Math.floor(input.inputImageCount)));
+  const outputTiles = Math.ceil(width / 512) * Math.ceil(height / 512);
+  if (input.model.includes("flux-2-dev")) {
+    const steps = Math.max(1, input.steps ?? RECOVERY_IMAGE_STEPS);
+    return outputTiles * steps * 0.00041 + inputImageCount * steps * 0.00021;
+  }
+  if (input.model.includes("flux-2-klein-9b")) {
+    const outputMegapixels = (width * height) / (1024 * 1024);
+    const outputCost = 0.015 + Math.max(0, outputMegapixels - 1) * 0.002;
+    const inputMegapixels = inputImageCount * (480 * 270) / (1024 * 1024);
+    return outputCost + inputMegapixels * 0.002;
+  }
+  if (input.model.includes("flux-2-klein-4b")) {
+    return outputTiles * 0.000287 + inputImageCount * 0.000059;
+  }
+  return undefined;
+}
+
+type CloudflareImageAttemptError = Error & {
+  providerAttempts?: number;
+  actualModel?: string;
+  estimatedCostUsd?: number;
+};
+
+function attachImageAttemptMetadata(
+  error: unknown,
+  input: { model: string; providerAttempts: number; estimatedUnitCostUsd?: number }
+) {
+  const candidate: CloudflareImageAttemptError = error instanceof Error
+    ? error as CloudflareImageAttemptError
+    : new Error(String(error));
+  candidate.providerAttempts = input.providerAttempts;
+  candidate.actualModel = input.model;
+  candidate.estimatedCostUsd = input.estimatedUnitCostUsd === undefined
+    ? undefined
+    : Number((input.estimatedUnitCostUsd * input.providerAttempts).toFixed(6));
+  return candidate;
+}
+
 async function runVisionVerdict<T>(options: {
   body: Buffer;
   question: string;
@@ -159,22 +211,40 @@ export async function generateCloudflareImage(
     seed?: number;
     guidance?: number;
     references?: Array<{ body: Buffer; contentType: string }>;
+    strategy?: "default" | "recovery";
+    maxProviderAttempts?: number;
   } = {}
 ) {
-  const model = quality === "premium"
-    ? getOptionalEnv("CLOUDFLARE_PREMIUM_IMAGE_MODEL") || PREMIUM_IMAGE_MODEL
-    : getOptionalEnv("CLOUDFLARE_IMAGE_MODEL") || STANDARD_IMAGE_MODEL;
+  const recovery = options.strategy === "recovery";
+  const model = recovery
+    ? getOptionalEnv("CLOUDFLARE_RECOVERY_IMAGE_MODEL") || RECOVERY_IMAGE_MODEL
+    : quality === "premium"
+      ? getOptionalEnv("CLOUDFLARE_PREMIUM_IMAGE_MODEL") || PREMIUM_IMAGE_MODEL
+      : getOptionalEnv("CLOUDFLARE_IMAGE_MODEL") || STANDARD_IMAGE_MODEL;
+  const steps = model.includes("flux-2-dev") ? RECOVERY_IMAGE_STEPS : 4;
+  const references = options.references?.slice(0, 4) ?? [];
+  const estimatedUnitCostUsd = estimateCloudflareImageRequestCost({
+    model,
+    inputImageCount: references.length,
+    steps
+  });
+  const providerAttemptLimit = Math.max(
+    1,
+    Math.min(MAX_IMAGE_PROVIDER_ATTEMPTS, Math.floor(options.maxProviderAttempts ?? MAX_IMAGE_PROVIDER_ATTEMPTS))
+  );
   let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < providerAttemptLimit; attempt += 1) {
     try {
       const form = new FormData();
       form.append("prompt", prompt);
       form.append("width", "1280");
       form.append("height", "720");
-      form.append("steps", "4");
+      // FLUX.2 Klein uses a fixed four-step process. FLUX.2 Dev exposes an
+      // adjustable step count and is reserved for the final recovery attempt.
+      if (model.includes("flux-2-dev")) form.append("steps", String(steps));
       if (options.seed !== undefined) form.append("seed", String(options.seed));
-      form.append("guidance", String(options.guidance ?? (quality === "premium" ? 4 : 3.5)));
-      options.references?.slice(0, 4).forEach((reference, index) => {
+      form.append("guidance", String(options.guidance ?? (recovery ? 5 : quality === "premium" ? 4 : 3.5)));
+      references.forEach((reference, index) => {
         const bytes = reference.body.buffer.slice(
           reference.body.byteOffset,
           reference.body.byteOffset + reference.body.byteLength
@@ -189,27 +259,45 @@ export async function generateCloudflareImage(
         method: "POST",
         headers: authorizationHeaders(),
         body: form,
-        signal: AbortSignal.timeout(110_000)
+        signal: AbortSignal.timeout(IMAGE_PROVIDER_TIMEOUT_MS)
       });
       if (!response.ok) {
         const error = await responseError(response);
-        if (!retryableStatus(response.status) || attempt === 2) throw error;
+        if (!retryableStatus(response.status) || attempt === providerAttemptLimit - 1) throw error;
         lastError = error;
       } else {
         const payload = await response.json() as CloudflareEnvelope<{ image?: string }> | { image?: string };
         const result = unwrapResult(payload);
         if (!result?.image) throw new Error("AI image service returned no image");
-        return { body: decodeBase64(result.image), model };
+        const providerAttempts = attempt + 1;
+        return {
+          body: decodeBase64(result.image),
+          model,
+          providerAttempts,
+          estimatedCostUsd: estimatedUnitCostUsd === undefined
+            ? undefined
+            : Number((estimatedUnitCostUsd * providerAttempts).toFixed(6))
+        };
       }
     } catch (error) {
       lastError = error;
-      if (attempt === 2 || ((error as { status?: number }).status && !retryableStatus((error as { status: number }).status))) {
-        throw error;
+      if (
+        attempt === providerAttemptLimit - 1
+        || ((error as { status?: number }).status && !retryableStatus((error as { status: number }).status))
+      ) {
+        throw attachImageAttemptMetadata(error, {
+          model,
+          providerAttempts: attempt + 1,
+          estimatedUnitCostUsd
+        });
       }
     }
     await wait(retryDelay(attempt));
   }
-  throw lastError instanceof Error ? lastError : new Error("AI image service failed after retries");
+  throw attachImageAttemptMetadata(
+    lastError instanceof Error ? lastError : new Error("AI image service failed after retries"),
+    { model, providerAttempts: providerAttemptLimit, estimatedUnitCostUsd }
+  );
 }
 
 export async function analyzeCloudflareImage(body: Buffer) {

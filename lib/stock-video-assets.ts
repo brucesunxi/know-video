@@ -21,6 +21,7 @@ const STOP_WORDS = new Set([
 ]);
 
 const CHINESE_STOCK_TERMS: Array<[RegExp, string]> = [
+  [/包子|包子铺|馒头|面点|饺子|蒸笼/u, "steamed bao buns bamboo basket kitchen cooking"],
   [/幼儿园|学前|儿童|孩子/u, "kindergarten classroom children learning"],
   [/学校|课堂|教育|学习/u, "classroom students learning"],
   [/咖啡|烘焙|咖啡店/u, "coffee shop barista roasting coffee"],
@@ -150,7 +151,12 @@ async function downloadCandidate(candidate: StockVideoCandidate) {
   return { body, contentType };
 }
 
-async function importSceneStockVideo(project: Project, scene: Scene, used: Set<string>) {
+async function importSceneStockVideo(
+  project: Project,
+  scene: Scene,
+  used: Set<string>,
+  recoveryFallback = false
+) {
   const candidate = await findCandidate(scene, used);
   if (!candidate) throw new Error("No relevant free stock video was found");
   const downloaded = await downloadCandidate(candidate);
@@ -179,16 +185,28 @@ async function importSceneStockVideo(project: Project, scene: Scene, used: Set<s
       sourceDurationSeconds: candidate.durationSeconds,
       sourceStartSeconds,
       costUsd: 0,
-      editingMethod: "moneyprinterturbo-inspired-stock-cut"
+      editingMethod: "moneyprinterturbo-inspired-stock-cut",
+      recoveryFallback
     }
   } satisfies SceneAsset;
 }
 
-export async function generateProjectStockClips(project: Project, sceneNumbers: number[]) {
+export async function generateProjectStockClips(
+  project: Project,
+  sceneNumbers: number[],
+  options: { recoveryFallback?: boolean } = {}
+) {
   if (!hasFreeStockVideoProvider()) throw new Error("Free stock video is not configured");
   const targets = new Set(sceneNumbers);
   const scenes = [...project.currentVersion.scenes];
-  const used = new Set<string>();
+  const used = new Set<string>(project.currentVersion.scenes.flatMap((scene) => (
+    scene.assets.flatMap((asset) => {
+      if (asset.metadata?.source !== "free-stock-video") return [];
+      const provider = String(asset.metadata?.provider ?? "");
+      const providerId = String(asset.metadata?.providerId ?? "");
+      return provider && providerId ? [`${provider}:${providerId}`] : [];
+    })
+  )));
   const failures: Array<{ sceneNumber: number; error: unknown }> = [];
   const styleProtectedSceneNumbers: number[] = [];
   for (const [index, scene] of scenes.entries()) {
@@ -211,7 +229,7 @@ export async function generateProjectStockClips(project: Project, sceneNumbers: 
       continue;
     }
     try {
-      const clip = await importSceneStockVideo(project, scene, used);
+      const clip = await importSceneStockVideo(project, scene, used, options.recoveryFallback === true);
       scenes[index] = {
         ...scene,
         style: {

@@ -61,6 +61,9 @@ vm.runInNewContext(output, {
         };
       }
     };
+    if (name === "@/lib/generation-resume") return {
+      isDeliverableVisualAsset: (asset) => ["image", "clip"].includes(asset.type) && Boolean(asset.url)
+    };
     throw new Error(`Unexpected import: ${name}`);
   }
 });

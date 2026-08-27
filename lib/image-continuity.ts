@@ -2,7 +2,15 @@ import { sceneAttachmentSummary } from "@/lib/attachment-context";
 import type { Project, Scene } from "@/lib/types";
 import { exactVisualStyleDirection } from "@/lib/visual-style-profiles";
 
-export type ImageReferenceRole = "current" | "style-anchor";
+export type ImageReferenceRole = "current" | "style-anchor" | "content-guide";
+
+const FOOD_SCENE_PATTERN = /(?:包子|包子铺|馒头|面点|饺子|蒸笼|餐饮|餐厅|餐馆|饭店|美食|厨房|厨师|烘焙|食物|菜品|上菜|\b(?:bao|steamed buns?|buns?|dumplings?|restaurants?|diners?|kitchens?|chefs?|bakeries|food|dishes|meals?|cooking)\b)/iu;
+
+export function sceneIsFoodHospitality(
+  scene: Pick<Scene, "title" | "voiceover" | "visualPrompt">
+) {
+  return FOOD_SCENE_PATTERN.test(`${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`);
+}
 
 export const TEXT_FREE_IMAGE_DIRECTION = [
   "TEXT-FREE BACKGROUND PLATE — ABSOLUTE HIGHEST PRIORITY AND DELIVERY REQUIREMENT:",
@@ -108,6 +116,14 @@ function semanticSceneDirection(scene: Scene) {
   const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`.toLowerCase();
   const courseDirection = educationGameCourseDirection(description, scene);
   if (courseDirection) return courseDirection;
+  if (sceneIsFoodHospitality(scene)) {
+    return [
+      "FOOD / HOSPITALITY SEMANTIC FIDELITY:",
+      "Keep the promoted food business immediately recognizable through real ingredients, preparation, steam, cooking tools, serving actions, customers, or the dining environment required by this scene.",
+      "Show one concrete food-service action with appetizing material detail and visible cause-and-effect. Do not substitute a generic portrait, office, decorative still life, abstract product pedestal, or unrelated restaurant scene.",
+      "Packaging, menus, storefronts, uniforms, and signs must be completely blank and unmarked; communicate the business through food, tools, people, and environment rather than typography."
+    ].join("\n");
+  }
   if (/(?:图书馆|书店|阅览|阅读|书架|借阅|还书|library|bookstore|reading|bookshelf|borrowing books|returning books)/iu.test(description)) {
     return [
       "LIBRARY / READING SEMANTIC FIDELITY:",
@@ -142,6 +158,7 @@ export function sceneVisualDiversityDirection(scene: Pick<Scene, "sceneNumber" |
   const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`.toLowerCase();
   const courseLike = /(?:minecraft|我的世界|方块|沙盒|游戏|玩家|玩法|关卡|课程|课堂|老师|教师|学生|学习|教学|training|course|classroom|teacher|student|learning|game|gameplay|sandbox|block)/iu.test(description);
   const libraryLike = /(?:图书馆|书店|阅览|阅读|书架|借阅|还书|library|bookstore|reading|bookshelf|borrowing books|returning books)/iu.test(description);
+  const foodLike = sceneIsFoodHospitality(scene);
   const sceneNumber = Math.max(1, Number(scene.sceneNumber) || 1);
   if (libraryLike) {
     const beats = [
@@ -170,6 +187,21 @@ export function sceneVisualDiversityDirection(scene: Pick<Scene, "sceneNumber" |
       "SCENE DIFFERENTIATION:",
       `This is scene ${sceneNumber} of ${sceneCount}. Primary visual beat: ${beats[Math.min(beats.length - 1, sceneNumber - 1)]}.`,
       "Do not reuse the same exterior voxel landscape or the same classroom table composition from other scenes."
+    ].join("\n");
+  }
+  if (foodLike) {
+    const beats = [
+      "wide establishing view of the real shop, dining room, counter, or open kitchen with staff beginning service and the food business unmistakable without signage",
+      "medium side-angle preparation action: hands kneading, filling, folding, arranging, cooking, or opening a steamer, with ingredients and tools creating a new foreground",
+      "high-angle or macro food-process detail: steam, texture, trays, bamboo baskets, plating, or a finished dish, with the worker secondary or partly out of frame",
+      "over-the-shoulder or lateral serving interaction at the counter or table, showing food moving from staff to a customer from a new camera side",
+      "wide or medium-wide outcome shot of fresh food, satisfied guests, and an active welcoming shop from a new location and camera height"
+    ];
+    return [
+      "SCENE DIFFERENTIATION:",
+      `This is scene ${sceneNumber} of ${sceneCount}. Primary food-film blueprint: ${beats[(sceneNumber - 1) % beats.length]}.`,
+      "Do not repeat another scene's seated pose, tabletop arrangement, steamer placement, counter angle, kitchen background, camera side, or shot scale.",
+      "Keep all menus, packages, storefront panels, labels, and uniforms completely blank and unmarked."
     ].join("\n");
   }
   const beats = [
@@ -201,10 +233,18 @@ export function sceneImagePrompt(
     .replaceAll("&", "＆")
     .replaceAll("<", "＜")
     .replaceAll(">", "＞");
-  const referenceDirection = referenceRoles.map((role, index) => role === "current"
-    ? `Reference image ${index + 1} is the current version of this exact scene only. Preserve this scene's central subject identity, composition logic, environment, and visual language while improving fidelity and following the revised direction.`
-    : `Reference image ${index + 1} is a STYLE-ONLY anchor from this project. Match only its rendering medium, paper or brush texture, line treatment, color behavior, lighting language, and character-design grammar. Do not copy its subject, objects, layout, camera angle, pose, or background; build the distinct scene content required below.`
-  ).join("\n");
+  // Cloudflare names multipart references input_image_0 through input_image_3.
+  // Use the same zero-based index in the prompt so content and style roles do
+  // not silently point at the wrong image.
+  const referenceDirection = referenceRoles.map((role, index) => {
+    if (role === "current") {
+      return `Input image ${index} (input_image_${index}) is the current version of this exact scene. Preserve only its central subject identity and environment continuity while following the new camera blueprint and requested revision.`;
+    }
+    if (role === "content-guide") {
+      return `Input image ${index} (input_image_${index}) is a CONTENT-ONLY guide. Preserve its recognizable subject, physical action, tools, and location logic, but replace its people, branding, written surfaces, exact layout, and rendering medium. Render the result in the locked project style.`;
+    }
+    return `Input image ${index} (input_image_${index}) is the project's STYLE-ONLY anchor. Match only its rendering medium, paper or brush texture, line treatment, color behavior, lighting language, and character-design grammar. Do not copy its subject, objects, layout, camera angle, pose, or background.`;
+  }).join("\n");
   const lockedStyle = projectLockedVisualStyle(project) ?? scene.style;
   const exactStyle = exactVisualStyleDirection(lockedStyle);
   const isCinematic = !lockedStyle.visualStyleId || lockedStyle.visualStyleId === "cinematic-realism";

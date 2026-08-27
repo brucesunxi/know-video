@@ -5,6 +5,7 @@ import {
   processProjectMediaScene
 } from "@/lib/background-media-generation";
 import type { ProjectMediaMessage } from "@/lib/media-generation-queue";
+import { MAX_PROJECT_MEDIA_RECOVERY_PASSES } from "@/lib/background-recovery-policy";
 
 export const maxDuration = 300;
 
@@ -14,7 +15,10 @@ export const POST = handleCallback<ProjectMediaMessage>(async (message, metadata
   } catch (error) {
     console.error(`[background-media] Scene ${message.sceneNumber} attempt ${metadata.deliveryCount} failed:`, error);
     const qualityRetriesExhausted = error instanceof ProjectMediaQualityExhaustedError
-      && metadata.deliveryCount >= 2;
+      && (
+        metadata.deliveryCount >= 2
+        || (message.recoveryPass ?? 0) >= MAX_PROJECT_MEDIA_RECOVERY_PASSES
+      );
     const transientRetriesExhausted = metadata.deliveryCount >= 4;
     if (qualityRetriesExhausted || transientRetriesExhausted) {
       await permanentlyFailProjectMedia(message, error);
