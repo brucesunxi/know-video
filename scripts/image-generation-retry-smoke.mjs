@@ -21,7 +21,7 @@ assert.match(imageAssets, /inspectCloudflareGeneratedImage/);
 assert.match(imageAssets, /generatedImageContainsAnyText/);
 assert.match(imageAssets, /buildTextInspectionSheet/);
 assert.match(imageAssets, /const \[full, upper, center, lower\]/);
-assert.match(imageAssets, /detectCloudflareImageText\(inspectionBody\)/);
+assert.match(imageAssets, /detectCloudflareImageText\(inspectionBody, visionDeadlineOptions\(deadlineMs\)\)/);
 const textInspection = imageAssets.slice(
   imageAssets.indexOf("async function generatedImageContainsAnyText"),
   imageAssets.indexOf("async function loadImageReference")
@@ -31,8 +31,8 @@ assert.ok(
   "Cloudflare text inspection must run before the optional OpenAI fallback"
 );
 assert.ok(
-  imageAssets.indexOf("await generatedImageContainsAnyText(normalized.body)")
-    < imageAssets.indexOf("await inspectGeneratedImage(normalized.body, scene, project)"),
+  imageAssets.indexOf("generatedImageContainsAnyText(normalized.body, deadlineMs)")
+    < imageAssets.indexOf("inspectGeneratedImage(normalized.body, scene, project, deadlineMs)"),
   "Text rejection must remain a hard gate before recoverable semantic/style inspection"
 );
 assert.match(imageAssets, /misspelled, cropped, blurry, nonsensical/);
@@ -85,6 +85,10 @@ assert.match(imageAssets, /const attemptBasePrompt = qualityAttempt === 0[\s\S]*
 assert.match(imageAssets, /qualityAttempt === 0\s*\? attemptBasePrompt/);
 assert.match(imageAssets, /strategy: recoveryModelAttempt \? "recovery" : "default"/);
 assert.match(imageAssets, /maxProviderAttempts/);
+assert.match(imageAssets, /deadlineMs\?: number/);
+assert.match(imageAssets, /operation: "Image generation"/);
+assert.match(imageAssets, /operation: "Image quality validation"/);
+assert.match(imageAssets, /error instanceof OperationDeadlineExceededError/);
 assert.match(imageAssets, /useStockContentGuide/);
 assert.match(imageAssets, /loadFreeStockImageGuide/);
 assert.match(imageAssets, /const pendingCostEvents: ProviderCostAttemptInput\[\] = \[\]/);

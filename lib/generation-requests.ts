@@ -367,13 +367,15 @@ export async function attachGenerationRequestProject(input: {
 }
 
 export async function touchGenerationRequest(id: string) {
-  if (!hasDatabaseUrl()) return;
+  if (!hasDatabaseUrl()) return true;
   await ensureGenerationRequestsSchema();
-  await getSql()`
+  const rows = await getSql()`
     update generation_requests
     set updated_at = now()
     where id = ${id} and status = 'pending'
-  `;
+    returning id
+  ` as Array<{ id: string }>;
+  return Boolean(rows[0]);
 }
 
 export async function failGenerationRequest(id: string, error = "视频脚本和分镜生成没有完成，请重试。") {

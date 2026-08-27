@@ -26,6 +26,7 @@ export async function uploadToR2(input: {
   key: string;
   body: Buffer | Uint8Array | string;
   contentType: string;
+  timeoutMs?: number;
 }) {
   const bucket = getRequiredEnv("R2_BUCKET");
   const client = createR2Client();
@@ -36,7 +37,10 @@ export async function uploadToR2(input: {
       Key: input.key,
       Body: input.body,
       ContentType: input.contentType
-    })
+    }),
+    input.timeoutMs
+      ? { abortSignal: AbortSignal.timeout(Math.max(1, Math.floor(input.timeoutMs))) }
+      : undefined
   );
 
   const publicBaseUrl = getOptionalEnv("R2_PUBLIC_BASE_URL");

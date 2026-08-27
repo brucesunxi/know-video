@@ -2,6 +2,7 @@ import { getOptionalEnv } from "@/lib/env";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
 import { styleAllowsFreeStockVideo } from "@/lib/style-motion-policy";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
+import { boundedOperationTimeout } from "@/lib/operation-deadline";
 
 type StockVideoCandidate = {
   id: string;
@@ -67,12 +68,18 @@ export function hasFreeStockVideoProvider() {
   return Boolean(getOptionalEnv("PEXELS_API_KEY") || getOptionalEnv("PIXABAY_API_KEY"));
 }
 
-async function searchPexels(query: string): Promise<StockVideoCandidate[]> {
+async function searchPexels(query: string, deadlineMs?: number): Promise<StockVideoCandidate[]> {
   const apiKey = getOptionalEnv("PEXELS_API_KEY");
   if (!apiKey) return [];
   const response = await fetch(`https://api.pexels.com/v1/videos/search?orientation=landscape&per_page=12&query=${encodeURIComponent(query)}`, {
     headers: { Authorization: apiKey },
-    signal: AbortSignal.timeout(18_000)
+    signal: AbortSignal.timeout(boundedOperationTimeout({
+      operation: "Pexels video search",
+      deadlineMs,
+      maxTimeoutMs: 18_000,
+      reserveMs: 70_000,
+      minimumTimeoutMs: 2_000
+    }))
   });
   if (!response.ok) throw new Error(`Pexels search failed with ${response.status}`);
   const body = await response.json() as {
@@ -97,11 +104,17 @@ async function searchPexels(query: string): Promise<StockVideoCandidate[]> {
   });
 }
 
-async function searchPixabay(query: string): Promise<StockVideoCandidate[]> {
+async function searchPixabay(query: string, deadlineMs?: number): Promise<StockVideoCandidate[]> {
   const apiKey = getOptionalEnv("PIXABAY_API_KEY");
   if (!apiKey) return [];
   const response = await fetch(`https://pixabay.com/api/videos/?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(query)}&safesearch=true&per_page=20`, {
-    signal: AbortSignal.timeout(18_000)
+    signal: AbortSignal.timeout(boundedOperationTimeout({
+      operation: "Pixabay video search",
+      deadlineMs,
+      maxTimeoutMs: 18_000,
+      reserveMs: 70_000,
+      minimumTimeoutMs: 2_000
+    }))
   });
   if (!response.ok) throw new Error(`Pixabay search failed with ${response.status}`);
   const body = await response.json() as {
@@ -126,10 +139,13 @@ async function searchPixabay(query: string): Promise<StockVideoCandidate[]> {
   });
 }
 
-async function findCandidate(scene: Scene, used: Set<string>) {
+async function findCandidate(scene: Scene, used: Set<string>, deadlineMs?: number) {
   const terms = stockSearchTerms(scene);
   for (const query of terms) {
-    const settled = await Promise.allSettled([searchPexels(query), searchPixabay(query)]);
+    const settled = await Promise.allSettled([
+      searchPexels(query, deadlineMs),
+      searchPixabay(query, deadlineMs)
+    ]);
     const candidates = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
     const usable = candidates.filter((candidate) => !used.has(`${candidate.provider}:${candidate.id}`) && candidate.durationSeconds >= 3);
     if (usable.length === 0) continue;
@@ -139,8 +155,16 @@ async function findCandidate(scene: Scene, used: Set<string>) {
   return undefined;
 }
 
-async function downloadCandidate(candidate: StockVideoCandidate) {
-  const response = await fetch(candidate.downloadUrl, { signal: AbortSignal.timeout(90_000) });
+async function downloadCandidate(candidate: StockVideoCandidate, deadlineMs?: number) {
+  const response = await fetch(candidate.downloadUrl, {
+    signal: AbortSignal.timeout(boundedOperationTimeout({
+      operation: `${candidate.provider} video download`,
+      deadlineMs,
+      maxTimeoutMs: 60_000,
+      reserveMs: 45_000,
+      minimumTimeoutMs: 3_000
+    }))
+  });
   if (!response.ok) throw new Error(`${candidate.provider} video download failed with ${response.status}`);
   const declaredBytes = Number(response.headers.get("content-length") ?? 0);
   if (declaredBytes > 80_000_000) throw new Error("Free stock video exceeds the 80 MB import limit");
@@ -155,13 +179,25 @@ async function importSceneStockVideo(
   project: Project,
   scene: Scene,
   used: Set<string>,
-  recoveryFallback = false
+  recoveryFallback = false,
+  deadlineMs?: number
 ) {
-  const candidate = await findCandidate(scene, used);
+  const candidate = await findCandidate(scene, used, deadlineMs);
   if (!candidate) throw new Error("No relevant free stock video was found");
-  const downloaded = await downloadCandidate(candidate);
+  const downloaded = await downloadCandidate(candidate, deadlineMs);
   const key = `stock/${project.id}/${project.currentVersion.id}/scene-${scene.sceneNumber}-${candidate.provider}-${candidate.id}-${crypto.randomUUID()}.mp4`;
-  const uploaded = await uploadToR2({ key, body: downloaded.body, contentType: downloaded.contentType });
+  const uploaded = await uploadToR2({
+    key,
+    body: downloaded.body,
+    contentType: downloaded.contentType,
+    timeoutMs: boundedOperationTimeout({
+      operation: "Free stock video upload",
+      deadlineMs,
+      maxTimeoutMs: 35_000,
+      reserveMs: 10_000,
+      minimumTimeoutMs: 3_000
+    })
+  });
   used.add(`${candidate.provider}:${candidate.id}`);
   const availableOffset = Math.max(0, candidate.durationSeconds - scene.durationSeconds);
   const sourceStartSeconds = availableOffset > 0
@@ -194,7 +230,7 @@ async function importSceneStockVideo(
 export async function generateProjectStockClips(
   project: Project,
   sceneNumbers: number[],
-  options: { recoveryFallback?: boolean } = {}
+  options: { recoveryFallback?: boolean; deadlineMs?: number } = {}
 ) {
   if (!hasFreeStockVideoProvider()) throw new Error("Free stock video is not configured");
   const targets = new Set(sceneNumbers);
@@ -229,7 +265,13 @@ export async function generateProjectStockClips(
       continue;
     }
     try {
-      const clip = await importSceneStockVideo(project, scene, used, options.recoveryFallback === true);
+      const clip = await importSceneStockVideo(
+        project,
+        scene,
+        used,
+        options.recoveryFallback === true,
+        options.deadlineMs
+      );
       scenes[index] = {
         ...scene,
         style: {

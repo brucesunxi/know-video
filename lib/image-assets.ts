@@ -44,6 +44,10 @@ import {
   recordProviderCostAttempts,
   type ProviderCostAttemptInput
 } from "@/lib/billing/provider-costs";
+import {
+  boundedOperationTimeout,
+  OperationDeadlineExceededError
+} from "@/lib/operation-deadline";
 
 type ImageIndependentRecoveryReason = "semantic_mismatch" | "semantic_check_failed" | "style_mismatch";
 
@@ -266,11 +270,31 @@ function essentialSceneSemantics(scene: Scene, project: Project) {
   ].join("\n").slice(0, 2400);
 }
 
-async function inspectGeneratedImage(body: Buffer, scene: Scene, project: Project) {
+function visionDeadlineOptions(deadlineMs?: number) {
+  return deadlineMs ? { deadlineMs, maxAttempts: 1 } : {};
+}
+
+function openAIRequestTimeout(deadlineMs: number | undefined, operation: string, maxTimeoutMs: number) {
+  return boundedOperationTimeout({
+    operation,
+    deadlineMs,
+    maxTimeoutMs,
+    reserveMs: 12_000,
+    minimumTimeoutMs: 5_000
+  });
+}
+
+async function inspectGeneratedImage(body: Buffer, scene: Scene, project: Project, deadlineMs?: number) {
   const expected = expectedSceneSemantics(scene, project);
   try {
-    if (hasCloudflareAI()) return (await inspectCloudflareGeneratedImage(body, expected)).verdict;
-    const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
+    if (hasCloudflareAI()) {
+      return (await inspectCloudflareGeneratedImage(body, expected, visionDeadlineOptions(deadlineMs))).verdict;
+    }
+    const client = new OpenAI({
+      apiKey: getOptionalEnv("OPENAI_API_KEY"),
+      timeout: openAIRequestTimeout(deadlineMs, "OpenAI image inspection", 40_000),
+      maxRetries: 0
+    });
     const response = await client.chat.completions.create({
       model: getOptionalEnv("OPENAI_VISION_MODEL") || "gpt-4o-mini",
       temperature: 0,
@@ -306,16 +330,22 @@ async function inspectGeneratedImage(body: Buffer, scene: Scene, project: Projec
   }
 }
 
-async function generatedImageContainsAnyText(body: Buffer) {
+async function generatedImageContainsAnyText(body: Buffer, deadlineMs?: number) {
   try {
     const inspectionBody = await buildTextInspectionSheet(body);
     // Keep image generation and validation on Cloudflare when it is configured.
     // Falling through to OpenAI here can reject otherwise valid Cloudflare output
     // because of an unrelated OpenAI quota or billing issue.
-    if (hasCloudflareAI()) return (await detectCloudflareImageText(inspectionBody)).hasText;
+    if (hasCloudflareAI()) {
+      return (await detectCloudflareImageText(inspectionBody, visionDeadlineOptions(deadlineMs))).hasText;
+    }
     const apiKey = getOptionalEnv("OPENAI_API_KEY");
     if (apiKey?.startsWith("sk-")) {
-      const client = new OpenAI({ apiKey });
+      const client = new OpenAI({
+        apiKey,
+        timeout: openAIRequestTimeout(deadlineMs, "OpenAI text inspection", 40_000),
+        maxRetries: 0
+      });
       const response = await client.chat.completions.create({
         model: getOptionalEnv("OPENAI_VISION_MODEL") || "gpt-4o-mini",
         temperature: 0,
@@ -518,7 +548,8 @@ async function generateSceneImage(
   comparisonImages: SceneComparisonImage[] = [],
   allowCompletionFallback = false,
   maxQualityAttempts = MAX_IMAGE_QUALITY_ATTEMPTS,
-  maxProviderAttempts = 2
+  maxProviderAttempts = 2,
+  deadlineMs?: number
 ): Promise<{ asset: SceneAsset } | undefined> {
   const effectiveQuality: ImageQuality = quality === "premium" || sceneRequiresPremiumImage(scene)
     ? "premium"
@@ -552,14 +583,24 @@ async function generateSceneImage(
     imageOptions: NonNullable<Parameters<typeof generateCloudflareImage>[2]>,
     requestLabel: string
   ) => {
+    boundedOperationTimeout({
+      operation: "Image generation",
+      deadlineMs,
+      maxTimeoutMs: 3_000,
+      reserveMs: 12_000,
+      minimumTimeoutMs: 3_000
+    });
     let outcome: "succeeded" | "failed" = "failed";
-    let callProviderAttempts = 1;
+    let callProviderAttempts = 0;
     let actualModel = imageOptions.strategy === "recovery"
       ? "@cf/black-forest-labs/flux-2-dev"
       : billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").model;
     let actualCostUsd = billingCatalogItem(effectiveQuality === "premium" ? "image_premium" : "image_standard").estimatedProviderUsdPerUnit;
     try {
-      const result = await generateCloudflareImage(imagePrompt, effectiveQuality, imageOptions);
+      const result = await generateCloudflareImage(imagePrompt, effectiveQuality, {
+        ...imageOptions,
+        deadlineMs
+      });
       actualModel = result.model;
       callProviderAttempts = result.providerAttempts;
       actualCostUsd = result.estimatedCostUsd ?? actualCostUsd;
@@ -571,7 +612,9 @@ async function generateSceneImage(
         actualModel?: string;
         estimatedCostUsd?: number;
       };
-      callProviderAttempts = Math.max(1, Number(attemptError.providerAttempts) || callProviderAttempts);
+      callProviderAttempts = Number.isFinite(attemptError.providerAttempts)
+        ? Math.max(0, Number(attemptError.providerAttempts))
+        : 1;
       actualModel = attemptError.actualModel || actualModel;
       actualCostUsd = Number.isFinite(attemptError.estimatedCostUsd)
         ? Number(attemptError.estimatedCostUsd)
@@ -580,7 +623,7 @@ async function generateSceneImage(
     } finally {
       providerRequestCount += callProviderAttempts;
       providerCostUsd += actualCostUsd;
-      pendingCostEvents.push({
+      if (callProviderAttempts > 0) pendingCostEvents.push({
         projectId: project.id,
         versionId: project.currentVersion.id,
         sceneNumber: scene.sceneNumber,
@@ -600,6 +643,13 @@ async function generateSceneImage(
     }
   };
   const trackedValidation = async <T>(requestLabel: string, operation: () => Promise<T>) => {
+    boundedOperationTimeout({
+      operation: "Image quality validation",
+      deadlineMs,
+      maxTimeoutMs: 3_000,
+      reserveMs: 12_000,
+      minimumTimeoutMs: 3_000
+    });
     validationRequestCount += 1;
     let outcome: "succeeded" | "failed" = "failed";
     try {
@@ -633,11 +683,15 @@ async function generateSceneImage(
       const [semanticCheck, styleCheck] = await Promise.all([
         trackedValidation(
           `${qualityAttempt}:focused:${reason}:semantic`,
-          () => evaluateCloudflareImageSemantics(candidate.body, essentialSceneSemantics(scene, project))
+          () => evaluateCloudflareImageSemantics(
+            candidate.body,
+            essentialSceneSemantics(scene, project),
+            visionDeadlineOptions(deadlineMs)
+          )
         ),
         trackedValidation(
           `${qualityAttempt}:focused:${reason}:style`,
-          () => evaluateCloudflareImageStyle(candidate.body, expectedStyle)
+          () => evaluateCloudflareImageStyle(candidate.body, expectedStyle, visionDeadlineOptions(deadlineMs))
         )
       ]);
       const accepted = semanticCheck.matches && styleCheck.matches;
@@ -646,6 +700,7 @@ async function generateSceneImage(
       );
       return accepted;
     } catch (error) {
+      if (error instanceof OperationDeadlineExceededError) throw error;
       console.warn(`[image-assets] Scene ${scene.sceneNumber} focused candidate review after ${reason} was unavailable:`, error);
       return false;
     }
@@ -727,7 +782,11 @@ async function generateSceneImage(
         generatedBody = generated.body;
         generatedModel = generated.model;
       } else {
-        const client = new OpenAI({ apiKey: getOptionalEnv("OPENAI_API_KEY") });
+        const client = new OpenAI({
+          apiKey: getOptionalEnv("OPENAI_API_KEY"),
+          timeout: openAIRequestTimeout(deadlineMs, "OpenAI image generation", 90_000),
+          maxRetries: 0
+        });
         providerRequestCount += 1;
         let openAiOutcome: "succeeded" | "failed" = "failed";
         let result: Awaited<ReturnType<typeof client.images.generate>>;
@@ -774,8 +833,8 @@ async function generateSceneImage(
       // Text is an absolute delivery boundary. An unverified candidate is never
       // retained, even during the premium completion-rescue pass.
       const containsText = hasCloudflareAI()
-        ? await trackedValidation(`${qualityAttempt}:text`, () => generatedImageContainsAnyText(normalized.body))
-        : await generatedImageContainsAnyText(normalized.body);
+        ? await trackedValidation(`${qualityAttempt}:text`, () => generatedImageContainsAnyText(normalized.body, deadlineMs))
+        : await generatedImageContainsAnyText(normalized.body, deadlineMs);
       if (containsText) {
         throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。", "text_detected");
       }
@@ -796,7 +855,11 @@ async function generateSceneImage(
         try {
           compositionReview = await trackedValidation(
             `${qualityAttempt}:composition:${nearest.sceneNumber}`,
-            () => evaluateCloudflareImageComposition(normalized.body, nearest.body)
+            () => evaluateCloudflareImageComposition(
+              normalized.body,
+              nearest.body,
+              visionDeadlineOptions(deadlineMs)
+            )
           );
         } catch (error) {
           throw new GeneratedImageQualityError("无法确认生成画面与其他分镜的构图差异。", "semantic_check_failed", { cause: error });
@@ -815,8 +878,11 @@ async function generateSceneImage(
       let inspection: Awaited<ReturnType<typeof inspectGeneratedImage>>;
       try {
         inspection = hasCloudflareAI()
-          ? await trackedValidation(`${qualityAttempt}:semantic`, () => inspectGeneratedImage(normalized.body, scene, project))
-          : await inspectGeneratedImage(normalized.body, scene, project);
+          ? await trackedValidation(
+              `${qualityAttempt}:semantic`,
+              () => inspectGeneratedImage(normalized.body, scene, project, deadlineMs)
+            )
+          : await inspectGeneratedImage(normalized.body, scene, project, deadlineMs);
       } catch (error) {
         if (!(error instanceof GeneratedImageQualityError) || error.code !== "semantic_check_failed") throw error;
         if (await independentlyVerifyCandidate(textFreeCandidate, "semantic_check_failed", qualityAttempt)) {
@@ -866,7 +932,14 @@ async function generateSceneImage(
   const uploaded = await uploadToR2({
     key,
     body,
-    contentType: "image/png"
+    contentType: "image/png",
+    timeoutMs: boundedOperationTimeout({
+      operation: "Generated image upload",
+      deadlineMs,
+      maxTimeoutMs: 35_000,
+      reserveMs: 6_000,
+      minimumTimeoutMs: 3_000
+    })
   });
 
   const asset: SceneAsset = {
@@ -920,6 +993,7 @@ export async function generateProjectSceneImages(
     useStockContentGuide?: boolean;
     throwOnFailure?: boolean;
     maxProviderAttempts?: number;
+    deadlineMs?: number;
   } = {}
 ) {
   const credentialIssue = imageCredentialIssue();
@@ -1016,7 +1090,8 @@ export async function generateProjectSceneImages(
           comparisonImages,
           options.allowCompletionFallback,
           options.maxQualityAttempts,
-          options.maxProviderAttempts
+          options.maxProviderAttempts,
+          options.deadlineMs
         );
         if (!generated) return;
 

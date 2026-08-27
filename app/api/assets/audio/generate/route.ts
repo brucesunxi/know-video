@@ -33,6 +33,7 @@ function audioFailedScenes(
 }
 
 export async function POST(request: Request) {
+  const requestWorkDeadline = Date.now() + 260_000;
   let user;
   try {
     user = await requireCurrentUser();
@@ -85,13 +86,21 @@ export async function POST(request: Request) {
     throw error;
   }
   try {
-  let updated = await generateProjectVoices(project, body.sceneNumbers, body.narrationVoice);
+  let updated = await generateProjectVoices(project, body.sceneNumbers, body.narrationVoice, {
+    deadlineMs: requestWorkDeadline,
+    azureMaxAttempts: 1,
+    allowOpenAIFallback: false
+  });
   let failed = audioFailedScenes(updated.currentVersion.scenes, requestedSceneNumbers, previousAudioKeys);
 
   for (let retry = 0; retry < 2 && failed.length > 0; retry += 1) {
     const retrySceneNumbers = failed.map((scene) => scene.sceneNumber);
     console.warn(`[audio-assets] Retrying failed voice scenes (${retry + 1}/2): ${retrySceneNumbers.join(",")}.`);
-    updated = await generateProjectVoices(updated, retrySceneNumbers, body.narrationVoice);
+    updated = await generateProjectVoices(updated, retrySceneNumbers, body.narrationVoice, {
+      deadlineMs: requestWorkDeadline,
+      azureMaxAttempts: 1,
+      allowOpenAIFallback: retry >= 1
+    });
     failed = audioFailedScenes(updated.currentVersion.scenes, requestedSceneNumbers, previousAudioKeys);
   }
 

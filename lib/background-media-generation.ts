@@ -29,9 +29,14 @@ import {
   MAX_PROJECT_MEDIA_RECOVERY_PASSES,
   nextProjectRecoveryPass
 } from "@/lib/background-recovery-policy";
+import {
+  backgroundBillingMarkerForAsset,
+  tagAssetForBackgroundBilling
+} from "@/lib/background-media-billing";
 
 const BACKGROUND_LONG_WORK_CUTOFF_MS = 190_000;
 const BACKGROUND_STOCK_WORK_CUTOFF_MS = 150_000;
+const BACKGROUND_CALLBACK_WORK_DEADLINE_MS = 260_000;
 
 export class ProjectMediaQualityExhaustedError extends Error {
   constructor(sceneNumber: number, cause?: unknown) {
@@ -46,15 +51,80 @@ function sceneAsset(project: Project, sceneNumber: number, type: SceneAsset["typ
     ?.assets.find((asset) => asset.type === type && asset.url && (type !== "image" || isDeliverableVisualAsset(asset)));
 }
 
+async function settleBackgroundImageUsage(message: ProjectMediaMessage, asset: SceneAsset | undefined) {
+  const marker = backgroundBillingMarkerForAsset(asset, message.requestId);
+  if (!asset || !marker || marker.resourceType === "speech") return;
+  const effectiveQuality = marker.resourceType === "image_premium" ? "premium" : "standard";
+  await recordUsageEvent({
+    userId: message.userId,
+    projectId: message.projectId,
+    versionId: message.versionId,
+    reservationKey: message.billingReservationKey,
+    resourceType: marker.resourceType,
+    quantity: marker.quantity,
+    idempotencyKey: `${marker.resourceType}:${message.requestId}:scene:${message.sceneNumber}`,
+    status: "settled",
+    actualCostUsd: Number(asset.metadata?.estimatedActualCostUsd) || undefined,
+    actualModel: typeof asset.metadata?.model === "string" ? asset.metadata.model : undefined,
+    actualProvider: String(asset.metadata?.model ?? "").startsWith("gpt-") ? "openai" : "cloudflare",
+    metadata: {
+      sceneNumber: message.sceneNumber,
+      assetKey: asset.r2Key,
+      source: "background_queue",
+      requestedQuality: asset.metadata?.backgroundRequestedQuality ?? effectiveQuality,
+      effectiveQuality: asset.metadata?.backgroundEffectiveQuality ?? effectiveQuality,
+      automaticPremiumUpgrade: asset.metadata?.backgroundAutomaticPremiumUpgrade === true,
+      qualityGate: asset.metadata?.qualityGate,
+      completionFallbackReason: asset.metadata?.completionFallbackReason,
+      providerRequestCount: asset.metadata?.providerRequestCount,
+      validationRequestCount: asset.metadata?.validationRequestCount,
+      internalRetriesNotCharged: Math.max(0, Number(asset.metadata?.providerRequestCount ?? 1) - 1),
+      retrySafeSettlement: true
+    }
+  });
+}
+
+async function settleBackgroundNarrationUsage(message: ProjectMediaMessage, asset: SceneAsset | undefined) {
+  const marker = backgroundBillingMarkerForAsset(asset, message.requestId);
+  if (!asset || !marker || marker.resourceType !== "speech") return;
+  await recordUsageEvent({
+    userId: message.userId,
+    projectId: message.projectId,
+    versionId: message.versionId,
+    reservationKey: message.billingReservationKey,
+    resourceType: marker.resourceType,
+    quantity: marker.quantity,
+    idempotencyKey: `speech:${message.requestId}:scene:${message.sceneNumber}`,
+    status: "settled",
+    actualModel: typeof asset.metadata?.model === "string" ? asset.metadata.model : undefined,
+    actualProvider: String(asset.metadata?.model ?? "").startsWith("gpt-") ? "openai" : "azure",
+    metadata: {
+      sceneNumber: message.sceneNumber,
+      narrationVoice: message.options?.narrationVoice,
+      assetKey: asset.r2Key,
+      source: "background_queue",
+      retrySafeSettlement: true
+    }
+  });
+}
+
 async function requireCurrentProject(message: ProjectMediaMessage) {
   const project = await loadProjectForRender(message.projectId, message.versionId, message.userId);
   if (!project) throw new Error("The queued video version is no longer current.");
   return project;
 }
 
-async function ensureSceneImage(message: ProjectMediaMessage, project: Project, deliveryCount: number) {
+async function ensureSceneImage(
+  message: ProjectMediaMessage,
+  project: Project,
+  deliveryCount: number,
+  deadlineMs: number
+) {
   const targetScene = project.currentVersion.scenes.find((scene) => scene.sceneNumber === message.sceneNumber);
-  if (targetScene && sceneHasVisualAsset(targetScene)) return project;
+  if (targetScene && sceneHasVisualAsset(targetScene)) {
+    await settleBackgroundImageUsage(message, sceneAsset(project, message.sceneNumber, "image"));
+    return project;
+  }
   const requiresPremium = Boolean(targetScene && sceneRequiresPremiumImage(targetScene));
   const attemptPlan = backgroundImageAttemptPlan({
     deliveryCount,
@@ -107,7 +177,8 @@ async function ensureSceneImage(message: ProjectMediaMessage, project: Project, 
       maxQualityAttempts: attemptPlan.maxQualityAttempts,
       useStockContentGuide: attemptPlan.useStockContentGuide,
       throwOnFailure: true,
-      maxProviderAttempts: 1
+      maxProviderAttempts: 1,
+      deadlineMs
     });
   } catch (error) {
     if (error instanceof GeneratedImageQualityError && isDefinitiveGeneratedImageQualityRejection(error)) {
@@ -117,95 +188,94 @@ async function ensureSceneImage(message: ProjectMediaMessage, project: Project, 
   }
   const generated = sceneAsset(updated, message.sceneNumber, "image");
   if (!generated) throw new Error(`Scene ${message.sceneNumber} image generation returned no deliverable asset.`);
+  const tagged = tagAssetForBackgroundBilling({
+    ...generated,
+    metadata: {
+      ...generated.metadata,
+      backgroundRequestedQuality: attemptPlan.requestedQuality,
+      backgroundEffectiveQuality: quality,
+      backgroundAutomaticPremiumUpgrade: quality === "premium" && completionRescue && !requiresPremium
+    }
+  }, {
+    requestId: message.requestId,
+    resourceType,
+    quantity: 1
+  });
+  generated.metadata = tagged.metadata;
   await persistGeneratedSceneAssets(message.versionId, updated.currentVersion.scenes, {
     replaceImages: true,
     sceneNumbers: [message.sceneNumber]
   });
-  await recordUsageEvent({
-    userId: message.userId,
-    projectId: message.projectId,
-    versionId: message.versionId,
-    reservationKey: message.billingReservationKey,
-    resourceType,
-    quantity: 1,
-    idempotencyKey: `${resourceType}:${message.requestId}:scene:${message.sceneNumber}`,
-    status: "settled",
-    actualCostUsd: Number(generated.metadata?.estimatedActualCostUsd) || undefined,
-    actualModel: typeof generated.metadata?.model === "string" ? generated.metadata.model : undefined,
-    actualProvider: String(generated.metadata?.model ?? "").startsWith("gpt-") ? "openai" : "cloudflare",
-    metadata: {
-      sceneNumber: message.sceneNumber,
-      assetKey: generated.r2Key,
-      source: "background_queue",
-      requestedQuality: "standard",
-      effectiveQuality: quality,
-      automaticPremiumUpgrade: quality === "premium" && completionRescue && !requiresPremium,
-      qualityGate: generated.metadata?.qualityGate,
-      completionFallbackReason: generated.metadata?.completionFallbackReason,
-      providerRequestCount: generated.metadata?.providerRequestCount,
-      validationRequestCount: generated.metadata?.validationRequestCount,
-      internalRetriesNotCharged: Math.max(0, Number(generated.metadata?.providerRequestCount ?? 1) - 1)
-    }
-  });
+  await settleBackgroundImageUsage(message, generated);
   return updated;
 }
 
-async function ensureSceneNarration(message: ProjectMediaMessage, project: Project) {
-  if (sceneAsset(project, message.sceneNumber, "audio")) return project;
+async function ensureSceneNarration(
+  message: ProjectMediaMessage,
+  project: Project,
+  deliveryCount: number,
+  deadlineMs: number
+) {
+  const existingAudio = sceneAsset(project, message.sceneNumber, "audio");
+  if (existingAudio) {
+    await settleBackgroundNarrationUsage(message, existingAudio);
+    return project;
+  }
   const updated = await generateProjectVoices(
     project,
     [message.sceneNumber],
-    message.options?.narrationVoice
+    message.options?.narrationVoice,
+    {
+      deadlineMs,
+      azureMaxAttempts: 1,
+      // Prefer the configured lower-cost provider. Queue retries provide the
+      // first two recovery attempts; only then use the paid backup.
+      allowOpenAIFallback: deliveryCount >= 3
+    }
   );
   const generated = sceneAsset(updated, message.sceneNumber, "audio");
   if (!generated) throw new Error(`Scene ${message.sceneNumber} narration generation did not produce usable audio.`);
+  const duration = Number(generated.metadata?.actualDurationSeconds)
+    || project.currentVersion.scenes.find((scene) => scene.sceneNumber === message.sceneNumber)?.durationSeconds
+    || 1;
+  const tagged = tagAssetForBackgroundBilling(generated, {
+    requestId: message.requestId,
+    resourceType: "speech",
+    quantity: duration
+  });
+  generated.metadata = tagged.metadata;
   await persistGeneratedSceneAssets(message.versionId, updated.currentVersion.scenes, {
     replaceAudio: true,
     sceneNumbers: [message.sceneNumber],
     updateStyles: Boolean(message.options?.narrationVoice),
     updateNarration: true
   });
-  const duration = Number(generated.metadata?.actualDurationSeconds)
-    || project.currentVersion.scenes.find((scene) => scene.sceneNumber === message.sceneNumber)?.durationSeconds
-    || 1;
-  await recordUsageEvent({
-    userId: message.userId,
-    projectId: message.projectId,
-    versionId: message.versionId,
-    reservationKey: message.billingReservationKey,
-    resourceType: "speech",
-    quantity: duration,
-    idempotencyKey: `speech:${message.requestId}:scene:${message.sceneNumber}`,
-    status: "settled",
-    metadata: {
-      sceneNumber: message.sceneNumber,
-      narrationVoice: message.options?.narrationVoice,
-      assetKey: generated.r2Key,
-      source: "background_queue"
-    }
-  });
+  await settleBackgroundNarrationUsage(message, generated);
   return updated;
 }
 
 async function addFreeStockMotion(
   message: ProjectMediaMessage,
   project: Project,
-  options: { forceRecoveryFallback?: boolean } = {}
+  options: { forceRecoveryFallback?: boolean; deadlineMs?: number } = {}
 ) {
   const forceRecoveryFallback = options.forceRecoveryFallback === true;
   if ((message.options?.motion !== "stock" && !forceRecoveryFallback) || !hasFreeStockVideoProvider()) return project;
   if (sceneAsset(project, message.sceneNumber, "clip")) return project;
   const result = await generateProjectStockClips(project, [message.sceneNumber], {
-    recoveryFallback: forceRecoveryFallback
+    recoveryFallback: forceRecoveryFallback,
+    deadlineMs: options.deadlineMs
   });
+  if (result.failures.length > 0) {
+    console.warn(`[background-media] Scene ${message.sceneNumber} has no matching free stock clip; local motion remains active.`);
+    return project;
+  }
   await persistGeneratedSceneAssets(message.versionId, result.project.currentVersion.scenes, {
     replaceClips: true,
     sceneNumbers: [message.sceneNumber],
     updateStyles: true
   });
-  if (result.failures.length > 0) {
-    console.warn(`[background-media] Scene ${message.sceneNumber} has no matching free stock clip; local motion remains active.`);
-  } else if (forceRecoveryFallback && result.styleProtectedSceneNumbers.includes(message.sceneNumber)) {
+  if (forceRecoveryFallback && result.styleProtectedSceneNumbers.includes(message.sceneNumber)) {
     console.warn(`[background-media] Scene ${message.sceneNumber} kept its non-photographic style; free stock was not used as a recovery fallback.`);
   }
   return result.project;
@@ -213,15 +283,20 @@ async function addFreeStockMotion(
 
 export async function processProjectMediaScene(message: ProjectMediaMessage, deliveryCount = 1) {
   const callbackStartedAt = Date.now();
+  const callbackWorkDeadline = callbackStartedAt + BACKGROUND_CALLBACK_WORK_DEADLINE_MS;
   const canStartLongWork = () => Date.now() - callbackStartedAt < BACKGROUND_LONG_WORK_CUTOFF_MS;
   const canStartStockWork = () => Date.now() - callbackStartedAt < BACKGROUND_STOCK_WORK_CUTOFF_MS;
-  await touchGenerationRequest(message.requestId);
+  const requestIsPending = await touchGenerationRequest(message.requestId);
+  if (!requestIsPending) {
+    console.info(`[background-media] Ignoring stale message for inactive request ${message.requestId}.`);
+    return;
+  }
   let project = await requireCurrentProject(message);
   let imageError: unknown;
   let narrationError: unknown;
 
   try {
-    project = await ensureSceneImage(message, project, deliveryCount);
+    project = await ensureSceneImage(message, project, deliveryCount, callbackWorkDeadline);
   } catch (error) {
     imageError = error;
     project = await requireCurrentProject(message);
@@ -232,7 +307,7 @@ export async function processProjectMediaScene(message: ProjectMediaMessage, del
   // next delivery instead of leaving both assets missing.
   if (canStartLongWork()) {
     try {
-      project = await ensureSceneNarration(message, project);
+      project = await ensureSceneNarration(message, project, deliveryCount, callbackWorkDeadline);
     } catch (error) {
       narrationError = error;
       project = await requireCurrentProject(message);
@@ -245,7 +320,8 @@ export async function processProjectMediaScene(message: ProjectMediaMessage, del
     try {
       project = await addFreeStockMotion(message, project, {
         forceRecoveryFallback: imageError instanceof ProjectMediaQualityExhaustedError
-          && canContinueAfterSceneQualityFailure(deliveryCount, message.recoveryPass)
+          && canContinueAfterSceneQualityFailure(deliveryCount, message.recoveryPass),
+        deadlineMs: callbackWorkDeadline
       });
     } catch (error) {
       // Free stock is optional because local camera motion remains available.
@@ -272,8 +348,7 @@ export async function processProjectMediaScene(message: ProjectMediaMessage, del
     return;
   }
 
-  const refreshed = await requireCurrentProject(message);
-  const incomplete = refreshed.currentVersion.scenes.filter((scene) => {
+  const incomplete = project.currentVersion.scenes.filter((scene) => {
     return !sceneHasVisualAsset(scene) || !sceneHasAudioAsset(scene);
   });
   if (incomplete.length > 0) {

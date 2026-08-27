@@ -17,6 +17,7 @@ import {
   type VideoGenerationTier
 } from "@/lib/video-cost-policy";
 import sharp from "sharp";
+import { boundedOperationTimeout } from "@/lib/operation-deadline";
 
 const STANDARD_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const PREMIUM_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
@@ -154,6 +155,8 @@ async function runVisionVerdict<T>(options: {
   maxTokens: number;
   parse: (payload: unknown) => T | undefined;
   inconclusiveMessage: string;
+  deadlineMs?: number;
+  maxAttempts?: number;
 }) {
   const model = getOptionalEnv("CLOUDFLARE_VISION_MODEL") || DEFAULT_VISION_MODEL;
   const normalized = await sharp(options.body)
@@ -163,8 +166,16 @@ async function runVisionVerdict<T>(options: {
     .toBuffer();
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const maxAttempts = Math.max(1, Math.min(2, Math.floor(options.maxAttempts ?? 2)));
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
+      const timeoutMs = boundedOperationTimeout({
+        operation: "Cloudflare vision validation",
+        deadlineMs: options.deadlineMs,
+        maxTimeoutMs: 35_000,
+        reserveMs: 12_000,
+        minimumTimeoutMs: 3_000
+      });
       const response = await fetch(endpoint(model), {
         method: "POST",
         headers: {
@@ -182,7 +193,7 @@ async function runVisionVerdict<T>(options: {
           max_tokens: options.maxTokens,
           stream: false
         }),
-        signal: AbortSignal.timeout(35_000)
+        signal: AbortSignal.timeout(timeoutMs)
       });
       if (!response.ok) throw await responseError(response);
       const payload = await response.json() as unknown;
@@ -194,7 +205,15 @@ async function runVisionVerdict<T>(options: {
       const status = (error as { status?: number }).status;
       if (status && !retryableStatus(status)) throw error;
     }
-    if (attempt === 0) await wait(350);
+    if (attempt < maxAttempts - 1) {
+      const delayMs = boundedOperationTimeout({
+        operation: "Cloudflare vision retry",
+        deadlineMs: options.deadlineMs,
+        maxTimeoutMs: 350,
+        reserveMs: 12_000
+      });
+      await wait(delayMs);
+    }
   }
 
   throw lastError instanceof Error ? lastError : new Error(options.inconclusiveMessage);
@@ -213,6 +232,7 @@ export async function generateCloudflareImage(
     references?: Array<{ body: Buffer; contentType: string }>;
     strategy?: "default" | "recovery";
     maxProviderAttempts?: number;
+    deadlineMs?: number;
   } = {}
 ) {
   const recovery = options.strategy === "recovery";
@@ -233,6 +253,7 @@ export async function generateCloudflareImage(
     Math.min(MAX_IMAGE_PROVIDER_ATTEMPTS, Math.floor(options.maxProviderAttempts ?? MAX_IMAGE_PROVIDER_ATTEMPTS))
   );
   let lastError: unknown;
+  let providerAttempts = 0;
   for (let attempt = 0; attempt < providerAttemptLimit; attempt += 1) {
     try {
       const form = new FormData();
@@ -255,11 +276,19 @@ export async function generateCloudflareImage(
           `reference-${index}.${reference.contentType === "image/png" ? "png" : "jpg"}`
         );
       });
+      const timeoutMs = boundedOperationTimeout({
+        operation: "Cloudflare image generation",
+        deadlineMs: options.deadlineMs,
+        maxTimeoutMs: IMAGE_PROVIDER_TIMEOUT_MS,
+        reserveMs: 12_000,
+        minimumTimeoutMs: 3_000
+      });
+      providerAttempts += 1;
       const response = await fetch(endpoint(model), {
         method: "POST",
         headers: authorizationHeaders(),
         body: form,
-        signal: AbortSignal.timeout(IMAGE_PROVIDER_TIMEOUT_MS)
+        signal: AbortSignal.timeout(timeoutMs)
       });
       if (!response.ok) {
         const error = await responseError(response);
@@ -269,7 +298,6 @@ export async function generateCloudflareImage(
         const payload = await response.json() as CloudflareEnvelope<{ image?: string }> | { image?: string };
         const result = unwrapResult(payload);
         if (!result?.image) throw new Error("AI image service returned no image");
-        const providerAttempts = attempt + 1;
         return {
           body: decodeBase64(result.image),
           model,
@@ -287,7 +315,7 @@ export async function generateCloudflareImage(
       ) {
         throw attachImageAttemptMetadata(error, {
           model,
-          providerAttempts: attempt + 1,
+          providerAttempts,
           estimatedUnitCostUsd
         });
       }
@@ -296,7 +324,7 @@ export async function generateCloudflareImage(
   }
   throw attachImageAttemptMetadata(
     lastError instanceof Error ? lastError : new Error("AI image service failed after retries"),
-    { model, providerAttempts: providerAttemptLimit, estimatedUnitCostUsd }
+    { model, providerAttempts, estimatedUnitCostUsd }
   );
 }
 
@@ -346,18 +374,25 @@ export async function analyzeCloudflareImage(body: Buffer) {
   return { description: captionDescription, model };
 }
 
-export async function detectCloudflareImageText(body: Buffer) {
+type CloudflareVisionDeadlineOptions = { deadlineMs?: number; maxAttempts?: number };
+
+export async function detectCloudflareImageText(body: Buffer, options: CloudflareVisionDeadlineOptions = {}) {
   const result = await runVisionVerdict({
     body,
     question: "This is a 2x2 inspection sheet containing the full generated frame plus enlarged overlapping regions from that same frame. Perform a high-recall text inspection across every tile. Answer TEXT_PRESENT if any tile contains any word, letter, number, caption, headline, sign, label, logo, watermark, signature, interface copy, or clustered malformed/fake glyphs intended to resemble writing. Misspelled, cropped, blurry, nonsensical, partially occluded, or duplicated writing still counts as TEXT_PRESENT. Do not classify isolated object outlines or ordinary texture marks as text. Answer exactly TEXT_PRESENT or TEXT_FREE.",
     maxTokens: 12,
     parse: parseImageTextPresence,
-    inconclusiveMessage: "AI vision service returned an inconclusive text inspection"
+    inconclusiveMessage: "AI vision service returned an inconclusive text inspection",
+    ...options
   });
   return { hasText: result.verdict, model: result.model };
 }
 
-export async function evaluateCloudflareImageSemantics(body: Buffer, expectedScene: string) {
+export async function evaluateCloudflareImageSemantics(
+  body: Buffer,
+  expectedScene: string,
+  options: CloudflareVisionDeadlineOptions = {}
+) {
   const result = await runVisionVerdict({
     body,
     question: [
@@ -369,12 +404,17 @@ export async function evaluateCloudflareImageSemantics(body: Buffer, expectedSce
       ].join("\n"),
     maxTokens: 16,
     parse: parseImageSemanticMatch,
-    inconclusiveMessage: "AI vision service returned an inconclusive semantic inspection"
+    inconclusiveMessage: "AI vision service returned an inconclusive semantic inspection",
+    ...options
   });
   return { matches: result.verdict, model: result.model };
 }
 
-export async function evaluateCloudflareImageStyle(body: Buffer, expectedStyle: string) {
+export async function evaluateCloudflareImageStyle(
+  body: Buffer,
+  expectedStyle: string,
+  options: CloudflareVisionDeadlineOptions = {}
+) {
   const result = await runVisionVerdict({
     body,
     question: [
@@ -386,7 +426,8 @@ export async function evaluateCloudflareImageStyle(body: Buffer, expectedStyle: 
     ].join("\n"),
     maxTokens: 12,
     parse: parseImageStyleMatch,
-    inconclusiveMessage: "AI vision service returned an inconclusive style inspection"
+    inconclusiveMessage: "AI vision service returned an inconclusive style inspection",
+    ...options
   });
   return { matches: result.verdict, model: result.model };
 }
@@ -404,7 +445,11 @@ async function buildCompositionComparisonSheet(candidate: Buffer, existing: Buff
   ]).jpeg({ quality: 92, chromaSubsampling: "4:4:4" }).toBuffer();
 }
 
-export async function evaluateCloudflareImageComposition(candidate: Buffer, existing: Buffer) {
+export async function evaluateCloudflareImageComposition(
+  candidate: Buffer,
+  existing: Buffer,
+  options: CloudflareVisionDeadlineOptions = {}
+) {
   const sheet = await buildCompositionComparisonSheet(candidate, existing);
   const result = await runVisionVerdict({
     body: sheet,
@@ -417,12 +462,17 @@ export async function evaluateCloudflareImageComposition(candidate: Buffer, exis
     ].join("\n"),
     maxTokens: 16,
     parse: parseImageCompositionDistinct,
-    inconclusiveMessage: "AI vision service returned an inconclusive composition comparison"
+    inconclusiveMessage: "AI vision service returned an inconclusive composition comparison",
+    ...options
   });
   return { distinct: result.verdict, model: result.model };
 }
 
-export async function inspectCloudflareGeneratedImage(body: Buffer, expectedScene: string) {
+export async function inspectCloudflareGeneratedImage(
+  body: Buffer,
+  expectedScene: string,
+  options: CloudflareVisionDeadlineOptions = {}
+) {
   const result = await runVisionVerdict({
     body,
     question: [
@@ -437,7 +487,8 @@ export async function inspectCloudflareGeneratedImage(body: Buffer, expectedScen
       ].join("\n"),
     maxTokens: 16,
     parse: parseGeneratedImageInspection,
-    inconclusiveMessage: "AI vision service returned an inconclusive generated-image inspection"
+    inconclusiveMessage: "AI vision service returned an inconclusive generated-image inspection",
+    ...options
   });
   return { verdict: result.verdict, model: result.model };
 }

@@ -7,6 +7,13 @@ import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
 import { estimateNarrationSeconds } from "@/lib/speech-timing";
 import { DEFAULT_NARRATION_VOICE, narrationVoiceProfile } from "@/lib/voice-profiles";
 import type { NarrationVoice, Project, Scene, SceneAsset } from "@/lib/types";
+import { boundedOperationTimeout } from "@/lib/operation-deadline";
+
+export type VoiceGenerationOptions = {
+  deadlineMs?: number;
+  azureMaxAttempts?: number;
+  allowOpenAIFallback?: boolean;
+};
 
 function containsChinese(text: string) {
   return /\p{Script=Han}/u.test(text);
@@ -16,11 +23,19 @@ async function generateOpenAISpeech(
   text: string,
   targetDurationSeconds: number,
   expectedTextDurationSeconds: number,
-  direction: string
+  direction: string,
+  options: VoiceGenerationOptions
 ) {
   const apiKey = getOptionalEnv("OPENAI_API_KEY");
   if (!apiKey) throw new Error("OpenAI speech backup is not configured");
-  const client = new OpenAI({ apiKey });
+  const timeout = boundedOperationTimeout({
+    operation: "OpenAI speech generation",
+    deadlineMs: options.deadlineMs,
+    maxTimeoutMs: 75_000,
+    reserveMs: 8_000,
+    minimumTimeoutMs: 5_000
+  });
+  const client = new OpenAI({ apiKey, timeout, maxRetries: 0 });
   const model = getOptionalEnv("OPENAI_TTS_MODEL") || "gpt-4o-mini-tts";
   const voice = getOptionalEnv("OPENAI_TTS_VOICE") || "alloy";
   const result = await client.audio.speech.create({
@@ -60,7 +75,8 @@ async function mapWithConcurrency<T>(items: T[], concurrency: number, worker: (i
 async function generateSceneVoice(
   scene: Scene,
   project: Project,
-  narrationVoice?: NarrationVoice
+  narrationVoice?: NarrationVoice,
+  options: VoiceGenerationOptions = {}
 ): Promise<{ asset: SceneAsset; voiceover: string }> {
   let body: Buffer;
   let model: string;
@@ -78,13 +94,15 @@ async function generateSceneVoice(
   const profile = narrationVoiceProfile(selectedVoice);
   const narrationLanguage = containsChinese(voiceover) ? "zh-CN" : "en-US";
   const direction = narrationLanguage === "zh-CN" ? profile.directionZh : profile.directionEn;
+  const azureConfigured = hasAzureSpeech();
   try {
-    if (!hasAzureSpeech()) throw new Error("Azure speech service is not configured");
+    if (!azureConfigured) throw new Error("Azure speech service is not configured");
     const generated = await generateAzureSpeech(
       voiceover,
       scene.durationSeconds,
       selectedVoice,
-      narrationLanguage
+      narrationLanguage,
+      { deadlineMs: options.deadlineMs, maxAttempts: options.azureMaxAttempts }
     );
     body = generated.body;
     model = generated.model;
@@ -95,12 +113,16 @@ async function generateSceneVoice(
     extension = generated.extension;
   } catch (azureError) {
     if (!getOptionalEnv("OPENAI_API_KEY")) throw azureError;
+    const status = (azureError as { status?: number }).status;
+    const transientAzureFailure = !status || [408, 429, 500, 502, 503, 504].includes(status);
+    if (azureConfigured && options.allowOpenAIFallback === false && transientAzureFailure) throw azureError;
     console.error(`[audio-assets] Azure ${narrationLanguage} speech failed, switching to OpenAI backup:`, azureError);
     const generated = await generateOpenAISpeech(
       voiceover,
       scene.durationSeconds,
       expectedTextDurationSeconds,
-      direction
+      direction,
+      options
     );
     ({ body, model, voice, contentType, extension, actualDurationSeconds } = generated);
   }
@@ -110,7 +132,18 @@ async function generateSceneVoice(
   });
   actualDurationSeconds ??= inspection.durationSeconds;
   const key = `generated/${project.id}/${project.currentVersion.id}/scene-${scene.sceneNumber}-voice-${crypto.randomUUID()}.${extension}`;
-  const uploaded = await uploadToR2({ key, body, contentType });
+  const uploaded = await uploadToR2({
+    key,
+    body,
+    contentType,
+    timeoutMs: boundedOperationTimeout({
+      operation: "Generated narration upload",
+      deadlineMs: options.deadlineMs,
+      maxTimeoutMs: 35_000,
+      reserveMs: 6_000,
+      minimumTimeoutMs: 3_000
+    })
+  });
 
   const asset: SceneAsset = {
     id: crypto.randomUUID(),
@@ -142,7 +175,8 @@ async function generateSceneVoice(
 export async function generateProjectVoices(
   project: Project,
   sceneNumbers?: number[],
-  narrationVoice?: NarrationVoice
+  narrationVoice?: NarrationVoice,
+  options: VoiceGenerationOptions = {}
 ) {
   if (
     (!hasAzureSpeech() && !getOptionalEnv("OPENAI_API_KEY"))
@@ -165,7 +199,7 @@ export async function generateProjectVoices(
   const concurrency = Math.min(3, Math.max(1, Number(getOptionalEnv("TTS_GENERATION_CONCURRENCY")) || 2));
   await mapWithConcurrency(selectedIndexes, concurrency, async ({ scene, index }) => {
     try {
-      const generated = await generateSceneVoice(scene, project, narrationVoice);
+      const generated = await generateSceneVoice(scene, project, narrationVoice, options);
       scenes[index] = {
         ...scene,
         voiceover: generated.voiceover,

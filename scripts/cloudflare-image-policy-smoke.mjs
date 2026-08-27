@@ -7,6 +7,12 @@ const source = fs.readFileSync(new URL("../lib/cloudflare-ai.ts", import.meta.ur
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true }
 }).outputText;
+const deadlineSource = fs.readFileSync(new URL("../lib/operation-deadline.ts", import.meta.url), "utf8");
+const deadlineOutput = ts.transpileModule(deadlineSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+}).outputText;
+const deadlineModule = { exports: {} };
+vm.runInNewContext(deadlineOutput, { module: deadlineModule, exports: deadlineModule.exports });
 const module = { exports: {} };
 const env = {};
 let fetchHandler = fetch;
@@ -29,6 +35,7 @@ vm.runInNewContext(output, {
       VIDEO_GENERATION_MODEL: "test-video",
       VIDEO_GENERATION_TIERS: {}
     };
+    if (name === "@/lib/operation-deadline") return deadlineModule.exports;
     if (name === "sharp") return () => ({});
     return {};
   }
@@ -57,10 +64,27 @@ assert.match(source, /providerAttempts/);
 assert.match(source, /attachImageAttemptMetadata/);
 assert.match(source, /IMAGE_PROVIDER_TIMEOUT_MS = 75_000/);
 assert.match(source, /maxProviderAttempts\?: number/);
+assert.match(source, /deadlineMs\?: number/);
+assert.match(source, /operation: "Cloudflare image generation"/);
+assert.match(source, /operation: "Cloudflare vision validation"/);
 
 env.CLOUDFLARE_AI_ACCOUNT_ID = "test-account";
 env.CLOUDFLARE_AI_TOKEN = "test-token";
 let requestCount = 0;
+fetchHandler = async () => {
+  requestCount += 1;
+  throw new Error("fetch must not start after the deadline");
+};
+await assert.rejects(
+  () => generateCloudflareImage("expired", "standard", { deadlineMs: Date.now() - 1 }),
+  (error) => {
+    assert.equal(error.providerAttempts, 0);
+    assert.equal(error.estimatedCostUsd, 0);
+    return true;
+  }
+);
+assert.equal(requestCount, 0);
+
 fetchHandler = async () => {
   requestCount += 1;
   if (requestCount === 1) {

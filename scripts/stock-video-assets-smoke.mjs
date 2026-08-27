@@ -16,6 +16,9 @@ vm.runInNewContext(output, {
     if (name === "@/lib/env") return { getOptionalEnv: (key) => env[key] };
     if (name === "@/lib/r2") return {};
     if (name === "@/lib/style-motion-policy") return { styleAllowsFreeStockVideo: () => true };
+    if (name === "@/lib/operation-deadline") return {
+      boundedOperationTimeout: ({ maxTimeoutMs }) => maxTimeoutMs
+    };
     throw new Error(`Unexpected import: ${name}`);
   }
 });
@@ -50,5 +53,8 @@ assert.match(source, /asset\.metadata\?\.source !== "free-stock-video"/);
 assert.match(source, /`\$\{provider\}:\$\{providerId\}`/);
 assert.match(source, /styleProtectedSceneNumbers/);
 assert.match(source, /styleAllowsFreeStockVideo\(scene\.style\)/);
+assert.match(source, /deadlineMs\?: number/);
+assert.match(source, /operation: "Free stock video upload"/);
+assert.match(source, /maxTimeoutMs: 60_000/);
 
 console.log("Free stock video asset smoke checks passed.");
