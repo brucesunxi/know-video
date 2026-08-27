@@ -321,7 +321,8 @@ async function generateAndPersistProject(body: ProjectGenerationInput, userId: s
           sceneNumber: firstSceneNumber,
           engine,
           billingReservationKey: projectReservationKey(requestId),
-          options: body.options
+          options: body.options,
+          startedAt: Date.now()
         });
       } else {
         await completeGenerationRequest({ id: requestId, projectId: persisted.project.id, engine });

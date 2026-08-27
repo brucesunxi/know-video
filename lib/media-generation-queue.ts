@@ -13,6 +13,7 @@ export type ProjectMediaMessage = {
   billingReservationKey?: string;
   options?: GenerationOptions;
   recoveryPass?: number;
+  startedAt?: number;
 };
 
 export async function enqueueProjectMediaScene(message: ProjectMediaMessage) {

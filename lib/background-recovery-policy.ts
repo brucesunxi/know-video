@@ -1,4 +1,4 @@
-export const MAX_PROJECT_MEDIA_RECOVERY_PASSES = 2;
+export const MAX_PROJECT_MEDIA_RECOVERY_PASSES = 1;
 
 export function backgroundImageAttemptPlan(input: {
   deliveryCount: number;
@@ -13,17 +13,18 @@ export function backgroundImageAttemptPlan(input: {
     completionRescue,
     recoveryCycle,
     requestedQuality: input.requiresPremium || completionRescue ? "premium" as const : "standard" as const,
-    // Normal delivery tries two fast candidates. Rescue tries one premium
-    // candidate and one stronger directed-recovery candidate in the same cap.
-    maxQualityAttempts: 2,
+    // The normal pass samples every scene once so one difficult frame cannot
+    // hold the whole project. The single rescue pass gets one premium candidate
+    // plus one stronger directed-recovery candidate.
+    maxQualityAttempts: completionRescue ? 2 : 1,
     useStockContentGuide: completionRescue
   };
 }
 
-export function canContinueAfterSceneQualityFailure(deliveryCount: number, recoveryPass?: number) {
-  // The initial delivery gets one queue retry. A directed project-recovery pass
-  // has already escalated its strategy, so it can advance after one delivery.
-  return deliveryCount >= 2 || (recoveryPass ?? 0) > 0;
+export function canContinueAfterSceneQualityFailure(_deliveryCount: number, _recoveryPass?: number) {
+  // Quality rejections advance to the next scene immediately. Missing scenes
+  // are revisited once with the stronger rescue plan after the first pass.
+  return true;
 }
 
 export function nextProjectRecoveryPass(currentPass?: number) {

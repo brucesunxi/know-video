@@ -37,11 +37,19 @@ import {
 const BACKGROUND_LONG_WORK_CUTOFF_MS = 190_000;
 const BACKGROUND_STOCK_WORK_CUTOFF_MS = 150_000;
 const BACKGROUND_CALLBACK_WORK_DEADLINE_MS = 260_000;
+const BACKGROUND_PROJECT_RUNTIME_LIMIT_MS = 35 * 60 * 1_000;
 
 export class ProjectMediaQualityExhaustedError extends Error {
   constructor(sceneNumber: number, cause?: unknown) {
     super(`Scene ${sceneNumber} visual generation did not produce a usable image.`, { cause });
     this.name = "ProjectMediaQualityExhaustedError";
+  }
+}
+
+export class ProjectMediaRuntimeExceededError extends Error {
+  constructor() {
+    super("Project media generation exceeded its maximum runtime.");
+    this.name = "ProjectMediaRuntimeExceededError";
   }
 }
 
@@ -53,7 +61,7 @@ function sceneAsset(project: Project, sceneNumber: number, type: SceneAsset["typ
 
 async function settleBackgroundImageUsage(message: ProjectMediaMessage, asset: SceneAsset | undefined) {
   const marker = backgroundBillingMarkerForAsset(asset, message.requestId);
-  if (!asset || !marker || marker.resourceType === "speech") return;
+  if (!asset || !marker || marker.resourceType === "speech") return false;
   const effectiveQuality = marker.resourceType === "image_premium" ? "premium" : "standard";
   await recordUsageEvent({
     userId: message.userId,
@@ -82,11 +90,12 @@ async function settleBackgroundImageUsage(message: ProjectMediaMessage, asset: S
       retrySafeSettlement: true
     }
   });
+  return true;
 }
 
 async function settleBackgroundNarrationUsage(message: ProjectMediaMessage, asset: SceneAsset | undefined) {
   const marker = backgroundBillingMarkerForAsset(asset, message.requestId);
-  if (!asset || !marker || marker.resourceType !== "speech") return;
+  if (!asset || !marker || marker.resourceType !== "speech") return false;
   await recordUsageEvent({
     userId: message.userId,
     projectId: message.projectId,
@@ -106,6 +115,7 @@ async function settleBackgroundNarrationUsage(message: ProjectMediaMessage, asse
       retrySafeSettlement: true
     }
   });
+  return true;
 }
 
 async function requireCurrentProject(message: ProjectMediaMessage) {
@@ -286,9 +296,17 @@ export async function processProjectMediaScene(message: ProjectMediaMessage, del
   const callbackWorkDeadline = callbackStartedAt + BACKGROUND_CALLBACK_WORK_DEADLINE_MS;
   const canStartLongWork = () => Date.now() - callbackStartedAt < BACKGROUND_LONG_WORK_CUTOFF_MS;
   const canStartStockWork = () => Date.now() - callbackStartedAt < BACKGROUND_STOCK_WORK_CUTOFF_MS;
-  const requestIsPending = await touchGenerationRequest(message.requestId);
-  if (!requestIsPending) {
+  const heartbeat = await touchGenerationRequest(message.requestId);
+  if (!heartbeat.pending) {
     console.info(`[background-media] Ignoring stale message for inactive request ${message.requestId}.`);
+    return;
+  }
+  const mediaStartedAt = Number.isFinite(message.startedAt)
+    ? Number(message.startedAt)
+    : heartbeat.createdAt ? Date.parse(heartbeat.createdAt) : callbackStartedAt;
+  if (Number.isFinite(mediaStartedAt) && callbackStartedAt - mediaStartedAt >= BACKGROUND_PROJECT_RUNTIME_LIMIT_MS) {
+    console.error(`[background-media] Request ${message.requestId} exceeded the 35-minute media runtime limit.`);
+    await permanentlyFailProjectMedia(message, new ProjectMediaRuntimeExceededError());
     return;
   }
   let project = await requireCurrentProject(message);
@@ -300,6 +318,8 @@ export async function processProjectMediaScene(message: ProjectMediaMessage, del
   } catch (error) {
     imageError = error;
     project = await requireCurrentProject(message);
+    const persistedImage = sceneAsset(project, message.sceneNumber, "image");
+    if (await settleBackgroundImageUsage(message, persistedImage)) imageError = undefined;
   }
 
   // Narration is independent from the visual candidate. Complete and persist
@@ -311,6 +331,8 @@ export async function processProjectMediaScene(message: ProjectMediaMessage, del
     } catch (error) {
       narrationError = error;
       project = await requireCurrentProject(message);
+      const persistedAudio = sceneAsset(project, message.sceneNumber, "audio");
+      if (await settleBackgroundNarrationUsage(message, persistedAudio)) narrationError = undefined;
     }
   } else {
     console.warn(`[background-media] Scene ${message.sceneNumber} narration was deferred to keep this queue callback inside its execution budget.`);
@@ -386,6 +408,8 @@ export async function processProjectMediaScene(message: ProjectMediaMessage, del
 export async function permanentlyFailProjectMedia(message: ProjectMediaMessage, error: unknown) {
   const reason = error instanceof ProjectMediaQualityExhaustedError
     ? `场景 ${message.sceneNumber} 的候选画面均未通过内容与风格质量检查。`
+    : error instanceof ProjectMediaRuntimeExceededError
+      ? "后台媒体生成已达到 35 分钟运行上限。"
     : error instanceof Error ? error.message : "Unknown media generation failure";
   await failGenerationRequest(
     message.requestId,

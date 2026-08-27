@@ -1,4 +1,5 @@
 import { getOptionalEnv } from "@/lib/env";
+import { externalErrorStatus } from "@/lib/external-error";
 import { assertUsableSpeechAudio } from "@/lib/audio-quality";
 import { estimateNarrationSeconds } from "@/lib/speech-timing";
 import { narrationVoiceProfile } from "@/lib/voice-profiles";
@@ -70,7 +71,7 @@ async function requestAzureSpeech(input: {
       }
     } catch (error) {
       lastError = error;
-      const status = (error as { status?: number }).status;
+      const status = externalErrorStatus(error);
       if (attempt === maxAttempts - 1 || (status && ![408, 429, 500, 502, 503, 504].includes(status))) throw error;
     }
     const delayMs = boundedOperationTimeout({

@@ -11,6 +11,7 @@ import {
 } from "@/lib/cloudflare-ai";
 import { sceneReferenceAssets } from "@/lib/attachment-context";
 import { getOptionalEnv } from "@/lib/env";
+import { externalErrorCode, externalErrorName, externalErrorStatus } from "@/lib/external-error";
 import {
   enforceTextFreeImagePrompt,
   imageSafeSemanticText,
@@ -60,9 +61,11 @@ function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
 }
 
 function classifyImageError(error: unknown): NonNullable<Project["currentVersion"]["assetErrorCode"]> {
-  const candidate = error as { status?: number; code?: string; name?: string };
-  if (candidate.status === 401 || candidate.code === "invalid_api_key") return "invalid_key";
-  if (candidate.name?.includes("S3") || candidate.code?.includes("Bucket")) return "storage_failed";
+  const status = externalErrorStatus(error);
+  const code = externalErrorCode(error);
+  const name = externalErrorName(error);
+  if (status === 401 || code === "invalid_api_key") return "invalid_key";
+  if (name.includes("S3") || code.includes("Bucket")) return "storage_failed";
   return "generation_failed";
 }
 
@@ -216,7 +219,7 @@ function qualityRecoveryDirection(
 }
 
 function isSafetyFiltered(error: unknown) {
-  return (error as { code?: string }).code === "3030";
+  return externalErrorCode(error) === "3030";
 }
 
 type ImageQuality = "standard" | "premium";

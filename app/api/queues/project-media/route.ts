@@ -19,7 +19,7 @@ export const POST = handleCallback<ProjectMediaMessage>(async (message, metadata
         metadata.deliveryCount >= 2
         || (message.recoveryPass ?? 0) >= MAX_PROJECT_MEDIA_RECOVERY_PASSES
       );
-    const transientRetriesExhausted = metadata.deliveryCount >= 4;
+    const transientRetriesExhausted = metadata.deliveryCount >= 3;
     if (qualityRetriesExhausted || transientRetriesExhausted) {
       await permanentlyFailProjectMedia(message, error);
       return;

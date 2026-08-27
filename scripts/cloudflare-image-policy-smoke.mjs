@@ -13,6 +13,16 @@ const deadlineOutput = ts.transpileModule(deadlineSource, {
 }).outputText;
 const deadlineModule = { exports: {} };
 vm.runInNewContext(deadlineOutput, { module: deadlineModule, exports: deadlineModule.exports });
+const externalErrorSource = fs.readFileSync(new URL("../lib/external-error.ts", import.meta.url), "utf8");
+const externalErrorOutput = ts.transpileModule(externalErrorSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+}).outputText;
+const externalErrorModule = { exports: {} };
+vm.runInNewContext(externalErrorOutput, {
+  module: externalErrorModule,
+  exports: externalErrorModule.exports,
+  Number
+});
 const module = { exports: {} };
 const env = {};
 let fetchHandler = fetch;
@@ -36,6 +46,7 @@ vm.runInNewContext(output, {
       VIDEO_GENERATION_TIERS: {}
     };
     if (name === "@/lib/operation-deadline") return deadlineModule.exports;
+    if (name === "@/lib/external-error") return externalErrorModule.exports;
     if (name === "sharp") return () => ({});
     return {};
   }

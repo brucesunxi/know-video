@@ -7,6 +7,7 @@ import { generateProjectSceneClips } from "@/lib/video-assets";
 import { videoGenerationEstimate } from "@/lib/video-cost-policy";
 import { billingIdempotencyKey, recordUsageEvent } from "@/lib/billing/usage";
 import { InsufficientCreditsError, releaseCreditReservation, reserveCredits } from "@/lib/billing/usage";
+import { externalErrorCode, externalErrorMessage, externalErrorStatus } from "@/lib/external-error";
 
 const requestSchema = z.object({
   projectId: z.string().min(1).max(200),
@@ -21,10 +22,9 @@ export const maxDuration = 300;
 
 function videoFailureCode(failures: Array<{ error: unknown }>) {
   const balanceRequired = failures.some(({ error }) => {
-    const failure = error as { status?: number; code?: string; message?: string };
-    return failure?.status === 402
-      || failure?.code === "2021"
-      || /insufficient balance|add money|byok/iu.test(failure?.message ?? "");
+    return externalErrorStatus(error) === 402
+      || externalErrorCode(error) === "2021"
+      || /insufficient balance|add money|byok/iu.test(externalErrorMessage(error));
   });
   return balanceRequired ? "VIDEO_PROVIDER_BALANCE_REQUIRED" as const : undefined;
 }

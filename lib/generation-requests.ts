@@ -367,15 +367,18 @@ export async function attachGenerationRequestProject(input: {
 }
 
 export async function touchGenerationRequest(id: string) {
-  if (!hasDatabaseUrl()) return true;
+  if (!hasDatabaseUrl()) return { pending: true as const };
   await ensureGenerationRequestsSchema();
   const rows = await getSql()`
     update generation_requests
     set updated_at = now()
     where id = ${id} and status = 'pending'
-    returning id
-  ` as Array<{ id: string }>;
-  return Boolean(rows[0]);
+    returning id, created_at
+  ` as Array<{ id: string; created_at: string | Date }>;
+  const row = rows[0];
+  return row
+    ? { pending: true as const, createdAt: new Date(row.created_at).toISOString() }
+    : { pending: false as const };
 }
 
 export async function failGenerationRequest(id: string, error = "视频脚本和分镜生成没有完成，请重试。") {

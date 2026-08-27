@@ -23,7 +23,7 @@ assert.deepEqual(
     completionRescue: false,
     recoveryCycle: false,
     requestedQuality: "standard",
-    maxQualityAttempts: 2,
+    maxQualityAttempts: 1,
     useStockContentGuide: false
   }
 );
@@ -47,11 +47,11 @@ assert.deepEqual(
     useStockContentGuide: true
   }
 );
-assert.equal(canContinueAfterSceneQualityFailure(1, 0), false);
+assert.equal(canContinueAfterSceneQualityFailure(1, 0), true);
 assert.equal(canContinueAfterSceneQualityFailure(2, 0), true);
 assert.equal(canContinueAfterSceneQualityFailure(1, 1), true);
 assert.equal(nextProjectRecoveryPass(), 1);
 assert.equal(nextProjectRecoveryPass(1), 2);
-assert.equal(MAX_PROJECT_MEDIA_RECOVERY_PASSES, 2);
+assert.equal(MAX_PROJECT_MEDIA_RECOVERY_PASSES, 1);
 
 console.log("Background recovery policy smoke checks passed.");

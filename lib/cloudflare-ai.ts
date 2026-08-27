@@ -18,6 +18,7 @@ import {
 } from "@/lib/video-cost-policy";
 import sharp from "sharp";
 import { boundedOperationTimeout } from "@/lib/operation-deadline";
+import { externalErrorStatus } from "@/lib/external-error";
 
 const STANDARD_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const PREMIUM_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
@@ -202,7 +203,7 @@ async function runVisionVerdict<T>(options: {
       lastError = new Error(options.inconclusiveMessage);
     } catch (error) {
       lastError = error;
-      const status = (error as { status?: number }).status;
+      const status = externalErrorStatus(error);
       if (status && !retryableStatus(status)) throw error;
     }
     if (attempt < maxAttempts - 1) {
@@ -309,9 +310,10 @@ export async function generateCloudflareImage(
       }
     } catch (error) {
       lastError = error;
+      const status = externalErrorStatus(error);
       if (
         attempt === providerAttemptLimit - 1
-        || ((error as { status?: number }).status && !retryableStatus((error as { status: number }).status))
+        || (status !== undefined && !retryableStatus(status))
       ) {
         throw attachImageAttemptMetadata(error, {
           model,
