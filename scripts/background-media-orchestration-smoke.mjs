@@ -62,6 +62,7 @@ let generationRequestHeartbeat;
 let imageSettlementFailures;
 let narrationSettlementFailures;
 let imageQualityFailures;
+let generationRecord;
 
 function reset(sceneCount = 1) {
   state = newProject(sceneCount);
@@ -78,6 +79,13 @@ function reset(sceneCount = 1) {
   imageSettlementFailures = 0;
   narrationSettlementFailures = 0;
   imageQualityFailures = new Map();
+  generationRecord = {
+    id: "request-1",
+    status: "pending",
+    projectId: "project-1",
+    engine: "ai",
+    options: { motion: "camera", language: "中文" }
+  };
 }
 
 function replacePersistedScenes(scenes, sceneNumbers) {
@@ -168,7 +176,8 @@ const mocks = {
   },
   "@/lib/generation-requests": {
     completeGenerationRequest: async () => { completedCount += 1; },
-    failGenerationRequest: async () => { failedCount += 1; },
+    failGenerationRequest: async () => { failedCount += 1; return true; },
+    getGenerationRequestBeforeExpiry: async () => clone(generationRecord),
     touchGenerationRequest: async () => generationRequestHeartbeat
   },
   "@/lib/image-assets": { generateProjectSceneImages },
@@ -180,6 +189,9 @@ const mocks = {
     persistGeneratedSceneAssets: async (_versionId, scenes, options) => {
       replacePersistedScenes(scenes, options.sceneNumbers);
     }
+  },
+  "@/lib/project-store": {
+    getProjectSnapshot: async () => ({ project: clone(state), messages: [] })
   },
   "@/lib/stock-video-assets": {
     generateProjectStockClips: async (project) => ({
@@ -229,7 +241,7 @@ vm.runInNewContext(compileModule("../lib/background-media-generation.ts"), {
   }
 });
 
-const { processProjectMediaScene } = workerModule.exports;
+const { processProjectGenerationWatchdog, processProjectMediaScene } = workerModule.exports;
 const message = (sceneNumber, overrides = {}) => ({
   requestId: "request-1",
   userId: "user-1",
@@ -319,6 +331,34 @@ generationRequestHeartbeat = {
 await processProjectMediaScene(message(1), 1);
 assert.equal(imageGenerationCount, 0);
 assert.equal(narrationGenerationCount, 0);
+assert.equal(failedCount, 1);
+assert.equal(refundedCount, 1);
+
+reset(1);
+await processProjectMediaScene(message(1), 1);
+completedCount = 0;
+releasedCount = 0;
+await processProjectGenerationWatchdog({
+  operation: "watchdog",
+  requestId: "request-1",
+  userId: "user-1",
+  billingReservationKey: "reservation-1"
+});
+assert.equal(completedCount, 1);
+assert.equal(releasedCount, 1);
+assert.equal(failedCount, 0);
+assert.equal(refundedCount, 0);
+assert.equal(usageByKey.size, 2);
+
+reset(2);
+await processProjectMediaScene(message(1), 1);
+await processProjectGenerationWatchdog({
+  operation: "watchdog",
+  requestId: "request-1",
+  userId: "user-1",
+  billingReservationKey: "reservation-1"
+});
+assert.equal(completedCount, 0);
 assert.equal(failedCount, 1);
 assert.equal(refundedCount, 1);
 

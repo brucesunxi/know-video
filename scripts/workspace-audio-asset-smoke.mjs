@@ -27,11 +27,11 @@ assert.match(workspace, /候选未采用/);
 assert.match(workspace, /预览和 MP4 导出会使用这张画面/);
 assert.match(workspace, /对比或采用前不会影响当前视频/);
 assert.match(workspace, /className=\{`kv-asset-state \$\{stateBadge\.tone\}`\}/);
-assert.match(workspace, /aria-label="素材采用状态"/);
-assert.match(workspace, /aria-label="素材用途"/);
+assert.match(workspace, /aria-label=\{text\("素材采用状态", "Asset usage status"\)\}/);
+assert.match(workspace, /aria-label=\{text\("素材用途", "Asset usage"\)\}/);
 assert.match(workspace, /className="kv-asset-usage"/);
 assert.match(workspace, /usageItems\.map/);
-assert.match(workspace, /aria-label="配音质量信息"/);
+assert.match(workspace, /aria-label=\{text\("配音质量信息", "Narration quality information"\)\}/);
 assert.match(workspace, /className="kv-asset-audio-quality"/);
 assert.match(workspace, /audioQualityItems\.map/);
 

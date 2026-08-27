@@ -19,7 +19,10 @@ import {
   listIncompleteGenerationRequests
 } from "@/lib/generation-requests";
 import { reconcileCompletedGenerationRequests } from "@/lib/generation-reconciliation";
-import { enqueueProjectMediaScene } from "@/lib/media-generation-queue";
+import {
+  enqueueProjectGenerationWatchdog,
+  enqueueProjectMediaScene
+} from "@/lib/media-generation-queue";
 import { persistGeneratedProject } from "@/lib/project-mutations";
 import { getProjectSnapshot, listProjects } from "@/lib/project-store";
 import { getFromR2, headR2Object, readR2Prefix } from "@/lib/r2";
@@ -415,6 +418,12 @@ export async function POST(request: Request) {
             targetDurationSeconds: Number(body.options?.duration ?? 30)
           },
           expiresInMinutes: 180
+        });
+        await enqueueProjectGenerationWatchdog({
+          operation: "watchdog",
+          requestId,
+          userId: user.id,
+          billingReservationKey: projectReservationKey(requestId)
         });
         after(() => runBackgroundGeneration(body!, user.id));
         return NextResponse.json({ status: "pending", requestId, billingEstimate: reservation.estimate }, { status: 202 });

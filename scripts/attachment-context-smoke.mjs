@@ -109,8 +109,11 @@ assert.equal(planningSnapshot[0].assets[0].r2Key, undefined);
 assert.equal(planningSnapshot[0].assets[0].type, "image");
 
 const imageSource = fs.readFileSync(new URL("../lib/image-continuity.ts", import.meta.url), "utf8");
+const visualStyleProfilesSource = fs.readFileSync(new URL("../lib/visual-style-profiles.ts", import.meta.url), "utf8");
+const visualStyleProfiles = loadTypeScript(visualStyleProfilesSource);
 const imageContinuity = loadTypeScript(imageSource, {
-  "@/lib/attachment-context": attachments
+  "@/lib/attachment-context": attachments,
+  "@/lib/visual-style-profiles": visualStyleProfiles
 });
 const project = {
   id: "project-1",
@@ -128,9 +131,9 @@ assert.match(aiVideoSource, /User-uploaded attachments are authoritative source 
 
 const imageAssetsSource = fs.readFileSync(new URL("../lib/image-assets.ts", import.meta.url), "utf8");
 assert.match(imageAssetsSource, /sceneReferenceAssets\(scene\)/);
-assert.match(imageAssetsSource, /loadSceneImageReference\(anchorTarget\.scene, "current"\)/);
-assert.match(imageAssetsSource, /loadSceneImageReference\(scene, "current"\)/);
-assert.match(imageAssetsSource, /sceneReferenceAssets\(scene\)\.some/);
+assert.match(imageAssetsSource, /const currentReference = await loadSceneImageReference\(scene, "current"\)/);
+assert.match(imageAssetsSource, /loadProjectStyleAnchorReferences\(workingProject, scene\)/);
+assert.match(imageAssetsSource, /sceneReferenceAssets\(scene\)\.find/);
 
 const generationReferencesSource = fs.readFileSync(new URL("../lib/generation-reference-assets.ts", import.meta.url), "utf8");
 assert.match(generationReferencesSource, /referenceAssets:/);

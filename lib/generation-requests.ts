@@ -33,6 +33,7 @@ type GenerationRequestRow = {
 
 let schemaPromise: Promise<void> | undefined;
 const ATTACHED_PROJECT_STALE_INTERVAL = "45 minutes";
+const ATTACHED_PROJECT_STALE_ERROR = "后台生成超过 45 分钟仍未完成，系统已自动停止并退回本次 Credits。请检查并重试缺失场景。";
 
 function publicStoredError(error: string | null) {
   if (!error) return undefined;
@@ -175,7 +176,12 @@ export async function getGenerationRequest(id: string, userId: string) {
   const sql = getSql();
   const expired = await sql`
     update generation_requests
-    set status = 'failed', error = '生成任务运行超时，请重新提交。', updated_at = now()
+    set status = 'failed',
+      error = case
+        when project_id is null then '生成任务运行超时，请重新提交。'
+        else ${ATTACHED_PROJECT_STALE_ERROR}
+      end,
+      updated_at = now()
     where id = ${id}
       and user_id = ${userId}
       and status = 'pending'
@@ -273,7 +279,7 @@ export async function getProjectGenerationOptions(projectId: string, userId: str
     from generation_requests
     where project_id = ${projectId}
       and user_id = ${userId}
-      and status in ('pending', 'ready')
+      and status in ('pending', 'ready', 'failed')
     order by updated_at desc
     limit 1
   ` as GenerationRequestRow[];
@@ -288,7 +294,7 @@ export async function getProjectGenerationRequest(projectId: string, userId: str
     from generation_requests
     where project_id = ${projectId}
       and user_id = ${userId}
-      and status in ('pending', 'ready')
+      and status in ('pending', 'ready', 'failed')
     order by updated_at desc
     limit 1
   ` as GenerationRequestRow[];
@@ -301,7 +307,12 @@ export async function listIncompleteGenerationRequests(userId: string) {
   const sql = getSql();
   const expired = await sql`
     update generation_requests
-    set status = 'failed', error = '生成任务运行超时，请重新提交。', updated_at = now()
+    set status = 'failed',
+      error = case
+        when project_id is null then '生成任务运行超时，请重新提交。'
+        else ${ATTACHED_PROJECT_STALE_ERROR}
+      end,
+      updated_at = now()
     where user_id = ${userId}
       and status = 'pending'
       and (
@@ -382,12 +393,14 @@ export async function touchGenerationRequest(id: string) {
 }
 
 export async function failGenerationRequest(id: string, error = "视频脚本和分镜生成没有完成，请重试。") {
-  if (!hasDatabaseUrl()) return;
+  if (!hasDatabaseUrl()) return false;
   await ensureGenerationRequestsSchema();
   const safeError = error.replace(/\s+/g, " ").trim().slice(0, 500) || "视频脚本和分镜生成没有完成，请重试。";
-  await getSql()`
+  const rows = await getSql()`
     update generation_requests
     set status = 'failed', error = ${safeError}, updated_at = now()
     where id = ${id} and status = 'pending'
-  `;
+    returning id
+  ` as Array<{ id: string }>;
+  return rows.length > 0;
 }

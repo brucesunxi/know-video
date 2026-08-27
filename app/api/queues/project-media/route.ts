@@ -2,6 +2,7 @@ import { handleCallback } from "@vercel/queue";
 import {
   permanentlyFailProjectMedia,
   ProjectMediaQualityExhaustedError,
+  processProjectGenerationWatchdog,
   processProjectMediaScene
 } from "@/lib/background-media-generation";
 import type { ProjectMediaMessage } from "@/lib/media-generation-queue";
@@ -10,6 +11,16 @@ import { MAX_PROJECT_MEDIA_RECOVERY_PASSES } from "@/lib/background-recovery-pol
 export const maxDuration = 300;
 
 export const POST = handleCallback<ProjectMediaMessage>(async (message, metadata) => {
+  if (message.operation === "watchdog") {
+    try {
+      await processProjectGenerationWatchdog(message);
+    } catch (error) {
+      console.error(`[background-media] Generation watchdog attempt ${metadata.deliveryCount} failed:`, error);
+      if (metadata.deliveryCount >= 3) return;
+      throw error;
+    }
+    return;
+  }
   try {
     await processProjectMediaScene(message, metadata.deliveryCount);
   } catch (error) {

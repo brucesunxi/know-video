@@ -10,11 +10,17 @@ import { estimateBilling } from "@/lib/billing/estimate";
 import {
   completeGenerationRequest,
   failGenerationRequest,
+  getGenerationRequestBeforeExpiry,
   touchGenerationRequest
 } from "@/lib/generation-requests";
 import { generateProjectSceneImages } from "@/lib/image-assets";
-import { enqueueProjectMediaScene, type ProjectMediaMessage } from "@/lib/media-generation-queue";
+import {
+  enqueueProjectMediaScene,
+  type ProjectGenerationWatchdogMessage,
+  type ProjectMediaSceneMessage
+} from "@/lib/media-generation-queue";
 import { loadProjectForRender, persistGeneratedSceneAssets } from "@/lib/project-mutations";
+import { getProjectSnapshot } from "@/lib/project-store";
 import { generateProjectStockClips, hasFreeStockVideoProvider } from "@/lib/stock-video-assets";
 import type { Project, SceneAsset } from "@/lib/types";
 import { sceneRequiresPremiumImage } from "@/lib/image-continuity";
@@ -59,7 +65,7 @@ function sceneAsset(project: Project, sceneNumber: number, type: SceneAsset["typ
     ?.assets.find((asset) => asset.type === type && asset.url && (type !== "image" || isDeliverableVisualAsset(asset)));
 }
 
-async function settleBackgroundImageUsage(message: ProjectMediaMessage, asset: SceneAsset | undefined) {
+async function settleBackgroundImageUsage(message: ProjectMediaSceneMessage, asset: SceneAsset | undefined) {
   const marker = backgroundBillingMarkerForAsset(asset, message.requestId);
   if (!asset || !marker || marker.resourceType === "speech") return false;
   const effectiveQuality = marker.resourceType === "image_premium" ? "premium" : "standard";
@@ -93,7 +99,7 @@ async function settleBackgroundImageUsage(message: ProjectMediaMessage, asset: S
   return true;
 }
 
-async function settleBackgroundNarrationUsage(message: ProjectMediaMessage, asset: SceneAsset | undefined) {
+async function settleBackgroundNarrationUsage(message: ProjectMediaSceneMessage, asset: SceneAsset | undefined) {
   const marker = backgroundBillingMarkerForAsset(asset, message.requestId);
   if (!asset || !marker || marker.resourceType !== "speech") return false;
   await recordUsageEvent({
@@ -118,14 +124,14 @@ async function settleBackgroundNarrationUsage(message: ProjectMediaMessage, asse
   return true;
 }
 
-async function requireCurrentProject(message: ProjectMediaMessage) {
+async function requireCurrentProject(message: ProjectMediaSceneMessage) {
   const project = await loadProjectForRender(message.projectId, message.versionId, message.userId);
   if (!project) throw new Error("The queued video version is no longer current.");
   return project;
 }
 
 async function ensureSceneImage(
-  message: ProjectMediaMessage,
+  message: ProjectMediaSceneMessage,
   project: Project,
   deliveryCount: number,
   deadlineMs: number
@@ -221,7 +227,7 @@ async function ensureSceneImage(
 }
 
 async function ensureSceneNarration(
-  message: ProjectMediaMessage,
+  message: ProjectMediaSceneMessage,
   project: Project,
   deliveryCount: number,
   deadlineMs: number
@@ -265,7 +271,7 @@ async function ensureSceneNarration(
 }
 
 async function addFreeStockMotion(
-  message: ProjectMediaMessage,
+  message: ProjectMediaSceneMessage,
   project: Project,
   options: { forceRecoveryFallback?: boolean; deadlineMs?: number } = {}
 ) {
@@ -291,7 +297,7 @@ async function addFreeStockMotion(
   return result.project;
 }
 
-export async function processProjectMediaScene(message: ProjectMediaMessage, deliveryCount = 1) {
+export async function processProjectMediaScene(message: ProjectMediaSceneMessage, deliveryCount = 1) {
   const callbackStartedAt = Date.now();
   const callbackWorkDeadline = callbackStartedAt + BACKGROUND_CALLBACK_WORK_DEADLINE_MS;
   const canStartLongWork = () => Date.now() - callbackStartedAt < BACKGROUND_LONG_WORK_CUTOFF_MS;
@@ -405,22 +411,83 @@ export async function processProjectMediaScene(message: ProjectMediaMessage, del
   }
 }
 
-export async function permanentlyFailProjectMedia(message: ProjectMediaMessage, error: unknown) {
+export async function permanentlyFailProjectMedia(message: ProjectMediaSceneMessage, error: unknown) {
   const reason = error instanceof ProjectMediaQualityExhaustedError
     ? `场景 ${message.sceneNumber} 的候选画面均未通过内容与风格质量检查。`
     : error instanceof ProjectMediaRuntimeExceededError
       ? "后台媒体生成已达到 35 分钟运行上限。"
     : error instanceof Error ? error.message : "Unknown media generation failure";
-  await failGenerationRequest(
+  const failed = await failGenerationRequest(
     message.requestId,
     `后台已多次自动重试，但场景 ${message.sceneNumber} 的素材仍未完成：${reason}`
   );
-  if (message.billingReservationKey) {
+  if (failed && message.billingReservationKey) {
     await refundCreditReservation({
       userId: message.userId,
       reservationKey: message.billingReservationKey,
       reason: "project_media_permanently_failed",
       metadata: { sceneNumber: message.sceneNumber, error: reason }
+    });
+  }
+}
+
+export async function processProjectGenerationWatchdog(message: ProjectGenerationWatchdogMessage) {
+  const generation = await getGenerationRequestBeforeExpiry(message.requestId, message.userId);
+  if (!generation || generation.status !== "pending") return;
+
+  const snapshot = generation.projectId
+    ? await getProjectSnapshot(generation.projectId, message.userId)
+    : undefined;
+  const project = snapshot?.project;
+  const scenes = project?.currentVersion.scenes ?? [];
+  const assetsComplete = scenes.length > 0
+    && scenes.every((scene) => sceneHasVisualAsset(scene) && sceneHasAudioAsset(scene));
+
+  if (project && assetsComplete) {
+    for (const scene of scenes) {
+      const settlementMessage: ProjectMediaSceneMessage = {
+        requestId: message.requestId,
+        userId: message.userId,
+        projectId: project.id,
+        versionId: project.currentVersion.id,
+        sceneNumber: scene.sceneNumber,
+        engine: generation.engine ?? "ai",
+        billingReservationKey: message.billingReservationKey,
+        options: generation.options
+      };
+      await settleBackgroundImageUsage(settlementMessage, sceneAsset(project, scene.sceneNumber, "image"));
+      await settleBackgroundNarrationUsage(settlementMessage, sceneAsset(project, scene.sceneNumber, "audio"));
+    }
+    await completeGenerationRequest({
+      id: message.requestId,
+      projectId: project.id,
+      engine: generation.engine ?? "ai"
+    });
+    if (message.billingReservationKey) {
+      await releaseCreditReservation({
+        userId: message.userId,
+        reservationKey: message.billingReservationKey,
+        reason: "project_generation_watchdog_reconciled",
+        metadata: { projectId: project.id, versionId: project.currentVersion.id }
+      });
+    }
+    return;
+  }
+
+  const failed = await failGenerationRequest(
+    message.requestId,
+    "后台生成超过 45 分钟仍未完成，系统已自动停止并退回本次 Credits。请检查并重试缺失场景。"
+  );
+  if (failed && message.billingReservationKey) {
+    await refundCreditReservation({
+      userId: message.userId,
+      reservationKey: message.billingReservationKey,
+      reason: "project_generation_watchdog_timed_out",
+      metadata: {
+        projectId: generation.projectId,
+        completedScenes: scenes.filter((scene) => sceneHasVisualAsset(scene) && sceneHasAudioAsset(scene)).length,
+        totalScenes: scenes.length
+      }
     });
   }
 }

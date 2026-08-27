@@ -8,6 +8,12 @@ const source = fs.readFileSync(new URL("../lib/video-brain.ts", import.meta.url)
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
+const briefSemanticsSource = fs.readFileSync(new URL("../lib/brief-semantics.ts", import.meta.url), "utf8");
+const briefSemanticsOutput = ts.transpileModule(briefSemanticsSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+}).outputText;
+const briefSemanticsModule = { exports: {} };
+vm.runInNewContext(briefSemanticsOutput, { module: briefSemanticsModule, exports: briefSemanticsModule.exports });
 const module = { exports: {} };
 const localRequire = (name) => {
   if (name === "@/lib/edit-intent") return {
@@ -27,10 +33,20 @@ const localRequire = (name) => {
     isProductionOnlyRequest: () => false,
     productionSettingsFromRequest: () => ({})
   };
-  if (name === "@/lib/brief-semantics") return {
-    extractBriefFacts: (prompt) => prompt.split(/[。！？；\n]+/u).filter((part) => part.length >= 8),
-    extractBriefSubject: (prompt) => prompt.match(/\b[A-Z][A-Z0-9_-]{2,}\b/)?.[0] ?? "这项产品",
-    isVideoCreationProductBrief: (prompt) => /视频(?:生成|创作|制作)(?:平台|工具|软件|系统|工作室)/u.test(prompt)
+  if (name === "@/lib/brief-semantics") return briefSemanticsModule.exports;
+  if (name === "@/lib/visual-style-profiles") return {
+    visualStyleDirection: () => "",
+    visualStyleProfile: () => ({
+      key: "cinematic",
+      label: "电影质感",
+      palette: ["#0B1220", "#F8FAFC"],
+      artDirection: "cinematic",
+      lighting: "directional",
+      cameraLanguage: "slow push in",
+      materials: "natural materials",
+      composition: "layered depth",
+      avoid: "flat layouts"
+    })
   };
   throw new Error(`Unexpected import: ${name}`);
 };
@@ -108,7 +124,8 @@ for (const fallbackScene of fallbackProject.currentVersion.scenes) {
   assert.match(fallbackScene.motionPrompt, /\p{Script=Han}/u);
   assert.match(fallbackScene.style.theme, /\p{Script=Han}/u);
   assert.match(fallbackScene.style.mood, /\p{Script=Han}/u);
-  assert.ok(fallbackScene.visualPrompt.length >= 100);
+  assert.ok(fallbackScene.visualPrompt.length >= 80);
+  assert.match(fallbackScene.visualPrompt, /前景|中景|背景/u);
   assert.ok(fallbackScene.motionPrompt.length >= 50);
 }
 

@@ -39,6 +39,11 @@ assert.match(source, /options\?: GenerationOptions/);
 assert.match(projectsRoute, /after\(\(\) => runBackgroundGeneration/);
 assert.match(projectsRoute, /attachGenerationRequestProject/);
 assert.match(projectsRoute, /enqueueProjectMediaScene/);
+assert.match(projectsRoute, /await enqueueProjectGenerationWatchdog\(\{/);
+assert.ok(
+  projectsRoute.indexOf("await enqueueProjectGenerationWatchdog({")
+    < projectsRoute.indexOf("after(() => runBackgroundGeneration")
+);
 assert.match(projectsRoute, /return NextResponse\.json\(\{ status: "pending", requestId \}, \{ status: 202 \}\)/);
 assert.match(projectsRoute, /listIncompleteGenerationRequests\(user\.id\)/);
 assert.match(projectsRoute, /listCompletedPendingGenerationRequests\(user\.id\)/);

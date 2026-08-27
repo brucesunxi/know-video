@@ -10,7 +10,12 @@ const vercel = JSON.parse(fs.readFileSync(new URL("../vercel.json", import.meta.
 
 assert.match(projectRoute, /attachGenerationRequestProject/);
 assert.match(projectRoute, /enqueueProjectMediaScene\(\{/);
+assert.match(projectRoute, /await enqueueProjectGenerationWatchdog\(\{/);
 assert.match(queue, /send\(PROJECT_MEDIA_TOPIC/);
+assert.match(queue, /PROJECT_GENERATION_WATCHDOG_DELAY_SECONDS = 45 \* 60/);
+assert.match(queue, /operation: "watchdog"/);
+assert.match(queue, /idempotencyKey: `\$\{message\.requestId\}:generation-watchdog`/);
+assert.match(queue, /delaySeconds: PROJECT_GENERATION_WATCHDOG_DELAY_SECONDS/);
 assert.match(queue, /recoveryPass\?: number/);
 assert.match(queue, /startedAt\?: number/);
 assert.match(queue, /idempotencyKey: `\$\{message\.requestId\}:pass:\$\{message\.recoveryPass \?\? 0\}:scene:\$\{message\.sceneNumber\}`/);
@@ -50,6 +55,12 @@ assert.match(worker, /BACKGROUND_CALLBACK_WORK_DEADLINE_MS = 260_000/);
 assert.match(worker, /BACKGROUND_PROJECT_RUNTIME_LIMIT_MS = 35 \* 60 \* 1_000/);
 assert.match(worker, /heartbeat\.createdAt/);
 assert.match(worker, /ProjectMediaRuntimeExceededError/);
+assert.match(worker, /processProjectGenerationWatchdog/);
+assert.match(worker, /generation\.status !== "pending"/);
+assert.match(worker, /assetsComplete/);
+assert.match(worker, /project_generation_watchdog_reconciled/);
+assert.match(worker, /project_generation_watchdog_timed_out/);
+assert.match(worker, /后台生成超过 45 分钟仍未完成/);
 assert.match(worker, /allowOpenAIFallback: deliveryCount >= 3/);
 assert.match(worker, /const heartbeat = await touchGenerationRequest\(message\.requestId\)/);
 assert.match(worker, /if \(!heartbeat\.pending\) \{[\s\S]*Ignoring stale message[\s\S]*return/);
@@ -80,6 +91,9 @@ assert.doesNotMatch(worker, /const refreshed = await requireCurrentProject\(mess
 assert.match(worker, /return updated/);
 assert.match(worker, /return result\.project/);
 assert.match(consumer, /processProjectMediaScene\(message, metadata\.deliveryCount\)/);
+assert.match(consumer, /message\.operation === "watchdog"/);
+assert.match(consumer, /processProjectGenerationWatchdog\(message\)/);
+assert.match(consumer, /Generation watchdog attempt/);
 assert.match(consumer, /error instanceof ProjectMediaQualityExhaustedError/);
 assert.match(consumer, /metadata\.deliveryCount >= 2/);
 assert.match(consumer, /message\.recoveryPass \?\? 0/);

@@ -355,6 +355,7 @@ function localizedErrorMessage(value: string, language: UiLanguage) {
   if (language === "zh-CN") return value;
   const fixed: Record<string, string> = {
     "生成任务运行超时，请重新提交。": "Script and storyboard generation timed out before the project could be saved. Review the request and try again.",
+    "后台生成超过 45 分钟仍未完成，系统已自动停止并退回本次 Credits。请检查并重试缺失场景。": "Background generation did not finish within 45 minutes. It was stopped automatically and all credits for this attempt were returned. Review and retry the missing scenes.",
     "脚本服务连接超时，请稍后重试。": "The script service timed out. Please try again in a moment.",
     "视频脚本和分镜生成没有完成，请重试。": "The script and storyboard could not be completed. Please try again.",
     "生成没有完成，请检查需求后重试。": "Generation did not finish. Review the request and try again."
@@ -6137,7 +6138,8 @@ export function WorkspaceClient({
   async function continueGeneratedProject(
     data: Required<Pick<StoryboardGenerationResponse, "project" | "messages" | "engine">> & StoryboardGenerationResponse,
     options: GenerationOptions,
-    resumeMissingOnly = false
+    resumeMissingOnly = false,
+    resolvedFailedTaskId?: string
   ) {
     let generatedProject = data.project;
     const warnings: string[] = [];
@@ -6277,12 +6279,15 @@ export function WorkspaceClient({
     setPendingPlan(undefined);
     setStudioView("preview");
     setProgress(100);
-    if (missingImageSceneNumbers.length === 0 && missingAudioSceneNumbers.length === 0) {
+    const requiredMediaComplete = missingImageSceneNumbers.length === 0 && missingAudioSceneNumbers.length === 0;
+    if (requiredMediaComplete) {
       setGenerationStartedAt(undefined);
       clearPendingGenerationSession();
+      if (resolvedFailedTaskId) await dismissResolvedFailedTask(resolvedFailedTaskId);
     }
     setBriefAttachments([]);
     if (!resumeMissingOnly) window.setTimeout(() => setStage("studio"), 350);
+    return requiredMediaComplete;
   }
 
   function addBriefAttachmentFiles(files: File[]) {
@@ -7801,6 +7806,11 @@ export function WorkspaceClient({
   async function openGenerationTask(task: GenerationTaskListItem) {
     const prompt = task.prompt?.trim() ?? "";
     if (task.status === "failed") {
+      if (task.projectId) {
+        setErrorMessage(undefined);
+        await openProject(task.projectId, task.id);
+        return;
+      }
       setBriefPrompt(prompt);
       setBriefAttachments([]);
       setGenerationOptions(resolvedGenerationOptions(prompt, task.options ?? defaultGenerationOptions(prompt)));
@@ -7829,7 +7839,19 @@ export function WorkspaceClient({
     }
   }
 
-  async function openProject(projectId: string) {
+  async function dismissResolvedFailedTask(requestId: string) {
+    try {
+      const response = await fetch(`/api/projects/generation?requestId=${encodeURIComponent(requestId)}`, { method: "DELETE" });
+      if (!response.ok) return;
+      setGenerationTasks((current) => current.filter((item) => item.id !== requestId));
+      const pending = readPendingGenerationSession();
+      if (pending?.requestId === requestId) clearPendingGenerationSession();
+    } catch (error) {
+      console.warn("[generation-repair] Unable to clear the resolved failure notification:", error);
+    }
+  }
+
+  async function openProject(projectId: string, failedGenerationTaskId?: string) {
     setProjectsLoading(true);
     setErrorMessage(undefined);
     try {
@@ -7851,9 +7873,10 @@ export function WorkspaceClient({
           messages: data.messages,
           engine: "ai",
           recovered: true
-        }, data.generationOptions, true);
+        }, data.generationOptions, true, failedGenerationTaskId);
         return;
       }
+      if (failedGenerationTaskId) await dismissResolvedFailedTask(failedGenerationTaskId);
       setProject(data.project);
       if (data.generationOptions) setGenerationOptions(data.generationOptions);
       setProjectSource("database");
