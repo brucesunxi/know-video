@@ -100,6 +100,8 @@
     "generation:billing-recovery:smoke": "node scripts/background-media-billing-smoke.mjs",
     "generation:recovery-policy:smoke": "node scripts/background-recovery-policy-smoke.mjs",
     "generation:health:smoke": "node scripts/generation-health-smoke.mjs",
+    "generation:terminal-billing:smoke": "node scripts/generation-terminal-billing-smoke.mjs",
+    "generation:lifecycle:smoke": "node scripts/generation-lifecycle-policy-smoke.mjs",
     "errors:external:smoke": "node scripts/external-error-smoke.mjs",
     "generation:prompt:smoke": "node scripts/generation-prompt-smoke.mjs",
     "generation:reference:smoke": "node scripts/generation-reference-smoke.mjs",

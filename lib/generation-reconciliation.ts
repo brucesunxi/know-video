@@ -1,8 +1,19 @@
-import { releaseCreditReservation } from "@/lib/billing/usage";
 import {
   completeGenerationRequest,
+  failGenerationRequest,
+  getGenerationRequestBeforeExpiry,
+  touchGenerationRequest,
   type GenerationRequestRecord
 } from "@/lib/generation-requests";
+import {
+  generationExceededRuntime,
+  generationMediaIsInactive,
+  generationResumeAttempt
+} from "@/lib/generation-lifecycle-policy";
+import {
+  enqueueProjectGenerationWatchdog,
+  enqueueProjectMediaScene
+} from "@/lib/media-generation-queue";
 import { sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
 import { getProjectSnapshot } from "@/lib/project-store";
 
@@ -12,19 +23,16 @@ async function finalizeCompletedGenerationRequest(
 ) {
   if (generation.status !== "pending" || !generation.projectId) return generation;
 
-  await releaseCreditReservation({
-    userId,
-    reservationKey: `project-generation:${generation.id}`,
-    reason: "project_generation_reconciled",
-    metadata: { projectId: generation.projectId }
-  });
   await completeGenerationRequest({
     id: generation.id,
+    userId,
     projectId: generation.projectId,
-    engine: generation.engine ?? "ai"
+    engine: generation.engine ?? "ai",
+    releaseReason: "project_generation_reconciled"
   });
 
-  return { ...generation, status: "ready" as const, error: undefined };
+  return await getGenerationRequestBeforeExpiry(generation.id, userId)
+    ?? { ...generation, status: "ready" as const, error: undefined };
 }
 
 export async function reconcileCompletedGenerationRequest(
@@ -47,4 +55,104 @@ export async function reconcileCompletedGenerationRequests(
   userId: string
 ) {
   await Promise.all(generations.map((generation) => finalizeCompletedGenerationRequest(generation, userId)));
+}
+
+async function failedRecoveryRecord(
+  generation: GenerationRequestRecord,
+  userId: string,
+  error: string,
+  refundReason: string
+) {
+  await failGenerationRequest({
+    id: generation.id,
+    userId,
+    error,
+    refundReason,
+    metadata: { projectId: generation.projectId, automaticRecovery: true }
+  });
+  return await getGenerationRequestBeforeExpiry(generation.id, userId)
+    ?? { ...generation, status: "failed" as const, error };
+}
+
+export async function recoverStalledGenerationRequest(
+  generation: GenerationRequestRecord,
+  userId: string,
+  now = Date.now()
+) {
+  if (generation.status !== "pending" || !generation.projectId) return generation;
+
+  const runtimeExceeded = generationExceededRuntime(generation.createdAt, now);
+  const mediaInactive = generationMediaIsInactive(generation.updatedAt, now);
+  if (!runtimeExceeded && !mediaInactive) return generation;
+
+  const snapshot = await getProjectSnapshot(generation.projectId, userId);
+  const project = snapshot?.project;
+  const scenes = project?.currentVersion.scenes ?? [];
+  const assetsComplete = scenes.length > 0
+    && scenes.every((scene) => sceneHasVisualAsset(scene) && sceneHasAudioAsset(scene));
+  if (assetsComplete) return finalizeCompletedGenerationRequest(generation, userId);
+
+  if (runtimeExceeded) {
+    return failedRecoveryRecord(
+      generation,
+      userId,
+      "后台生成已达到 40 分钟运行上限，系统已自动停止并退回本次 Credits。请重试缺失场景。",
+      "project_generation_runtime_exceeded"
+    );
+  }
+  if (!project || scenes.length === 0) {
+    return failedRecoveryRecord(
+      generation,
+      userId,
+      "后台任务没有保存出可恢复的分镜，系统已停止任务并退回本次 Credits。请重新生成。",
+      "project_generation_unrecoverable"
+    );
+  }
+
+  const firstIncomplete = scenes
+    .filter((scene) => !sceneHasVisualAsset(scene) || !sceneHasAudioAsset(scene))
+    .sort((left, right) => left.sceneNumber - right.sceneNumber)[0];
+  if (!firstIncomplete) return finalizeCompletedGenerationRequest(generation, userId);
+
+  const resumeAttempt = generationResumeAttempt(generation.createdAt, now);
+  await enqueueProjectGenerationWatchdog({
+    operation: "watchdog",
+    requestId: generation.id,
+    userId,
+    billingReservationKey: `project-generation:${generation.id}`,
+    watchdogPass: resumeAttempt
+  });
+  const startedAt = Date.parse(generation.createdAt);
+  await enqueueProjectMediaScene({
+    requestId: generation.id,
+    userId,
+    projectId: project.id,
+    versionId: project.currentVersion.id,
+    sceneNumber: firstIncomplete.sceneNumber,
+    engine: generation.engine ?? "ai",
+    billingReservationKey: `project-generation:${generation.id}`,
+    options: generation.options,
+    recoveryPass: 0,
+    resumeAttempt,
+    startedAt: Number.isFinite(startedAt) ? startedAt : now
+  });
+  await touchGenerationRequest(generation.id);
+  return { ...generation, updatedAt: new Date(now).toISOString() };
+}
+
+export async function recoverStalledGenerationRequests(
+  generations: GenerationRequestRecord[],
+  userId: string,
+  now = Date.now()
+) {
+  return Promise.all(generations.map((generation) => (
+    generation.status === "pending"
+      && generation.projectId
+      && (
+        generationMediaIsInactive(generation.updatedAt, now)
+        || generationExceededRuntime(generation.createdAt, now)
+      )
+      ? recoverStalledGenerationRequest(generation, userId, now)
+      : generation
+  )));
 }

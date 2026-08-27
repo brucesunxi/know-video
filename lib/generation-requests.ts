@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
-import { refundCreditReservation } from "@/lib/billing/usage";
+import {
+  buildCreditReservationRefundQuery,
+  buildCreditReservationReleaseQuery
+} from "@/lib/billing/usage";
 import { getSql, hasDatabaseUrl } from "@/lib/db";
+import {
+  GENERATION_MAX_RUNTIME_MINUTES,
+  GENERATION_PLANNING_TIMEOUT_MINUTES,
+  generationExceededRuntime
+} from "@/lib/generation-lifecycle-policy";
 import type { GenerationOptions, GenerationReferenceAsset } from "@/lib/types";
 
 export type GenerationRequestStatus = "pending" | "ready" | "failed";
@@ -29,10 +37,12 @@ type GenerationRequestRow = {
   error: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  billing_repair_needed?: boolean;
 };
 
-const ATTACHED_PROJECT_STALE_INTERVAL = "45 minutes";
-const ATTACHED_PROJECT_STALE_ERROR = "后台生成超过 45 分钟仍未完成，系统已自动停止并退回本次 Credits。请检查并重试缺失场景。";
+const PLANNING_STALE_INTERVAL = `${GENERATION_PLANNING_TIMEOUT_MINUTES} minutes`;
+const ATTACHED_PROJECT_STALE_INTERVAL = `${GENERATION_MAX_RUNTIME_MINUTES} minutes`;
+const ATTACHED_PROJECT_STALE_ERROR = "后台生成已达到 40 分钟运行上限，系统已自动停止并退回本次 Credits。请检查并重试缺失场景。";
 
 function publicStoredError(error: string | null) {
   if (!error) return undefined;
@@ -62,6 +72,43 @@ function toRecord(row: GenerationRequestRow): GenerationRequestRecord {
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString()
   };
+}
+
+async function readGenerationRequestRow(id: string, userId: string) {
+  const rows = await getSql()`
+    select request.*,
+      exists (
+        select 1
+        from credit_reservations reservation
+        where reservation.reservation_key = 'project-generation:' || request.id::text
+          and reservation.user_id = request.user_id
+          and (
+            (
+              request.status = 'ready'
+              and reservation.status in ('reserved', 'partially_settled')
+            )
+            or (
+              request.status = 'failed'
+              and (
+                reservation.status in ('reserved', 'partially_settled', 'settled')
+                or (reservation.status = 'released' and reservation.settled_credits > 0)
+              )
+            )
+          )
+      ) as billing_repair_needed
+    from generation_requests request
+    where request.id = ${id} and request.user_id = ${userId}
+    limit 1
+  ` as GenerationRequestRow[];
+  return rows[0];
+}
+
+function requestLooksStale(row: GenerationRequestRow) {
+  if (row.status !== "pending") return false;
+  if (row.project_id) return generationExceededRuntime(row.created_at);
+  const updatedAt = new Date(row.updated_at).getTime();
+  return Number.isFinite(updatedAt)
+    && Date.now() - updatedAt >= GENERATION_PLANNING_TIMEOUT_MINUTES * 60_000;
 }
 
 export function generationRequestFingerprint(
@@ -123,49 +170,38 @@ export async function claimGenerationRequest(input: {
 
 export async function getGenerationRequest(id: string, userId: string) {
   if (!hasDatabaseUrl()) return undefined;
-  const sql = getSql();
-  const expired = await sql`
-    update generation_requests
-    set status = 'failed',
-      error = case
-        when project_id is null then '生成任务运行超时，请重新提交。'
-        else ${ATTACHED_PROJECT_STALE_ERROR}
-      end,
-      updated_at = now()
-    where id = ${id}
-      and user_id = ${userId}
-      and status = 'pending'
-      and (
-        (project_id is null and updated_at < now() - interval '15 minutes')
-        or (project_id is not null and updated_at < now() - ${ATTACHED_PROJECT_STALE_INTERVAL}::interval)
-      )
-    returning id
-  ` as Array<{ id: string }>;
-  if (expired[0]) {
-    await refundCreditReservation({
+  let row = await readGenerationRequestRow(id, userId);
+  if (!row) return undefined;
+  if (requestLooksStale(row) || (row.status === "failed" && row.billing_repair_needed)) {
+    await failGenerationRequest({
+      id,
       userId,
-      reservationKey: `project-generation:${expired[0].id}`,
-      reason: "project_generation_timed_out"
-    }).catch((error) => console.error("[generation-requests] Unable to refund timed-out generation:", error));
+      error: row.error ?? "生成任务运行超时，请重新提交。",
+      refundReason: row.status === "failed"
+        ? "terminal_generation_billing_repair"
+        : "project_generation_timed_out",
+      metadata: row.status === "failed" ? { repairedTerminalBilling: true } : undefined,
+      staleOnly: row.status === "pending"
+    });
+    row = await readGenerationRequestRow(id, userId) ?? row;
+  } else if (row.status === "ready" && row.project_id && row.billing_repair_needed) {
+    await completeGenerationRequest({
+      id,
+      userId,
+      projectId: row.project_id,
+      engine: row.engine ?? "ai",
+      releaseReason: "terminal_generation_billing_repair",
+      metadata: { repairedTerminalBilling: true }
+    });
+    row = await readGenerationRequestRow(id, userId) ?? row;
   }
-  const rows = await sql`
-    select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
-    from generation_requests
-    where id = ${id} and user_id = ${userId}
-    limit 1
-  ` as GenerationRequestRow[];
-  return rows[0] ? toRecord(rows[0]) : undefined;
+  return toRecord(row);
 }
 
 export async function getGenerationRequestBeforeExpiry(id: string, userId: string) {
   if (!hasDatabaseUrl()) return undefined;
-  const rows = await getSql()`
-    select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
-    from generation_requests
-    where id = ${id} and user_id = ${userId}
-    limit 1
-  ` as GenerationRequestRow[];
-  return rows[0] ? toRecord(rows[0]) : undefined;
+  const row = await readGenerationRequestRow(id, userId);
+  return row ? toRecord(row) : undefined;
 }
 
 export async function listCompletedPendingGenerationRequests(userId: string) {
@@ -250,27 +286,59 @@ export async function getProjectGenerationRequest(projectId: string, userId: str
 export async function listIncompleteGenerationRequests(userId: string) {
   if (!hasDatabaseUrl()) return [];
   const sql = getSql();
-  const expired = await sql`
-    update generation_requests
-    set status = 'failed',
-      error = case
-        when project_id is null then '生成任务运行超时，请重新提交。'
-        else ${ATTACHED_PROJECT_STALE_ERROR}
-      end,
-      updated_at = now()
-    where user_id = ${userId}
-      and status = 'pending'
+  const repairCandidates = await sql`
+    select request.*
+    from generation_requests request
+    left join credit_reservations reservation
+      on reservation.reservation_key = 'project-generation:' || request.id::text
+      and reservation.user_id = request.user_id
+    where request.user_id = ${userId}
       and (
-        (project_id is null and updated_at < now() - interval '15 minutes')
-        or (project_id is not null and updated_at < now() - ${ATTACHED_PROJECT_STALE_INTERVAL}::interval)
+        (
+          request.status = 'pending'
+          and (
+            (request.project_id is null and request.updated_at < now() - ${PLANNING_STALE_INTERVAL}::interval)
+            or (request.project_id is not null and request.created_at < now() - ${ATTACHED_PROJECT_STALE_INTERVAL}::interval)
+          )
+        )
+        or (
+          request.status = 'ready'
+          and reservation.status in ('reserved', 'partially_settled')
+        )
+        or (
+          request.status = 'failed'
+          and (
+            reservation.status in ('reserved', 'partially_settled', 'settled')
+            or (reservation.status = 'released' and reservation.settled_credits > 0)
+          )
+        )
       )
-    returning id
-  ` as Array<{ id: string }>;
-  await Promise.all(expired.map((request) => refundCreditReservation({
-    userId,
-    reservationKey: `project-generation:${request.id}`,
-    reason: "project_generation_timed_out"
-  }).catch((error) => console.error("[generation-requests] Unable to refund timed-out generation:", error))));
+    order by request.updated_at
+    limit 50
+  ` as GenerationRequestRow[];
+  await Promise.all(repairCandidates.map(async (request) => {
+    if (request.status === "ready" && request.project_id) {
+      await completeGenerationRequest({
+        id: request.id,
+        userId,
+        projectId: request.project_id,
+        engine: request.engine ?? "ai",
+        releaseReason: "terminal_generation_billing_repair",
+        metadata: { repairedTerminalBilling: true }
+      });
+      return;
+    }
+    await failGenerationRequest({
+      id: request.id,
+      userId,
+      error: request.error ?? "生成任务运行超时，请重新提交。",
+      refundReason: request.status === "failed"
+        ? "terminal_generation_billing_repair"
+        : "project_generation_timed_out",
+      metadata: request.status === "failed" ? { repairedTerminalBilling: true } : undefined,
+      staleOnly: request.status === "pending"
+    });
+  }));
   const rows = await sql`
     select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
     from generation_requests
@@ -283,27 +351,69 @@ export async function listIncompleteGenerationRequests(userId: string) {
 
 export async function deleteFailedGenerationRequest(id: string, userId: string) {
   if (!hasDatabaseUrl()) return false;
-  const rows = await getSql()`
-    delete from generation_requests
-    where id = ${id}
-      and user_id = ${userId}
-      and status = 'failed'
-    returning id
-  ` as Array<{ id: string }>;
+  const sql = getSql();
+  const results = await sql.transaction([
+    sql`select pg_advisory_xact_lock(hashtextextended(${id}, 1))`,
+    buildCreditReservationRefundQuery(sql, {
+      userId,
+      reservationKey: `project-generation:${id}`,
+      reason: "failed_generation_deleted",
+      metadata: { deletedFailureNotice: true }
+    }, {
+      requestId: id,
+      status: "failed"
+    }),
+    sql`
+      delete from generation_requests
+      where id = ${id}
+        and user_id = ${userId}
+        and status = 'failed'
+      returning id
+    `
+  ]);
+  const rows = results[2] as Array<{ id: string }>;
   return rows.length > 0;
 }
 
 export async function completeGenerationRequest(input: {
   id: string;
+  userId: string;
   projectId: string;
   engine: string;
+  billingReservationKey?: string;
+  releaseReason?: string;
+  metadata?: Record<string, unknown>;
 }) {
-  if (!hasDatabaseUrl()) return;
-  await getSql()`
-    update generation_requests
-    set status = 'ready', project_id = ${input.projectId}, engine = ${input.engine}, error = null, updated_at = now()
-    where id = ${input.id} and status = 'pending'
-  `;
+  if (!hasDatabaseUrl()) return { completed: false, releasedCredits: 0 } as const;
+  const sql = getSql();
+  const reservationKey = input.billingReservationKey ?? `project-generation:${input.id}`;
+  const results = await sql.transaction([
+    sql`select pg_advisory_xact_lock(hashtextextended(${input.id}, 1))`,
+    sql`
+      update generation_requests
+      set status = 'ready', project_id = ${input.projectId}, engine = ${input.engine}, error = null, updated_at = now()
+      where id = ${input.id}
+        and user_id = ${input.userId}
+        and status = 'pending'
+      returning id
+    `,
+    buildCreditReservationReleaseQuery(sql, {
+      userId: input.userId,
+      reservationKey,
+      reason: input.releaseReason ?? "project_generation_completed",
+      metadata: { projectId: input.projectId, ...input.metadata }
+    }, {
+      requestId: input.id,
+      status: "ready",
+      projectId: input.projectId
+    })
+  ]);
+  const completed = (results[1] as Array<{ id: string }>).length > 0;
+  const released = (results[2] as Array<{ released_credits: string | number }>)[0];
+  return {
+    completed,
+    releasedCredits: Number(released?.released_credits ?? 0)
+  } as const;
 }
 
 export async function attachGenerationRequestProject(input: {
@@ -333,14 +443,61 @@ export async function touchGenerationRequest(id: string) {
     : { pending: false as const };
 }
 
-export async function failGenerationRequest(id: string, error = "视频脚本和分镜生成没有完成，请重试。") {
-  if (!hasDatabaseUrl()) return false;
-  const safeError = error.replace(/\s+/g, " ").trim().slice(0, 500) || "视频脚本和分镜生成没有完成，请重试。";
-  const rows = await getSql()`
-    update generation_requests
-    set status = 'failed', error = ${safeError}, updated_at = now()
-    where id = ${id} and status = 'pending'
-    returning id
-  ` as Array<{ id: string }>;
-  return rows.length > 0;
+export async function failGenerationRequest(input: {
+  id: string;
+  userId: string;
+  error?: string;
+  billingReservationKey?: string;
+  refundReason: string;
+  metadata?: Record<string, unknown>;
+  staleOnly?: boolean;
+}) {
+  if (!hasDatabaseUrl()) return { failed: false, refundedCredits: 0 } as const;
+  const safeError = (input.error ?? "视频脚本和分镜生成没有完成，请重试。")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 500) || "视频脚本和分镜生成没有完成，请重试。";
+  const sql = getSql();
+  const reservationKey = input.billingReservationKey ?? `project-generation:${input.id}`;
+  const staleOnly = input.staleOnly === true;
+  const results = await sql.transaction([
+    sql`select pg_advisory_xact_lock(hashtextextended(${input.id}, 1))`,
+    sql`
+      update generation_requests
+      set status = 'failed',
+        error = case
+          when ${staleOnly} and project_id is not null then ${ATTACHED_PROJECT_STALE_ERROR}
+          else ${safeError}
+        end,
+        updated_at = now()
+      where id = ${input.id}
+        and user_id = ${input.userId}
+        and status = 'pending'
+        and (
+          ${staleOnly} = false
+          or (project_id is null and updated_at < now() - ${PLANNING_STALE_INTERVAL}::interval)
+          or (project_id is not null and created_at < now() - ${ATTACHED_PROJECT_STALE_INTERVAL}::interval)
+        )
+      returning id
+    `,
+    buildCreditReservationRefundQuery(sql, {
+      userId: input.userId,
+      reservationKey,
+      reason: input.refundReason,
+      metadata: input.metadata
+    }, {
+      requestId: input.id,
+      status: "failed"
+    })
+  ]);
+  const failed = (results[1] as Array<{ id: string }>).length > 0;
+  const refunded = (results[2] as Array<{
+    refund_credits: string | number;
+    consumed_credits_refund: string | number;
+  }>)[0];
+  return {
+    failed,
+    refundedCredits: Number(refunded?.refund_credits ?? 0),
+    reversedSettledCredits: Number(refunded?.consumed_credits_refund ?? 0)
+  } as const;
 }

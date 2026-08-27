@@ -1,8 +1,11 @@
 import { send } from "@vercel/queue";
+import {
+  GENERATION_WATCHDOG_INITIAL_DELAY_SECONDS,
+  GENERATION_WATCHDOG_RECHECK_DELAY_SECONDS
+} from "@/lib/generation-lifecycle-policy";
 import type { GenerationOptions } from "@/lib/types";
 
 export const PROJECT_MEDIA_TOPIC = "project-media-generation";
-export const PROJECT_GENERATION_WATCHDOG_DELAY_SECONDS = 45 * 60;
 export const RENDER_JOB_WATCHDOG_DELAY_SECONDS = 50 * 60;
 
 export type ProjectMediaSceneMessage = {
@@ -16,6 +19,7 @@ export type ProjectMediaSceneMessage = {
   billingReservationKey?: string;
   options?: GenerationOptions;
   recoveryPass?: number;
+  resumeAttempt?: number;
   startedAt?: number;
 };
 
@@ -24,6 +28,7 @@ export type ProjectGenerationWatchdogMessage = {
   requestId: string;
   userId: string;
   billingReservationKey?: string;
+  watchdogPass?: number;
 };
 
 export type RenderJobWatchdogMessage = {
@@ -37,15 +42,18 @@ export type ProjectMediaMessage = ProjectMediaSceneMessage | ProjectGenerationWa
 
 export async function enqueueProjectMediaScene(message: ProjectMediaSceneMessage) {
   return send(PROJECT_MEDIA_TOPIC, message, {
-    idempotencyKey: `${message.requestId}:pass:${message.recoveryPass ?? 0}:scene:${message.sceneNumber}`,
+    idempotencyKey: `${message.requestId}:resume:${message.resumeAttempt ?? 0}:pass:${message.recoveryPass ?? 0}:scene:${message.sceneNumber}`,
     retentionSeconds: 7 * 24 * 60 * 60
   });
 }
 
 export async function enqueueProjectGenerationWatchdog(message: ProjectGenerationWatchdogMessage) {
+  const watchdogPass = message.watchdogPass ?? 0;
   return send(PROJECT_MEDIA_TOPIC, message, {
-    idempotencyKey: `${message.requestId}:generation-watchdog`,
-    delaySeconds: PROJECT_GENERATION_WATCHDOG_DELAY_SECONDS,
+    idempotencyKey: `${message.requestId}:generation-watchdog:${watchdogPass}`,
+    delaySeconds: watchdogPass > 0
+      ? GENERATION_WATCHDOG_RECHECK_DELAY_SECONDS
+      : GENERATION_WATCHDOG_INITIAL_DELAY_SECONDS,
     retentionSeconds: 7 * 24 * 60 * 60
   });
 }

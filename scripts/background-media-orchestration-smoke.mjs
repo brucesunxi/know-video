@@ -66,6 +66,7 @@ let generationRecord;
 let stockProviderAvailable;
 let stockClipOutcomes;
 let stockGenerationCount;
+let watchdogEnqueuedCount;
 
 function reset(sceneCount = 1) {
   state = newProject(sceneCount);
@@ -85,12 +86,16 @@ function reset(sceneCount = 1) {
   stockProviderAvailable = false;
   stockClipOutcomes = [];
   stockGenerationCount = 0;
+  watchdogEnqueuedCount = 0;
+  const now = new Date().toISOString();
   generationRecord = {
     id: "request-1",
     status: "pending",
     projectId: "project-1",
     engine: "ai",
-    options: { motion: "camera", language: "中文" }
+    options: { motion: "camera", language: "中文" },
+    createdAt: now,
+    updatedAt: now
   };
 }
 
@@ -192,8 +197,6 @@ const mocks = {
   "@/lib/billing/usage": {
     InsufficientCreditsError,
     recordUsageEvent,
-    refundCreditReservation: async () => { refundedCount += 1; },
-    releaseCreditReservation: async () => { releasedCount += 1; },
     reserveAdditionalCredits: async () => undefined
   },
   "@/lib/billing/estimate": {
@@ -203,14 +206,30 @@ const mocks = {
     })
   },
   "@/lib/generation-requests": {
-    completeGenerationRequest: async () => { completedCount += 1; },
-    failGenerationRequest: async () => { failedCount += 1; return true; },
+    completeGenerationRequest: async (input) => {
+      completedCount += 1;
+      if (input.billingReservationKey) releasedCount += 1;
+      return { completed: true, releasedCredits: input.billingReservationKey ? 1 : 0 };
+    },
+    failGenerationRequest: async (input) => {
+      failedCount += 1;
+      if (input.billingReservationKey) refundedCount += 1;
+      return { failed: true, refundedCredits: input.billingReservationKey ? 1 : 0 };
+    },
     getGenerationRequestBeforeExpiry: async () => clone(generationRecord),
     touchGenerationRequest: async () => generationRequestHeartbeat
   },
   "@/lib/image-assets": { generateProjectSceneImages },
   "@/lib/media-generation-queue": {
+    enqueueProjectGenerationWatchdog: async () => { watchdogEnqueuedCount += 1; },
     enqueueProjectMediaScene: async (message) => { enqueued.push(clone(message)); }
+  },
+  "@/lib/generation-lifecycle-policy": {
+    elapsedGenerationMs: (value) => Date.now() - new Date(value).getTime(),
+    GENERATION_PLANNING_TIMEOUT_MINUTES: 15,
+    generationExceededRuntime: (value) => Date.now() - new Date(value).getTime() >= 40 * 60 * 1_000,
+    generationMediaIsInactive: (value) => Date.now() - new Date(value).getTime() >= 8 * 60 * 1_000,
+    generationResumeAttempt: () => 1
   },
   "@/lib/project-mutations": {
     loadProjectForRender: async () => clone(state),
@@ -406,6 +425,46 @@ await processProjectGenerationWatchdog({
   billingReservationKey: "reservation-1"
 });
 assert.equal(completedCount, 0);
+assert.equal(failedCount, 0);
+assert.equal(refundedCount, 0);
+assert.equal(watchdogEnqueuedCount, 1);
+
+reset(2);
+generationRecord.updatedAt = new Date(Date.now() - 9 * 60 * 1_000).toISOString();
+await processProjectGenerationWatchdog({
+  operation: "watchdog",
+  requestId: "request-1",
+  userId: "user-1",
+  billingReservationKey: "reservation-1"
+});
+assert.deepEqual(enqueued.map((item) => [item.sceneNumber, item.resumeAttempt, item.recoveryPass]), [[1, 1, 0]]);
+assert.equal(watchdogEnqueuedCount, 1);
+assert.equal(failedCount, 0);
+assert.equal(refundedCount, 0);
+
+reset(2);
+generationRecord.createdAt = new Date(Date.now() - 41 * 60 * 1_000).toISOString();
+generationRecord.updatedAt = generationRecord.createdAt;
+await processProjectGenerationWatchdog({
+  operation: "watchdog",
+  requestId: "request-1",
+  userId: "user-1",
+  billingReservationKey: "reservation-1"
+});
+assert.equal(enqueued.length, 0);
+assert.equal(failedCount, 1);
+assert.equal(refundedCount, 1);
+
+reset(1);
+generationRecord.projectId = undefined;
+generationRecord.createdAt = new Date(Date.now() - 16 * 60 * 1_000).toISOString();
+generationRecord.updatedAt = generationRecord.createdAt;
+await processProjectGenerationWatchdog({
+  operation: "watchdog",
+  requestId: "request-1",
+  userId: "user-1",
+  billingReservationKey: "reservation-1"
+});
 assert.equal(failedCount, 1);
 assert.equal(refundedCount, 1);
 

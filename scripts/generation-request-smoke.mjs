@@ -26,14 +26,19 @@ vm.runInNewContext(output, {
 });
 
 const { generationRequestFingerprint } = module.exports;
-assert.match(source, /failGenerationRequest\(id: string, error =/);
+assert.match(source, /export async function failGenerationRequest\(input: \{/);
 assert.match(source, /safeError/);
 assert.match(source, /userId: string/);
-assert.match(source, /where id = \$\{id\} and user_id = \$\{userId\}/);
+assert.match(source, /where request\.id = \$\{id\} and request\.user_id = \$\{userId\}/);
 assert.match(source, /listIncompleteGenerationRequests/);
 assert.match(source, /deleteFailedGenerationRequest/);
 assert.match(source, /status = 'failed'/);
-assert.match(source, /interval '15 minutes'/);
+assert.match(source, /PLANNING_STALE_INTERVAL/);
+assert.match(source, /GENERATION_MAX_RUNTIME_MINUTES/);
+assert.match(source, /sql\.transaction\(\[/);
+assert.match(source, /buildCreditReservationReleaseQuery/);
+assert.match(source, /buildCreditReservationRefundQuery/);
+assert.match(source, /pg_advisory_xact_lock/);
 assert.doesNotMatch(source, /create table|alter table|create (?:unique )?index/i);
 assert.match(source, /options\?: GenerationOptions/);
 assert.match(projectsRoute, /after\(\(\) => runBackgroundGeneration/);
@@ -43,6 +48,10 @@ assert.match(projectsRoute, /await enqueueProjectGenerationWatchdog\(\{/);
 assert.ok(
   projectsRoute.indexOf("await enqueueProjectGenerationWatchdog({")
     < projectsRoute.indexOf("after(() => runBackgroundGeneration")
+);
+assert.ok(
+  projectsRoute.indexOf("await enqueueProjectGenerationWatchdog({")
+    < projectsRoute.indexOf("const reservation = await reserveCredits({")
 );
 assert.match(projectsRoute, /return NextResponse\.json\(\{ status: "pending", requestId \}, \{ status: 202 \}\)/);
 assert.match(projectsRoute, /listIncompleteGenerationRequests\(user\.id\)/);
@@ -54,9 +63,14 @@ assert.match(generationRoute, /reconcileCompletedGenerationRequest/);
 assert.match(generationRoute, /sceneHasAudioAsset/);
 assert.match(generationRoute, /listCompletedPendingGenerationRequests\(user\.id\)/);
 assert.match(generationRoute, /if \(!requestId\)/);
-assert.match(generationRoute, /generationRequests: await listIncompleteGenerationRequests\(user\.id\)/);
+assert.match(generationRoute, /const incomplete = await listIncompleteGenerationRequests\(user\.id\)/);
+assert.match(generationRoute, /generationRequests: await recoverStalledGenerationRequests\(incomplete, user\.id\)/);
 assert.match(reconciliation, /sceneHasVisualAsset\(scene\) && sceneHasAudioAsset\(scene\)/);
-assert.match(reconciliation, /reason: "project_generation_reconciled"/);
+assert.match(reconciliation, /releaseReason: "project_generation_reconciled"/);
+assert.match(reconciliation, /recoverStalledGenerationRequest/);
+assert.match(reconciliation, /generationMediaIsInactive/);
+assert.match(reconciliation, /resumeAttempt/);
+assert.match(reconciliation, /enqueueProjectMediaScene/);
 assert.match(source, /not exists \([\s\S]*?scene_assets visual_asset/);
 assert.match(source, /scene_assets audio_asset/);
 assert.match(generationRoute, /export async function DELETE/);
@@ -64,8 +78,8 @@ assert.match(generationRoute, /deleteFailedGenerationRequest\(parsed\.data, user
 assert.match(schema, /generation_requests \([\s\S]*?user_id uuid references users\(id\)/);
 assert.match(schema, /generation_requests \([\s\S]*?options_json jsonb/);
 assert.match(source, /operator is not unique/);
-assert.match(source, /refundCreditReservation/);
-assert.match(source, /reason: "project_generation_timed_out"/);
+assert.match(source, /buildCreditReservationRefundQuery/);
+assert.match(source, /refundReason: row\.status === "failed"/);
 const options = {
   duration: "30",
   sceneCount: "5",

@@ -10,7 +10,9 @@ import {
 } from "@/lib/generation-requests";
 import {
   reconcileCompletedGenerationRequest,
-  reconcileCompletedGenerationRequests
+  reconcileCompletedGenerationRequests,
+  recoverStalledGenerationRequest,
+  recoverStalledGenerationRequests
 } from "@/lib/generation-reconciliation";
 import { getProjectSnapshot } from "@/lib/project-store";
 import { sceneHasAudioAsset, sceneHasVisualAsset } from "@/lib/generation-resume";
@@ -29,7 +31,10 @@ export async function GET(request: Request) {
   if (!requestId) {
     const candidates = await listCompletedPendingGenerationRequests(user.id);
     await reconcileCompletedGenerationRequests(candidates, user.id);
-    return NextResponse.json({ generationRequests: await listIncompleteGenerationRequests(user.id) });
+    const incomplete = await listIncompleteGenerationRequests(user.id);
+    return NextResponse.json({
+      generationRequests: await recoverStalledGenerationRequests(incomplete, user.id)
+    });
   }
   const parsed = requestIdSchema.safeParse(requestId);
   if (!parsed.success) {
@@ -39,9 +44,12 @@ export async function GET(request: Request) {
   const reconciled = beforeExpiry
     ? await reconcileCompletedGenerationRequest(beforeExpiry, user.id)
     : undefined;
-  const generation = reconciled?.status === "pending"
-    ? await getGenerationRequest(parsed.data, user.id) ?? reconciled
-    : reconciled ?? await getGenerationRequest(parsed.data, user.id);
+  const recovered = reconciled
+    ? await recoverStalledGenerationRequest(reconciled, user.id)
+    : undefined;
+  const generation = recovered?.status === "pending"
+    ? await getGenerationRequest(parsed.data, user.id) ?? recovered
+    : recovered ?? await getGenerationRequest(parsed.data, user.id);
   if (!generation) {
     return NextResponse.json({ error: "没有找到生成任务。" }, { status: 404 });
   }

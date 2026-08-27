@@ -18,7 +18,10 @@ import {
   listCompletedPendingGenerationRequests,
   listIncompleteGenerationRequests
 } from "@/lib/generation-requests";
-import { reconcileCompletedGenerationRequests } from "@/lib/generation-reconciliation";
+import {
+  reconcileCompletedGenerationRequests,
+  recoverStalledGenerationRequests
+} from "@/lib/generation-reconciliation";
 import {
   enqueueProjectGenerationWatchdog,
   enqueueProjectMediaScene
@@ -31,8 +34,6 @@ import {
   InsufficientCreditsError,
   billingIdempotencyKey,
   recordUsageEvent,
-  refundCreditReservation,
-  releaseCreditReservation,
   reserveAdditionalCredits,
   reserveCredits
 } from "@/lib/billing/usage";
@@ -113,7 +114,10 @@ export async function GET() {
       listProjects(user.id),
       listIncompleteGenerationRequests(user.id)
     ]);
-    return NextResponse.json({ projects, generationRequests });
+    return NextResponse.json({
+      projects,
+      generationRequests: await recoverStalledGenerationRequests(generationRequests, user.id)
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "AUTH_REQUIRED") return authRequiredResponse();
     throw error;
@@ -329,11 +333,13 @@ async function generateAndPersistProject(body: ProjectGenerationInput, userId: s
           startedAt: Date.now()
         });
       } else {
-        await completeGenerationRequest({ id: requestId, projectId: persisted.project.id, engine });
-        await releaseCreditReservation({
+        await completeGenerationRequest({
+          id: requestId,
           userId,
-          reservationKey: projectReservationKey(requestId),
-          reason: "project_completed_without_scenes"
+          projectId: persisted.project.id,
+          engine,
+          billingReservationKey: projectReservationKey(requestId),
+          releaseReason: "project_completed_without_scenes"
         });
       }
     }
@@ -347,16 +353,15 @@ async function failBackgroundGeneration(body: ProjectGenerationInput, error: unk
       console.error("[projects] Unable to clean unused generation references:", cleanupError);
     });
   }
-  if (body.requestId) {
-    await failGenerationRequest(body.requestId, publicGenerationError(error)).catch(() => undefined);
-    if (userId) {
-      await refundCreditReservation({
-        userId,
-        reservationKey: projectReservationKey(body.requestId),
-        reason: "project_generation_failed",
-        metadata: { error: publicGenerationError(error) }
-      }).catch(() => undefined);
-    }
+  if (body.requestId && userId) {
+    await failGenerationRequest({
+      id: body.requestId,
+      userId,
+      error: publicGenerationError(error),
+      billingReservationKey: projectReservationKey(body.requestId),
+      refundReason: "project_generation_failed",
+      metadata: { error: publicGenerationError(error) }
+    }).catch(() => undefined);
   }
   console.error("[projects] Unable to create video project:", error);
 }
@@ -414,6 +419,12 @@ export async function POST(request: Request) {
         });
       }
       if (hasDatabaseUrl()) {
+        await enqueueProjectGenerationWatchdog({
+          operation: "watchdog",
+          requestId,
+          userId: user.id,
+          billingReservationKey: projectReservationKey(requestId)
+        });
         const reservation = await reserveCredits({
           userId: user.id,
           reservationKey: projectReservationKey(requestId),
@@ -424,12 +435,6 @@ export async function POST(request: Request) {
             targetDurationSeconds: Number(body.options?.duration ?? 30)
           },
           expiresInMinutes: 180
-        });
-        await enqueueProjectGenerationWatchdog({
-          operation: "watchdog",
-          requestId,
-          userId: user.id,
-          billingReservationKey: projectReservationKey(requestId)
         });
         after(() => runBackgroundGeneration(body!, user.id));
         return NextResponse.json({ status: "pending", requestId, billingEstimate: reservation.estimate }, { status: 202 });

@@ -2,8 +2,6 @@ import { generateProjectVoices } from "@/lib/audio-assets";
 import {
   InsufficientCreditsError,
   recordUsageEvent,
-  refundCreditReservation,
-  releaseCreditReservation,
   reserveAdditionalCredits
 } from "@/lib/billing/usage";
 import { estimateBilling } from "@/lib/billing/estimate";
@@ -15,6 +13,14 @@ import {
 } from "@/lib/generation-requests";
 import { generateProjectSceneImages } from "@/lib/image-assets";
 import {
+  elapsedGenerationMs,
+  GENERATION_PLANNING_TIMEOUT_MINUTES,
+  generationExceededRuntime,
+  generationMediaIsInactive,
+  generationResumeAttempt
+} from "@/lib/generation-lifecycle-policy";
+import {
+  enqueueProjectGenerationWatchdog,
   enqueueProjectMediaScene,
   type ProjectGenerationWatchdogMessage,
   type ProjectMediaSceneMessage
@@ -425,17 +431,13 @@ export async function processProjectMediaScene(message: ProjectMediaSceneMessage
   }
   await completeGenerationRequest({
     id: message.requestId,
+    userId: message.userId,
     projectId: message.projectId,
-    engine: message.engine
+    engine: message.engine,
+    billingReservationKey: message.billingReservationKey,
+    releaseReason: "project_generation_completed",
+    metadata: { versionId: message.versionId }
   });
-  if (message.billingReservationKey) {
-    await releaseCreditReservation({
-      userId: message.userId,
-      reservationKey: message.billingReservationKey,
-      reason: "project_generation_completed",
-      metadata: { projectId: message.projectId, versionId: message.versionId }
-    });
-  }
 }
 
 export async function permanentlyFailProjectMedia(message: ProjectMediaSceneMessage, error: unknown) {
@@ -444,23 +446,57 @@ export async function permanentlyFailProjectMedia(message: ProjectMediaSceneMess
     : error instanceof ProjectMediaRuntimeExceededError
       ? "后台媒体生成已达到 35 分钟运行上限。"
     : error instanceof Error ? error.message : "Unknown media generation failure";
-  const failed = await failGenerationRequest(
-    message.requestId,
-    `后台已多次自动重试，但场景 ${message.sceneNumber} 的素材仍未完成：${reason}`
-  );
-  if (failed && message.billingReservationKey) {
-    await refundCreditReservation({
-      userId: message.userId,
-      reservationKey: message.billingReservationKey,
-      reason: "project_media_permanently_failed",
-      metadata: { sceneNumber: message.sceneNumber, error: reason }
-    });
-  }
+  await failGenerationRequest({
+    id: message.requestId,
+    userId: message.userId,
+    error: `后台已多次自动重试，但场景 ${message.sceneNumber} 的素材仍未完成：${reason}`,
+    billingReservationKey: message.billingReservationKey,
+    refundReason: "project_media_permanently_failed",
+    metadata: { sceneNumber: message.sceneNumber, error: reason }
+  });
 }
 
 export async function processProjectGenerationWatchdog(message: ProjectGenerationWatchdogMessage) {
   const generation = await getGenerationRequestBeforeExpiry(message.requestId, message.userId);
-  if (!generation || generation.status !== "pending") return;
+  if (!generation) return;
+  if (generation.status === "ready" && generation.projectId) {
+    await completeGenerationRequest({
+      id: message.requestId,
+      userId: message.userId,
+      projectId: generation.projectId,
+      engine: generation.engine ?? "ai",
+      billingReservationKey: message.billingReservationKey,
+      releaseReason: "project_generation_watchdog_terminal_repair",
+      metadata: { repairedTerminalBilling: true }
+    });
+    return;
+  }
+  if (generation.status === "failed") {
+    await failGenerationRequest({
+      id: message.requestId,
+      userId: message.userId,
+      error: generation.error,
+      billingReservationKey: message.billingReservationKey,
+      refundReason: "project_generation_watchdog_terminal_repair",
+      metadata: { repairedTerminalBilling: true }
+    });
+    return;
+  }
+
+  const watchdogPass = message.watchdogPass ?? 0;
+  const enqueueNextWatchdog = () => enqueueProjectGenerationWatchdog({
+    ...message,
+    watchdogPass: watchdogPass + 1
+  });
+  const runtimeExceeded = generationExceededRuntime(generation.createdAt);
+  const mediaInactive = generationMediaIsInactive(generation.updatedAt);
+  const planningTimedOut = !generation.projectId
+    && elapsedGenerationMs(generation.updatedAt) >= GENERATION_PLANNING_TIMEOUT_MINUTES * 60_000;
+
+  if (!generation.projectId && !runtimeExceeded && !planningTimedOut) {
+    await enqueueNextWatchdog();
+    return;
+  }
 
   const snapshot = generation.projectId
     ? await getProjectSnapshot(generation.projectId, message.userId)
@@ -487,34 +523,62 @@ export async function processProjectGenerationWatchdog(message: ProjectGeneratio
     }
     await completeGenerationRequest({
       id: message.requestId,
+      userId: message.userId,
       projectId: project.id,
-      engine: generation.engine ?? "ai"
+      engine: generation.engine ?? "ai",
+      billingReservationKey: message.billingReservationKey,
+      releaseReason: "project_generation_watchdog_reconciled",
+      metadata: { versionId: project.currentVersion.id }
     });
-    if (message.billingReservationKey) {
-      await releaseCreditReservation({
-        userId: message.userId,
-        reservationKey: message.billingReservationKey,
-        reason: "project_generation_watchdog_reconciled",
-        metadata: { projectId: project.id, versionId: project.currentVersion.id }
-      });
-    }
     return;
   }
 
-  const failed = await failGenerationRequest(
-    message.requestId,
-    "后台生成超过 45 分钟仍未完成，系统已自动停止并退回本次 Credits。请检查并重试缺失场景。"
-  );
-  if (failed && message.billingReservationKey) {
-    await refundCreditReservation({
-      userId: message.userId,
-      reservationKey: message.billingReservationKey,
-      reason: "project_generation_watchdog_timed_out",
-      metadata: {
-        projectId: generation.projectId,
-        completedScenes: scenes.filter((scene) => sceneHasVisualAsset(scene) && sceneHasAudioAsset(scene)).length,
-        totalScenes: scenes.length
-      }
-    });
+  if (project && scenes.length > 0 && !runtimeExceeded && mediaInactive) {
+    const firstIncomplete = scenes
+      .filter((scene) => !sceneHasVisualAsset(scene) || !sceneHasAudioAsset(scene))
+      .sort((left, right) => left.sceneNumber - right.sceneNumber)[0];
+    if (firstIncomplete) {
+      const resumeAttempt = generationResumeAttempt(generation.createdAt);
+      const startedAt = Date.parse(generation.createdAt);
+      await enqueueNextWatchdog();
+      await enqueueProjectMediaScene({
+        requestId: message.requestId,
+        userId: message.userId,
+        projectId: project.id,
+        versionId: project.currentVersion.id,
+        sceneNumber: firstIncomplete.sceneNumber,
+        engine: generation.engine ?? "ai",
+        billingReservationKey: message.billingReservationKey,
+        options: generation.options,
+        recoveryPass: 0,
+        resumeAttempt,
+        startedAt: Number.isFinite(startedAt) ? startedAt : Date.now()
+      });
+      await touchGenerationRequest(message.requestId);
+      return;
+    }
   }
+
+  if (!runtimeExceeded && !planningTimedOut && project && scenes.length > 0) {
+    await enqueueNextWatchdog();
+    return;
+  }
+
+  await failGenerationRequest({
+    id: message.requestId,
+    userId: message.userId,
+    error: generation.projectId
+      ? "后台生成已达到运行上限或没有保存出可恢复分镜，系统已自动停止并退回本次 Credits。请重试缺失场景。"
+      : "脚本与分镜规划在 15 分钟内没有完成，系统已自动停止并退回本次 Credits。请重新生成。",
+    billingReservationKey: message.billingReservationKey,
+    refundReason: "project_generation_watchdog_timed_out",
+    metadata: {
+      projectId: generation.projectId,
+      watchdogPass,
+      runtimeExceeded,
+      mediaInactive,
+      completedScenes: scenes.filter((scene) => sceneHasVisualAsset(scene) && sceneHasAudioAsset(scene)).length,
+      totalScenes: scenes.length
+    }
+  });
 }

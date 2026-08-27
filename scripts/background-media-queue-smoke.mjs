@@ -6,19 +6,21 @@ const queue = fs.readFileSync(new URL("../lib/media-generation-queue.ts", import
 const worker = fs.readFileSync(new URL("../lib/background-media-generation.ts", import.meta.url), "utf8");
 const consumer = fs.readFileSync(new URL("../app/api/queues/project-media/route.ts", import.meta.url), "utf8");
 const requests = fs.readFileSync(new URL("../lib/generation-requests.ts", import.meta.url), "utf8");
+const lifecycle = fs.readFileSync(new URL("../lib/generation-lifecycle-policy.ts", import.meta.url), "utf8");
 const vercel = JSON.parse(fs.readFileSync(new URL("../vercel.json", import.meta.url), "utf8"));
 
 assert.match(projectRoute, /attachGenerationRequestProject/);
 assert.match(projectRoute, /enqueueProjectMediaScene\(\{/);
 assert.match(projectRoute, /await enqueueProjectGenerationWatchdog\(\{/);
 assert.match(queue, /send\(PROJECT_MEDIA_TOPIC/);
-assert.match(queue, /PROJECT_GENERATION_WATCHDOG_DELAY_SECONDS = 45 \* 60/);
 assert.match(queue, /operation: "watchdog"/);
-assert.match(queue, /idempotencyKey: `\$\{message\.requestId\}:generation-watchdog`/);
-assert.match(queue, /delaySeconds: PROJECT_GENERATION_WATCHDOG_DELAY_SECONDS/);
+assert.match(queue, /watchdogPass\?: number/);
+assert.match(queue, /idempotencyKey: `\$\{message\.requestId\}:generation-watchdog:\$\{watchdogPass\}`/);
+assert.match(queue, /GENERATION_WATCHDOG_RECHECK_DELAY_SECONDS/);
 assert.match(queue, /recoveryPass\?: number/);
+assert.match(queue, /resumeAttempt\?: number/);
 assert.match(queue, /startedAt\?: number/);
-assert.match(queue, /idempotencyKey: `\$\{message\.requestId\}:pass:\$\{message\.recoveryPass \?\? 0\}:scene:\$\{message\.sceneNumber\}`/);
+assert.match(queue, /idempotencyKey: `\$\{message\.requestId\}:resume:\$\{message\.resumeAttempt \?\? 0\}:pass:\$\{message\.recoveryPass \?\? 0\}:scene:\$\{message\.sceneNumber\}`/);
 assert.match(worker, /if \(targetScene && sceneHasVisualAsset\(targetScene\)\) \{[\s\S]*settleBackgroundImageUsage[\s\S]*return project/);
 assert.match(worker, /if \(existingAudio\) \{[\s\S]*settleBackgroundNarrationUsage[\s\S]*return project/);
 assert.match(worker, /tagAssetForBackgroundBilling/);
@@ -62,11 +64,14 @@ assert.match(worker, /BACKGROUND_PROJECT_RUNTIME_LIMIT_MS = 35 \* 60 \* 1_000/);
 assert.match(worker, /heartbeat\.createdAt/);
 assert.match(worker, /ProjectMediaRuntimeExceededError/);
 assert.match(worker, /processProjectGenerationWatchdog/);
-assert.match(worker, /generation\.status !== "pending"/);
 assert.match(worker, /assetsComplete/);
 assert.match(worker, /project_generation_watchdog_reconciled/);
 assert.match(worker, /project_generation_watchdog_timed_out/);
-assert.match(worker, /后台生成超过 45 分钟仍未完成/);
+assert.match(worker, /generationMediaIsInactive/);
+assert.match(worker, /generationResumeAttempt/);
+assert.match(worker, /await enqueueNextWatchdog\(\)/);
+assert.match(worker, /resumeAttempt/);
+assert.match(worker, /脚本与分镜规划在 15 分钟内没有完成/);
 assert.match(worker, /allowOpenAIFallback: deliveryCount >= 3/);
 assert.match(worker, /const heartbeat = await touchGenerationRequest\(message\.requestId\)/);
 assert.match(worker, /if \(!heartbeat\.pending\) \{[\s\S]*Ignoring stale message[\s\S]*return/);
@@ -105,10 +110,13 @@ assert.match(consumer, /metadata\.deliveryCount >= 2/);
 assert.match(consumer, /message\.recoveryPass \?\? 0/);
 assert.match(consumer, /MAX_PROJECT_MEDIA_RECOVERY_PASSES/);
 assert.match(consumer, /metadata\.deliveryCount >= 3/);
-assert.match(requests, /ATTACHED_PROJECT_STALE_INTERVAL = "45 minutes"/);
-assert.match(requests, /where id = \$\{id\} and status = 'pending'[\s\S]*returning id/);
+assert.match(requests, /ATTACHED_PROJECT_STALE_INTERVAL = `\$\{GENERATION_MAX_RUNTIME_MINUTES\} minutes`/);
+assert.match(requests, /where id = \$\{input\.id\}[\s\S]*and status = 'pending'[\s\S]*returning id/);
 assert.match(requests, /returning id, created_at/);
 assert.match(requests, /pending: false as const/);
+assert.match(lifecycle, /GENERATION_MEDIA_INACTIVITY_MINUTES = 8/);
+assert.match(lifecycle, /GENERATION_MAX_RUNTIME_MINUTES = 40/);
+assert.match(lifecycle, /GENERATION_WATCHDOG_INITIAL_DELAY_SECONDS = 12 \* 60/);
 assert.equal(
   vercel.functions["app/api/queues/project-media/route.ts"].experimentalTriggers[0].topic,
   "project-media-generation"

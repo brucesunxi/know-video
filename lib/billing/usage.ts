@@ -189,14 +189,30 @@ export async function reserveAdditionalCredits(input: {
   throw new InsufficientCreditsError(account.availableCredits, input.credits);
 }
 
-export async function releaseCreditReservation(input: {
+export type ReleaseCreditReservationInput = {
   userId: string;
   reservationKey: string;
   reason: string;
   metadata?: Record<string, unknown>;
-}) {
-  if (!hasDatabaseUrl()) return { released: false } as const;
-  const rows = await getSql()`
+};
+
+export type RefundCreditReservationInput = ReleaseCreditReservationInput;
+
+export type GenerationReservationGuard = {
+  requestId: string;
+  status: "ready" | "failed";
+  projectId?: string;
+};
+
+export function buildCreditReservationReleaseQuery(
+  sql: ReturnType<typeof getSql>,
+  input: ReleaseCreditReservationInput,
+  guard?: GenerationReservationGuard
+) {
+  const generationRequestId = guard?.requestId ?? "";
+  const generationStatus = guard?.status ?? "";
+  const generationProjectId = guard?.projectId ?? "";
+  return sql`
     with reservation_lock as (
       select pg_advisory_xact_lock(hashtext(${input.reservationKey}))
     ), released as (
@@ -209,6 +225,17 @@ export async function releaseCreditReservation(input: {
       where reservation.reservation_key = ${input.reservationKey}
         and reservation.user_id = ${input.userId}
         and reservation.status in ('reserved', 'partially_settled')
+        and (
+          ${generationRequestId} = ''
+          or exists (
+            select 1
+            from generation_requests generation
+            where generation.id::text = ${generationRequestId}
+              and generation.user_id = ${input.userId}
+              and generation.status = ${generationStatus}
+              and (${generationProjectId} = '' or generation.project_id::text = ${generationProjectId})
+          )
+        )
       returning reservation.user_id, reservation.released_credits, reservation.reservation_key
     ), credited as (
       update credit_accounts account
@@ -227,23 +254,31 @@ export async function releaseCreditReservation(input: {
       on conflict (source_id) do nothing
     )
     select released_credits from credited
-  ` as Array<{ released_credits: string | number }>;
+  `;
+}
+
+export async function releaseCreditReservation(input: ReleaseCreditReservationInput) {
+  if (!hasDatabaseUrl()) return { released: false } as const;
+  const rows = await buildCreditReservationReleaseQuery(getSql(), input) as Array<{
+    released_credits: string | number;
+  }>;
   return { released: Boolean(rows[0]), credits: Number(rows[0]?.released_credits ?? 0) } as const;
 }
 
-export async function refundCreditReservation(input: {
-  userId: string;
-  reservationKey: string;
-  reason: string;
-  metadata?: Record<string, unknown>;
-}) {
-  if (!hasDatabaseUrl()) return { refunded: false } as const;
+export function buildCreditReservationRefundQuery(
+  sql: ReturnType<typeof getSql>,
+  input: RefundCreditReservationInput,
+  guard?: GenerationReservationGuard
+) {
   const refundMetadata = JSON.stringify({
     refundReason: input.reason,
     customerChargeRefunded: true,
     ...input.metadata
   });
-  const rows = await getSql()`
+  const generationRequestId = guard?.requestId ?? "";
+  const generationStatus = guard?.status ?? "";
+  const generationProjectId = guard?.projectId ?? "";
+  return sql`
     with reservation_lock as (
       select pg_advisory_xact_lock(hashtext(${input.reservationKey}))
     ), target as (
@@ -254,6 +289,17 @@ export async function refundCreditReservation(input: {
         and (
           reservation.status in ('reserved', 'partially_settled', 'settled')
           or (reservation.status = 'released' and reservation.settled_credits > 0)
+        )
+        and (
+          ${generationRequestId} = ''
+          or exists (
+            select 1
+            from generation_requests generation
+            where generation.id::text = ${generationRequestId}
+              and generation.user_id = ${input.userId}
+              and generation.status = ${generationStatus}
+              and (${generationProjectId} = '' or generation.project_id::text = ${generationProjectId})
+          )
         )
     ), released_events as (
       update usage_events event
@@ -294,7 +340,15 @@ export async function refundCreditReservation(input: {
       on conflict (source_id) do nothing
     )
     select refund_credits, consumed_credits_refund from credited
-  ` as Array<{ refund_credits: string | number; consumed_credits_refund: string | number }>;
+  `;
+}
+
+export async function refundCreditReservation(input: RefundCreditReservationInput) {
+  if (!hasDatabaseUrl()) return { refunded: false } as const;
+  const rows = await buildCreditReservationRefundQuery(getSql(), input) as Array<{
+    refund_credits: string | number;
+    consumed_credits_refund: string | number;
+  }>;
   return {
     refunded: Boolean(rows[0]),
     credits: Number(rows[0]?.refund_credits ?? 0),
