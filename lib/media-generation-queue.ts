@@ -3,10 +3,13 @@ import {
   GENERATION_WATCHDOG_INITIAL_DELAY_SECONDS,
   GENERATION_WATCHDOG_RECHECK_DELAY_SECONDS
 } from "@/lib/generation-lifecycle-policy";
+import {
+  RENDER_JOB_WATCHDOG_INITIAL_DELAY_SECONDS,
+  RENDER_JOB_WATCHDOG_RECHECK_DELAY_SECONDS
+} from "@/lib/render-lifecycle-policy";
 import type { GenerationOptions } from "@/lib/types";
 
 export const PROJECT_MEDIA_TOPIC = "project-media-generation";
-export const RENDER_JOB_WATCHDOG_DELAY_SECONDS = 50 * 60;
 
 export type ProjectMediaSceneMessage = {
   operation?: "scene";
@@ -36,6 +39,7 @@ export type RenderJobWatchdogMessage = {
   jobId: string;
   projectId: string;
   versionId: string;
+  watchdogPass?: number;
 };
 
 export type ProjectMediaMessage = ProjectMediaSceneMessage | ProjectGenerationWatchdogMessage | RenderJobWatchdogMessage;
@@ -59,9 +63,12 @@ export async function enqueueProjectGenerationWatchdog(message: ProjectGeneratio
 }
 
 export async function enqueueRenderJobWatchdog(message: RenderJobWatchdogMessage) {
+  const watchdogPass = message.watchdogPass ?? 0;
   return send(PROJECT_MEDIA_TOPIC, message, {
-    idempotencyKey: `${message.jobId}:render-watchdog`,
-    delaySeconds: RENDER_JOB_WATCHDOG_DELAY_SECONDS,
+    idempotencyKey: `${message.jobId}:render-watchdog:${watchdogPass}`,
+    delaySeconds: watchdogPass > 0
+      ? RENDER_JOB_WATCHDOG_RECHECK_DELAY_SECONDS
+      : RENDER_JOB_WATCHDOG_INITIAL_DELAY_SECONDS,
     retentionSeconds: 7 * 24 * 60 * 60
   });
 }

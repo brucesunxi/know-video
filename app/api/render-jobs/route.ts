@@ -3,8 +3,9 @@ import { z } from "zod";
 import { assertProjectOwner, authRequiredResponse, requireCurrentUser } from "@/lib/auth";
 import { loadCurrentProjectForEdit } from "@/lib/project-mutations";
 import { publicRenderError, renderOutputMetadataIssue, renderSandboxName } from "@/lib/render-lifecycle";
+import { renderJobLooksStale } from "@/lib/render-lifecycle-policy";
 import { renderInputMetadataIssue, renderInputReadiness } from "@/lib/render-preflight";
-import { acquireRenderJob, cancelRenderJob, getRenderJob, invalidateReadyRenderJob, listRenderJobs, updateRenderJob } from "@/lib/render-jobs";
+import { acquireRenderJob, cancelRenderJob, expireRenderJobFromWatchdog, getRenderJob, invalidateReadyRenderJob, listRenderJobs, updateRenderJob } from "@/lib/render-jobs";
 import { headR2Object } from "@/lib/r2";
 import { startSandboxRender, stopRenderSandbox } from "@/lib/vercel-renderer";
 import { enqueueRenderJobWatchdog } from "@/lib/media-generation-queue";
@@ -25,6 +26,22 @@ function publicRenderJob(renderJob: Awaited<ReturnType<typeof getRenderJob>>) {
     ...renderJob,
     error: publicRenderError(renderJob.status, renderJob.error)
   };
+}
+
+async function recoverStaleRenderJob(renderJob: NonNullable<Awaited<ReturnType<typeof getRenderJob>>>) {
+  if (!renderJobLooksStale(renderJob)) return renderJob;
+  const expired = await expireRenderJobFromWatchdog({
+    jobId: renderJob.id,
+    projectId: renderJob.projectId,
+    versionId: renderJob.versionId
+  });
+  if (expired) {
+    after(() => stopRenderSandbox(renderSandboxName(renderJob.id)).catch((error) => {
+      console.error("[render-jobs] Unable to stop recovered stale render sandbox:", error);
+    }));
+    return expired;
+  }
+  return await getRenderJob(renderJob.id) ?? renderJob;
 }
 
 export const maxDuration = 300;
@@ -56,7 +73,9 @@ export async function GET(request: Request) {
     } catch {
       return NextResponse.json({ error: "没有找到渲染项目。" }, { status: 404 });
     }
-    return NextResponse.json({ renderJobs: (await listRenderJobs(projectId)).map(publicRenderJob) });
+    const renderJobs = await listRenderJobs(projectId);
+    const recovered = await Promise.all(renderJobs.map((renderJob) => recoverStaleRenderJob(renderJob)));
+    return NextResponse.json({ renderJobs: recovered.map(publicRenderJob) });
   }
   if (!jobId || !z.string().uuid().safeParse(jobId).success) {
     return NextResponse.json({ error: "缺少有效的渲染任务 ID。" }, { status: 400 });
@@ -69,8 +88,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "没有找到渲染任务。" }, { status: 404 });
     }
   }
-  return renderJob
-    ? NextResponse.json({ renderJob: publicRenderJob(renderJob) })
+  const recovered = renderJob ? await recoverStaleRenderJob(renderJob) : undefined;
+  return recovered
+    ? NextResponse.json({ renderJob: publicRenderJob(recovered) })
     : NextResponse.json({ error: "没有找到渲染任务。" }, { status: 404 });
 }
 
@@ -174,6 +194,27 @@ export async function POST(request: Request) {
     );
   }
   const renderJob = acquired.renderJob;
+  try {
+    await enqueueRenderJobWatchdog({
+      operation: "render-watchdog",
+      jobId: renderJob.id,
+      projectId: body.projectId,
+      versionId: body.versionId,
+      watchdogPass: 0
+    });
+  } catch (error) {
+    console.error("[render-jobs] Unable to schedule render watchdog:", error);
+    const failed = await updateRenderJob({
+      jobId: renderJob.id,
+      status: "failed",
+      progress: 0,
+      error: "无法启动受监控的视频合成任务。"
+    });
+    return NextResponse.json({
+      error: "视频合成监控暂时不可用，请稍后重试。",
+      renderJob: publicRenderJob(failed)
+    }, { status: 503 });
+  }
   const invalidMedia: Array<{ sceneNumber: number; type: "visual" | "audio"; reason: string }> = [];
   const invalidProductionMedia: Array<{ type: "logo" | "music"; label: string; reason: string }> = [];
   let transientStorageError = false;
@@ -242,12 +283,6 @@ export async function POST(request: Request) {
 
   try {
     const origin = new URL(request.url).origin;
-    await enqueueRenderJobWatchdog({
-      operation: "render-watchdog",
-      jobId: renderJob.id,
-      projectId: body.projectId,
-      versionId: body.versionId
-    });
     await startSandboxRender({
       jobId: renderJob.id,
       project,

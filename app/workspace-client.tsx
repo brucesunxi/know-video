@@ -440,6 +440,7 @@ type MediaGenerationResponse = {
 
 const IMAGE_GENERATION_TIMEOUT_MS = 305_000;
 const AUDIO_GENERATION_TIMEOUT_MS = 305_000;
+const RENDER_JOB_POLL_INTERVAL_MS = 10_000;
 const AUTOMATIC_MEDIA_REPAIR_ATTEMPTS = 3;
 
 async function generateImageScenesIndependently(input: {
@@ -1972,7 +1973,7 @@ async function waitForRenderJob(
     if (Date.now() - startedAt > 45 * 60 * 1000) {
       throw new Error("视频渲染超时，请稍后在项目中重试导出。");
     }
-    await new Promise((resolve) => window.setTimeout(resolve, 5000));
+    await new Promise((resolve) => window.setTimeout(resolve, RENDER_JOB_POLL_INTERVAL_MS));
     if (isCancelled()) return undefined;
     try {
       const response = await fetch(`/api/render-jobs?id=${encodeURIComponent(jobId)}`, { cache: "no-store" });
@@ -7092,10 +7093,19 @@ export function WorkspaceClient({
   }
 
   useEffect(() => {
-    if (!exportsOpen || !renderJobs.some((job) => job.status === "queued" || job.status === "running")) return;
-    const interval = window.setInterval(() => void loadRenderJobs(true), 5000);
+    if (
+      !exportsOpen
+      || activeRenderJobId
+      || !renderJobs.some((job) => job.status === "queued" || job.status === "running")
+    ) return;
+    const interval = window.setInterval(() => void loadRenderJobs(true), RENDER_JOB_POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
-  }, [exportsOpen, project.id, renderJobs.some((job) => job.status === "queued" || job.status === "running")]);
+  }, [
+    activeRenderJobId,
+    exportsOpen,
+    project.id,
+    renderJobs.some((job) => job.status === "queued" || job.status === "running")
+  ]);
 
   function toggleAssets() {
     setAssetsOpen((current) => !current);

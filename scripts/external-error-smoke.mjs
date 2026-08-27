@@ -4,6 +4,7 @@ import vm from "node:vm";
 import ts from "typescript";
 
 const source = fs.readFileSync(new URL("../lib/external-error.ts", import.meta.url), "utf8");
+const imageAssets = fs.readFileSync(new URL("../lib/image-assets.ts", import.meta.url), "utf8");
 const output = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
@@ -25,5 +26,8 @@ assert.equal(externalErrorStatus({ status: "429" }), 429);
 assert.equal(externalErrorStatus({ status: "not-a-number" }), undefined);
 assert.equal(externalErrorCode({ code: { nested: true } }), "");
 assert.equal(externalErrorCode(null), "");
+assert.match(imageAssets, /const code = externalErrorCode\(error\)/);
+assert.match(imageAssets, /const name = externalErrorName\(error\)/);
+assert.doesNotMatch(imageAssets, /\.code\?\.includes|\.name\?\.includes/);
 
 console.log("External provider error normalization smoke checks passed.");

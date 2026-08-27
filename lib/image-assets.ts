@@ -1213,8 +1213,8 @@ export async function generateProjectSceneImages(
       } catch (error) {
         const qualityCode = error instanceof GeneratedImageQualityError ? error.code : undefined;
         console.error(`[image-assets] Scene ${scene.sceneNumber} image generation failed${qualityCode ? ` (${qualityCode})` : ""}:`, error);
-        failures.push(classifyImageError(error));
         if (options.throwOnFailure) throw error;
+        failures.push(classifyImageError(error));
       }
   });
 

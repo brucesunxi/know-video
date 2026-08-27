@@ -125,5 +125,15 @@ assert.match(continuity, /All visible books must have completely plain, unmarked
 assert.doesNotMatch(continuity, /Project subject for semantic context only/);
 assert.match(imageAssets, /mapWithConcurrency\(targets, 1/);
 assert.match(imageAssets, /currentVersion: \{ \.\.\.project\.currentVersion, scenes \}/);
+const sceneFailureCatch = imageAssets.slice(
+  imageAssets.indexOf("console.error(`[image-assets] Scene ${scene.sceneNumber} image generation failed"),
+  imageAssets.indexOf("const assetStatus = mediaAssetStatus(scenes)")
+);
+assert.ok(
+  sceneFailureCatch.indexOf("if (options.throwOnFailure) throw error")
+    < sceneFailureCatch.indexOf("failures.push(classifyImageError(error))"),
+  "Background image failures must preserve the original provider error before optional UI classification"
+);
+assert.doesNotMatch(imageAssets, /\.code\?\.includes|\.name\?\.includes/);
 
 console.log("Image generation retry smoke checks passed.");

@@ -99,6 +99,10 @@ assert.match(route, /readiness\.inputs\.map/);
 assert.match(route, /invalidProductionMedia/);
 assert.match(route, /pushInvalidInput/);
 assert.match(route, /input\.scope === "production"/);
+assert.ok(
+  route.indexOf("await enqueueRenderJobWatchdog({") < route.indexOf("await Promise.all(readiness.inputs.map"),
+  "The render job must be monitored before cloud storage preflight starts"
+);
 assert.match(source, /品牌 Logo/);
 assert.match(source, /背景音乐/);
 assert.match(route, /请重新生成或重新上传后再导出/);

@@ -6,14 +6,36 @@ import type { Project } from "@/lib/types";
 const SANDBOX_ROOT = "/vercel/sandbox";
 const SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RENDER_TIMEOUT_MS = 45 * 60 * 1000;
+export const RENDERER_DEPENDENCY_REVISION = "lock-465beb093d4c";
 
 function rendererRevision() {
   return getOptionalEnv("VERCEL_GIT_COMMIT_SHA") || "main";
 }
 
 function baseSandboxName() {
-  const revision = rendererRevision().replace(/[^a-zA-Z0-9-]/g, "").slice(0, 12) || "main";
-  return `know-video-renderer-${revision}`;
+  return `know-video-renderer-${RENDERER_DEPENDENCY_REVISION}`;
+}
+
+async function syncRendererSource(sandbox: Sandbox) {
+  const revision = rendererRevision();
+  const fetchResult = await sandbox.runCommand({
+    cmd: "git",
+    args: ["fetch", "--depth", "1", "origin", revision],
+    cwd: SANDBOX_ROOT,
+    timeoutMs: 2 * 60 * 1000
+  });
+  if (fetchResult.exitCode !== 0) {
+    throw new Error(`渲染代码同步失败：${(await fetchResult.stderr()).slice(-1200)}`);
+  }
+  const checkoutResult = await sandbox.runCommand({
+    cmd: "git",
+    args: ["checkout", "--force", "FETCH_HEAD"],
+    cwd: SANDBOX_ROOT,
+    timeoutMs: 60_000
+  });
+  if (checkoutResult.exitCode !== 0) {
+    throw new Error(`渲染代码切换失败：${(await checkoutResult.stderr()).slice(-1200)}`);
+  }
 }
 
 async function ensureRendererBase() {
@@ -113,6 +135,8 @@ export async function startSandboxRender(input: {
         WORKER_SHARED_SECRET: getRequiredEnv("WORKER_SHARED_SECRET")
       }
     });
+
+    await syncRendererSource(sandbox);
 
     const inputPath = `${SANDBOX_ROOT}/.render-jobs/${input.jobId}.json`;
     await sandbox.mkDir(`${SANDBOX_ROOT}/.render-jobs`);

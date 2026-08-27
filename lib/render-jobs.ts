@@ -1,6 +1,11 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 import { assetUrlForKey } from "@/lib/r2";
 import { versionStatusAfterRenderJob } from "@/lib/render-lifecycle";
+import {
+  RENDER_JOB_INACTIVITY_TIMEOUT_MINUTES,
+  RENDER_JOB_MAX_RUNTIME_MINUTES,
+  RENDER_JOB_QUEUED_TIMEOUT_MINUTES
+} from "@/lib/render-lifecycle-policy";
 import { deleteUnreferencedStorageObjects } from "@/lib/storage-cleanup";
 import type { RenderJob } from "@/lib/types";
 
@@ -18,7 +23,10 @@ type RenderJobRow = {
   version_label?: string | null;
 };
 
-const RENDER_WATCHDOG_ERROR = "渲染任务超过 50 分钟仍未完成，系统已自动停止，可重新导出。";
+const RENDER_WATCHDOG_ERROR = "渲染任务长时间没有进展或已达到 50 分钟上限，系统已自动停止，可重新导出。";
+const RENDER_QUEUED_TIMEOUT = `${RENDER_JOB_QUEUED_TIMEOUT_MINUTES} minutes`;
+const RENDER_INACTIVITY_TIMEOUT = `${RENDER_JOB_INACTIVITY_TIMEOUT_MINUTES} minutes`;
+const RENDER_MAX_RUNTIME = `${RENDER_JOB_MAX_RUNTIME_MINUTES} minutes`;
 
 function toRenderJob(row: RenderJobRow): RenderJob {
   return {
@@ -99,8 +107,23 @@ export async function acquireRenderJob(projectId: string, versionId: string): Pr
       where project_id = ${projectId}
         and version_id = ${versionId}
         and (
-          (status = 'queued' and updated_at < now() - interval '5 minutes')
-          or (status = 'running' and updated_at < now() - interval '50 minutes')
+          (status = 'queued' and updated_at < now() - ${RENDER_QUEUED_TIMEOUT}::interval)
+          or (status = 'running' and updated_at < now() - ${RENDER_INACTIVITY_TIMEOUT}::interval)
+          or (status in ('queued', 'running') and created_at < now() - ${RENDER_MAX_RUNTIME}::interval)
+        )
+    `,
+    sql`
+      update project_versions
+      set status = 'draft', render_url = null
+      where id = ${versionId}
+        and project_id = ${projectId}
+        and status = 'rendering'
+        and not exists (
+          select 1
+          from render_jobs
+          where project_id = ${projectId}
+            and version_id = ${versionId}
+            and status in ('queued', 'running')
         )
     `,
     sql`
@@ -145,9 +168,9 @@ export async function acquireRenderJob(projectId: string, versionId: string): Pr
       returning *
     `
   ]);
-  const reusable = (results[2] as RenderJobRow[])[0];
+  const reusable = (results[3] as RenderJobRow[])[0];
   if (reusable) return { renderJob: toRenderJob(reusable), reused: true };
-  const created = (results[3] as RenderJobRow[])[0];
+  const created = (results[4] as RenderJobRow[])[0];
   return created ? { renderJob: toRenderJob(created), reused: false } : undefined;
 }
 
@@ -237,7 +260,11 @@ export async function expireRenderJobFromWatchdog(input: {
         and project_id = ${input.projectId}
         and version_id = ${input.versionId}
         and status in ('queued', 'running')
-        and created_at < now() - interval '48 minutes'
+        and (
+          (status = 'queued' and updated_at < now() - ${RENDER_QUEUED_TIMEOUT}::interval)
+          or (status = 'running' and updated_at < now() - ${RENDER_INACTIVITY_TIMEOUT}::interval)
+          or created_at < now() - ${RENDER_MAX_RUNTIME}::interval
+        )
       returning *
     `,
     sql`
