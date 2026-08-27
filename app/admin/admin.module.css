@@ -33,7 +33,7 @@
 .error { color: #a52b24; background: #fff3f2; border-color: #efb9b4; }
 
 .workspace { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr); gap: 18px; max-width: 1280px; margin: 0 auto 18px; }
-.panel, .history { background: #fff; border: 1px solid #d7e0e7; border-radius: 8px; box-shadow: 0 12px 30px rgba(31, 48, 66, .06); }
+.panel, .history, .health { background: #fff; border: 1px solid #d7e0e7; border-radius: 8px; box-shadow: 0 12px 30px rgba(31, 48, 66, .06); }
 .panel { padding: 24px; }
 .panelTitle { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 19px; }
 .panelTitle svg { color: #08796c; margin-top: 2px; }
@@ -70,6 +70,26 @@
 .primary { min-height: 45px; background: #08796c; }
 
 .empty { margin-top: 17px; padding: 22px; border: 1px dashed #cbd6df; border-radius: 6px; color: #7b8798; text-align: center; font-size: 13px; }
+.health { max-width: 1280px; margin: 0 auto 18px; padding: 22px 24px 24px; }
+.healthHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.healthHead .panelTitle { margin-bottom: 16px; }
+.healthHead button { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 13px; border: 1px solid #cbd6df; border-radius: 6px; background: #fff; color: #344258; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
+.healthHead button:disabled { opacity: .55; cursor: default; }
+.healthStatus { display: flex; align-items: center; gap: 9px; min-height: 42px; box-sizing: border-box; padding: 10px 12px; border: 1px solid; border-radius: 6px; font-size: 13px; font-weight: 700; }
+.healthStatus time { margin-left: auto; color: inherit; font-size: 11px; font-weight: 600; opacity: .72; }
+.healthGood { border-color: #a9ded5; background: #ecfaf7; color: #08796c; }
+.healthDanger { border-color: #efb9b4; background: #fff3f2; color: #a52b24; }
+.healthMetrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-top: 16px; border: 1px solid #dce4ea; border-radius: 6px; overflow: hidden; }
+.healthMetrics dl { min-width: 0; margin: 0; padding: 14px 15px; border-right: 1px solid #e1e7ec; }
+.healthMetrics dl:last-child { border-right: 0; }
+.healthMetrics dt { color: #6d798c; font-size: 11px; font-weight: 700; }
+.healthMetrics dd { margin: 5px 0 2px; color: #172237; font-size: 24px; font-weight: 800; }
+.healthMetrics small { display: block; overflow: hidden; color: #8490a0; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.healthIssues { margin-top: 14px; border-top: 1px solid #e1e7ec; }
+.healthIssues p { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 10px; margin: 0; padding: 11px 2px; border-bottom: 1px solid #edf1f4; font-size: 12px; }
+.healthIssues b { color: #a52b24; }
+.healthIssues span { overflow-wrap: anywhere; color: #5c697d; }
+.healthLoading { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 120px; color: #6d798c; font-size: 13px; }
 .history { max-width: 1280px; margin: 0 auto; overflow: hidden; }
 .historyHead { display: flex; justify-content: space-between; align-items: center; padding: 22px 24px; border-bottom: 1px solid #e0e6eb; }
 .historyHead > span { padding: 5px 9px; border-radius: 4px; background: #edf2f5; color: #68758a; font-size: 12px; font-weight: 700; }
@@ -91,5 +111,15 @@
   .adminBadge { min-width: 0; width: 100%; box-sizing: border-box; }
   .workspace { grid-template-columns: 1fr; }
   .userCard dl { grid-template-columns: 1fr; }
+  .health { padding: 18px 16px 20px; }
+  .healthHead { align-items: stretch; flex-direction: column; }
+  .healthHead button { align-self: flex-start; }
+  .healthStatus { align-items: flex-start; flex-wrap: wrap; }
+  .healthStatus time { flex-basis: 100%; margin-left: 27px; }
+  .healthMetrics { grid-template-columns: 1fr 1fr; }
+  .healthMetrics dl { border-bottom: 1px solid #e1e7ec; }
+  .healthMetrics dl:nth-child(2n) { border-right: 0; }
+  .healthMetrics dl:last-child { border-bottom: 0; }
+  .healthIssues p { grid-template-columns: 1fr; gap: 4px; }
   .tableWrap table { min-width: 720px; }
 }

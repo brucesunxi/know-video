@@ -7,10 +7,21 @@ import {
 } from "@/lib/background-media-generation";
 import type { ProjectMediaMessage } from "@/lib/media-generation-queue";
 import { MAX_PROJECT_MEDIA_RECOVERY_PASSES } from "@/lib/background-recovery-policy";
+import { processRenderJobWatchdog } from "@/lib/render-watchdog";
 
 export const maxDuration = 300;
 
 export const POST = handleCallback<ProjectMediaMessage>(async (message, metadata) => {
+  if (message.operation === "render-watchdog") {
+    try {
+      await processRenderJobWatchdog(message);
+    } catch (error) {
+      console.error(`[render-watchdog] Attempt ${metadata.deliveryCount} failed:`, error);
+      if (metadata.deliveryCount >= 3) return;
+      throw error;
+    }
+    return;
+  }
   if (message.operation === "watchdog") {
     try {
       await processProjectGenerationWatchdog(message);

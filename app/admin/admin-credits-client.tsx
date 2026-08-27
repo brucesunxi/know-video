@@ -2,15 +2,21 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, ArrowLeft, CheckCircle2, Coins, Loader2, Search, ShieldCheck, UserRound } from "lucide-react";
+import { Activity, AlertCircle, ArrowLeft, CheckCircle2, Coins, Loader2, RefreshCw, Search, ShieldCheck, UserRound } from "lucide-react";
 import type { CurrentUser } from "@/lib/auth";
 import type { AdminCreditGrant, AdminCreditTarget } from "@/lib/billing/admin-credits";
+import type { GenerationHealthAudit } from "@/lib/generation-health";
 import styles from "@/app/admin/admin.module.css";
 
 type AdminResponse = {
   target?: AdminCreditTarget | null;
   recentGrants?: AdminCreditGrant[];
   result?: { credited: boolean; duplicate: boolean; account: AdminCreditTarget };
+  error?: string;
+};
+
+type GenerationHealthResponse = {
+  audit?: GenerationHealthAudit;
   error?: string;
 };
 
@@ -24,12 +30,31 @@ export function AdminCreditsClient({ admin }: { admin: CurrentUser }) {
   const [credits, setCredits] = useState("100");
   const [reason, setReason] = useState("");
   const [recentGrants, setRecentGrants] = useState<AdminCreditGrant[]>([]);
+  const [health, setHealth] = useState<GenerationHealthAudit>();
+  const [healthLoading, setHealthLoading] = useState(true);
+  const [healthError, setHealthError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<{ tone: "error" | "success"; text: string }>();
   const NoticeIcon = notice?.tone === "error" ? AlertCircle : CheckCircle2;
 
+  async function loadGenerationHealth() {
+    setHealthLoading(true);
+    setHealthError(undefined);
+    try {
+      const response = await fetch("/api/admin/generation-health", { cache: "no-store" });
+      const data = await response.json() as GenerationHealthResponse;
+      if (!response.ok || !data.audit) throw new Error(data.error || "生成健康数据读取失败。");
+      setHealth(data.audit);
+    } catch (error) {
+      setHealthError(error instanceof Error ? error.message : "生成健康数据读取失败。");
+    } finally {
+      setHealthLoading(false);
+    }
+  }
+
   useEffect(() => {
+    void loadGenerationHealth();
     void fetch("/api/admin/credits", { cache: "no-store" })
       .then(async (response) => {
         const data = await response.json() as AdminResponse;
@@ -39,6 +64,21 @@ export function AdminCreditsClient({ admin }: { admin: CurrentUser }) {
       .catch((error) => setNotice({ tone: "error", text: error instanceof Error ? error.message : "管理数据读取失败。" }))
       .finally(() => setLoading(false));
   }, []);
+
+  const stalePending = health?.pendingGenerations.filter((item) => (
+    item.ageMinutes >= (item.projectId ? 45 : 15)
+  )) ?? [];
+  const staleRenders = health?.activeRenderJobs.filter((item) => (
+    item.ageMinutes >= (item.status === "running" ? 50 : 5)
+  )) ?? [];
+  const expiredReservations = health?.openReservations.filter((item) => item.expired) ?? [];
+  const invalidReadyProjects = health?.incompleteCurrentProjects.filter((item) => item.versionStatus === "ready") ?? [];
+  const blockingHealthIssues = stalePending.length
+    + staleRenders.length
+    + expiredReservations.length
+    + (health?.creditInvariantViolations.length ?? 0)
+    + invalidReadyProjects.length
+    + (health?.readyRequestsWithIncompleteMedia.length ?? 0);
 
   async function searchUser(event: FormEvent) {
     event.preventDefault();
@@ -137,6 +177,44 @@ export function AdminCreditsClient({ admin }: { admin: CurrentUser }) {
             <button className={styles.primary} disabled={!target || submitting} type="submit">{submitting ? <Loader2 className={styles.spin} size={18} /> : <Coins size={18} />}{submitting ? "正在入账" : "确认增加 Credits"}</button>
           </form>
         </div>
+      </section>
+
+      <section className={styles.health}>
+        <div className={styles.healthHead}>
+          <div className={styles.panelTitle}><Activity size={20} /><div><h2>生成健康</h2><p>任务、渲染、媒体完整性与 Credits 账务闭环</p></div></div>
+          <button aria-label="刷新生成健康" disabled={healthLoading} onClick={() => void loadGenerationHealth()} type="button">
+            <RefreshCw className={healthLoading ? styles.spin : undefined} size={17} />刷新
+          </button>
+        </div>
+        {healthError ? <div className={`${styles.healthStatus} ${styles.healthDanger}`}><AlertCircle size={18} />{healthError}</div> : null}
+        {health ? (
+          <>
+            <div className={`${styles.healthStatus} ${blockingHealthIssues > 0 ? styles.healthDanger : styles.healthGood}`}>
+              {blockingHealthIssues > 0 ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+              {blockingHealthIssues > 0
+                ? `发现 ${blockingHealthIssues} 个需要立即收口的问题。`
+                : "没有发现超时任务、账务不一致或错误完成状态。"}
+              <time>{formatDate(health.generatedAt)}</time>
+            </div>
+            <div className={styles.healthMetrics}>
+              <dl><dt>生成中</dt><dd>{health.pendingGenerations.length}</dd><small>超时 {stalePending.length}</small></dl>
+              <dl><dt>渲染中</dt><dd>{health.activeRenderJobs.length}</dd><small>超时 {staleRenders.length}</small></dl>
+              <dl><dt>冻结预留</dt><dd>{health.openReservations.length}</dd><small>过期 {expiredReservations.length}</small></dl>
+              <dl><dt>媒体未齐</dt><dd>{health.incompleteCurrentProjects.length}</dd><small>错误就绪 {invalidReadyProjects.length}</small></dl>
+              <dl><dt>账务不变量</dt><dd>{health.creditInvariantViolations.length}</dd><small>最近失败 {health.recentFailedGenerations.length}</small></dl>
+            </div>
+            {blockingHealthIssues > 0 ? (
+              <div className={styles.healthIssues}>
+                {stalePending.map((item) => <p key={item.id}><b>生成超时</b><span>{item.email} · {item.ageMinutes} 分钟 · {item.id.slice(0, 8)}</span></p>)}
+                {staleRenders.map((item) => <p key={item.id}><b>渲染超时</b><span>{item.status} · {item.ageMinutes} 分钟 · {item.id.slice(0, 8)}</span></p>)}
+                {expiredReservations.map((item) => <p key={item.key}><b>预留过期</b><span>{item.email} · {item.remaining} Credits · {item.key}</span></p>)}
+                {health.creditInvariantViolations.map((item) => <p key={item.email}><b>账务不一致</b><span>{item.email} · 账户冻结 {item.accountReserved} / 预留明细 {item.reservationOpen}</span></p>)}
+                {invalidReadyProjects.map((item) => <p key={item.projectId}><b>错误就绪</b><span>{item.title} · 画面 {item.visuals}/{item.scenes} · 配音 {item.audio}/{item.scenes}</span></p>)}
+                {health.readyRequestsWithIncompleteMedia.map((item) => <p key={item.requestId}><b>错误完成</b><span>{item.title} · 画面 {item.visuals}/{item.scenes} · 配音 {item.audio}/{item.scenes}</span></p>)}
+              </div>
+            ) : null}
+          </>
+        ) : healthLoading ? <div className={styles.healthLoading}><Loader2 className={styles.spin} size={18} />正在核对生产状态</div> : null}
       </section>
 
       <section className={styles.history}>

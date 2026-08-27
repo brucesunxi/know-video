@@ -7,6 +7,7 @@ import { renderInputMetadataIssue, renderInputReadiness } from "@/lib/render-pre
 import { acquireRenderJob, cancelRenderJob, getRenderJob, invalidateReadyRenderJob, listRenderJobs, updateRenderJob } from "@/lib/render-jobs";
 import { headR2Object } from "@/lib/r2";
 import { startSandboxRender, stopRenderSandbox } from "@/lib/vercel-renderer";
+import { enqueueRenderJobWatchdog } from "@/lib/media-generation-queue";
 
 const requestSchema = z.object({
   projectId: z.string().uuid(),
@@ -241,6 +242,12 @@ export async function POST(request: Request) {
 
   try {
     const origin = new URL(request.url).origin;
+    await enqueueRenderJobWatchdog({
+      operation: "render-watchdog",
+      jobId: renderJob.id,
+      projectId: body.projectId,
+      versionId: body.versionId
+    });
     await startSandboxRender({
       jobId: renderJob.id,
       project,

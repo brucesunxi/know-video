@@ -19,6 +19,7 @@ type RenderJobRow = {
 };
 
 let metadataColumnAvailable: boolean | undefined;
+const RENDER_WATCHDOG_ERROR = "渲染任务超过 50 分钟仍未完成，系统已自动停止，可重新导出。";
 
 function toRenderJob(row: RenderJobRow): RenderJob {
   return {
@@ -233,6 +234,54 @@ export async function cancelRenderJob(projectId: string, jobId: string) {
           select 1 from projects
           where projects.id = ${projectId}
             and projects.current_version_id = project_versions.id
+        )
+    `
+  ]);
+  const row = (results[1] as RenderJobRow[])[0];
+  return row ? toRenderJob(row) : undefined;
+}
+
+export async function expireRenderJobFromWatchdog(input: {
+  jobId: string;
+  projectId: string;
+  versionId: string;
+}) {
+  if (!hasDatabaseUrl()) return undefined;
+  const sql = getSql();
+  const results = await sql.transaction([
+    sql`select pg_advisory_xact_lock(hashtextextended(${input.jobId}, 0))`,
+    sql`
+      update render_jobs
+      set status = 'failed',
+          progress = 0,
+          error = ${RENDER_WATCHDOG_ERROR},
+          output_r2_key = null,
+          updated_at = now()
+      where id = ${input.jobId}
+        and project_id = ${input.projectId}
+        and version_id = ${input.versionId}
+        and status in ('queued', 'running')
+        and created_at < now() - interval '48 minutes'
+      returning *
+    `,
+    sql`
+      update project_versions
+      set status = 'draft', render_url = null
+      where id = ${input.versionId}
+        and project_id = ${input.projectId}
+        and status = 'rendering'
+        and exists (
+          select 1
+          from render_jobs
+          where id = ${input.jobId}
+            and status = 'failed'
+            and error = ${RENDER_WATCHDOG_ERROR}
+        )
+        and exists (
+          select 1
+          from projects
+          where id = ${input.projectId}
+            and current_version_id = ${input.versionId}
         )
     `
   ]);
