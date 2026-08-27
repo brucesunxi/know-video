@@ -31,7 +31,6 @@ type GenerationRequestRow = {
   updated_at: Date | string;
 };
 
-let schemaPromise: Promise<void> | undefined;
 const ATTACHED_PROJECT_STALE_INTERVAL = "45 minutes";
 const ATTACHED_PROJECT_STALE_ERROR = "后台生成超过 45 分钟仍未完成，系统已自动停止并退回本次 Credits。请检查并重试缺失场景。";
 
@@ -41,53 +40,6 @@ function publicStoredError(error: string | null) {
     return "生成服务初始化没有完成，请重试。";
   }
   return error;
-}
-
-async function ensureGenerationRequestsSchema() {
-  if (!hasDatabaseUrl()) return;
-  if (!schemaPromise) {
-    const sql = getSql();
-    schemaPromise = (async () => {
-      await sql`
-        create table if not exists generation_requests (
-          id uuid primary key,
-          user_id uuid references users(id) on delete cascade,
-          prompt text,
-          request_fingerprint text not null,
-          status text not null check (status in ('pending', 'ready', 'failed')),
-          project_id uuid references projects(id) on delete set null,
-          engine text,
-          error text,
-          created_at timestamptz not null default now(),
-          updated_at timestamptz not null default now()
-        )
-      `;
-      await sql`
-        alter table generation_requests
-        add column if not exists user_id uuid references users(id) on delete cascade
-      `;
-      await sql`
-        alter table generation_requests
-        add column if not exists prompt text
-      `;
-      await sql`
-        alter table generation_requests
-        add column if not exists options_json jsonb
-      `;
-      await sql`
-        create index if not exists generation_requests_status_updated_idx
-        on generation_requests(status, updated_at desc)
-      `;
-      await sql`
-        create index if not exists generation_requests_user_status_updated_idx
-        on generation_requests(user_id, status, updated_at desc)
-      `;
-    })().catch((error) => {
-      schemaPromise = undefined;
-      throw error;
-    });
-  }
-  await schemaPromise;
 }
 
 function toRecord(row: GenerationRequestRow): GenerationRequestRecord {
@@ -134,7 +86,6 @@ export async function claimGenerationRequest(input: {
   options?: GenerationOptions;
 }): Promise<{ claimed: boolean; record?: GenerationRequestRecord; conflict?: boolean }> {
   if (!hasDatabaseUrl()) return { claimed: true };
-  await ensureGenerationRequestsSchema();
   const sql = getSql();
   const inserted = await sql`
     insert into generation_requests (id, user_id, prompt, options_json, request_fingerprint, status)
@@ -172,7 +123,6 @@ export async function claimGenerationRequest(input: {
 
 export async function getGenerationRequest(id: string, userId: string) {
   if (!hasDatabaseUrl()) return undefined;
-  await ensureGenerationRequestsSchema();
   const sql = getSql();
   const expired = await sql`
     update generation_requests
@@ -209,7 +159,6 @@ export async function getGenerationRequest(id: string, userId: string) {
 
 export async function getGenerationRequestBeforeExpiry(id: string, userId: string) {
   if (!hasDatabaseUrl()) return undefined;
-  await ensureGenerationRequestsSchema();
   const rows = await getSql()`
     select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
     from generation_requests
@@ -221,7 +170,6 @@ export async function getGenerationRequestBeforeExpiry(id: string, userId: strin
 
 export async function listCompletedPendingGenerationRequests(userId: string) {
   if (!hasDatabaseUrl()) return [];
-  await ensureGenerationRequestsSchema();
   const rows = await getSql()`
     select
       gr.id,
@@ -273,7 +221,6 @@ export async function listCompletedPendingGenerationRequests(userId: string) {
 
 export async function getProjectGenerationOptions(projectId: string, userId: string) {
   if (!hasDatabaseUrl()) return undefined;
-  await ensureGenerationRequestsSchema();
   const rows = await getSql()`
     select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
     from generation_requests
@@ -288,7 +235,6 @@ export async function getProjectGenerationOptions(projectId: string, userId: str
 
 export async function getProjectGenerationRequest(projectId: string, userId: string) {
   if (!hasDatabaseUrl()) return undefined;
-  await ensureGenerationRequestsSchema();
   const rows = await getSql()`
     select id, user_id, prompt, options_json, request_fingerprint, status, project_id, engine, error, created_at, updated_at
     from generation_requests
@@ -303,7 +249,6 @@ export async function getProjectGenerationRequest(projectId: string, userId: str
 
 export async function listIncompleteGenerationRequests(userId: string) {
   if (!hasDatabaseUrl()) return [];
-  await ensureGenerationRequestsSchema();
   const sql = getSql();
   const expired = await sql`
     update generation_requests
@@ -338,7 +283,6 @@ export async function listIncompleteGenerationRequests(userId: string) {
 
 export async function deleteFailedGenerationRequest(id: string, userId: string) {
   if (!hasDatabaseUrl()) return false;
-  await ensureGenerationRequestsSchema();
   const rows = await getSql()`
     delete from generation_requests
     where id = ${id}
@@ -355,7 +299,6 @@ export async function completeGenerationRequest(input: {
   engine: string;
 }) {
   if (!hasDatabaseUrl()) return;
-  await ensureGenerationRequestsSchema();
   await getSql()`
     update generation_requests
     set status = 'ready', project_id = ${input.projectId}, engine = ${input.engine}, error = null, updated_at = now()
@@ -369,7 +312,6 @@ export async function attachGenerationRequestProject(input: {
   engine: string;
 }) {
   if (!hasDatabaseUrl()) return;
-  await ensureGenerationRequestsSchema();
   await getSql()`
     update generation_requests
     set project_id = ${input.projectId}, engine = ${input.engine}, error = null, updated_at = now()
@@ -379,7 +321,6 @@ export async function attachGenerationRequestProject(input: {
 
 export async function touchGenerationRequest(id: string) {
   if (!hasDatabaseUrl()) return { pending: true as const };
-  await ensureGenerationRequestsSchema();
   const rows = await getSql()`
     update generation_requests
     set updated_at = now()
@@ -394,7 +335,6 @@ export async function touchGenerationRequest(id: string) {
 
 export async function failGenerationRequest(id: string, error = "视频脚本和分镜生成没有完成，请重试。") {
   if (!hasDatabaseUrl()) return false;
-  await ensureGenerationRequestsSchema();
   const safeError = error.replace(/\s+/g, " ").trim().slice(0, 500) || "视频脚本和分镜生成没有完成，请重试。";
   const rows = await getSql()`
     update generation_requests

@@ -68,6 +68,8 @@ npm run db:seed
 
 `db:init` applies the schema. `db:seed` inserts the demo Know Video project used by the current editor screen.
 
+Run `db:init` whenever `db/schema.sql` changes. Production request handlers never create, alter, or inspect database schemas, which keeps Neon traffic predictable and prevents migrations from blocking video generation.
+
 ## Product And Engineering Documents
 
 - [Architecture](docs/architecture.md)

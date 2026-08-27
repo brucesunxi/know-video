@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run database:runtime-schema:smoke",
     "build": "next build",
     "start": "next start",
     "render:smoke": "node scripts/render-smoke.mjs",
@@ -63,6 +64,8 @@
     "voice:preview:smoke": "node scripts/voice-preview-smoke.mjs",
     "asset:policy:smoke": "node scripts/asset-policy-smoke.mjs",
     "asset:ownership:smoke": "node scripts/asset-ownership-smoke.mjs",
+    "storage:reliability:smoke": "node scripts/storage-reliability-smoke.mjs",
+    "database:runtime-schema:smoke": "node scripts/runtime-schema-smoke.mjs",
     "media:generation:smoke": "node scripts/media-generation-result-smoke.mjs",
     "video:response:smoke": "node scripts/cloudflare-video-response-smoke.mjs",
     "vision:response:smoke": "node scripts/cloudflare-vision-response-smoke.mjs",

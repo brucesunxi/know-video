@@ -18,7 +18,6 @@ type RenderJobRow = {
   version_label?: string | null;
 };
 
-let metadataColumnAvailable: boolean | undefined;
 const RENDER_WATCHDOG_ERROR = "渲染任务超过 50 分钟仍未完成，系统已自动停止，可重新导出。";
 
 function toRenderJob(row: RenderJobRow): RenderJob {
@@ -38,29 +37,6 @@ function toRenderJob(row: RenderJobRow): RenderJob {
     updatedAt: new Date(row.updated_at).toISOString(),
     versionLabel: row.version_label ?? undefined
   };
-}
-
-async function ensureRenderJobMetadataColumn(sql: ReturnType<typeof getSql>) {
-  if (metadataColumnAvailable !== undefined) return metadataColumnAvailable;
-  const rows = await sql`
-    select exists (
-      select 1
-      from information_schema.columns
-      where table_name = 'render_jobs'
-        and column_name = 'metadata_json'
-    ) as exists
-  ` as Array<{ exists: boolean }>;
-  metadataColumnAvailable = Boolean(rows[0]?.exists);
-  if (!metadataColumnAvailable) {
-    try {
-      await sql`alter table render_jobs add column if not exists metadata_json jsonb not null default '{}'`;
-      metadataColumnAvailable = true;
-    } catch (error) {
-      metadataColumnAvailable = false;
-      console.error("[render-jobs] Unable to add render metadata column; continuing without metadata persistence:", error);
-    }
-  }
-  return metadataColumnAvailable;
 }
 
 export async function invalidateVersionRender(versionId: string) {
@@ -347,8 +323,7 @@ export async function updateRenderJob(input: {
   const sql = getSql();
   const versionStatus = versionStatusAfterRenderJob(input.status);
   const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
-  const canStoreMetadata = await ensureRenderJobMetadataColumn(sql);
-  const updateJob = canStoreMetadata ? sql`
+  const updateJob = sql`
     update render_jobs
     set status = ${input.status},
         progress = ${input.progress},
@@ -359,35 +334,6 @@ export async function updateRenderJob(input: {
           when ${input.status} in ('failed', 'cancelled') then '{}'
           else metadata_json
         end,
-        updated_at = now()
-    where id = ${input.jobId}
-      and (
-        ${input.status} in ('failed', 'cancelled')
-        or exists (
-          select 1
-          from projects
-          where projects.id = render_jobs.project_id
-            and projects.current_version_id = render_jobs.version_id
-        )
-      )
-      and (
-        (
-          ${input.status} = 'running'
-          and status in ('queued', 'running')
-          and progress <= ${input.progress}
-        )
-        or (
-          ${input.status} in ('ready', 'failed', 'cancelled')
-          and status in ('queued', 'running')
-        )
-      )
-    returning *
-  ` : sql`
-    update render_jobs
-    set status = ${input.status},
-        progress = ${input.progress},
-        error = ${input.error ?? null},
-        output_r2_key = coalesce(${input.outputR2Key ?? null}, output_r2_key),
         updated_at = now()
     where id = ${input.jobId}
       and (

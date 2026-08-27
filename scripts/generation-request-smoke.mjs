@@ -34,7 +34,7 @@ assert.match(source, /listIncompleteGenerationRequests/);
 assert.match(source, /deleteFailedGenerationRequest/);
 assert.match(source, /status = 'failed'/);
 assert.match(source, /interval '15 minutes'/);
-assert.match(source, /options_json jsonb/);
+assert.doesNotMatch(source, /create table|alter table|create (?:unique )?index/i);
 assert.match(source, /options\?: GenerationOptions/);
 assert.match(projectsRoute, /after\(\(\) => runBackgroundGeneration/);
 assert.match(projectsRoute, /attachGenerationRequestProject/);

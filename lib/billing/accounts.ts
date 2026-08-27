@@ -20,91 +20,8 @@ export type CreditPurchase = {
   providerPaymentId?: string;
 };
 
-let accountSchemaPromise: Promise<void> | undefined;
-
-export async function ensureCreditAccountSchema() {
-  if (!hasDatabaseUrl()) return;
-  if (!accountSchemaPromise) {
-    const sql = getSql();
-    accountSchemaPromise = (async () => {
-      await sql`
-        create table if not exists credit_accounts (
-          user_id uuid primary key references users(id) on delete cascade,
-          available_credits bigint not null default 0 check (available_credits >= 0),
-          reserved_credits bigint not null default 0 check (reserved_credits >= 0),
-          lifetime_purchased bigint not null default 0,
-          lifetime_consumed bigint not null default 0,
-          created_at timestamptz not null default now(),
-          updated_at timestamptz not null default now()
-        )
-      `;
-      await sql`alter table credit_accounts add column if not exists reserved_credits bigint not null default 0`;
-      await sql`
-        create table if not exists credit_purchases (
-          id uuid primary key,
-          user_id uuid not null references users(id) on delete cascade,
-          pack_id text not null,
-          credits bigint not null check (credits > 0),
-          amount_usd_cents integer not null check (amount_usd_cents > 0),
-          status text not null check (status in ('pending', 'paid', 'failed', 'refunded')),
-          payment_provider text,
-          provider_checkout_id text unique,
-          provider_payment_id text,
-          created_at timestamptz not null default now(),
-          paid_at timestamptz,
-          updated_at timestamptz not null default now()
-        )
-      `;
-      await sql`
-        create table if not exists credit_reservations (
-          id uuid primary key default uuid_generate_v4(),
-          user_id uuid not null references users(id) on delete cascade,
-          reservation_key text not null unique,
-          status text not null default 'reserved'
-            check (status in ('reserved', 'partially_settled', 'settled', 'released')),
-          reserved_credits bigint not null check (reserved_credits >= 0),
-          settled_credits bigint not null default 0 check (settled_credits >= 0),
-          released_credits bigint not null default 0 check (released_credits >= 0),
-          estimated_cost_microusd bigint not null default 0 check (estimated_cost_microusd >= 0),
-          estimate_json jsonb not null default '{}',
-          metadata_json jsonb not null default '{}',
-          expires_at timestamptz not null default (now() + interval '2 hours'),
-          created_at timestamptz not null default now(),
-          updated_at timestamptz not null default now(),
-          check (settled_credits + released_credits <= reserved_credits)
-        )
-      `;
-      await sql`alter table credit_purchases add column if not exists payment_provider text`;
-      await sql`alter table credit_purchases add column if not exists provider_checkout_id text`;
-      await sql`alter table credit_purchases add column if not exists provider_payment_id text`;
-      await sql`create unique index if not exists credit_purchases_checkout_idx on credit_purchases(provider_checkout_id)`;
-      await sql`create unique index if not exists credit_purchases_payment_idx on credit_purchases(provider_payment_id) where provider_payment_id is not null`;
-      await sql`
-        create table if not exists credit_ledger (
-          id uuid primary key default uuid_generate_v4(),
-          user_id uuid not null references users(id) on delete cascade,
-          event_type text not null,
-          credits_delta bigint not null,
-          balance_after bigint not null check (balance_after >= 0),
-          source_id text not null unique,
-          metadata_json jsonb not null default '{}',
-          created_at timestamptz not null default now()
-        )
-      `;
-      await sql`create index if not exists credit_purchases_user_created_idx on credit_purchases(user_id, created_at desc)`;
-      await sql`create index if not exists credit_ledger_user_created_idx on credit_ledger(user_id, created_at desc)`;
-      await sql`create index if not exists credit_reservations_user_status_idx on credit_reservations(user_id, status, updated_at desc)`;
-    })().catch((error) => {
-      accountSchemaPromise = undefined;
-      throw error;
-    });
-  }
-  await accountSchemaPromise;
-}
-
 export async function getCreditAccount(userId: string): Promise<CreditAccount> {
   if (!hasDatabaseUrl()) return { availableCredits: 0, reservedCredits: 0, lifetimePurchased: 0, lifetimeConsumed: 0 };
-  await ensureCreditAccountSchema();
   const sql = getSql();
   await sql`
     insert into credit_accounts (user_id)
@@ -183,7 +100,6 @@ export async function createPendingCreditPurchase(input: {
   credits: number;
   amountUsdCents: number;
 }) {
-  await ensureCreditAccountSchema();
   await getCreditAccount(input.userId);
   await getSql()`
     insert into credit_purchases (
@@ -204,7 +120,6 @@ export async function attachCheckoutToCreditPurchase(purchaseId: string, checkou
 }
 
 export async function failCreditPurchase(purchaseId: string) {
-  await ensureCreditAccountSchema();
   await getSql()`
     update credit_purchases
     set status = 'failed', updated_at = now()
@@ -213,7 +128,6 @@ export async function failCreditPurchase(purchaseId: string) {
 }
 
 export async function expireXenditCreditPurchase(purchaseId: string, checkoutId: string) {
-  await ensureCreditAccountSchema();
   await getSql()`
     update credit_purchases
     set status = 'failed', updated_at = now()
@@ -225,7 +139,6 @@ export async function expireXenditCreditPurchase(purchaseId: string, checkoutId:
 }
 
 export async function getCreditPurchaseForUser(purchaseId: string, userId: string) {
-  await ensureCreditAccountSchema();
   const rows = await getSql()`
     select id, user_id, pack_id, credits, amount_usd_cents, status,
       provider_checkout_id, provider_payment_id
@@ -242,7 +155,6 @@ export async function settleXenditCreditPurchase(input: {
   paymentId: string;
   amountUsdCents: number;
 }) {
-  await ensureCreditAccountSchema();
   const rows = await getSql()`
     with paid_purchase as (
       update credit_purchases

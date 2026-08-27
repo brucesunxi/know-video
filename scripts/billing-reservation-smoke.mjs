@@ -19,9 +19,7 @@ assert.match(accounts, /reservedCredits/);
 assert.match(accounts, /reservation_expired/);
 
 assert.match(usage, /export async function reserveCredits/);
-assert.match(usage, /create table if not exists pricing_rules/);
-assert.match(usage, /create table if not exists usage_events/);
-assert.match(usage, /alter table usage_events add column if not exists reservation_id/);
+assert.doesNotMatch(usage, /create table|alter table|create (?:unique )?index/i);
 assert.match(usage, /available_credits = account\.available_credits -/);
 assert.match(usage, /reserved_credits = account\.reserved_credits \+/);
 assert.match(usage, /'reserve_adjustment', -\(\$\{input\.credits\}::bigint\)/);

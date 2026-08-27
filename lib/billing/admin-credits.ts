@@ -1,4 +1,3 @@
-import { ensureCreditAccountSchema } from "@/lib/billing/accounts";
 import { getSql } from "@/lib/db";
 
 export type AdminCreditTarget = {
@@ -45,7 +44,6 @@ function toTarget(row: TargetRow): AdminCreditTarget {
 }
 
 export async function findAdminCreditTarget(identifier: string) {
-  await ensureCreditAccountSchema();
   const normalized = identifier.trim().toLowerCase();
   const rows = await getSql()`
     select u.id, u.email, u.name,
@@ -62,7 +60,6 @@ export async function findAdminCreditTarget(identifier: string) {
 }
 
 export async function listRecentAdminCreditGrants(limit = 20) {
-  await ensureCreditAccountSchema();
   const rows = await getSql()`
     select l.id, u.email, u.name, l.credits_delta, l.balance_after,
       l.metadata_json, l.created_at
@@ -108,7 +105,6 @@ export async function grantAdminCredits(input: {
   adminId: string;
   adminEmail: string;
 }) {
-  await ensureCreditAccountSchema();
   const target = await findAdminCreditTarget(input.identifier);
   if (!target) throw new Error("USER_NOT_FOUND");
   const sql = getSql();

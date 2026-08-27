@@ -1,34 +1,5 @@
 import { getSql, hasDatabaseUrl } from "@/lib/db";
 
-let schemaPromise: Promise<void> | undefined;
-
-async function ensureProviderCostSchema() {
-  if (!hasDatabaseUrl()) return;
-  if (!schemaPromise) {
-    schemaPromise = getSql()`
-      create table if not exists provider_cost_events (
-        id uuid primary key default uuid_generate_v4(),
-        project_id uuid references projects(id) on delete set null,
-        version_id uuid references project_versions(id) on delete set null,
-        scene_number integer,
-        provider text not null,
-        model text not null,
-        operation text not null,
-        outcome text not null check (outcome in ('succeeded', 'failed')),
-        cost_microusd bigint not null check (cost_microusd >= 0),
-        cost_source text not null default 'catalog_estimate',
-        idempotency_key text not null unique,
-        metadata_json jsonb not null default '{}',
-        created_at timestamptz not null default now()
-      )
-    `.then(() => undefined).catch((error) => {
-      schemaPromise = undefined;
-      throw error;
-    });
-  }
-  await schemaPromise;
-}
-
 export type ProviderCostAttemptInput = {
   projectId?: string;
   versionId?: string;
@@ -45,7 +16,6 @@ export type ProviderCostAttemptInput = {
 export async function recordProviderCostAttempts(inputs: ProviderCostAttemptInput[]) {
   if (!hasDatabaseUrl() || inputs.length === 0) return;
   try {
-    await ensureProviderCostSchema();
     const sql = getSql();
     await sql.transaction(inputs.map((input) => sql`
         insert into provider_cost_events (

@@ -8,10 +8,21 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getOptionalEnv, getRequiredEnv } from "@/lib/env";
 
+const R2_UPLOAD_TIMEOUT_MS = 60_000;
+const R2_READ_TIMEOUT_MS = 60_000;
+const R2_HEAD_TIMEOUT_MS = 20_000;
+const R2_DELETE_TIMEOUT_MS = 45_000;
+let r2Client: S3Client | undefined;
+
+function operationSignal(timeoutMs: number) {
+  return AbortSignal.timeout(Math.max(1, Math.floor(timeoutMs)));
+}
+
 export function createR2Client() {
+  if (r2Client) return r2Client;
   const accountId = getRequiredEnv("R2_ACCOUNT_ID");
 
-  return new S3Client({
+  r2Client = new S3Client({
     region: "auto",
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     forcePathStyle: true,
@@ -20,6 +31,7 @@ export function createR2Client() {
       secretAccessKey: getRequiredEnv("R2_SECRET_ACCESS_KEY")
     }
   });
+  return r2Client;
 }
 
 export async function uploadToR2(input: {
@@ -38,9 +50,7 @@ export async function uploadToR2(input: {
       Body: input.body,
       ContentType: input.contentType
     }),
-    input.timeoutMs
-      ? { abortSignal: AbortSignal.timeout(Math.max(1, Math.floor(input.timeoutMs))) }
-      : undefined
+    { abortSignal: operationSignal(input.timeoutMs ?? R2_UPLOAD_TIMEOUT_MS) }
   );
 
   const publicBaseUrl = getOptionalEnv("R2_PUBLIC_BASE_URL");
@@ -59,7 +69,8 @@ export async function getFromR2(key: string, range?: string) {
       Bucket: bucket,
       Key: key,
       Range: range
-    })
+    }),
+    { abortSignal: operationSignal(R2_READ_TIMEOUT_MS) }
   );
 
   return {
@@ -79,10 +90,13 @@ export async function readR2Prefix(key: string, bytes = 64) {
 }
 
 export async function headR2Object(key: string) {
-  const response = await createR2Client().send(new HeadObjectCommand({
-    Bucket: getRequiredEnv("R2_BUCKET"),
-    Key: key
-  }));
+  const response = await createR2Client().send(
+    new HeadObjectCommand({
+      Bucket: getRequiredEnv("R2_BUCKET"),
+      Key: key
+    }),
+    { abortSignal: operationSignal(R2_HEAD_TIMEOUT_MS) }
+  );
   return {
     contentLength: response.ContentLength,
     contentType: response.ContentType,
@@ -105,13 +119,16 @@ export async function deleteR2Objects(keys: string[]) {
   const client = createR2Client();
   const bucket = getRequiredEnv("R2_BUCKET");
   for (let index = 0; index < unique.length; index += 1000) {
-    await client.send(new DeleteObjectsCommand({
-      Bucket: bucket,
-      Delete: {
-        Objects: unique.slice(index, index + 1000).map((Key) => ({ Key })),
-        Quiet: true
-      }
-    }));
+    await client.send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: {
+          Objects: unique.slice(index, index + 1000).map((Key) => ({ Key })),
+          Quiet: true
+        }
+      }),
+      { abortSignal: operationSignal(R2_DELETE_TIMEOUT_MS) }
+    );
   }
 }
 

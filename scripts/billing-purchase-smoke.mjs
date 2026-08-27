@@ -60,7 +60,7 @@ const workspace = fs.readFileSync(new URL("../app/workspace-client.tsx", import.
 assert.match(accountRoute, /requireCurrentUser/);
 assert.match(accountRoute, /xenditIsConfigured/);
 assert.match(accountRoute, /paymentProvider: "xendit"/);
-assert.match(accounts, /create table if not exists credit_accounts/);
+assert.doesNotMatch(accounts, /create table|alter table|create (?:unique )?index/i);
 assert.match(workspace, /购买 Credits/);
 assert.match(workspace, /One-time payment in USD/);
 assert.match(workspace, /\/api\/billing\/checkout/);
