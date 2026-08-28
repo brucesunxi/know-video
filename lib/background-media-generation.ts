@@ -28,6 +28,7 @@ import {
 import { loadProjectForRender, persistGeneratedSceneAssets } from "@/lib/project-mutations";
 import { getProjectSnapshot } from "@/lib/project-store";
 import { generateProjectStockClips, hasFreeStockVideoProvider } from "@/lib/stock-video-assets";
+import { styleAllowsFreeStockVideo } from "@/lib/style-motion-policy";
 import type { Project, SceneAsset } from "@/lib/types";
 import { sceneRequiresPremiumImage } from "@/lib/image-continuity";
 import {
@@ -198,6 +199,8 @@ async function ensureSceneImage(
       // candidate, keeping each queue invocation below its execution deadline.
       maxQualityAttempts: attemptPlan.maxQualityAttempts,
       useStockContentGuide: attemptPlan.useStockContentGuide,
+      maxStockContentGuides: completionRescue ? 3 : 1,
+      allowLocallyTrustedStockFallback: completionRescue,
       throwOnFailure: true,
       maxProviderAttempts: 1,
       deadlineMs
@@ -333,6 +336,7 @@ export async function processProjectMediaScene(message: ProjectMediaSceneMessage
   const shouldTryStockBeforeImage = Boolean(
     initialScene
     && !sceneHasVisualAsset(initialScene)
+    && styleAllowsFreeStockVideo(initialScene.style)
     && (
       message.options?.motion === "stock"
       || deliveryCount >= 2
@@ -377,7 +381,9 @@ export async function processProjectMediaScene(message: ProjectMediaSceneMessage
     console.warn(`[background-media] Scene ${message.sceneNumber} narration was deferred to keep this queue callback inside its execution budget.`);
   }
 
-  if (!stockAttemptedBeforeImage && canStartStockWork()) {
+  const stockFallbackScene = project.currentVersion.scenes.find((scene) => scene.sceneNumber === message.sceneNumber);
+  const stockVideoFallbackAllowed = Boolean(stockFallbackScene && styleAllowsFreeStockVideo(stockFallbackScene.style));
+  if (!stockAttemptedBeforeImage && stockVideoFallbackAllowed && canStartStockWork()) {
     try {
       project = await addFreeStockMotion(message, project, {
         forceRecoveryFallback: imageError instanceof ProjectMediaQualityExhaustedError
@@ -389,7 +395,7 @@ export async function processProjectMediaScene(message: ProjectMediaSceneMessage
       console.warn(`[background-media] Scene ${message.sceneNumber} free stock lookup failed; local motion remains active:`, error);
       project = await requireCurrentProject(message);
     }
-  } else {
+  } else if (!stockAttemptedBeforeImage && stockVideoFallbackAllowed) {
     console.warn(`[background-media] Scene ${message.sceneNumber} free stock lookup was deferred to keep this queue callback inside its execution budget.`);
   }
 

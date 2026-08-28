@@ -22,8 +22,11 @@ const metaNarrationPatterns = [
 ];
 
 const ignoredBrandTokens = new Set([
-  "AI", "VIDEO", "SaaS", "APP", "WEB", "MP4", "HD", "4K", "B2B", "B2C"
+  "AI", "API", "APP", "B2B", "B2C", "CEO", "CFO", "CRM", "CTA", "ERP", "FAQ", "GPU", "HD", "HR",
+  "JPG", "KPI", "LLM", "MP4", "PDF", "PNG", "ROI", "SaaS", "SDK", "SEO", "TTS", "UI", "URL", "UX", "VIDEO", "WEB", "4K"
 ]);
+
+const genericEnglishNamePattern = /^(?:sales|marketing|promotional?|introduction|introductory|product|service|solution|platform|company|business|prospects?|customers?|clients?|teams?|video|film)(?:\s+(?:sales|marketing|promotional?|introduction|introductory|product|service|solution|platform|company|business|prospects?|customers?|clients?|teams?|video|film))*$/iu;
 
 export type BriefDomain =
   | "gaming"
@@ -113,6 +116,34 @@ export function extractBriefSubject(prompt: string, chinese = true) {
     .find((part) => part.length >= 2 && !productionInstructionPattern.test(part));
   if (firstClause) return firstClause.replace(/^[请帮我给为关于\s]+/u, "").slice(0, chinese ? 18 : 48);
   return chinese ? "这项产品" : "This product";
+}
+
+export function requiredNamedBriefSubject(prompt: string, chinese = true) {
+  const uppercaseCandidates = prompt.match(/\b[A-Z][A-Z0-9_-]{2,}\b/g) ?? [];
+  const uppercaseName = uppercaseCandidates.find((candidate) => !ignoredBrandTokens.has(candidate));
+  if (uppercaseName) return uppercaseName;
+
+  const declaredEnglishName = prompt.match(
+    /\b([A-Z][A-Za-z0-9&._-]*(?:\s+[A-Z][A-Za-z0-9&._-]*){0,3})\s+(?:is|helps|offers|provides|builds|creates|serves)\b/u
+  )?.[1]?.trim();
+  if (declaredEnglishName && !genericEnglishNamePattern.test(declaredEnglishName)) return declaredEnglishName;
+
+  const directedEnglishName = prompt.match(
+    /(?:for|about)\s+([A-Z][A-Za-z0-9&._-]*(?:\s+[A-Z][A-Za-z0-9&._-]*){0,3})(?=\s*(?:[,.;:]|\bthat\b|\bwhich\b|\bto\b|$))/u
+  )?.[1]?.trim();
+  if (directedEnglishName && !genericEnglishNamePattern.test(directedEnglishName)) return directedEnglishName;
+
+  if (!chinese) return undefined;
+  const legalEntityName = prompt.match(
+    /(?:为|给|关于|公司(?:是|名为)?|品牌(?:是|名为)?|^|[，。；！？\n])\s*([\p{Script=Han}A-Za-z0-9·&]{2,32}?(?:有限责任公司|股份有限公司|有限公司|集团))/u
+  )?.[1]?.trim();
+  return legalEntityName?.replace(/^(?:请(?:帮我)?|帮我)?(?:为|给|关于)/u, "").trim();
+}
+
+export function briefOutputIncludesRequiredName(output: string, prompt: string, chinese = true) {
+  const requiredName = requiredNamedBriefSubject(prompt, chinese);
+  if (!requiredName) return true;
+  return compactTitleValue(output).includes(compactTitleValue(requiredName));
 }
 
 function compactTitleValue(value: string) {

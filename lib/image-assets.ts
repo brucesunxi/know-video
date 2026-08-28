@@ -38,7 +38,7 @@ import {
 import { isDeliverableVisualAsset, mediaAssetStatus } from "@/lib/generation-resume";
 import { normalizeFreeStockImageStyle } from "@/lib/local-stock-image-style";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
-import { loadFreeStockImageGuide } from "@/lib/stock-image-guides";
+import { loadFreeStockImageGuides } from "@/lib/stock-image-guides";
 import { styleAllowsFreeStockVideo } from "@/lib/style-motion-policy";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 import { exactVisualStyleDirection } from "@/lib/visual-style-profiles";
@@ -57,7 +57,8 @@ type ImageIndependentRecoveryReason =
   | "semantic_check_failed"
   | "style_mismatch"
   | "verified_stock_rescue"
-  | "local_style_normalized_stock_rescue";
+  | "local_style_normalized_stock_rescue"
+  | "locally_trusted_stock_rescue";
 
 function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
   if (hasCloudflareAI()) return undefined;
@@ -559,15 +560,21 @@ async function generateSceneImage(
   allowCompletionFallback = false,
   maxQualityAttempts = MAX_IMAGE_QUALITY_ATTEMPTS,
   maxProviderAttempts = 2,
-  deadlineMs?: number
+  deadlineMs?: number,
+  allowLocallyTrustedStockFallback = false
 ): Promise<{ asset: SceneAsset } | undefined> {
   const effectiveQuality: ImageQuality = quality === "premium" || sceneRequiresPremiumImage(scene)
     ? "premium"
     : "standard";
   const usableReferences = hasCloudflareAI() ? references : [];
+  const completionStockGuides = usableReferences.filter((reference) => reference.role === "content-guide");
+  const providerReferences = [
+    ...usableReferences.filter((reference) => reference.role !== "content-guide"),
+    ...completionStockGuides.slice(0, 1)
+  ];
   const baseSeed = stableImageSeed(`${project.id}:${scene.sceneNumber}:${effectiveQuality}:${variantKey}`);
   const qualityAttemptLimit = Math.max(1, Math.min(MAX_IMAGE_QUALITY_ATTEMPTS, maxQualityAttempts));
-  let prompt = buildSceneImagePrompt(scene, project, usableReferences, visualInstruction);
+  let prompt = buildSceneImagePrompt(scene, project, providerReferences, visualInstruction);
   let body: Buffer | undefined;
   let model = "";
   let seed = baseSeed;
@@ -775,14 +782,16 @@ async function generateSceneImage(
       }
       if (compositionDuplicate) return false;
 
-      const semanticCheck = await trackedValidation(
+      const locallyTrusted = allowLocallyTrustedStockFallback
+        && reference.metadata?.locallyTrusted === true;
+      const semanticMatches = locallyTrusted || (await trackedValidation(
         `${qualityAttempt}:stock-rescue:semantic`,
         () => evaluateCloudflareImageSemantics(
           semanticInspectionBody,
           essentialSceneSemantics(scene, project),
           visionDeadlineOptions(deadlineMs)
         )
-      );
+      )).matches;
       const styleMatches = !directPhotographicStock || (await trackedValidation(
         `${qualityAttempt}:stock-rescue:style`,
         () => evaluateCloudflareImageStyle(
@@ -791,7 +800,7 @@ async function generateSceneImage(
           visionDeadlineOptions(deadlineMs)
         )
       )).matches;
-      if (!semanticCheck.matches || !styleMatches) return false;
+      if (!semanticMatches || !styleMatches) return false;
 
       body = normalized.body;
       qualityMetadata = normalized.metadata;
@@ -803,21 +812,26 @@ async function generateSceneImage(
       usedIndependentRecovery = true;
       usedVerifiedStockRescue = true;
       usedLocalStyleNormalization = !directPhotographicStock;
-      completionFallbackReason = directPhotographicStock
-        ? "verified_stock_rescue"
-        : "local_style_normalized_stock_rescue";
+      completionFallbackReason = locallyTrusted
+        ? "locally_trusted_stock_rescue"
+        : directPhotographicStock
+          ? "verified_stock_rescue"
+          : "local_style_normalized_stock_rescue";
       stockRescueMetadata = {
         stockProvider: reference.metadata?.provider,
         stockProviderId: reference.metadata?.providerId,
         stockSourcePageUrl: reference.metadata?.sourcePageUrl,
         stockSearchQuery: reference.metadata?.searchQuery,
+        stockCandidateDescriptor: reference.metadata?.candidateDescriptor,
+        localRelevanceScore: reference.metadata?.localRelevanceScore,
+        locallyTrusted,
         localStyleNormalized: !directPhotographicStock,
         localStyleMode: styled.mode,
         costUsd: 0
       };
       if (nearest) closestScene = nearest;
       console.warn(
-        `[image-assets] Scene ${scene.sceneNumber} completed with a verified free stock still${directPhotographicStock ? "" : ` normalized as ${styled.mode}`} after generated candidates were rejected.`
+        `[image-assets] Scene ${scene.sceneNumber} completed with a ${locallyTrusted ? "locally trusted" : "independently verified"} free stock still${directPhotographicStock ? "" : ` normalized as ${styled.mode}`} after generated candidates were rejected.`
       );
       return true;
     } catch (error) {
@@ -827,11 +841,14 @@ async function generateSceneImage(
     }
   };
   try {
-    const completionStockGuide = usableReferences.find((reference) => reference.role === "content-guide");
-    const stockRescueAttemptedBeforeGeneration = Boolean(allowCompletionFallback && completionStockGuide);
-    const completedFromStock = stockRescueAttemptedBeforeGeneration
-      ? await acceptVerifiedStockRescue(completionStockGuide, -1)
-      : false;
+    const stockRescueAttemptedBeforeGeneration = Boolean(allowCompletionFallback && completionStockGuides.length > 0);
+    let completedFromStock = false;
+    if (stockRescueAttemptedBeforeGeneration) {
+      for (const [guideIndex, completionStockGuide] of completionStockGuides.entries()) {
+        completedFromStock = await acceptVerifiedStockRescue(completionStockGuide, -(guideIndex + 1));
+        if (completedFromStock) break;
+      }
+    }
   for (let qualityAttempt = 0; !completedFromStock && qualityAttempt < qualityAttemptLimit; qualityAttempt += 1) {
     seed = (baseSeed + qualityAttempt * 104_729) % 2_147_483_647 || 1;
     const recoveryModelAttempt = allowCompletionFallback
@@ -843,8 +860,8 @@ async function generateSceneImage(
     // seed can genuinely re-stage the shot. A later style rejection restores
     // the canonical anchor automatically.
     const attemptReferences = lastQualityRejection === "composition_duplicate" && !recoveryModelAttempt
-      ? usableReferences.filter((reference) => reference.role !== "style-anchor")
-      : usableReferences;
+      ? providerReferences.filter((reference) => reference.role !== "style-anchor")
+      : providerReferences;
     const duplicateCorrection = duplicateWasDetected
       ? "COMPOSITION REJECTION: a prior candidate copied another scene too closely. Re-stage this beat from a substantially different camera height, shot size, camera side, subject action, foreground silhouette, and background. Do not reuse the same tabletop, centered object group, aisle view, horizon, pose, or color-block placement."
       : "";
@@ -1080,9 +1097,13 @@ async function generateSceneImage(
       candidateInstruction: visualInstruction || undefined,
       qualityGate: usedIndependentRecovery
         ? usedVerifiedStockRescue
-          ? usedLocalStyleNormalization
-            ? "local-style-normalized-stock-rescue"
-            : "verified-stock-rescue"
+          ? completionFallbackReason === "locally_trusted_stock_rescue"
+            ? usedLocalStyleNormalization
+              ? "locally-trusted-local-style-stock-rescue"
+              : "locally-trusted-stock-rescue"
+            : usedLocalStyleNormalization
+              ? "local-style-normalized-stock-rescue"
+              : "verified-stock-rescue"
           : "independent-semantic-style-recovery"
         : "strict-semantic-style-pass",
       completionFallbackReason,
@@ -1111,6 +1132,8 @@ export async function generateProjectSceneImages(
     allowCompletionFallback?: boolean;
     maxQualityAttempts?: number;
     useStockContentGuide?: boolean;
+    maxStockContentGuides?: number;
+    allowLocallyTrustedStockFallback?: boolean;
     throwOnFailure?: boolean;
     maxProviderAttempts?: number;
     deadlineMs?: number;
@@ -1160,7 +1183,7 @@ export async function generateProjectSceneImages(
         const currentReference = await loadSceneImageReference(scene, "current");
         const styleAnchorReferences = await loadProjectStyleAnchorReferences(workingProject, scene);
         const comparisonImages = await loadProjectComparisonImages(workingProject, scene);
-        let contentGuideReference: ImageReference | undefined;
+        let contentGuideReferences: ImageReference[] = [];
         if (options.useStockContentGuide) {
           try {
             const excludedContentGuideKeys = workingProject.currentVersion.scenes.flatMap((candidate) => (
@@ -1171,12 +1194,12 @@ export async function generateProjectSceneImages(
                     return typeof key === "string" && key ? [key] : [];
                   })
             ));
-            const guide = await loadFreeStockImageGuide(scene, {
+            const guides = await loadFreeStockImageGuides(scene, {
               excludedReferenceKeys: excludedContentGuideKeys,
-              selectionKey: options.variantKey
+              selectionKey: options.variantKey,
+              maxCandidates: options.maxStockContentGuides ?? 1
             });
-            if (guide) {
-              contentGuideReference = {
+            contentGuideReferences = guides.map((guide) => ({
                 body: guide.body,
                 contentType: guide.contentType,
                 role: "content-guide",
@@ -1185,11 +1208,13 @@ export async function generateProjectSceneImages(
                   provider: guide.provider,
                   providerId: guide.providerId,
                   sourcePageUrl: guide.pageUrl,
-                  searchQuery: guide.query
+                  searchQuery: guide.query,
+                  candidateDescriptor: guide.descriptor,
+                  localRelevanceScore: guide.relevanceScore,
+                  locallyTrusted: guide.locallyTrusted
                 },
                 deliveryBody: guide.deliveryBody
-              };
-            }
+              }));
           } catch (error) {
             console.warn(`[image-assets] Scene ${scene.sceneNumber} free stock content guide was unavailable:`, error);
           }
@@ -1199,7 +1224,7 @@ export async function generateProjectSceneImages(
         const references = [
           ...styleAnchorReferences,
           currentReference,
-          contentGuideReference
+          ...contentGuideReferences
         ].filter(Boolean) as ImageReference[];
         const generated = await generateSceneImage(
           scene,
@@ -1212,7 +1237,8 @@ export async function generateProjectSceneImages(
           options.allowCompletionFallback,
           options.maxQualityAttempts,
           options.maxProviderAttempts,
-          options.deadlineMs
+          options.deadlineMs,
+          options.allowLocallyTrustedStockFallback
         );
         if (!generated) return;
 

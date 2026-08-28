@@ -1,5 +1,6 @@
 import type { GenerationOptions, Scene } from "@/lib/types";
 import {
+  briefOutputIncludesRequiredName,
   detectBriefDomain,
   extractBriefSubject,
   extractBriefVisualConcepts,
@@ -203,9 +204,8 @@ export function storyboardQualityIssues(
       if (unrelatedBusinessLanguage) issues.push("hospitality story uses unrelated enterprise language");
     }
     const subject = extractBriefSubject(brief, options?.language !== "英文");
-    const isDistinctBrand = /^[A-Z][A-Z0-9_-]{2,}$/u.test(subject);
-    const narration = `${projectTitle ?? ""} ${scenes.map((scene) => scene.voiceover).join(" ")}`.toLowerCase();
-    if (isDistinctBrand && !narration.includes(subject.toLowerCase())) {
+    const narration = `${projectTitle ?? ""} ${scenes.map((scene) => scene.voiceover).join(" ")}`;
+    if (!briefOutputIncludesRequiredName(narration, brief, options?.language !== "英文")) {
       issues.push("voiceover loses the client's named company or product");
     }
     if (repeatedBriefSubjectOpenings(scenes, subject)) {

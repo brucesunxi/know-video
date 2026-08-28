@@ -1,6 +1,7 @@
 import { getOptionalEnv } from "@/lib/env";
 import { assetUrlForKey, uploadToR2 } from "@/lib/r2";
 import { styleAllowsFreeStockVideo } from "@/lib/style-motion-policy";
+import { rankStockCandidates } from "@/lib/stock-candidate-policy";
 import type { Project, Scene, SceneAsset } from "@/lib/types";
 import { boundedOperationTimeout } from "@/lib/operation-deadline";
 
@@ -14,6 +15,10 @@ type StockVideoCandidate = {
   durationSeconds: number;
   attribution?: string;
   query: string;
+  description?: string;
+  tags?: string[];
+  relevanceScore?: number;
+  descriptor?: string;
 };
 
 const STOP_WORDS = new Set([
@@ -94,6 +99,7 @@ async function searchPexels(query: string, deadlineMs?: number): Promise<StockVi
       url: string;
       duration: number;
       user?: { name?: string };
+      tags?: string[];
       video_files?: Array<{ link: string; width?: number; height?: number; file_type?: string; quality?: string }>;
     }>;
   };
@@ -105,7 +111,7 @@ async function searchPexels(query: string, deadlineMs?: number): Promise<StockVi
     return file ? [{
       id: String(video.id), provider: "pexels" as const, downloadUrl: file.link, pageUrl: video.url,
       width: file.width ?? 1280, height: file.height ?? 720, durationSeconds: video.duration,
-      attribution: video.user?.name, query
+      attribution: video.user?.name, query, tags: video.tags
     }] : [];
   });
 }
@@ -129,6 +135,7 @@ async function searchPixabay(query: string, deadlineMs?: number): Promise<StockV
       pageURL: string;
       duration: number;
       user?: string;
+      tags?: string;
       videos?: Record<string, { url?: string; width?: number; height?: number }>;
     }>;
   };
@@ -140,7 +147,7 @@ async function searchPixabay(query: string, deadlineMs?: number): Promise<StockV
     return file?.url ? [{
       id: String(video.id), provider: "pixabay" as const, downloadUrl: file.url, pageUrl: video.pageURL,
       width: file.width ?? 1280, height: file.height ?? 720, durationSeconds: video.duration,
-      attribution: video.user, query
+      attribution: video.user, query, tags: video.tags?.split(",").map((tag) => tag.trim()).filter(Boolean)
     }] : [];
   });
 }
@@ -155,8 +162,16 @@ async function findCandidate(scene: Scene, used: Set<string>, deadlineMs?: numbe
     const candidates = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
     const usable = candidates.filter((candidate) => !used.has(`${candidate.provider}:${candidate.id}`) && candidate.durationSeconds >= 3);
     if (usable.length === 0) continue;
-    const index = stableHash(`${scene.id}:${scene.sceneNumber}:${query}`) % Math.min(usable.length, 6);
-    return usable[index];
+    const ranked = rankStockCandidates(scene, usable, `${scene.id}:${scene.sceneNumber}:${query}`)
+      .filter(({ evaluation }) => evaluation.locallyTrusted);
+    const selected = ranked[0];
+    if (selected) {
+      return {
+        ...selected.candidate,
+        relevanceScore: selected.evaluation.relevanceScore,
+        descriptor: selected.evaluation.descriptor
+      };
+    }
   }
   return undefined;
 }
@@ -228,7 +243,10 @@ async function importSceneStockVideo(
       sourceStartSeconds,
       costUsd: 0,
       editingMethod: "moneyprinterturbo-inspired-stock-cut",
-      recoveryFallback
+      recoveryFallback,
+      localRelevanceScore: candidate.relevanceScore,
+      candidateDescriptor: candidate.descriptor,
+      locallyTrusted: true
     }
   } satisfies SceneAsset;
 }

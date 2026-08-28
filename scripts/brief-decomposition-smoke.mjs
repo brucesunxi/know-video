@@ -17,14 +17,27 @@ const {
   projectTitleMistakesStyleForSubject,
   extractBriefVisualConcepts,
   detectBriefDomain,
-  isProductionInstructionClause
+  isProductionInstructionClause,
+  requiredNamedBriefSubject,
+  briefOutputIncludesRequiredName
 } = module.exports;
 
 const mixedBrief = "请为 VYBEA 制作一个 30 秒企业产品介绍视频，风格高级、节奏明快、适合官网首屏。VYBEA 是面向娱乐 IP 的项目级责任治理平台。它帮助团队把分散风险信号转化为可审查证据和可追溯决策。";
 const facts = Array.from(extractBriefFacts(mixedBrief, true));
 assert.equal(extractBriefSubject(mixedBrief, true), "VYBEA");
+assert.equal(requiredNamedBriefSubject(mixedBrief, true), "VYBEA");
+assert.equal(briefOutputIncludesRequiredName("VYBEA makes project responsibility traceable.", mixedBrief, false), true);
+assert.equal(briefOutputIncludesRequiredName("Project responsibility becomes traceable.", mixedBrief, false), false);
+assert.equal(
+  requiredNamedBriefSubject("sales introduction video for prospects covering a common problem, the solution, and next steps", false),
+  undefined
+);
+assert.equal(requiredNamedBriefSubject("Create a CRM sales video focused on ROI for prospects.", false), undefined);
+assert.equal(requiredNamedBriefSubject("Create a video for Know Video, a platform for business teams.", false), "Know Video");
+assert.equal(requiredNamedBriefSubject("请为北京简融易数科技有限公司制作企业介绍片。", true), "北京简融易数科技有限公司");
 const kindergartenBrief = "帮我生成一个幼儿园的宣传视频";
 assert.equal(extractBriefSubject(kindergartenBrief, true), "幼儿园");
+assert.equal(requiredNamedBriefSubject(kindergartenBrief, true), undefined);
 assert.equal(projectTitleRepresentsBrief("纸乐园的第一天", kindergartenBrief, true), false);
 assert.equal(projectTitleRepresentsBrief("走进幼儿园", kindergartenBrief, true), true);
 assert.equal(ensureBriefFaithfulProjectTitle("纸乐园的第一天", kindergartenBrief, true), "幼儿园宣传片");
@@ -71,6 +84,7 @@ assert.match(aiVideo, /narrationLine: z\.string/);
 assert.match(aiVideo, /voiceover: treatment\.beats\[index\]\?\.narrationLine/);
 assert.match(aiVideo, /copy treatment\.beats\[N-1\]\.narrationLine into voiceover exactly/);
 assert.match(aiVideo, /production instruction rather than the promoted company or product/);
+assert.match(aiVideo, /briefOutputIncludesRequiredName\(narration, prompt, isChineseTreatment\(treatment\)\)/);
 assert.match(aiVideo, /one or more locked narration lines exceed their scene-level spoken-time budget/);
 assert.match(aiVideo, /locked narration is too sparse for the requested video duration/);
 assert.match(aiVideo, /one or more locked narration lines are too sparse to carry their scene/);

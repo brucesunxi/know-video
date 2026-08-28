@@ -64,7 +64,7 @@ assert.match(imageAssets, /TRUSTED_STYLE_ANCHOR_GATES/);
 assert.match(imageAssets, /const anchorAsset = anchorScenes\[0\]/);
 assert.doesNotMatch(imageAssets, /const selected = \[nearest, contrasting\]/);
 assert.match(imageAssets, /lastQualityRejection === "composition_duplicate"/);
-assert.match(imageAssets, /usableReferences\.filter\(\(reference\) => reference\.role !== "style-anchor"\)/);
+assert.match(imageAssets, /providerReferences\.filter\(\(reference\) => reference\.role !== "style-anchor"\)/);
 assert.match(imageAssets, /LIBRARY TEXT-SAFE OBJECT RULE/);
 assert.match(imageAssets, /every book cover and spine as a completely plain unmarked/);
 assert.doesNotMatch(imageAssets, /documents, books, signs/);
@@ -90,7 +90,7 @@ assert.match(imageAssets, /operation: "Image generation"/);
 assert.match(imageAssets, /operation: "Image quality validation"/);
 assert.match(imageAssets, /error instanceof OperationDeadlineExceededError/);
 assert.match(imageAssets, /useStockContentGuide/);
-assert.match(imageAssets, /loadFreeStockImageGuide/);
+assert.match(imageAssets, /loadFreeStockImageGuides/);
 assert.match(imageAssets, /const acceptedImage = candidate\.assets\.find/);
 assert.match(imageAssets, /isDeliverableVisualAsset\(asset\)/);
 assert.doesNotMatch(imageAssets, /acceptedGeneratedImage/);
@@ -100,10 +100,13 @@ assert.match(imageAssets, /normalizeFreeStockImageStyle/);
 assert.match(imageAssets, /local-style-normalized-stock-rescue/);
 assert.match(imageAssets, /local_style_normalized_stock_rescue/);
 assert.match(imageAssets, /localStyleNormalized/);
+assert.match(imageAssets, /locally_trusted_stock_rescue/);
+assert.match(imageAssets, /allowLocallyTrustedStockFallback/);
+assert.match(imageAssets, /completionStockGuides\.entries\(\)/);
 assert.match(imageAssets, /const semanticInspectionBody = directPhotographicStock/);
 assert.match(imageAssets, /evaluateCloudflareImageSemantics\(\s*semanticInspectionBody/);
 assert.ok(
-  imageAssets.indexOf("await acceptVerifiedStockRescue(completionStockGuide, -1)")
+  imageAssets.indexOf("completedFromStock = await acceptVerifiedStockRescue(completionStockGuide")
     < imageAssets.indexOf("for (let qualityAttempt = 0;"),
   "The zero-cost completion rescue must run before another paid provider attempt"
 );
@@ -116,7 +119,7 @@ assert.match(imageAssets, /recordProviderCostAttempts\(pendingCostEvents\)/);
 assert.doesNotMatch(imageAssets, /recordProviderCostAttempt\(/);
 assert.match(providerCosts, /export async function recordProviderCostAttempts/);
 assert.match(providerCosts, /sql\.transaction\(inputs\.map/);
-assert.match(imageAssets, /\.\.\.styleAnchorReferences,[\s\S]*currentReference,[\s\S]*contentGuideReference/);
+assert.match(imageAssets, /\.\.\.styleAnchorReferences,[\s\S]*currentReference,[\s\S]*\.\.\.contentGuideReferences/);
 assert.match(imageAssets, /\.resize\(480, 270/);
 assert.match(cloudflare, /RECOVERY_IMAGE_MODEL = "@cf\/black-forest-labs\/flux-2-dev"/);
 assert.match(cloudflare, /if \(model\.includes\("flux-2-dev"\)\) form\.append\("steps"/);
@@ -124,6 +127,8 @@ assert.match(stockGuides, /api\.pexels\.com\/v1\/search/);
 assert.match(stockGuides, /image_type=photo/);
 assert.match(stockGuides, /excludedReferenceKeys\?: Iterable<string>/);
 assert.match(stockGuides, /selectionKey\?: string/);
+assert.match(stockGuides, /maxCandidates\?: number/);
+assert.match(stockGuides, /rankStockCandidates/);
 assert.match(stockGuides, /stockSearchTerms\(scene\)\.slice\(0, 3\)/);
 assert.match(stockGuides, /AbortSignal\.timeout\(25_000\)/);
 assert.match(stockGuides, /!excluded\.has\(candidateReferenceKey\(candidate\)\)/);

@@ -89,6 +89,7 @@
     "video:style-motion:smoke": "node scripts/style-motion-policy-smoke.mjs",
     "video:local-motion:smoke": "node scripts/local-motion-smoke.mjs",
     "video:stock:smoke": "node scripts/stock-video-assets-smoke.mjs",
+    "video:stock-safety:smoke": "node scripts/stock-candidate-policy-smoke.mjs",
     "composition:video-layer:smoke": "node scripts/composition-video-layer-smoke.mjs",
     "composition:revision:smoke": "node scripts/composition-revision-smoke.mjs",
     "version:restore:smoke": "node scripts/version-restore-smoke.mjs",

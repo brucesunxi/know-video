@@ -244,6 +244,7 @@ const mocks = {
     generateProjectStockClips,
     hasFreeStockVideoProvider: () => stockProviderAvailable
   },
+  "@/lib/style-motion-policy": { styleAllowsFreeStockVideo: () => true },
   "@/lib/image-continuity": { sceneRequiresPremiumImage: () => false },
   "@/lib/image-quality": {
     GeneratedImageQualityError,

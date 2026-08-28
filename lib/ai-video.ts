@@ -8,6 +8,7 @@ import { isProductionOnlyRequest, productionSettingsFromRequest } from "@/lib/pr
 import { fitScenesNarrationApproximate } from "@/lib/narration-fit";
 import { affectedSceneNumbersForOperations, bindOperationSceneIds, editPlanOperations } from "@/lib/edit-operations";
 import {
+  briefOutputIncludesRequiredName,
   detectBriefDomain,
   ensureBriefFaithfulProjectTitle,
   extractBriefVisualConcepts,
@@ -278,7 +279,7 @@ function locallyRepairTreatmentNarration(treatment: Treatment, targetDuration: n
   };
 }
 
-function treatmentNarrationIssues(treatment: Treatment, targetDuration: number) {
+function treatmentNarrationIssues(treatment: Treatment, targetDuration: number, prompt: string) {
   const lines = treatment.beats.map((beat) => beat.narrationLine.trim());
   const issues: string[] = [];
   const openings = lines.map(normalizedNarrationOpening).filter((value) => value.length >= 6);
@@ -310,12 +311,11 @@ function treatmentNarrationIssues(treatment: Treatment, targetDuration: number) 
   if (lines.some((line) => estimateNarrationSeconds(line) > Math.max(1.4, averageSceneSeconds * 1.12))) {
     issues.push("one or more locked narration lines exceed their scene-level spoken-time budget");
   }
-  const subject = treatment.commercialBrief.subject.trim().toLowerCase();
   if (isProductionInstructionClause(treatment.commercialBrief.subject)) {
     issues.push("commercial brief subject is a production instruction rather than the promoted company or product");
   }
-  const narration = `${treatment.workingTitle} ${lines.join(" ")}`.toLowerCase();
-  if (subject.length >= 2 && !narration.includes(subject)) {
+  const narration = `${treatment.workingTitle} ${lines.join(" ")}`;
+  if (!briefOutputIncludesRequiredName(narration, prompt, isChineseTreatment(treatment))) {
     issues.push("locked narration loses the client's named company or product");
   }
   return issues;
@@ -1124,7 +1124,7 @@ async function createTreatment(
   }
   treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
   const narrationIssues = [
-    ...treatmentNarrationIssues(treatment, targetDuration),
+    ...treatmentNarrationIssues(treatment, targetDuration, prompt),
     ...treatmentLanguageIssues(treatment, options),
     ...treatmentDomainIssues(treatment, prompt)
   ];
@@ -1161,7 +1161,7 @@ async function createTreatment(
     };
     treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
     const remainingNarrationIssues = [
-      ...treatmentNarrationIssues(treatment, targetDuration),
+      ...treatmentNarrationIssues(treatment, targetDuration, prompt),
       ...treatmentLanguageIssues(treatment, options),
       ...treatmentDomainIssues(treatment, prompt)
     ];

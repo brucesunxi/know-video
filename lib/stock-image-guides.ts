@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { getOptionalEnv } from "@/lib/env";
 import { stockSearchTerms } from "@/lib/stock-video-assets";
+import { rankStockCandidates } from "@/lib/stock-candidate-policy";
 import type { Scene } from "@/lib/types";
 
 type StockImageGuideCandidate = {
@@ -9,11 +10,14 @@ type StockImageGuideCandidate = {
   imageUrl: string;
   pageUrl: string;
   query: string;
+  description?: string;
+  tags?: string[];
 };
 
 type StockImageGuideOptions = {
   excludedReferenceKeys?: Iterable<string>;
   selectionKey?: string;
+  maxCandidates?: number;
 };
 
 export type StockImageGuide = {
@@ -25,16 +29,10 @@ export type StockImageGuide = {
   providerId: string;
   pageUrl: string;
   query: string;
+  descriptor: string;
+  relevanceScore: number;
+  locallyTrusted: boolean;
 };
-
-function stableHash(value: string) {
-  let hash = 2166136261;
-  for (const character of value) {
-    hash ^= character.codePointAt(0) ?? 0;
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
 
 export function hasFreeStockImageGuideProvider() {
   return Boolean(getOptionalEnv("PEXELS_API_KEY") || getOptionalEnv("PIXABAY_API_KEY"));
@@ -52,6 +50,7 @@ async function searchPexelsImages(query: string): Promise<StockImageGuideCandida
     photos?: Array<{
       id: number;
       url: string;
+      alt?: string;
       src?: { landscape?: string; large?: string; large2x?: string };
     }>;
   };
@@ -62,7 +61,8 @@ async function searchPexelsImages(query: string): Promise<StockImageGuideCandida
       provider: "pexels" as const,
       imageUrl,
       pageUrl: photo.url,
-      query
+      query,
+      description: photo.alt
     }] : [];
   });
 }
@@ -78,6 +78,7 @@ async function searchPixabayImages(query: string): Promise<StockImageGuideCandid
     hits?: Array<{
       id: number;
       pageURL: string;
+      tags?: string;
       largeImageURL?: string;
       webformatURL?: string;
     }>;
@@ -89,7 +90,8 @@ async function searchPixabayImages(query: string): Promise<StockImageGuideCandid
       provider: "pixabay" as const,
       imageUrl,
       pageUrl: image.pageURL,
-      query
+      query,
+      tags: image.tags?.split(",").map((tag) => tag.trim()).filter(Boolean)
     }] : [];
   });
 }
@@ -98,8 +100,10 @@ function candidateReferenceKey(candidate: StockImageGuideCandidate) {
   return `stock-guide:${candidate.provider}:${candidate.id}`;
 }
 
-async function findGuideCandidate(scene: Scene, options: StockImageGuideOptions) {
+async function findGuideCandidates(scene: Scene, options: StockImageGuideOptions) {
   const excluded = new Set(options.excludedReferenceKeys ?? []);
+  const maxCandidates = Math.max(1, Math.min(4, Math.floor(options.maxCandidates ?? 1)));
+  const collected: StockImageGuideCandidate[] = [];
   for (const query of stockSearchTerms(scene).slice(0, 3)) {
     const settled = await Promise.allSettled([
       searchPexelsImages(query),
@@ -108,51 +112,70 @@ async function findGuideCandidate(scene: Scene, options: StockImageGuideOptions)
     const candidates = settled
       .flatMap((result) => result.status === "fulfilled" ? result.value : [])
       .filter((candidate) => !excluded.has(candidateReferenceKey(candidate)));
-    if (candidates.length === 0) continue;
-    return candidates[
-      stableHash(`${scene.id}:${scene.sceneNumber}:${query}:${options.selectionKey ?? "default"}:image-guide`)
-      % Math.min(6, candidates.length)
-    ];
+    collected.push(...candidates);
+    if (collected.length >= maxCandidates * 3) break;
   }
-  return undefined;
+  const unique = [...new Map(collected.map((candidate) => [candidateReferenceKey(candidate), candidate])).values()];
+  return rankStockCandidates(
+    scene,
+    unique,
+    `${scene.id}:${scene.sceneNumber}:${options.selectionKey ?? "default"}:image-guide`
+  ).slice(0, maxCandidates);
+}
+
+export async function loadFreeStockImageGuides(
+  scene: Scene,
+  options: StockImageGuideOptions = {}
+): Promise<StockImageGuide[]> {
+  if (!hasFreeStockImageGuideProvider()) return [];
+  const candidates = await findGuideCandidates(scene, options);
+  const guides: StockImageGuide[] = [];
+  for (const { candidate, evaluation } of candidates) {
+    try {
+      const response = await fetch(candidate.imageUrl, { signal: AbortSignal.timeout(25_000) });
+      if (!response.ok) throw new Error(`${candidate.provider} image download failed with ${response.status}`);
+      const declaredBytes = Number(response.headers.get("content-length") ?? 0);
+      if (declaredBytes > 15_000_000) throw new Error("Free stock image exceeds the 15 MB guide limit");
+      const source = Buffer.from(await response.arrayBuffer());
+      if (source.byteLength < 5_000 || source.byteLength > 15_000_000) {
+        throw new Error("Free stock image has an invalid file size");
+      }
+      const [body, deliveryBody] = await Promise.all([
+        sharp(source, { failOn: "warning" })
+          .rotate()
+          // Cloudflare requires every FLUX.2 input image to be smaller than 512x512.
+          .resize(480, 270, { fit: "cover", position: "attention" })
+          .jpeg({ quality: 84, chromaSubsampling: "4:2:0" })
+          .toBuffer(),
+        sharp(source, { failOn: "warning" })
+          .rotate()
+          .resize(1280, 720, { fit: "cover", position: "attention" })
+          .png({ compressionLevel: 8, adaptiveFiltering: true })
+          .toBuffer()
+      ]);
+      guides.push({
+        body,
+        deliveryBody,
+        contentType: "image/jpeg",
+        referenceKey: candidateReferenceKey(candidate),
+        provider: candidate.provider,
+        providerId: candidate.id,
+        pageUrl: candidate.pageUrl,
+        query: candidate.query,
+        descriptor: evaluation.descriptor,
+        relevanceScore: evaluation.relevanceScore,
+        locallyTrusted: evaluation.locallyTrusted
+      });
+    } catch (error) {
+      console.warn(`[stock-image-guides] Could not import ${candidate.provider}:${candidate.id}:`, error);
+    }
+  }
+  return guides;
 }
 
 export async function loadFreeStockImageGuide(
   scene: Scene,
   options: StockImageGuideOptions = {}
 ): Promise<StockImageGuide | undefined> {
-  if (!hasFreeStockImageGuideProvider()) return undefined;
-  const candidate = await findGuideCandidate(scene, options);
-  if (!candidate) return undefined;
-  const response = await fetch(candidate.imageUrl, { signal: AbortSignal.timeout(25_000) });
-  if (!response.ok) throw new Error(`${candidate.provider} image download failed with ${response.status}`);
-  const declaredBytes = Number(response.headers.get("content-length") ?? 0);
-  if (declaredBytes > 15_000_000) throw new Error("Free stock image exceeds the 15 MB guide limit");
-  const source = Buffer.from(await response.arrayBuffer());
-  if (source.byteLength < 5_000 || source.byteLength > 15_000_000) {
-    throw new Error("Free stock image has an invalid file size");
-  }
-  const [body, deliveryBody] = await Promise.all([
-    sharp(source, { failOn: "warning" })
-      .rotate()
-      // Cloudflare requires every FLUX.2 input image to be smaller than 512x512.
-      .resize(480, 270, { fit: "cover", position: "attention" })
-      .jpeg({ quality: 84, chromaSubsampling: "4:2:0" })
-      .toBuffer(),
-    sharp(source, { failOn: "warning" })
-      .rotate()
-      .resize(1280, 720, { fit: "cover", position: "attention" })
-      .png({ compressionLevel: 8, adaptiveFiltering: true })
-      .toBuffer()
-  ]);
-  return {
-    body,
-    deliveryBody,
-    contentType: "image/jpeg",
-    referenceKey: candidateReferenceKey(candidate),
-    provider: candidate.provider,
-    providerId: candidate.id,
-    pageUrl: candidate.pageUrl,
-    query: candidate.query
-  };
+  return (await loadFreeStockImageGuides(scene, { ...options, maxCandidates: 1 }))[0];
 }
