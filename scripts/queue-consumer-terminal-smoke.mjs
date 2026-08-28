@@ -82,4 +82,92 @@ sceneFailure = new Error("provider unavailable");
 await consume(sceneMessage, { deliveryCount: 3 });
 assert.equal(terminalSceneCalls, 2);
 
+const backgroundSource = fs.readFileSync(new URL("../lib/background-media-generation.ts", import.meta.url), "utf8");
+const backgroundOutput = ts.transpileModule(backgroundSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+}).outputText;
+let generationRecord;
+let completedGenerationInput;
+let failedGenerationInput;
+const backgroundModule = { exports: {} };
+vm.runInNewContext(backgroundOutput, {
+  module: backgroundModule,
+  exports: backgroundModule.exports,
+  Error,
+  console: { ...console, error: () => undefined, info: () => undefined, warn: () => undefined },
+  require: (id) => {
+    if (id.includes("generation-requests")) {
+      return {
+        completeGenerationRequest: async (input) => { completedGenerationInput = input; },
+        failGenerationRequest: async (input) => { failedGenerationInput = input; },
+        getGenerationRequestBeforeExpiry: async () => generationRecord,
+        touchGenerationRequest: async () => ({ pending: false })
+      };
+    }
+    if (id.includes("billing/usage")) {
+      return {
+        InsufficientCreditsError: class InsufficientCreditsError extends Error {},
+        recordUsageEvent: async () => undefined,
+        reserveAdditionalCredits: async () => undefined
+      };
+    }
+    if (id.includes("generation-lifecycle-policy")) {
+      return {
+        GENERATION_PLANNING_TIMEOUT_MINUTES: 15,
+        elapsedGenerationMs: () => 0,
+        generationExceededRuntime: () => false,
+        generationMediaIsInactive: () => false,
+        generationResumeAttempt: () => 1
+      };
+    }
+    if (id.includes("image-quality")) {
+      return {
+        GeneratedImageQualityError: class GeneratedImageQualityError extends Error {},
+        isDefinitiveGeneratedImageQualityRejection: () => false
+      };
+    }
+    if (id.includes("background-recovery-policy")) {
+      return {
+        backgroundImageAttemptPlan: () => ({}),
+        canContinueAfterSceneQualityFailure: () => false,
+        MAX_PROJECT_MEDIA_RECOVERY_PASSES: 1,
+        nextProjectRecoveryPass: () => 1
+      };
+    }
+    return {};
+  }
+});
+
+const finalizeWatchdogFailure = backgroundModule.exports.permanentlyFailProjectGenerationWatchdog;
+const watchdogMessage = {
+  operation: "watchdog",
+  requestId: "request-1",
+  userId: "user-1",
+  billingReservationKey: "project-generation:request-1",
+  watchdogPass: 4
+};
+
+generationRecord = { status: "ready", projectId: "project-1", engine: "ai" };
+await finalizeWatchdogFailure(watchdogMessage, new TypeError("read failed"));
+assert.equal(completedGenerationInput.projectId, "project-1");
+assert.equal(completedGenerationInput.releaseReason, "project_generation_watchdog_terminal_repair");
+assert.equal(completedGenerationInput.metadata.terminalWatchdogFinalizer, true);
+assert.equal(completedGenerationInput.metadata.errorType, "TypeError");
+
+generationRecord = { status: "failed", error: "provider failure" };
+await finalizeWatchdogFailure(watchdogMessage, new Error("repair failed"));
+assert.equal(failedGenerationInput.error, "provider failure");
+assert.equal(failedGenerationInput.refundReason, "project_generation_watchdog_failed");
+
+generationRecord = { status: "pending" };
+await finalizeWatchdogFailure(watchdogMessage, new Error("watchdog failed"));
+assert.match(failedGenerationInput.error, /退回 Credits/);
+assert.equal(failedGenerationInput.metadata.watchdogPass, 4);
+
+generationRecord = { status: "ready", engine: "ai" };
+await assert.rejects(
+  () => finalizeWatchdogFailure(watchdogMessage, new Error("watchdog failed")),
+  /has no project/
+);
+
 console.log("Queue consumer terminal-state smoke checks passed.");
