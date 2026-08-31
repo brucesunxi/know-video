@@ -143,6 +143,8 @@ assert.match(continuity, /must not remain in the same seated pose/);
 assert.match(continuity, /Input image \$\{index\} \(input_image_\$\{index\}\)/);
 assert.match(continuity, /FOOD \/ HOSPITALITY SEMANTIC FIDELITY/);
 assert.match(continuity, /All visible books must have completely plain, unmarked covers and spines/);
+assert.match(continuity, /never substitute ominous anonymous hands, glass sheets, dark fabric/);
+assert.match(cloudflare, /disturbing macro textures, microscopic or organic-looking surfaces/);
 assert.doesNotMatch(continuity, /Project subject for semantic context only/);
 assert.match(imageAssets, /mapWithConcurrency\(targets, 1/);
 assert.match(imageAssets, /currentVersion: \{ \.\.\.project\.currentVersion, scenes \}/);

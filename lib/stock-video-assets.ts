@@ -152,8 +152,16 @@ async function searchPixabay(query: string, deadlineMs?: number): Promise<StockV
   });
 }
 
-async function findCandidate(scene: Scene, used: Set<string>, deadlineMs?: number) {
+function projectNarrativeContext(project: Project) {
+  return [
+    project.title,
+    ...project.currentVersion.scenes.flatMap((scene) => [scene.title, scene.voiceover])
+  ].filter(Boolean).join(" ");
+}
+
+async function findCandidate(project: Project, scene: Scene, used: Set<string>, deadlineMs?: number) {
   const terms = stockSearchTerms(scene);
+  const narrativeContext = projectNarrativeContext(project);
   for (const query of terms) {
     const settled = await Promise.allSettled([
       searchPexels(query, deadlineMs),
@@ -162,7 +170,12 @@ async function findCandidate(scene: Scene, used: Set<string>, deadlineMs?: numbe
     const candidates = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
     const usable = candidates.filter((candidate) => !used.has(`${candidate.provider}:${candidate.id}`) && candidate.durationSeconds >= 3);
     if (usable.length === 0) continue;
-    const ranked = rankStockCandidates(scene, usable, `${scene.id}:${scene.sceneNumber}:${query}`)
+    const ranked = rankStockCandidates(
+      scene,
+      usable,
+      `${scene.id}:${scene.sceneNumber}:${query}`,
+      narrativeContext
+    )
       .filter(({ evaluation }) => evaluation.locallyTrusted);
     const selected = ranked[0];
     if (selected) {
@@ -203,7 +216,7 @@ async function importSceneStockVideo(
   recoveryFallback = false,
   deadlineMs?: number
 ) {
-  const candidate = await findCandidate(scene, used, deadlineMs);
+  const candidate = await findCandidate(project, scene, used, deadlineMs);
   if (!candidate) throw new Error("No relevant free stock video was found");
   const downloaded = await downloadCandidate(candidate, deadlineMs);
   const key = `stock/${project.id}/${project.currentVersion.id}/scene-${scene.sceneNumber}-${candidate.provider}-${candidate.id}-${crypto.randomUUID()}.mp4`;

@@ -16,13 +16,13 @@ export const visualStyleProfiles: Record<VisualStyleName, {
   电影质感: {
     key: "cinematic",
     label: "电影质感",
-    palette: ["#0B1220", "#1E3448", "#2DD4BF", "#F5C56B", "#F8FAFC"],
-    artDirection: "cinematic corporate film, dramatic depth, realistic environments, visible human stakes, premium commercial production value",
-    lighting: "low-key directional lighting, soft haze, rim light, controlled shadows, teal-and-warm-gold contrast",
+    palette: ["#E7EEF2", "#243447", "#3E7C78", "#D6A45B", "#F8FAFC"],
+    artDirection: "cinematic commercial film, realistic environments, clearly readable human actions, visible stakes, premium but natural production value",
+    lighting: "motivated daylight and practical lighting, natural skin tones, readable midtones, controlled contrast, restrained teal-and-warm-gold accents",
     cameraLanguage: "35mm or 50mm lens, dolly push-ins, low-angle hero frames, shallow depth of field, motivated match cuts",
-    materials: "glass, brushed metal, dark fabric, concrete, subtle reflections, volumetric light",
-    composition: "layered foreground-midground-background depth, strong leading lines, one clear hero subject, restrained negative space",
-    avoid: "flat white UI mockups, pastel palettes, cute shapes, lifestyle stock-photo warmth, cartoon energy"
+    materials: "wood, paper, brushed metal, natural textiles, and clear glass only when each material serves the scene action",
+    composition: "layered foreground-midground-background depth, strong leading lines, one clear human action or story-relevant hero subject, restrained negative space",
+    avoid: "ominous darkness, horror-coded shadows, anonymous hands manipulating glass or fabric, decorative material studies, microscopic textures, smoke or particle backgrounds, flat white UI mockups, cartoon energy"
   },
   极简高级: {
     key: "minimal",

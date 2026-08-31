@@ -60,6 +60,63 @@ assert.equal(library.safe, true);
 assert.equal(library.locallyTrusted, true);
 assert.ok(library.relevanceScore >= 10);
 
+const salesContext = "Sales introduction for prospects. Help sales teams explain a customer problem and reach a successful business outcome.";
+const chineseSalesContext = "面向潜在客户的销售介绍，帮助销售团队解释客户问题并展示企业服务成果。";
+const contextualMeeting = evaluateStockCandidate(salesScene, {
+  query: "business team office meeting",
+  pageUrl: "https://pixabay.com/videos/id-39890/",
+  tags: ["office", "people", "business", "work", "team", "corporate", "meeting", "planning", "project"]
+}, salesContext);
+assert.equal(contextualMeeting.locallyTrusted, true);
+assert.equal(evaluateStockCandidate(salesScene, {
+  query: "business team office meeting",
+  pageUrl: "https://pixabay.com/videos/id-39890/",
+  tags: ["office", "people", "business", "work", "team", "corporate", "meeting", "planning", "project"]
+}, chineseSalesContext).locallyTrusted, true);
+
+const rejectedTexture = evaluateStockCandidate(salesScene, {
+  query: "premium business material design",
+  pageUrl: "https://pixabay.com/videos/id-121430/",
+  tags: ["texture", "pattern", "material", "fabric", "surface", "space", "design", "wallpaper", "black", "grunge", "rough", "backdrop", "wool", "dark"]
+}, salesContext);
+assert.equal(rejectedTexture.safe, false);
+assert.equal(rejectedTexture.locallyTrusted, false);
+assert.equal(rejectedTexture.safetyReason, "abstract texture or background footage");
+
+const rejectedBeachDrift = evaluateStockCandidate(salesScene, {
+  query: "calm beach sunrise",
+  pageUrl: "https://pixabay.com/videos/id-230028/",
+  tags: ["seascape", "sand", "beach", "water", "sea", "sunrise", "relaxation", "shore", "ocean", "coast", "island"]
+}, salesContext);
+assert.equal(rejectedBeachDrift.safe, true);
+assert.equal(rejectedBeachDrift.locallyTrusted, false);
+assert.equal(evaluateStockCandidate(salesScene, {
+  query: "calm beach sunrise",
+  pageUrl: "https://pixabay.com/videos/id-230028/",
+  tags: ["seascape", "sand", "beach", "water", "sea", "sunrise", "shore", "ocean", "coast"]
+}, chineseSalesContext).locallyTrusted, false);
+
+const rejectedOrganicMacro = evaluateStockCandidate(salesScene, {
+  query: "business transformation detail",
+  pageUrl: "https://example.com/video/microscopic-cell-tissue-surface-42/",
+  tags: ["microscopic", "cell", "tissue", "surface"]
+}, salesContext);
+assert.equal(rejectedOrganicMacro.safe, false);
+assert.equal(rejectedOrganicMacro.safetyReason, "potentially disturbing organic macro imagery");
+
+const mobilePhoneCandidate = evaluateStockCandidate({
+  title: "Mobile service introduction",
+  voiceover: "Customers use a mobile phone to stay connected.",
+  visualPrompt: "A customer uses a smartphone in a bright workplace.",
+  style: { theme: "documentary", mood: "welcoming" }
+}, {
+  query: "mobile phone communication",
+  pageUrl: "https://example.com/video/cell-phone-mobile-communication-84/",
+  tags: ["cell", "phone", "mobile", "communication", "technology"]
+}, "Mobile technology service for customers");
+assert.equal(mobilePhoneCandidate.safe, true);
+assert.equal(mobilePhoneCandidate.locallyTrusted, true);
+
 const weakSingleWordMatch = evaluateStockCandidate(salesScene, {
   query: "business team office meeting",
   pageUrl: "https://www.pexels.com/photo/business-person-outdoors-98765/"

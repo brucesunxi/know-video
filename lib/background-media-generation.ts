@@ -72,6 +72,18 @@ function sceneAsset(project: Project, sceneNumber: number, type: SceneAsset["typ
     ?.assets.find((asset) => asset.type === type && asset.url && (type !== "image" || isDeliverableVisualAsset(asset)));
 }
 
+// Once any deliverable still exists, keep the rest of the project on the same
+// image-plus-local-motion path instead of creating a mixed-media patchwork.
+function projectAllowsFreeStockVideo(
+  project: Project,
+  requestedMotion: NonNullable<ProjectMediaSceneMessage["options"]>["motion"] | undefined
+) {
+  if (requestedMotion !== "stock") return false;
+  return !project.currentVersion.scenes.some((scene) => scene.assets.some((asset) => (
+    asset.type === "image" && isDeliverableVisualAsset(asset)
+  )));
+}
+
 async function settleBackgroundImageUsage(message: ProjectMediaSceneMessage, asset: SceneAsset | undefined) {
   const marker = backgroundBillingMarkerForAsset(asset, message.requestId);
   if (!asset || !marker || marker.resourceType === "speech") return false;
@@ -288,7 +300,7 @@ async function addFreeStockMotion(
   options: { forceRecoveryFallback?: boolean; deadlineMs?: number } = {}
 ) {
   const forceRecoveryFallback = options.forceRecoveryFallback === true;
-  if ((message.options?.motion !== "stock" && !forceRecoveryFallback) || !hasFreeStockVideoProvider()) return project;
+  if (message.options?.motion !== "stock" || !hasFreeStockVideoProvider()) return project;
   if (sceneAsset(project, message.sceneNumber, "clip")) return project;
   const result = await generateProjectStockClips(project, [message.sceneNumber], {
     recoveryFallback: forceRecoveryFallback,
@@ -337,11 +349,7 @@ export async function processProjectMediaScene(message: ProjectMediaSceneMessage
     initialScene
     && !sceneHasVisualAsset(initialScene)
     && styleAllowsFreeStockVideo(initialScene.style)
-    && (
-      message.options?.motion === "stock"
-      || deliveryCount >= 2
-      || (message.recoveryPass ?? 0) > 0
-    )
+    && projectAllowsFreeStockVideo(project, message.options?.motion)
   );
   if (shouldTryStockBeforeImage && canStartStockWork()) {
     stockAttemptedBeforeImage = true;
@@ -382,7 +390,11 @@ export async function processProjectMediaScene(message: ProjectMediaSceneMessage
   }
 
   const stockFallbackScene = project.currentVersion.scenes.find((scene) => scene.sceneNumber === message.sceneNumber);
-  const stockVideoFallbackAllowed = Boolean(stockFallbackScene && styleAllowsFreeStockVideo(stockFallbackScene.style));
+  const stockVideoFallbackAllowed = Boolean(
+    stockFallbackScene
+    && styleAllowsFreeStockVideo(stockFallbackScene.style)
+    && projectAllowsFreeStockVideo(project, message.options?.motion)
+  );
   if (!stockAttemptedBeforeImage && stockVideoFallbackAllowed && canStartStockWork()) {
     try {
       project = await addFreeStockMotion(message, project, {

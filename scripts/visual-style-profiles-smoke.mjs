@@ -26,7 +26,9 @@ const { inferAutoVisualStyleId, repairLegacyAutoVisualStyle, resolveAutoVisualSt
 const styles = ["电影质感", "极简高级", "明快有活力", "温暖自然"];
 const palettes = styles.map((style) => visualStyleProfile(style).palette.join(","));
 assert.equal(new Set(palettes).size, styles.length, "every preset should have a distinct palette");
-assert.match(visualStyleDirection("电影质感"), /low-key|rim light|35mm|volumetric/i);
+assert.match(visualStyleDirection("电影质感"), /motivated daylight|readable midtones|35mm|natural textiles/i);
+assert.match(visualStyleDirection("电影质感"), /horror-coded shadows|anonymous hands|microscopic textures/i);
+assert.doesNotMatch(visualStyleDirection("电影质感"), /low-key|soft haze|dark fabric|volumetric light/i);
 assert.match(visualStyleDirection("极简高级"), /minimalist|negative space|softbox|symmetry/i);
 assert.match(visualStyleDirection("明快有活力"), /energetic|high-key|accent colors|rhythmic/i);
 assert.match(visualStyleDirection("温暖自然"), /warm|window light|human-centered|wood/i);

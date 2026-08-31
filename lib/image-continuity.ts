@@ -150,7 +150,8 @@ function semanticSceneDirection(scene: Scene) {
   return [
     "SEMANTIC FIDELITY:",
     "Style is only the rendering language; it must never replace the scene's concrete subject, action, environment, and cause-and-effect story.",
-    "Do not use a generic hand with an abstract object or decorative geometry unless that exact object is central to the client brief."
+    "Do not use a generic hand with an abstract object or decorative geometry unless that exact object is central to the client brief.",
+    "For ordinary business, sales, service, or promotional scenes, keep faces, workplaces, products, and actions clearly readable; never substitute ominous anonymous hands, glass sheets, dark fabric, smoke, particles, microscopic surfaces, or material-texture studies."
   ].join("\n");
 }
 

@@ -328,9 +328,22 @@ imageQualityFailures.set(1, 1);
 await processProjectMediaScene(message(1), 1);
 assert.deepEqual(enqueued.map((item) => [item.sceneNumber, item.recoveryPass]), [[1, 1]]);
 await processProjectMediaScene(enqueued.shift(), 1);
-assert.equal(stockGenerationCount, 2);
-assert.equal(imageGenerationCount, 1);
-assert.equal(state.currentVersion.scenes[0].assets.some((asset) => asset.type === "clip"), true);
+assert.equal(stockGenerationCount, 0);
+assert.equal(imageGenerationCount, 2);
+assert.equal(state.currentVersion.scenes[0].assets.some((asset) => asset.type === "image"), true);
+assert.equal(completedCount, 1);
+
+reset(2);
+stockProviderAvailable = true;
+stockClipOutcomes = [false, true];
+await processProjectMediaScene(message(1, { options: { motion: "stock", language: "中文" } }), 1);
+await processProjectMediaScene(enqueued.shift(), 1);
+assert.equal(stockGenerationCount, 1);
+assert.equal(imageGenerationCount, 2);
+assert.equal(state.currentVersion.scenes.every((scene) => (
+  scene.assets.some((asset) => asset.type === "image")
+  && !scene.assets.some((asset) => asset.type === "clip")
+)), true);
 assert.equal(completedCount, 1);
 
 reset(1);

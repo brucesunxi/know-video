@@ -402,6 +402,7 @@ export async function evaluateCloudflareImageSemantics(
         `EXPECTED SCENE: ${expectedScene.slice(0, 2800)}`,
         "Answer SEMANTIC_MATCH only when the central subject, action, and setting or concrete visual metaphor are recognizable and materially connected to the expected scene.",
         "Answer SEMANTIC_MISMATCH when the image is mainly a color palette, pattern sheet, material swatch, decorative abstract geometry, generic background, unrelated subject, or merely matches the requested art style without depicting the scene content.",
+        "For an ordinary business, sales, service, education, or promotional scene, also answer SEMANTIC_MISMATCH for ominous anonymous hands, disturbing macro textures, microscopic or organic-looking surfaces, smoke, particles, or dark material studies that do not directly depict the requested action.",
         "Do not require readable text. Judge visible meaning, not typography. Answer exactly SEMANTIC_MATCH or SEMANTIC_MISMATCH."
       ].join("\n"),
     maxTokens: 16,
@@ -483,6 +484,7 @@ export async function inspectCloudflareGeneratedImage(
         "Answer TEXT_PRESENT if there is readable text, a logo, watermark, signature, or clustered fake writing.",
         "Otherwise answer STYLE_MISMATCH if the visible rendering medium conflicts with the LOCKED VISUAL STYLE, including photography instead of illustration, line art instead of paper collage, 3D instead of 2D, or any other medium substitution.",
         "Otherwise answer SEMANTIC_MISMATCH if the central subject, action, and setting are unrelated or unrecognizable, or if the image is mainly a palette, pattern sheet, material swatch, decorative geometry, generic background, split-screen montage, contact sheet, storyboard sheet, style sample, browser window, website screenshot, application interface, dashboard, presentation slide, document, or mostly blank screen.",
+        "For an ordinary business, sales, service, education, or promotional scene, ominous anonymous hands, disturbing macro textures, microscopic or organic-looking surfaces, smoke, particles, and dark material studies are also semantic mismatches unless the expected scene explicitly requires them.",
         "A browser or app screenshot is never an acceptable substitute for a concrete film scene, even when the expected topic mentions software, a website, onboarding, or a welcome page.",
         "Answer IMAGE_PASS only when the image is text-free, uses the exact locked rendering medium, and its concrete visible meaning materially matches the expected scene.",
         "Answer exactly TEXT_PRESENT, STYLE_MISMATCH, SEMANTIC_MISMATCH, or IMAGE_PASS."
