@@ -82,12 +82,14 @@ const EXPLICIT_STYLE_PATTERNS: Array<[string, RegExp]> = [
   ["product-ui", /产品界面演示|界面演示风格|product[ -]?ui|ui[ -]?demo/iu]
 ];
 
+const SAFETY_POSTER_AUTO_PATTERN = /(?:安全(?:培训|教育|操作|生产|施工|作业|规范|须知)|危险(?:作业|警示|告知)|事故预防|工地安全|职业健康|网络安全|信息安全|反诈|诈骗预警|钓鱼(?:邮件|网站|攻击)|合规培训|workplace safety|safety training|construction safety|hazard warning|cybersecurity|phishing|fraud prevention)/iu;
+
 export function inferAutoVisualStyleId(value: string) {
   const text = value.toLocaleLowerCase();
   const explicit = EXPLICIT_STYLE_PATTERNS.find(([, pattern]) => pattern.test(text));
   if (explicit) return explicit[0];
 
-  if (/安全|风险|预警|钓鱼|合规|工地|hazard|risk|safety|phishing/iu.test(text)) return "safety-poster";
+  if (SAFETY_POSTER_AUTO_PATTERN.test(text)) return "safety-poster";
   if (/游戏|电竞|minecraft|像素|game|gaming|pixel/iu.test(text)) return "pixel-art";
 
   // A real place, physical service, food, or tangible product should look like

@@ -58,6 +58,14 @@ for (const [index, visualStyleId] of styles.entries()) {
   const stats = await sharp(result.body).resize(160, 90).greyscale().stats();
   assert.ok((stats.entropy ?? 0) > 0.8, `${result.mode} lost too much scene detail`);
   assert.ok((stats.channels[0]?.stdev ?? 0) > 5, `${result.mode} became visually empty`);
+  if (result.mode === "safety-poster") {
+    const { data, info } = await sharp(result.body).resize(80, 45).raw().toBuffer({ resolveWithObject: true });
+    const colors = new Set();
+    for (let offset = 0; offset < data.length; offset += info.channels) {
+      colors.add(`${data[offset]}:${data[offset + 1]}:${data[offset + 2]}`);
+    }
+    assert.ok(colors.size >= 24, `safety-poster collapsed into ${colors.size} harsh duotone colors`);
+  }
   const hash = createHash("sha256").update(result.body).digest("hex");
   assert.equal(hashes.get(hash), undefined, `${result.mode} unexpectedly matched ${hashes.get(hash)}`);
   hashes.set(hash, result.mode);

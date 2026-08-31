@@ -135,6 +135,32 @@ async function flatIllustration(body: Buffer, options: {
     .toBuffer();
 }
 
+async function safetyPosterIllustration(body: Buffer) {
+  const flattened = await flatIllustration(body, {
+    colours: 16,
+    median: 7,
+    saturation: 0.76,
+    brightness: 1.04,
+    contrast: 1.12,
+    offset: -8,
+    ink: true
+  });
+  return sharp(flattened)
+    .composite([{
+      input: {
+        create: {
+          width: WIDTH,
+          height: HEIGHT,
+          channels: 4,
+          background: { r: 245, g: 197, b: 24, alpha: 0.16 }
+        }
+      },
+      blend: "soft-light"
+    }])
+    .png({ palette: true, colours: 20, dither: 0.08, compressionLevel: 0 })
+    .toBuffer();
+}
+
 export async function normalizeFreeStockImageStyle(body: Buffer, style: Scene["style"]) {
   const mode = localStockImageStyleMode(style);
   if (mode === "pixel-art") return { body: await pixelArt(body), mode };
@@ -204,15 +230,13 @@ export async function normalizeFreeStockImageStyle(body: Buffer, style: Scene["s
       mode
     };
   }
+  if (mode === "safety-poster") return { body: await safetyPosterIllustration(body), mode };
 
   let image = sharp(body, { failOn: "warning" })
     .rotate()
     .resize(WIDTH, HEIGHT, { fit: "cover", position: "attention" });
 
   switch (mode) {
-    case "safety-poster":
-      image = image.greyscale().normalize().linear(1.65, -55).threshold(128).tint("#f5c518");
-      break;
     case "photographic":
       image = image.modulate({ saturation: 0.94 }).linear(1.04, -4).sharpen();
       break;

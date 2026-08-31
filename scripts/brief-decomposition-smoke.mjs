@@ -91,6 +91,10 @@ assert.match(aiVideo, /one or more locked narration lines are too sparse to carr
 assert.match(aiVideo, /fitScenesNarrationApproximate/);
 assert.match(aiVideo, /approximate pacing target/);
 assert.match(aiVideo, /cannot fit the requested integer scene durations without truncation/);
+assert.match(aiVideo, /function locallyRepairTreatmentLanguage/);
+assert.match(aiVideo, /workingTitle: locallyLocalizedChineseTitle/);
+assert.match(aiVideo, /narrationLine: localNarrationLine\(localized, beat, index, averageSceneSeconds\)/);
+assert.equal((aiVideo.match(/treatment = locallyRepairTreatmentLanguage\(treatment, targetDuration, prompt, options\)/g) ?? []).length, 2);
 assert.match(aiVideo, /Using local storyboard fallback after generation failure/);
 assert.match(aiVideo, /blockingStoryboardIssues/);
 assert.match(aiVideo, /Accepting repaired storyboard with non-blocking quality warnings/);

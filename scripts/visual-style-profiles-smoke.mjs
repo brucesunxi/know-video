@@ -38,6 +38,11 @@ assert.equal(inferAutoVisualStyleId("做一个包子铺的视频宣传片"), "ci
 assert.equal(inferAutoVisualStyleId("制作图书馆宣传视频"), "cinematic-realism");
 assert.equal(inferAutoVisualStyleId("Create a cafe promotional film"), "cinematic-realism");
 assert.equal(inferAutoVisualStyleId("生成 AI SaaS 产品宣传视频"), "product-ui");
+assert.equal(inferAutoVisualStyleId("为企业风险治理平台制作产品介绍视频"), "product-ui");
+assert.equal(inferAutoVisualStyleId("说明销售团队如何降低客户流失风险"), "cinematic-realism");
+assert.equal(inferAutoVisualStyleId("制作项目风险预警流程说明视频"), "isometric");
+assert.equal(inferAutoVisualStyleId("为工地制作安全操作培训视频"), "safety-poster");
+assert.equal(inferAutoVisualStyleId("制作网络钓鱼邮件识别培训"), "safety-poster");
 assert.equal(inferAutoVisualStyleId("制作拼贴纸艺风格的包子铺宣传片"), "collage");
 assert.equal(inferAutoVisualStyleId("介绍一个没有明显类别的新主题"), "cinematic-realism");
 assert.equal(resolveAutoVisualStyleOptions("包子铺宣传片", {

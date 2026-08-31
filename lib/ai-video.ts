@@ -13,7 +13,8 @@ import {
   ensureBriefFaithfulProjectTitle,
   extractBriefVisualConcepts,
   hasMetaProductionNarration,
-  isProductionInstructionClause
+  isProductionInstructionClause,
+  requiredNamedBriefSubject
 } from "@/lib/brief-semantics";
 import { applySceneStructureOperations } from "@/lib/scene-structure";
 import {
@@ -150,6 +151,20 @@ function joinChineseParts(parts: string[], maxLength = 28) {
   return compactClause(joined.replace(/，+/g, "，").replace(/，$/u, ""), maxLength) + "。";
 }
 
+function compactChineseNarrationClause(
+  value: string,
+  maxLength: number,
+  fallback: string,
+  preserveBrand = false
+) {
+  const compact = compactClause(value, maxLength);
+  if (!compact) return fallback;
+  const brandLike = /^(?:[A-Z][A-Z0-9_-]{1,}|Know Video)$/u.test(compact);
+  return looksSimplifiedChineseLocalized(compact) || (preserveBrand && brandLike)
+    ? compact
+    : fallback;
+}
+
 function localNarrationLine(
   treatment: Treatment,
   beat: Treatment["beats"][number],
@@ -157,6 +172,7 @@ function localNarrationLine(
   averageSceneSeconds: number
 ) {
   const brief = treatment.commercialBrief;
+  const chineseTreatment = isChineseTreatment(treatment);
   const domain = detectBriefDomain([
     brief.subject,
     brief.category,
@@ -166,14 +182,36 @@ function localNarrationLine(
     ...brief.differentiators,
     ...brief.outcomes
   ].join(" "));
-  const subject = compactClause(brief.subject, 12);
-  const offering = compactClause(brief.offering, 14);
-  const audience = compactClause(brief.audience, 10);
-  const problem = compactClause(brief.customerProblem, 12);
-  const differentiator = compactClause(brief.differentiators[index % brief.differentiators.length] ?? "", 12);
-  const outcome = compactClause(brief.outcomes[index % brief.outcomes.length] ?? "", 12);
-  const proof = compactClause(brief.proofPoints[index % Math.max(1, brief.proofPoints.length)] ?? "", 10);
-  const sourceFact = compactClause(beat.sourceFact, 14);
+  const subject = chineseTreatment
+    ? compactChineseNarrationClause(brief.subject, 12, "这项产品", true)
+    : compactClause(brief.subject, 12);
+  const offering = chineseTreatment
+    ? compactChineseNarrationClause(brief.offering, 14, "核心服务")
+    : compactClause(brief.offering, 14);
+  const audience = chineseTreatment
+    ? compactChineseNarrationClause(brief.audience, 10, "客户")
+    : compactClause(brief.audience, 10);
+  const problem = chineseTreatment
+    ? compactChineseNarrationClause(brief.customerProblem, 12, "关键问题")
+    : compactClause(brief.customerProblem, 12);
+  const differentiatorValue = brief.differentiators[index % brief.differentiators.length] ?? "";
+  const differentiator = chineseTreatment
+    ? compactChineseNarrationClause(differentiatorValue, 12, "核心优势")
+    : compactClause(differentiatorValue, 12);
+  const outcomeValue = brief.outcomes[index % brief.outcomes.length] ?? "";
+  const outcome = chineseTreatment
+    ? compactChineseNarrationClause(outcomeValue, 12, "更清楚的结果")
+    : compactClause(outcomeValue, 12);
+  const proofValue = brief.proofPoints[index % Math.max(1, brief.proofPoints.length)] ?? "";
+  const proof = chineseTreatment
+    ? compactChineseNarrationClause(proofValue, 10, "可靠依据")
+    : compactClause(proofValue, 10);
+  const sourceFact = chineseTreatment
+    ? compactChineseNarrationClause(beat.sourceFact, 14, "核心能力")
+    : compactClause(beat.sourceFact, 14);
+  const callToAction = chineseTreatment
+    ? compactChineseNarrationClause(brief.callToAction, 12, "继续了解")
+    : compactClause(brief.callToAction, 12);
   const chineseCharacterBudget = Math.max(12, Math.floor((averageSceneSeconds - 0.55) * 4));
 
   const chineseTemplates = domain === "gaming"
@@ -183,7 +221,7 @@ function localNarrationLine(
         [`随着${problem || "挑战"}展开`, "选择与行动不断改变局面"],
         [`每一次尝试`, `都带来${proof || outcome || "新的策略和发现"}`],
         [`完成目标之后`, `留下的是${outcome || "亲手赢得的成就感"}`],
-        [`现在进入${subject || "游戏世界"}`, compactClause(brief.callToAction, 12) || "开始下一局"]
+        [`现在进入${subject || "游戏世界"}`, callToAction || "开始下一局"]
       ]
     : domain === "education"
       ? [
@@ -191,7 +229,7 @@ function localNarrationLine(
           [`关键方法是${sourceFact || offering || "把复杂内容拆成清晰步骤"}`, `帮助${audience || "学习者"}跟上节奏`],
           [`围绕${differentiator || "真实练习"}`, "理解与应用同步发生"],
           [`每一次反馈`, `都让${outcome || "学习进步"}更具体`],
-          [`最终收获的是${outcome || "能够真正使用的知识"}`, compactClause(brief.callToAction, 12) || "继续探索"],
+          [`最终收获的是${outcome || "能够真正使用的知识"}`, callToAction || "继续探索"],
           [`下一步`, `让学习自然延伸到真实场景`]
         ]
       : domain === "commerce"
@@ -200,7 +238,7 @@ function localNarrationLine(
             [`从${sourceFact || offering || "发现商品"}开始`, `体验一路保持顺畅`],
             [`围绕${differentiator || "真实需求"}`, "每个选择都更贴近消费者"],
             [`有了${proof || sourceFact || "可靠信息"}`, "下单决定更轻松"],
-            [`最终抵达${outcome || "满意交付"}`, compactClause(brief.callToAction, 12) || "立即体验"],
+            [`最终抵达${outcome || "满意交付"}`, callToAction || "立即体验"],
             [`从看见到拥有`, "每一步都自然连贯"]
           ]
         : domain === "entertainment"
@@ -209,7 +247,7 @@ function localNarrationLine(
               [`真正抓住注意力的`, `是${differentiator || "人物与冲突的变化"}`],
               [`随着${problem || "悬念"}展开`, "情绪与节奏持续推进"],
               [`每个关键瞬间`, `都留下${proof || outcome || "值得记住的感受"}`],
-              [`最终抵达${outcome || "完整的情绪回响"}`, compactClause(brief.callToAction, 12) || "继续关注"],
+              [`最终抵达${outcome || "完整的情绪回响"}`, callToAction || "继续关注"],
               [`故事暂时落幕`, "期待已经指向下一次相遇"]
             ]
           : [
@@ -217,10 +255,10 @@ function localNarrationLine(
               [`关键变化来自${sourceFact || offering || "核心能力"}`, `形成${outcome || "可执行路径"}`],
               [`围绕${differentiator || offering || subject}`, "相关人员更快形成判断"],
               [`有了${proof || sourceFact || "清晰依据"}`, "每个决定都更可信"],
-              [`最终交付的是${outcome || "稳定结果"}`, compactClause(brief.callToAction, 12) || "持续向前"],
+              [`最终交付的是${outcome || "稳定结果"}`, callToAction || "持续向前"],
               [`给${audience || "客户"}留下的`, `是更清楚的下一步`]
             ];
-  if (isChineseTreatment(treatment)) {
+  if (chineseTreatment) {
     return joinChineseParts(
       chineseTemplates[index % chineseTemplates.length].filter(Boolean),
       chineseCharacterBudget
@@ -246,6 +284,54 @@ function localNarrationLine(
         `The story closes with the next action visible and ready.`
       ];
   return englishTemplates[index % englishTemplates.length].replace(/\s+/g, " ").trim();
+}
+
+function locallyLocalizedChineseTitle(value: string, prompt: string) {
+  const title = value.trim();
+  if (looksSimplifiedChineseLocalized(title)) return title;
+  const requiredName = requiredNamedBriefSubject(prompt, true);
+  if (requiredName) return `${requiredName} 产品介绍`;
+  const withoutEnglishPhrase = title
+    .replace(/[A-Za-z]{3,}(?:[\s-]+[A-Za-z]{3,})*/gu, "")
+    .replace(/^[\s,，。:：;；、-]+|[\s,，。:：;；、-]+$/g, "")
+    .trim();
+  if (looksSimplifiedChineseLocalized(withoutEnglishPhrase)) return withoutEnglishPhrase;
+  const fallbackTitles: Record<ReturnType<typeof detectBriefDomain>, string> = {
+    gaming: "游戏内容介绍",
+    education: "课程内容介绍",
+    commerce: "产品服务介绍",
+    hospitality: "品牌体验介绍",
+    entertainment: "内容作品介绍",
+    business: "企业服务介绍",
+    general: "主题内容介绍"
+  };
+  return fallbackTitles[detectBriefDomain(prompt)];
+}
+
+function locallyRepairTreatmentLanguage(
+  treatment: Treatment,
+  targetDuration: number,
+  prompt: string,
+  options?: GenerationOptions
+) {
+  if (options?.language !== "中文") return treatment;
+  const localized = {
+    ...treatment,
+    language: "中文",
+    workingTitle: locallyLocalizedChineseTitle(treatment.workingTitle, prompt)
+  };
+  const averageSceneSeconds = targetDuration / localized.beats.length;
+  return {
+    ...localized,
+    beats: localized.beats.map((beat, index) => (
+      looksSimplifiedChineseLocalized(beat.narrationLine)
+        ? beat
+        : {
+            ...beat,
+            narrationLine: localNarrationLine(localized, beat, index, averageSceneSeconds)
+          }
+    ))
+  };
 }
 
 function shouldLocallyRepairNarrationLine(line: string, averageSceneSeconds: number, subject?: string) {
@@ -1123,6 +1209,7 @@ async function createTreatment(
     throw new Error(`Director treatment returned ${treatment.beats.length} beats; expected ${sceneCount}`);
   }
   treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
+  treatment = locallyRepairTreatmentLanguage(treatment, targetDuration, prompt, options);
   const narrationIssues = [
     ...treatmentNarrationIssues(treatment, targetDuration, prompt),
     ...treatmentLanguageIssues(treatment, options),
@@ -1160,6 +1247,7 @@ async function createTreatment(
       workingTitle: ensureBriefFaithfulProjectTitle(treatment.workingTitle, prompt, options?.language !== "英文")
     };
     treatment = locallyRepairTreatmentNarration(treatment, targetDuration);
+    treatment = locallyRepairTreatmentLanguage(treatment, targetDuration, prompt, options);
     const remainingNarrationIssues = [
       ...treatmentNarrationIssues(treatment, targetDuration, prompt),
       ...treatmentLanguageIssues(treatment, options),
