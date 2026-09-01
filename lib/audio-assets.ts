@@ -19,6 +19,12 @@ function containsChinese(text: string) {
   return /\p{Script=Han}/u.test(text);
 }
 
+function openAISpeechFallbackEnabled(options: VoiceGenerationOptions) {
+  return options.allowOpenAIFallback === true
+    && getOptionalEnv("ENABLE_OPENAI_TTS_FALLBACK")?.toLowerCase() === "true"
+    && Boolean(getOptionalEnv("OPENAI_API_KEY"));
+}
+
 async function generateOpenAISpeech(
   text: string,
   targetDurationSeconds: number,
@@ -112,11 +118,8 @@ async function generateSceneVoice(
     contentType = generated.contentType;
     extension = generated.extension;
   } catch (azureError) {
-    if (!getOptionalEnv("OPENAI_API_KEY")) throw azureError;
-    const status = (azureError as { status?: number }).status;
-    const transientAzureFailure = !status || [408, 429, 500, 502, 503, 504].includes(status);
-    if (azureConfigured && options.allowOpenAIFallback === false && transientAzureFailure) throw azureError;
-    console.error(`[audio-assets] Azure ${narrationLanguage} speech failed, switching to OpenAI backup:`, azureError);
+    if (!openAISpeechFallbackEnabled(options)) throw azureError;
+    console.error(`[audio-assets] Azure ${narrationLanguage} speech failed, using explicitly enabled OpenAI backup:`, azureError);
     const generated = await generateOpenAISpeech(
       voiceover,
       scene.durationSeconds,
@@ -179,7 +182,7 @@ export async function generateProjectVoices(
   options: VoiceGenerationOptions = {}
 ) {
   if (
-    (!hasAzureSpeech() && !getOptionalEnv("OPENAI_API_KEY"))
+    (!hasAzureSpeech() && !openAISpeechFallbackEnabled(options))
     || getOptionalEnv("ENABLE_TTS") === "false"
   ) {
     return {

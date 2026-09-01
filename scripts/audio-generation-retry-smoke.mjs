@@ -16,7 +16,11 @@ assert.ok(route.indexOf("Retrying failed voice scenes") < route.lastIndexOf("per
 assert.match(route, /mediaGenerationProgress\(\s*requestedSceneNumbers,/);
 assert.match(audioAssets, /generateOpenAISpeech/);
 assert.match(audioAssets, /generateAzureSpeech\(/);
-assert.match(audioAssets, /Azure \$\{narrationLanguage\} speech failed, switching to OpenAI backup/);
+assert.match(audioAssets, /options\.allowOpenAIFallback === true/);
+assert.match(audioAssets, /ENABLE_OPENAI_TTS_FALLBACK/);
+assert.match(audioAssets, /using explicitly enabled OpenAI backup/);
+assert.doesNotMatch(route, /allowOpenAIFallback: true/);
+assert.doesNotMatch(route, /allowOpenAIFallback: retry >=/);
 assert.doesNotMatch(audioAssets, /generateCloudflareSpeech/);
 
 console.log("Audio generation retry smoke checks passed.");

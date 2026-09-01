@@ -253,7 +253,6 @@ async function ensureSceneImage(
 async function ensureSceneNarration(
   message: ProjectMediaSceneMessage,
   project: Project,
-  deliveryCount: number,
   deadlineMs: number
 ) {
   const existingAudio = sceneAsset(project, message.sceneNumber, "audio");
@@ -268,9 +267,7 @@ async function ensureSceneNarration(
     {
       deadlineMs,
       azureMaxAttempts: 1,
-      // Prefer the configured lower-cost provider. Queue retries provide the
-      // first two recovery attempts; only then use the paid backup.
-      allowOpenAIFallback: deliveryCount >= 3
+      allowOpenAIFallback: false
     }
   );
   const generated = sceneAsset(updated, message.sceneNumber, "audio");
@@ -378,7 +375,7 @@ export async function processProjectMediaScene(message: ProjectMediaSceneMessage
   // next delivery instead of leaving both assets missing.
   if (canStartLongWork()) {
     try {
-      project = await ensureSceneNarration(message, project, deliveryCount, callbackWorkDeadline);
+      project = await ensureSceneNarration(message, project, callbackWorkDeadline);
     } catch (error) {
       narrationError = error;
       project = await requireCurrentProject(message);
@@ -416,7 +413,12 @@ export async function processProjectMediaScene(message: ProjectMediaSceneMessage
   const qualityFailureCanEnterProjectRecovery = imageError instanceof ProjectMediaQualityExhaustedError
     && canContinueAfterSceneQualityFailure(deliveryCount, message.recoveryPass);
   if (imageError && missingVisualAfterAttempt && !qualityFailureCanEnterProjectRecovery) throw imageError;
-  if (narrationError && (!refreshedScene || !sceneHasAudioAsset(refreshedScene))) throw narrationError;
+
+  // A narration failure must not strand visual recovery work from earlier
+  // scenes. Keep walking the project, then revisit every incomplete scene in
+  // the bounded recovery pass. If narration is still missing at the end of
+  // that pass, surface the original provider/quality error to the queue.
+  const missingNarrationAfterAttempt = !refreshedScene || !sceneHasAudioAsset(refreshedScene);
 
   const nextSceneNumber = project.currentVersion.scenes
     .filter((scene) => scene.sceneNumber > message.sceneNumber)
@@ -438,6 +440,7 @@ export async function processProjectMediaScene(message: ProjectMediaSceneMessage
       // bounded second delivery instead of treating this as a transient outage
       // and repeating two more expensive generation cycles.
       if (imageError instanceof ProjectMediaQualityExhaustedError) throw imageError;
+      if (narrationError && missingNarrationAfterAttempt) throw narrationError;
       throw new Error(`Project media remained incomplete after ${recoveryPass - 1} recovery passes.`);
     }
     await enqueueProjectMediaScene({

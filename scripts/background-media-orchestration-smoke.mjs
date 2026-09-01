@@ -54,6 +54,7 @@ let usageByKey;
 let usageAttempts;
 let imageGenerationCount;
 let narrationGenerationCount;
+let narrationFailures;
 let completedCount;
 let releasedCount;
 let refundedCount;
@@ -75,6 +76,7 @@ function reset(sceneCount = 1) {
   usageAttempts = new Map();
   imageGenerationCount = 0;
   narrationGenerationCount = 0;
+  narrationFailures = new Map();
   completedCount = 0;
   releasedCount = 0;
   refundedCount = 0;
@@ -140,6 +142,11 @@ async function generateProjectSceneImages(project, options) {
 async function generateProjectVoices(project, sceneNumbers) {
   narrationGenerationCount += 1;
   const sceneNumber = sceneNumbers[0];
+  const failures = narrationFailures.get(sceneNumber) ?? 0;
+  if (failures > 0) {
+    narrationFailures.set(sceneNumber, failures - 1);
+    return clone(project);
+  }
   const updated = clone(project);
   const scene = updated.currentVersion.scenes.find((candidate) => candidate.sceneNumber === sceneNumber);
   scene.assets = [{
@@ -381,6 +388,24 @@ assert.deepEqual(enqueued.map((item) => [item.sceneNumber, item.recoveryPass]), 
 await processProjectMediaScene(enqueued.shift(), 1);
 assert.equal(completedCount, 1);
 assert.equal(releasedCount, 1);
+assert.equal(state.currentVersion.scenes.every((scene) => (
+  scene.assets.some((asset) => asset.type === "image")
+  && scene.assets.some((asset) => asset.type === "audio")
+)), true);
+
+// A final-scene narration failure must not prevent the recovery pass from
+// revisiting visual quality failures in earlier scenes.
+reset(5);
+for (const sceneNumber of [1, 2, 3, 4]) imageQualityFailures.set(sceneNumber, 1);
+narrationFailures.set(5, 1);
+await processProjectMediaScene(message(1), 1);
+while (enqueued.length > 0) {
+  await processProjectMediaScene(enqueued.shift(), 1);
+}
+assert.equal(completedCount, 1);
+assert.equal(failedCount, 0);
+assert.equal(imageGenerationCount, 9);
+assert.equal(narrationGenerationCount, 6);
 assert.equal(state.currentVersion.scenes.every((scene) => (
   scene.assets.some((asset) => asset.type === "image")
   && scene.assets.some((asset) => asset.type === "audio")

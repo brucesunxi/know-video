@@ -44,11 +44,12 @@ assert.match(azure, /maxAttempts = Math\.max\(1, Math\.min\(3/);
 assert.match(azure, /signal: AbortSignal\.timeout\(timeoutMs\)/);
 assert.match(azure, /deadlineMs: options\.deadlineMs/);
 assert.match(audio, /new OpenAI\(\{ apiKey, timeout, maxRetries: 0 \}\)/);
-assert.match(audio, /options\.allowOpenAIFallback === false/);
+assert.match(audio, /options\.allowOpenAIFallback === true/);
+assert.match(audio, /ENABLE_OPENAI_TTS_FALLBACK/);
 assert.match(background, /BACKGROUND_CALLBACK_WORK_DEADLINE_MS = 260_000/);
 assert.match(background, /azureMaxAttempts: 1/);
-assert.match(background, /allowOpenAIFallback: deliveryCount >= 3/);
+assert.match(background, /allowOpenAIFallback: false/);
 assert.match(route, /const requestWorkDeadline = Date\.now\(\) \+ 260_000/);
-assert.match(route, /allowOpenAIFallback: retry >= 1/);
+assert.doesNotMatch(route, /allowOpenAIFallback: true/);
 
 console.log("Speech deadline and bounded fallback smoke checks passed.");

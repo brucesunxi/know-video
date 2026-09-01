@@ -175,14 +175,24 @@ export function assertUsableSpeechAudio(
   ) {
     throw new Error("语音服务返回的音频后半段异常静音。");
   }
-  if (
+  const audibleDurationSeconds = inspection.audibleStartSeconds !== undefined
+    && inspection.audibleEndSeconds !== undefined
+    ? Math.max(0, inspection.audibleEndSeconds - inspection.audibleStartSeconds)
+    : inspection.durationSeconds;
+  const exceedsTextPace = Boolean(
     options.expectedTextDurationSeconds
     && options.expectedTextDurationSeconds >= 0.8
-    && inspection.durationSeconds > Math.max(
+    && audibleDurationSeconds > Math.max(
       options.expectedTextDurationSeconds * 1.55,
       options.expectedTextDurationSeconds + 1.4
     )
-  ) {
+  );
+  const exceedsSceneDuration = !options.targetDurationSeconds
+    || audibleDurationSeconds > Math.max(
+      options.targetDurationSeconds * 1.2,
+      options.targetDurationSeconds + 1
+    );
+  if (exceedsTextPace && exceedsSceneDuration) {
     throw new Error("旁白音频语速异常缓慢或包含重复内容。");
   }
   return inspection;

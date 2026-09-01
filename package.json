@@ -100,6 +100,7 @@
     "project:generation-budget:smoke": "node scripts/project-generation-budget-smoke.mjs",
     "project:delete:smoke": "node scripts/project-library-delete-smoke.mjs",
     "generation:request:smoke": "node scripts/generation-request-smoke.mjs",
+    "generation:retry-queue:smoke": "node scripts/generation-retry-queue-smoke.mjs",
     "generation:background-media:smoke": "node scripts/background-media-queue-smoke.mjs",
     "generation:queue-terminal:smoke": "node scripts/queue-consumer-terminal-smoke.mjs",
     "generation:orchestration:smoke": "node scripts/background-media-orchestration-smoke.mjs",

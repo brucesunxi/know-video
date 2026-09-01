@@ -16,13 +16,19 @@ assert.match(workspace, /missingAudioSceneNumbers = missingSceneAssetNumbers/);
 assert.match(workspace, /本次任务不会被标记为生成完成/);
 assert.match(workspace, /const requiredMediaComplete = missingImageSceneNumbers\.length === 0 && missingAudioSceneNumbers\.length === 0/);
 assert.match(workspace, /if \(requiredMediaComplete\) \{\s*setGenerationStartedAt\(undefined\);\s*clearPendingGenerationSession\(\);/);
-assert.match(workspace, /if \(data\.generationOptions && missingRequiredMedia\)/);
+assert.match(workspace, /if \(failedGenerationTaskId && missingRequiredMedia\)/);
 assert.match(generationRequests, /status in \('pending', 'ready', 'failed'\)/);
 assert.match(workspace, /if \(task\.projectId\) \{[\s\S]*await openProject\(task\.projectId, task\.id\)/);
 assert.match(workspace, /async function dismissResolvedFailedTask\(requestId: string\)/);
-assert.match(workspace, /resolvedFailedTaskId\?: string/);
-assert.match(workspace, /if \(resolvedFailedTaskId\) await dismissResolvedFailedTask\(resolvedFailedTaskId\)/);
-assert.match(workspace, /continueGeneratedProject\(\{\s*project: data\.project,/);
+const openProject = workspace.slice(
+  workspace.indexOf("async function openProject("),
+  workspace.indexOf("async function renameProject(")
+);
+assert.match(openProject, /failedRequestId: failedGenerationTaskId/);
+assert.match(openProject, /retryRequestId: crypto\.randomUUID\(\)/);
+assert.match(openProject, /method: "POST"/);
+assert.match(openProject, /setGenerationStatus\("任务已转入后台生成"\)/);
+assert.doesNotMatch(openProject, /continueGeneratedProject/);
 assert.ok(
   workspace.indexOf("if (resumeMissingOnly) {") < workspace.indexOf("let missingImageSceneNumbers"),
   "a recovered durable project must enter the studio before media repair starts"

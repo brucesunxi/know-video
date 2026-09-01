@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     updated = await generateProjectVoices(updated, retrySceneNumbers, body.narrationVoice, {
       deadlineMs: requestWorkDeadline,
       azureMaxAttempts: 1,
-      allowOpenAIFallback: retry >= 1
+      allowOpenAIFallback: false
     });
     failed = audioFailedScenes(updated.currentVersion.scenes, requestedSceneNumbers, previousAudioKeys);
   }

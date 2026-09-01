@@ -68,6 +68,19 @@ assert.throws(
 assert.doesNotThrow(
   () => assertUsableSpeechAudio(wav(3, 5_000), { expectedTextDurationSeconds: 2.2 })
 );
+assert.doesNotThrow(
+  () => assertUsableSpeechAudio(wav(5, 5_000), {
+    expectedTextDurationSeconds: 2,
+    targetDurationSeconds: 5
+  })
+);
+assert.throws(
+  () => assertUsableSpeechAudio(wav(7, 5_000), {
+    expectedTextDurationSeconds: 2,
+    targetDurationSeconds: 4
+  }),
+  /语速异常缓慢或包含重复内容/
+);
 assert.throws(() => assertUsableSpeechAudio(Buffer.from("not audio")), /无法解码/);
 
 const inspectedMp3 = inspectAudio(mp3());

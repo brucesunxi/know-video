@@ -122,6 +122,8 @@ function localizedRuntimeLabel(value: string, language: UiLanguage) {
     "连接超时，正在找回后台生成结果": "The connection timed out. Recovering the background generation result",
     "任务已转入后台生成": "Generation continues in the background",
     "连接中断，任务将在后台继续确认": "Connection interrupted. The background task will continue to be checked",
+    "已修正自动画面风格，正在启动后台素材恢复": "Visual style repaired. Starting background media recovery",
+    "正在启动后台素材恢复": "Starting background media recovery",
     "正在生成统一风格的场景画面": "Generating consistently styled scene visuals",
     "正在补齐尚未完成的场景画面": "Completing unfinished scene visuals",
     "正在生成自然配音": "Generating natural narration",
@@ -6180,8 +6182,7 @@ export function WorkspaceClient({
   async function continueGeneratedProject(
     data: Required<Pick<StoryboardGenerationResponse, "project" | "messages" | "engine">> & StoryboardGenerationResponse,
     options: GenerationOptions,
-    resumeMissingOnly = false,
-    resolvedFailedTaskId?: string
+    resumeMissingOnly = false
   ) {
     let generatedProject = data.project;
     const warnings: string[] = [];
@@ -6325,7 +6326,6 @@ export function WorkspaceClient({
     if (requiredMediaComplete) {
       setGenerationStartedAt(undefined);
       clearPendingGenerationSession();
-      if (resolvedFailedTaskId) await dismissResolvedFailedTask(resolvedFailedTaskId);
     }
     setBriefAttachments([]);
     if (!resumeMissingOnly) window.setTimeout(() => setStage("studio"), 350);
@@ -7919,15 +7919,32 @@ export function WorkspaceClient({
       if (!response.ok || !data.project || !data.messages) throw new Error(data.error || "项目读取失败。");
       const missingRequiredMedia = missingSceneAssetNumbers(data.project.currentVersion.scenes, "image").length > 0
         || missingSceneAssetNumbers(data.project.currentVersion.scenes, "audio").length > 0;
-      if (data.generationOptions && missingRequiredMedia) {
+      if (failedGenerationTaskId && missingRequiredMedia) {
         setIsBusy(true);
-        if (data.autoVisualStyleRepaired) setGenerationStatus("已修正自动画面风格，正在统一重建场景画面");
-        await continueGeneratedProject({
-          project: data.project,
-          messages: data.messages,
-          engine: "ai",
-          recovered: true
-        }, data.generationOptions, true, failedGenerationTaskId);
+        setGenerationStatus(data.autoVisualStyleRepaired
+          ? "已修正自动画面风格，正在启动后台素材恢复"
+          : "正在启动后台素材恢复");
+        const retryResponse = await fetch("/api/projects/generation", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            failedRequestId: failedGenerationTaskId,
+            retryRequestId: crypto.randomUUID()
+          })
+        });
+        const retryData = await retryResponse.json().catch(() => ({})) as {
+          status?: "pending" | "ready";
+          project?: Project;
+          error?: string;
+        };
+        if (!retryResponse.ok) throw new Error(retryData.error || "后台素材恢复任务启动失败，请稍后重试。");
+        if (retryData.status === "ready" && retryData.project) {
+          await openProject(retryData.project.id);
+          return;
+        }
+        setGenerationStatus("任务已转入后台生成");
+        setStage("projects");
+        await openProjects();
         return;
       }
       if (failedGenerationTaskId) await dismissResolvedFailedTask(failedGenerationTaskId);
