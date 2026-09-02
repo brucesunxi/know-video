@@ -43,6 +43,7 @@ import { NARRATION_VOICE_IDS } from "@/lib/types";
 import { contentPromptForGeneration } from "@/lib/generation-prompt";
 import { sceneRequiresPremiumImage } from "@/lib/image-continuity";
 import { resolveAutoVisualStyleOptions } from "@/lib/visual-style-inference";
+import { generateProjectFromPrompt } from "@/lib/video-brain";
 
 const referenceAssetSchema = z.object({
   key: z.string().min(1).max(800),
@@ -104,6 +105,8 @@ const requestSchema = z.object({
 });
 
 export const maxDuration = 300;
+const BACKGROUND_STORYBOARD_BUDGET_MS = 135_000;
+const BACKGROUND_STORYBOARD_TEXT_TIMEOUT_MS = 24_000;
 
 export async function GET() {
   try {
@@ -140,6 +143,10 @@ function publicGenerationError(error: unknown) {
     return error.message.slice(0, 240) || "视频脚本和分镜生成没有完成，请重试。";
   }
   return "视频脚本和分镜生成没有完成，请重试。";
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 type ProjectGenerationInput = z.infer<typeof requestSchema>;
@@ -234,7 +241,19 @@ async function generateAndPersistProject(body: ProjectGenerationInput, userId: s
     }));
     const referenceAssets = enrichedReferences.map(createGenerationReferenceAsset);
     const referenceContext = generationReferenceContext(enrichedReferences);
-    const generated = await createStoryboardProject(body.prompt, undefined, body.options, referenceContext);
+    const generated = await Promise.race([
+      createStoryboardProject(body.prompt, undefined, body.options, referenceContext, {
+        deadlineMs: BACKGROUND_STORYBOARD_BUDGET_MS - 15_000,
+        textTimeoutMs: BACKGROUND_STORYBOARD_TEXT_TIMEOUT_MS
+      }),
+      sleep(BACKGROUND_STORYBOARD_BUDGET_MS).then(() => {
+        console.warn(`[projects] Storyboard planning exceeded ${BACKGROUND_STORYBOARD_BUDGET_MS}ms; persisting local fallback project for ${requestId ?? "direct-request"}.`);
+        return {
+          project: generateProjectFromPrompt(body.prompt, undefined, body.options),
+          engine: "heuristic" as const
+        };
+      })
+    ]);
     const project = attachGenerationReferenceAssets(generated.project, referenceAssets);
     const { engine } = generated;
     const persisted = await persistGeneratedProject({

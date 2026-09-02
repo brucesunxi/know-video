@@ -1314,14 +1314,18 @@ export async function createStoryboardProject(
   prompt: string,
   baseProject?: Project,
   options?: GenerationOptions,
-  referenceContext = ""
+  referenceContext = "",
+  planningBudget?: {
+    deadlineMs?: number;
+    textTimeoutMs?: number;
+  }
 ): Promise<{
   project: Project;
   engine: AiEngine;
 }> {
   // Leave enough of Vercel's 300-second request window for validation and durable persistence.
-  const generationDeadline = Date.now() + 210_000;
-  const textModel = getTextModel(42_000);
+  const generationDeadline = Date.now() + Math.max(45_000, Math.min(210_000, planningBudget?.deadlineMs ?? 210_000));
+  const textModel = getTextModel(Math.max(12_000, Math.min(42_000, planningBudget?.textTimeoutMs ?? 42_000)));
   if (!textModel) {
     return { project: generateProjectFromPrompt(prompt, baseProject, options), engine: "heuristic" };
   }
