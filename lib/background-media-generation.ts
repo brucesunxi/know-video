@@ -211,7 +211,7 @@ async function ensureSceneImage(
       // candidate, keeping each queue invocation below its execution deadline.
       maxQualityAttempts: attemptPlan.maxQualityAttempts,
       useStockContentGuide: attemptPlan.useStockContentGuide,
-      maxStockContentGuides: completionRescue ? 3 : 1,
+      maxStockContentGuides: completionRescue ? 2 : 1,
       throwOnFailure: true,
       maxProviderAttempts: 1,
       deadlineMs

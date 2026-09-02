@@ -24,9 +24,11 @@ import { GENERATED_IMAGE_HEIGHT, GENERATED_IMAGE_WIDTH } from "@/lib/image-quali
 const STANDARD_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const PREMIUM_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
 const RECOVERY_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-dev";
+export const RECOVERY_IMAGE_WIDTH = 1792;
+export const RECOVERY_IMAGE_HEIGHT = 1008;
 const RECOVERY_IMAGE_STEPS = 8;
 const MAX_IMAGE_PROVIDER_ATTEMPTS = 2;
-const IMAGE_PROVIDER_TIMEOUT_MS = 75_000;
+const IMAGE_PROVIDER_TIMEOUT_MS = 100_000;
 const DEFAULT_TTS_MODEL = "@cf/myshell-ai/melotts";
 const DEFAULT_VISION_MODEL = "@cf/moondream/moondream3.1-9B-A2B";
 const DEFAULT_TRANSCRIPTION_MODEL = "@cf/openai/whisper-large-v3-turbo";
@@ -244,10 +246,19 @@ export async function generateCloudflareImage(
       ? getOptionalEnv("CLOUDFLARE_PREMIUM_IMAGE_MODEL") || PREMIUM_IMAGE_MODEL
       : getOptionalEnv("CLOUDFLARE_IMAGE_MODEL") || STANDARD_IMAGE_MODEL;
   const steps = model.includes("flux-2-dev") ? RECOVERY_IMAGE_STEPS : 4;
+  // FLUX.2 Dev is only the final recovery candidate. A near-1080p 16:9 frame
+  // uses one third fewer output tiles than 1920x1080, then the shared Lanczos
+  // normalization performs only a small 7% upscale. This keeps the recovery
+  // request inside the queue callback budget without returning a soft 720p
+  // source to the renderer.
+  const outputWidth = recovery ? RECOVERY_IMAGE_WIDTH : GENERATED_IMAGE_WIDTH;
+  const outputHeight = recovery ? RECOVERY_IMAGE_HEIGHT : GENERATED_IMAGE_HEIGHT;
   const references = options.references?.slice(0, 4) ?? [];
   const estimatedUnitCostUsd = estimateCloudflareImageRequestCost({
     model,
     inputImageCount: references.length,
+    width: outputWidth,
+    height: outputHeight,
     steps
   });
   const providerAttemptLimit = Math.max(
@@ -260,8 +271,8 @@ export async function generateCloudflareImage(
     try {
       const form = new FormData();
       form.append("prompt", prompt);
-      form.append("width", String(GENERATED_IMAGE_WIDTH));
-      form.append("height", String(GENERATED_IMAGE_HEIGHT));
+      form.append("width", String(outputWidth));
+      form.append("height", String(outputHeight));
       // FLUX.2 Klein uses a fixed four-step process. FLUX.2 Dev exposes an
       // adjustable step count and is reserved for the final recovery attempt.
       if (model.includes("flux-2-dev")) form.append("steps", String(steps));

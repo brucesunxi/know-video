@@ -56,7 +56,12 @@ vm.runInNewContext(output, {
   }
 });
 
-const { estimateCloudflareImageRequestCost, generateCloudflareImage } = module.exports;
+const {
+  estimateCloudflareImageRequestCost,
+  generateCloudflareImage,
+  RECOVERY_IMAGE_HEIGHT,
+  RECOVERY_IMAGE_WIDTH
+} = module.exports;
 const closeTo = (actual, expected) => assert.ok(Math.abs(actual - expected) < 0.000001, `${actual} != ${expected}`);
 
 closeTo(estimateCloudflareImageRequestCost({
@@ -70,14 +75,19 @@ closeTo(estimateCloudflareImageRequestCost({
 closeTo(estimateCloudflareImageRequestCost({
   model: "@cf/black-forest-labs/flux-2-dev",
   inputImageCount: 2,
+  width: RECOVERY_IMAGE_WIDTH,
+  height: RECOVERY_IMAGE_HEIGHT,
   steps: 8
-}), 12 * 8 * 0.00041 + 2 * 8 * 0.00021);
+}), 8 * 8 * 0.00041 + 2 * 8 * 0.00021);
+
+assert.equal(RECOVERY_IMAGE_WIDTH, 1792);
+assert.equal(RECOVERY_IMAGE_HEIGHT, 1008);
 
 assert.match(source, /strategy\?: "default" \| "recovery"/);
 assert.match(source, /options\.strategy === "recovery"/);
 assert.match(source, /providerAttempts/);
 assert.match(source, /attachImageAttemptMetadata/);
-assert.match(source, /IMAGE_PROVIDER_TIMEOUT_MS = 75_000/);
+assert.match(source, /IMAGE_PROVIDER_TIMEOUT_MS = 100_000/);
 assert.match(source, /maxProviderAttempts\?: number/);
 assert.match(source, /deadlineMs\?: number/);
 assert.match(source, /operation: "Cloudflare image generation"/);
@@ -148,6 +158,28 @@ await assert.rejects(
     return true;
   }
 );
+assert.equal(requestCount, 1);
+
+let recoveryDimensions;
+requestCount = 0;
+fetchHandler = async (_url, options) => {
+  requestCount += 1;
+  recoveryDimensions = {
+    width: options.body.get("width"),
+    height: options.body.get("height")
+  };
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ result: { image: Buffer.from("recovery-image").toString("base64") } })
+  };
+};
+const recovery = await generateCloudflareImage("recovery prompt", "premium", {
+  strategy: "recovery",
+  maxProviderAttempts: 1
+});
+assert.deepEqual(recoveryDimensions, { width: "1792", height: "1008" });
+closeTo(recovery.estimatedCostUsd, 8 * 8 * 0.00041);
 assert.equal(requestCount, 1);
 
 console.log("Cloudflare image policy smoke checks passed.");

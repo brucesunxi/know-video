@@ -25,6 +25,7 @@ import {
   type ImageReferenceRole
 } from "@/lib/image-continuity";
 import {
+  focusedImageReviewRejectionCode,
   GeneratedImageQualityError,
   isDefinitiveGeneratedImageQualityRejection,
   normalizeGeneratedImage,
@@ -96,7 +97,7 @@ function buildBrandSafeImagePrompt(scene: Scene, project: Project) {
     "Use a brand-neutral educational or commercial scene with concrete subject matter and purposeful action, rendered only in the locked style above.",
     `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
     "Premium commercial art direction, strong depth, one clear focal point, refined lighting, and generous negative space.",
-    "Do not depict identifiable people, faces, children, weapons, conflict, politics, medical content, dashboards, presentation slides, floating UI cards, protected characters, official game logos, or brand marks."
+    "When people are essential, show anonymous adults from a natural mid-distance with complete coherent bodies and ordinary professional actions. Do not depict identifiable faces, children, weapons, injury, conflict, politics, medical content, dashboards, presentation slides, floating UI cards, protected characters, official game logos, or brand marks."
   ].join("\n"));
 }
 
@@ -108,7 +109,7 @@ function buildUltraSafeSceneImagePrompt(scene: Scene, project: Project) {
     semanticFallbackComposition(scene),
     `Mood: ${scene.style.mood}. Palette: ${scene.style.palette.join(", ")}.`,
     "Use safe scene-specific learning objects, product props, paths and environment details, all rendered only in the locked style above.",
-    "No recognizable brands, logos, readable text, real minors, faces, copyrighted characters, weapons, harm, conflict, or sensitive content."
+    "When the scene requires people, use anonymous adults at a natural distance with complete coherent bodies and no identifiable facial detail. No recognizable brands, logos, readable text, real minors, copyrighted characters, weapons, injury, harm, conflict, or sensitive content."
   ].join("\n"));
 }
 
@@ -118,6 +119,12 @@ function textSafePhysicalObjectDirection(scene: Scene) {
     return [
       "LIBRARY TEXT-SAFE OBJECT RULE: books, shelves, and reading furniture are required semantic objects and must remain visible.",
       "Render every book cover and spine as a completely plain unmarked color or material surface. Remove titles, labels, numbers, barcodes, decorative line clusters, and writing-like marks while preserving recognizable book shapes and shelf depth."
+    ].join("\n");
+  }
+  if (/(?:工地|施工|安全帽|防护装备|入场检查|高空作业|作业安全|construction|job[- ]?site|worksite|site safety|safety briefing|pre[- ]?entry|protective equipment|hard hat|safety harness|\bppe\b)/iu.test(description)) {
+    return [
+      "CONSTRUCTION SAFETY TEXT-SAFE OBJECT RULE: workers, complete protective equipment, tools, and the worksite are required semantic objects and must remain visible.",
+      "Keep helmets, vests, badges, signs, forms, machinery, and equipment completely blank and unmarked. Show safety through natural full-body actions and equipment checks rather than written instructions or isolated hands."
     ].join("\n");
   }
   return [
@@ -178,6 +185,17 @@ function semanticFallbackComposition(scene: Scene) {
     ];
     const beat = beats[Math.min(beats.length - 1, Math.max(0, scene.sceneNumber - 1) % beats.length)];
     return `Composition: ${beat}. Keep books and shelves recognizable, but make every cover and spine completely plain and unmarked with no title-like decoration.`;
+  }
+  if (/(?:工地|施工|安全帽|防护装备|入场检查|高空作业|作业安全|construction|job[- ]?site|worksite|site safety|safety briefing|pre[- ]?entry|protective equipment|hard hat|safety harness|\bppe\b)/iu.test(description)) {
+    const beats = [
+      "a wide daylight worksite entrance where a supervisor greets a small crew before entry",
+      "a medium side-angle PPE inspection with a worker naturally checking a hard hat, high-visibility vest, gloves, boots, and harness",
+      "a high three-quarter equipment check showing a complete worker inspecting tools, harness clips, or a guarded work zone",
+      "an over-the-shoulder safety briefing where a supervisor calmly indicates a physical route, barrier, or equipment area without written boards",
+      "a wide daylight outcome where the checked crew begins coordinated work safely with correct PPE and a clear path"
+    ];
+    const beat = beats[Math.min(beats.length - 1, Math.max(0, scene.sceneNumber - 1) % beats.length)];
+    return `Composition: ${beat}. Keep every person naturally proportioned and non-threatening; no isolated hands, injuries, danger spectacle, ominous shadows, smoke, sparks, night lighting, signs, badges, or writing.`;
   }
   if (/(?:方块|沙盒|游戏|课程|编程|voxel|sandbox|game|course|programming)/iu.test(description)) {
     return "Composition: a different voxel-learning beat for this scene, such as a planning desk with unlabeled colored blocks, an abstract block-building workspace, a simple logic circuit made of cubes and light paths, or a finished voxel world display with no characters or logos.";
@@ -688,12 +706,12 @@ async function generateSceneImage(
       });
     }
   };
-  const independentlyVerifyCandidate = async (
+  const independentlyReviewCandidate = async (
     candidate: TextFreeImageCandidate,
     reason: ImageIndependentRecoveryReason,
     qualityAttempt: number
   ) => {
-    if (!allowCompletionFallback || !hasCloudflareAI()) return false;
+    if (!allowCompletionFallback || !hasCloudflareAI()) return undefined;
     try {
       const [semanticCheck, styleCheck] = await Promise.all([
         trackedValidation(
@@ -709,15 +727,19 @@ async function generateSceneImage(
           () => evaluateCloudflareImageStyle(candidate.body, expectedStyle, visionDeadlineOptions(deadlineMs))
         )
       ]);
-      const accepted = semanticCheck.matches && styleCheck.matches;
+      const rejectionCode = focusedImageReviewRejectionCode({
+        semanticMatches: semanticCheck.matches,
+        styleMatches: styleCheck.matches
+      });
+      const accepted = rejectionCode === undefined;
       console.warn(
-        `[image-assets] Scene ${scene.sceneNumber} focused candidate review after ${reason}: semantic=${semanticCheck.matches}, style=${styleCheck.matches}, accepted=${accepted}.`
+        `[image-assets] Scene ${scene.sceneNumber} focused candidate review after ${reason}: semantic=${semanticCheck.matches}, style=${styleCheck.matches}, accepted=${accepted}, correctedReason=${rejectionCode ?? "pass"}.`
       );
-      return accepted;
+      return { accepted, rejectionCode };
     } catch (error) {
       if (error instanceof OperationDeadlineExceededError) throw error;
       console.warn(`[image-assets] Scene ${scene.sceneNumber} focused candidate review after ${reason} was unavailable:`, error);
-      return false;
+      return undefined;
     }
   };
   const acceptCandidate = (candidate: TextFreeImageCandidate, recoveryReason?: ImageIndependentRecoveryReason) => {
@@ -750,6 +772,33 @@ async function generateSceneImage(
       // for those styles, but never ship the filtered photo as the final frame.
       if (!directPhotographicStock || reference.metadata?.deliveryEligible !== true) return false;
       const normalized = await normalizeGeneratedImage(reference.deliveryBody);
+      const [semanticCheck, styleCheck] = await Promise.all([
+        trackedValidation(
+          `${qualityAttempt}:stock-rescue:semantic`,
+          () => evaluateCloudflareImageSemantics(
+            normalized.body,
+            essentialSceneSemantics(scene, project),
+            visionDeadlineOptions(deadlineMs)
+          )
+        ),
+        trackedValidation(
+          `${qualityAttempt}:stock-rescue:style`,
+          () => evaluateCloudflareImageStyle(
+            normalized.body,
+            expectedStyle,
+            visionDeadlineOptions(deadlineMs)
+          )
+        )
+      ]);
+      if (!semanticCheck.matches || !styleCheck.matches) {
+        console.warn(
+          `[image-assets] Scene ${scene.sceneNumber} stock rescue rejected before delivery checks: semantic=${semanticCheck.matches}, style=${styleCheck.matches}.`
+        );
+        return false;
+      }
+
+      // Only candidates that match both the scene and the locked medium spend
+      // the remaining callback budget on text and duplicate-composition gates.
       const containsText = await trackedValidation(
         `${qualityAttempt}:stock-rescue:text`,
         () => generatedImageContainsAnyText(normalized.body, deadlineMs)
@@ -776,24 +825,6 @@ async function generateSceneImage(
       if (compositionDuplicate) return false;
 
       const locallyTrusted = reference.metadata?.locallyTrusted === true;
-      const semanticMatches = (await trackedValidation(
-        `${qualityAttempt}:stock-rescue:semantic`,
-        () => evaluateCloudflareImageSemantics(
-          normalized.body,
-          essentialSceneSemantics(scene, project),
-          visionDeadlineOptions(deadlineMs)
-        )
-      )).matches;
-      const styleMatches = (await trackedValidation(
-        `${qualityAttempt}:stock-rescue:style`,
-        () => evaluateCloudflareImageStyle(
-          normalized.body,
-          expectedStyle,
-          visionDeadlineOptions(deadlineMs)
-        )
-      )).matches;
-      if (!semanticMatches || !styleMatches) return false;
-
       body = normalized.body;
       qualityMetadata = normalized.metadata;
       model = `${String(reference.metadata?.provider ?? "free")}-stock-image`;
@@ -1003,9 +1034,20 @@ async function generateSceneImage(
           : await inspectGeneratedImage(normalized.body, scene, project, deadlineMs);
       } catch (error) {
         if (!(error instanceof GeneratedImageQualityError) || error.code !== "semantic_check_failed") throw error;
-        if (await independentlyVerifyCandidate(textFreeCandidate, "semantic_check_failed", qualityAttempt)) {
+        const focusedReview = await independentlyReviewCandidate(
+          textFreeCandidate,
+          "semantic_check_failed",
+          qualityAttempt
+        );
+        if (focusedReview?.accepted) {
           acceptCandidate(textFreeCandidate, "semantic_check_failed");
           break;
+        }
+        if (focusedReview?.rejectionCode === "semantic_mismatch") {
+          throw new GeneratedImageQualityError("生成画面与当前场景内容不匹配。", "semantic_mismatch");
+        }
+        if (focusedReview?.rejectionCode === "style_mismatch") {
+          throw new GeneratedImageQualityError("生成画面偏离项目锁定的视觉风格。", "style_mismatch");
         }
         throw error;
       }
@@ -1015,15 +1057,16 @@ async function generateSceneImage(
         throw new GeneratedImageQualityError("生成画面包含文字或类似文字的符号。", "text_detected");
       }
       if (inspection === "semantic_mismatch" || inspection === "style_mismatch") {
-        const qualityError = inspection === "semantic_mismatch"
-          ? new GeneratedImageQualityError("生成画面与当前场景内容不匹配。", "semantic_mismatch")
-          : new GeneratedImageQualityError("生成画面偏离项目锁定的视觉风格。", "style_mismatch");
         const recoveryReason = inspection === "style_mismatch" ? "style_mismatch" : "semantic_mismatch";
-        if (await independentlyVerifyCandidate(textFreeCandidate, recoveryReason, qualityAttempt)) {
+        const focusedReview = await independentlyReviewCandidate(textFreeCandidate, recoveryReason, qualityAttempt);
+        if (focusedReview?.accepted) {
           acceptCandidate(textFreeCandidate, recoveryReason);
           break;
         }
-        throw qualityError;
+        const correctedReason = focusedReview?.rejectionCode ?? recoveryReason;
+        throw correctedReason === "semantic_mismatch"
+          ? new GeneratedImageQualityError("生成画面与当前场景内容不匹配。", "semantic_mismatch")
+          : new GeneratedImageQualityError("生成画面偏离项目锁定的视觉风格。", "style_mismatch");
       }
       acceptCandidate(textFreeCandidate);
       break;
@@ -1178,7 +1221,8 @@ export async function generateProjectSceneImages(
             const guides = await loadFreeStockImageGuides(scene, {
               excludedReferenceKeys: excludedContentGuideKeys,
               selectionKey: options.variantKey,
-              maxCandidates: options.maxStockContentGuides ?? 1
+              maxCandidates: options.maxStockContentGuides ?? 1,
+              deadlineMs: options.deadlineMs
             });
             contentGuideReferences = guides.map((guide) => ({
                 body: guide.body,

@@ -57,6 +57,15 @@ assert.deepEqual(Array.from(stockSearchTerms(scene({
   "reader choosing book library shelves",
   "quiet library study reading room"
 ]);
+assert.deepEqual(Array.from(stockSearchTerms(scene({
+  title: "Job-site safety briefing",
+  voiceover: "入场前检查防护装备，确认安全后再开始作业。",
+  visualPrompt: "Workers check hard hats, high-visibility vests, and safety harnesses."
+}))), [
+  "construction workers safety equipment inspection",
+  "construction worker checking hard hat vest harness",
+  "construction team safety briefing daylight"
+]);
 assert.deepEqual(Array.from(stockSearchTerms(scene({ style: { stockSearchTerms: ["children painting classroom", "teacher reading story"] } }))), [
   "children painting classroom",
   "teacher reading story"

@@ -49,7 +49,7 @@ assert.match(worker, /free stock lookup failed; local motion remains active/);
 assert.match(worker, /if \(result\.failures\.length > 0\) \{[\s\S]*return project;[\s\S]*persistGeneratedSceneAssets/);
 assert.match(worker, /allowCompletionFallback: completionRescue/);
 assert.match(worker, /useStockContentGuide: attemptPlan\.useStockContentGuide/);
-assert.match(worker, /maxStockContentGuides: completionRescue \? 3 : 1/);
+assert.match(worker, /maxStockContentGuides: completionRescue \? 2 : 1/);
 assert.doesNotMatch(worker, /allowLocallyTrustedStockFallback/);
 assert.match(worker, /shouldTryStockBeforeImage/);
 assert.match(worker, /projectAllowsFreeStockVideo\(project, message\.options\?\.motion\)/);

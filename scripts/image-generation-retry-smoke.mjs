@@ -51,8 +51,9 @@ assert.match(imageAssets, /evaluateCloudflareImageSemantics/);
 assert.match(imageAssets, /evaluateCloudflareImageStyle/);
 assert.match(imageAssets, /evaluateCloudflareImageComposition/);
 assert.match(imageAssets, /independent-semantic-style-recovery/);
-assert.match(imageAssets, /semanticCheck\.matches && styleCheck\.matches/);
-assert.match(imageAssets, /independentlyVerifyCandidate/);
+assert.match(imageAssets, /focusedImageReviewRejectionCode/);
+assert.match(imageAssets, /independentlyReviewCandidate/);
+assert.match(imageAssets, /correctedReason=\$\{rejectionCode \?\? "pass"\}/);
 assert.match(imageAssets, /acceptCandidate\(textFreeCandidate, recoveryReason\)/);
 assert.doesNotMatch(imageAssets, /allowStyleFallback|styleFallback|text-free-semantic-pass-style-fallback/);
 assert.doesNotMatch(imageAssets, /betterTextFreeCandidate/);
@@ -105,6 +106,15 @@ assert.match(imageAssets, /if \(!directPhotographicStock \|\| reference\.metadat
 assert.match(imageAssets, /evaluateCloudflareImageSemantics\(\s*normalized\.body/);
 assert.match(imageAssets, /evaluateCloudflareImageStyle\(\s*normalized\.body/);
 assert.doesNotMatch(imageAssets, /locallyTrusted \|\|/);
+const stockRescue = imageAssets.slice(
+  imageAssets.indexOf("const acceptVerifiedStockRescue"),
+  imageAssets.indexOf("const stockRescueAttemptedBeforeGeneration")
+);
+assert.ok(
+  stockRescue.indexOf(":stock-rescue:semantic") < stockRescue.indexOf(":stock-rescue:text"),
+  "Irrelevant stock must be rejected before spending the remaining callback budget on text inspection"
+);
+assert.match(stockRescue, /Promise\.all\(\[/);
 assert.ok(
   imageAssets.indexOf("completedFromStock = await acceptVerifiedStockRescue(completionStockGuide")
     < imageAssets.indexOf("for (let qualityAttempt = 0;"),
@@ -128,22 +138,32 @@ assert.match(stockGuides, /image_type=photo/);
 assert.match(stockGuides, /excludedReferenceKeys\?: Iterable<string>/);
 assert.match(stockGuides, /selectionKey\?: string/);
 assert.match(stockGuides, /maxCandidates\?: number/);
+assert.match(stockGuides, /deadlineMs\?: number/);
 assert.match(stockGuides, /rankStockCandidates/);
 assert.match(stockGuides, /stockSearchTerms\(scene\)\.slice\(0, 3\)/);
-assert.match(stockGuides, /AbortSignal\.timeout\(25_000\)/);
+assert.match(stockGuides, /operation: `\$\{candidate\.provider\} image download`/);
+assert.match(stockGuides, /maxTimeoutMs: 20_000/);
+assert.match(stockGuides, /reserveMs: 80_000/);
 assert.match(stockGuides, /!excluded\.has\(candidateReferenceKey\(candidate\)\)/);
 assert.match(imageAssets, /excludedContentGuideKeys/);
 assert.match(imageAssets, /selectionKey: options\.variantKey/);
+assert.match(imageAssets, /deadlineMs: options\.deadlineMs/);
 assert.match(stockGuides, /\.resize\(480, 270/);
 assert.match(stockGuides, /deliveryBody/);
 assert.match(stockGuides, /GENERATED_IMAGE_WIDTH, GENERATED_IMAGE_HEIGHT/);
 assert.match(stockGuides, /deliveryEligible = sourceWidth >= 1600 && sourceHeight >= 900/);
+assert.match(stockGuides, /Promise\.all\(candidates\.map/);
 assert.ok(stockGuides.indexOf("photo.src?.large2x") < stockGuides.indexOf("photo.src?.landscape"));
 assert.match(continuity, /LIBRARY \/ READING SEMANTIC FIDELITY/);
 assert.match(continuity, /Primary camera blueprint/);
 assert.match(continuity, /must not remain in the same seated pose/);
 assert.match(continuity, /Input image \$\{index\} \(input_image_\$\{index\}\)/);
 assert.match(continuity, /FOOD \/ HOSPITALITY SEMANTIC FIDELITY/);
+assert.match(continuity, /CONSTRUCTION SAFETY SEMANTIC FIDELITY/);
+assert.match(continuity, /Primary construction-safety blueprint/);
+assert.match(imageAssets, /CONSTRUCTION SAFETY TEXT-SAFE OBJECT RULE/);
+assert.match(imageAssets, /anonymous adults from a natural mid-distance with complete coherent bodies/);
+assert.doesNotMatch(imageAssets, /Do not depict identifiable people, faces, children/);
 assert.match(continuity, /All visible books must have completely plain, unmarked covers and spines/);
 assert.match(continuity, /never substitute ominous anonymous hands, glass sheets, dark fabric/);
 assert.match(cloudflare, /disturbing macro textures, microscopic or organic-looking surfaces/);

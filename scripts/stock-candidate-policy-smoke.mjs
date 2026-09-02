@@ -60,6 +60,20 @@ assert.equal(library.safe, true);
 assert.equal(library.locallyTrusted, true);
 assert.ok(library.relevanceScore >= 10);
 
+const constructionSafety = evaluateStockCandidate({
+  title: "Job-site safety briefing",
+  voiceover: "工人入场前检查安全帽、防护背心和安全绳。",
+  visualPrompt: "A construction worker performs a complete PPE inspection in daylight.",
+  style: { theme: "cinematic documentary", mood: "calm and professional" }
+}, {
+  query: "construction workers safety equipment inspection",
+  pageUrl: "https://www.pexels.com/photo/construction-worker-checking-safety-equipment-76543/",
+  description: "Construction worker checking helmet vest and safety harness at a daylight worksite"
+});
+assert.equal(constructionSafety.safe, true);
+assert.equal(constructionSafety.locallyTrusted, true);
+assert.ok(constructionSafety.relevanceScore >= 10);
+
 const salesContext = "Sales introduction for prospects. Help sales teams explain a customer problem and reach a successful business outcome.";
 const chineseSalesContext = "面向潜在客户的销售介绍，帮助销售团队解释客户问题并展示企业服务成果。";
 const contextualMeeting = evaluateStockCandidate(salesScene, {

@@ -16,10 +16,16 @@ vm.runInNewContext(output, {
   require: (specifier) => specifier === "sharp" ? sharp : {}
 });
 const {
+  focusedImageReviewRejectionCode,
   GeneratedImageQualityError,
   isDefinitiveGeneratedImageQualityRejection,
   normalizeGeneratedImage
 } = module.exports;
+
+assert.equal(focusedImageReviewRejectionCode({ semanticMatches: true, styleMatches: true }), undefined);
+assert.equal(focusedImageReviewRejectionCode({ semanticMatches: false, styleMatches: true }), "semantic_mismatch");
+assert.equal(focusedImageReviewRejectionCode({ semanticMatches: true, styleMatches: false }), "style_mismatch");
+assert.equal(focusedImageReviewRejectionCode({ semanticMatches: false, styleMatches: false }), "semantic_mismatch");
 
 assert.equal(isDefinitiveGeneratedImageQualityRejection(
   new GeneratedImageQualityError("style", "style_mismatch")

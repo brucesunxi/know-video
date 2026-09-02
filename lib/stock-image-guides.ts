@@ -3,6 +3,7 @@ import { getOptionalEnv } from "@/lib/env";
 import { stockSearchTerms } from "@/lib/stock-video-assets";
 import { rankStockCandidates } from "@/lib/stock-candidate-policy";
 import { GENERATED_IMAGE_HEIGHT, GENERATED_IMAGE_WIDTH } from "@/lib/image-quality";
+import { boundedOperationTimeout } from "@/lib/operation-deadline";
 import type { Scene } from "@/lib/types";
 
 type StockImageGuideCandidate = {
@@ -19,6 +20,7 @@ type StockImageGuideOptions = {
   excludedReferenceKeys?: Iterable<string>;
   selectionKey?: string;
   maxCandidates?: number;
+  deadlineMs?: number;
 };
 
 export type StockImageGuide = {
@@ -42,12 +44,18 @@ export function hasFreeStockImageGuideProvider() {
   return Boolean(getOptionalEnv("PEXELS_API_KEY") || getOptionalEnv("PIXABAY_API_KEY"));
 }
 
-async function searchPexelsImages(query: string): Promise<StockImageGuideCandidate[]> {
+async function searchPexelsImages(query: string, deadlineMs?: number): Promise<StockImageGuideCandidate[]> {
   const apiKey = getOptionalEnv("PEXELS_API_KEY");
   if (!apiKey) return [];
   const response = await fetch(`https://api.pexels.com/v1/search?orientation=landscape&per_page=10&query=${encodeURIComponent(query)}`, {
     headers: { Authorization: apiKey },
-    signal: AbortSignal.timeout(18_000)
+    signal: AbortSignal.timeout(boundedOperationTimeout({
+      operation: "Pexels image search",
+      deadlineMs,
+      maxTimeoutMs: 15_000,
+      reserveMs: 100_000,
+      minimumTimeoutMs: 2_000
+    }))
   });
   if (!response.ok) throw new Error(`Pexels image search failed with ${response.status}`);
   const body = await response.json() as {
@@ -71,11 +79,17 @@ async function searchPexelsImages(query: string): Promise<StockImageGuideCandida
   });
 }
 
-async function searchPixabayImages(query: string): Promise<StockImageGuideCandidate[]> {
+async function searchPixabayImages(query: string, deadlineMs?: number): Promise<StockImageGuideCandidate[]> {
   const apiKey = getOptionalEnv("PIXABAY_API_KEY");
   if (!apiKey) return [];
   const response = await fetch(`https://pixabay.com/api/?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(query)}&image_type=photo&orientation=horizontal&safesearch=true&per_page=20`, {
-    signal: AbortSignal.timeout(18_000)
+    signal: AbortSignal.timeout(boundedOperationTimeout({
+      operation: "Pixabay image search",
+      deadlineMs,
+      maxTimeoutMs: 15_000,
+      reserveMs: 100_000,
+      minimumTimeoutMs: 2_000
+    }))
   });
   if (!response.ok) throw new Error(`Pixabay image search failed with ${response.status}`);
   const body = await response.json() as {
@@ -110,8 +124,8 @@ async function findGuideCandidates(scene: Scene, options: StockImageGuideOptions
   const collected: StockImageGuideCandidate[] = [];
   for (const query of stockSearchTerms(scene).slice(0, 3)) {
     const settled = await Promise.allSettled([
-      searchPexelsImages(query),
-      searchPixabayImages(query)
+      searchPexelsImages(query, options.deadlineMs),
+      searchPixabayImages(query, options.deadlineMs)
     ]);
     const candidates = settled
       .flatMap((result) => result.status === "fulfilled" ? result.value : [])
@@ -133,10 +147,17 @@ export async function loadFreeStockImageGuides(
 ): Promise<StockImageGuide[]> {
   if (!hasFreeStockImageGuideProvider()) return [];
   const candidates = await findGuideCandidates(scene, options);
-  const guides: StockImageGuide[] = [];
-  for (const { candidate, evaluation } of candidates) {
+  const prepared = await Promise.all(candidates.map(async ({ candidate, evaluation }) => {
     try {
-      const response = await fetch(candidate.imageUrl, { signal: AbortSignal.timeout(25_000) });
+      const response = await fetch(candidate.imageUrl, {
+        signal: AbortSignal.timeout(boundedOperationTimeout({
+          operation: `${candidate.provider} image download`,
+          deadlineMs: options.deadlineMs,
+          maxTimeoutMs: 20_000,
+          reserveMs: 80_000,
+          minimumTimeoutMs: 2_000
+        }))
+      });
       if (!response.ok) throw new Error(`${candidate.provider} image download failed with ${response.status}`);
       const declaredBytes = Number(response.headers.get("content-length") ?? 0);
       if (declaredBytes > 15_000_000) throw new Error("Free stock image exceeds the 15 MB guide limit");
@@ -166,7 +187,7 @@ export async function loadFreeStockImageGuides(
           .png({ compressionLevel: 8, adaptiveFiltering: true })
           .toBuffer()
       ]);
-      guides.push({
+      return {
         body,
         deliveryBody,
         contentType: "image/jpeg",
@@ -181,12 +202,13 @@ export async function loadFreeStockImageGuides(
         deliveryEligible,
         sourceWidth,
         sourceHeight
-      });
+      } satisfies StockImageGuide;
     } catch (error) {
       console.warn(`[stock-image-guides] Could not import ${candidate.provider}:${candidate.id}:`, error);
+      return undefined;
     }
-  }
-  return guides;
+  }));
+  return prepared.filter(Boolean) as StockImageGuide[];
 }
 
 export async function loadFreeStockImageGuide(

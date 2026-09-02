@@ -112,6 +112,10 @@ function educationGameCourseDirection(description: string, scene: Scene) {
   ].join("\n");
 }
 
+function isConstructionSafetyScene(description: string) {
+  return /(?:工地|施工|安全帽|防护装备|入场检查|高空作业|作业安全|construction|job[- ]?site|worksite|site safety|safety briefing|pre[- ]?entry|protective equipment|hard hat|safety harness|\bppe\b)/iu.test(description);
+}
+
 function semanticSceneDirection(scene: Scene) {
   const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`.toLowerCase();
   const courseDirection = educationGameCourseDirection(description, scene);
@@ -130,6 +134,14 @@ function semanticSceneDirection(scene: Scene) {
       "Keep the library setting immediately recognizable through shelves, books, reading tables, quiet study areas, book selection, borrowing, returning, or reading actions required by this scene.",
       "Books and shelving are essential scene objects and must not be removed merely to avoid typography. Render every cover and spine as a clean unmarked color or material surface with no title, label, number, barcode, decorative stripe sequence, or writing-like mark.",
       "Vary the reader action, aisle, furniture, camera side, and shot scale across scenes; do not turn every beat into the same centered bookshelf or reading-table hero image."
+    ].join("\n");
+  }
+  if (isConstructionSafetyScene(description)) {
+    return [
+      "CONSTRUCTION SAFETY SEMANTIC FIDELITY:",
+      "Keep a real, orderly construction or industrial worksite immediately recognizable through workers, hard hats, high-visibility clothing, boots, gloves, harnesses, tools, barriers, scaffolding, or pre-entry inspection actions required by this scene.",
+      "Show one calm, concrete safety action with correct protective equipment and clear cause-and-effect. Workers must look healthy, professional, naturally proportioned, and non-threatening; never use injury, peril, panic, ominous silhouettes, isolated body parts, or horror-like staging.",
+      "Communicate the briefing through people, equipment, gestures, and environment. Keep signs, badges, helmets, clothing, machinery, forms, and equipment labels completely blank and unmarked."
     ].join("\n");
   }
   if (/(?:跨境|库存|仓库|仓储|订单|物流|调拨|补货|缺货|积压|cross[- ]?border|inventory|warehouse|order|logistics|replenish|stock)/iu.test(description)) {
@@ -160,6 +172,7 @@ export function sceneVisualDiversityDirection(scene: Pick<Scene, "sceneNumber" |
   const courseLike = /(?:minecraft|我的世界|方块|沙盒|游戏|玩家|玩法|关卡|课程|课堂|老师|教师|学生|学习|教学|training|course|classroom|teacher|student|learning|game|gameplay|sandbox|block)/iu.test(description);
   const libraryLike = /(?:图书馆|书店|阅览|阅读|书架|借阅|还书|library|bookstore|reading|bookshelf|borrowing books|returning books)/iu.test(description);
   const foodLike = sceneIsFoodHospitality(scene);
+  const constructionSafetyLike = isConstructionSafetyScene(description);
   const sceneNumber = Math.max(1, Number(scene.sceneNumber) || 1);
   if (libraryLike) {
     const beats = [
@@ -203,6 +216,21 @@ export function sceneVisualDiversityDirection(scene: Pick<Scene, "sceneNumber" |
       `This is scene ${sceneNumber} of ${sceneCount}. Primary food-film blueprint: ${beats[(sceneNumber - 1) % beats.length]}.`,
       "Do not repeat another scene's seated pose, tabletop arrangement, steamer placement, counter angle, kitchen background, camera side, or shot scale.",
       "Keep all menus, packages, storefront panels, labels, and uniforms completely blank and unmarked."
+    ].join("\n");
+  }
+  if (constructionSafetyLike) {
+    const beats = [
+      "wide daylight establishing view at a clean worksite entrance, with a supervisor greeting a small crew before entry",
+      "medium side-angle PPE inspection showing a worker checking a hard hat, high-visibility vest, gloves, boots, and harness with natural hands",
+      "high three-quarter equipment check focused on a worker securely inspecting tools, harness clips, or a guarded work area, with the full person visible",
+      "over-the-shoulder safety briefing where a supervisor calmly points out a physical route, barrier, or equipment zone without any written board",
+      "wide outcome shot of the checked crew beginning coordinated work safely in daylight, with correct PPE and a clear unobstructed path"
+    ];
+    return [
+      "SCENE DIFFERENTIATION:",
+      `This is scene ${sceneNumber} of ${sceneCount}. Primary construction-safety blueprint: ${beats[(sceneNumber - 1) % beats.length]}.`,
+      "Do not repeat another scene's worker pose, inspection object, camera side, shot scale, foreground machinery, or background structure.",
+      "Keep every person fully coherent and naturally proportioned. Avoid isolated hands, extreme body close-ups, injury cues, threatening shadows, night lighting, smoke, sparks, or dramatic danger staging."
     ].join("\n");
   }
   const beats = [
