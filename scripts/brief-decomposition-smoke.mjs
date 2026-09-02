@@ -69,6 +69,8 @@ assert.equal(listPunctuationFacts.some((fact) => fact.includes("自动整理客�
 assert.equal(isProductionInstructionClause("视频时长：30 秒"), true);
 assert.equal(isProductionInstructionClause("Know Video 是 AI 视频生成平台"), false);
 assert.equal(isProductionInstructionClause("帮助企业快速完成品牌内容制作"), false);
+assert.equal(module.exports.isVideoCreationProductBrief("Create a polished 30-second product video for an AI video-generation platform for prospects."), true);
+assert.equal(extractBriefSubject("Create a polished 30-second product video for an AI video-generation platform for prospects.", false), "AI video-generation platform");
 assert.equal(detectBriefDomain("为一款 DIY 沙盒游戏制作介绍片，展示玩家建造关卡和角色成长"), "gaming");
 assert.equal(detectBriefDomain("为企业治理平台制作产品介绍片"), "business");
 const gameConcepts = extractBriefVisualConcepts("DIY 沙盒游戏让玩家建造关卡并推动角色成长", true);
@@ -99,6 +101,9 @@ assert.match(aiVideo, /Using local storyboard fallback after generation failure/
 assert.match(aiVideo, /blockingStoryboardIssues/);
 assert.match(aiVideo, /Accepting repaired storyboard with non-blocking quality warnings/);
 assert.match(videoBrain, /domainFallbackNarrations/);
+assert.match(videoBrain, /no readable text, no UI screenshot, no fake words/);
+assert.match(videoBrain, /no words or fake interface copy/);
+assert.match(videoBrain, /videoPlatformTitle/);
 assert.match(videoBrain, /domain === "gaming"/);
 assert.doesNotMatch(videoBrain, /const firstClause = scene\.voiceover\.split/);
 assert.doesNotMatch(videoBrain, /briefFacts\[index %/);

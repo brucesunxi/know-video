@@ -17,6 +17,11 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`;
 const { detectedShotVariety, storyboardQualityIssues } = await import(moduleUrl);
+const {
+  extractBriefSubject,
+  isVideoCreationProductBrief,
+  projectTitleRepresentsBrief
+} = await import(moduleUrl);
 
 const palettes = ["#0B1220", "#27C4B8", "#F3C969"];
 const makeScene = (sceneNumber, title, voiceover, visualPrompt, motionPrompt) => ({
@@ -46,6 +51,19 @@ assert(storyboardQualityIssues(
   { language: "中文" },
   "纸乐园的第一天",
   "帮我生成一个幼儿园的宣传视频"
+).includes("project title does not identify the client's actual subject"));
+const videoPlatformBrief = "Create a polished 30-second product video for an AI video-generation platform for prospects.";
+assert.equal(isVideoCreationProductBrief(videoPlatformBrief), true);
+assert.equal(extractBriefSubject(videoPlatformBrief, false), "AI video-generation platform");
+assert.equal(projectTitleRepresentsBrief("AI video-generation platform Product Film", videoPlatformBrief, false), true);
+assert(!storyboardQualityIssues(
+  scenes.map((scene) => ({
+    ...scene,
+    voiceover: scene.voiceover.replace("创意", "AI video generation platform")
+  })),
+  { language: "英文" },
+  "AI video-generation platform Product Film",
+  videoPlatformBrief
 ).includes("project title does not identify the client's actual subject"));
 
 const mutate = (index, values) => scenes.map((scene, current) => current === index ? { ...scene, ...values } : scene);

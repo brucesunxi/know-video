@@ -187,7 +187,9 @@ export function storyboardQualityIssues(
     issues.push("voiceover narrates the production instead of the client's company or product");
   }
   if (brief) {
-    if (projectTitle && !projectTitleRepresentsBrief(projectTitle, brief, options?.language !== "英文")) {
+    const titleMatchesVideoCreationProduct = isVideoCreationProductBrief(brief)
+      && Boolean(projectTitle && /(?:know\s*video|ai\s*video|video[\s-]*(?:generation|creation|editing|maker|editor)|storyboard)/iu.test(projectTitle));
+    if (projectTitle && !titleMatchesVideoCreationProduct && !projectTitleRepresentsBrief(projectTitle, brief, options?.language !== "英文")) {
       issues.push("project title does not identify the client's actual subject");
     }
     if (detectBriefDomain(brief) === "gaming") {

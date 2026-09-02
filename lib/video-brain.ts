@@ -303,22 +303,66 @@ function localizedFallbackDirection(
   options?: GenerationOptions,
   prompt = ""
 ): Scene {
-  if (!chinese) return {
-    ...scene,
-    style: {
-      ...scene.style,
-      visualStyleId: options?.visualStyleId,
-      visualStyleLabel: options?.visualStyleLabel,
-      visualStylePrompt: options?.visualStylePrompt
-    }
-  };
   const profile = visualStyleProfile(options?.style);
   const subject = scene.title.replace(/[：:]/g, "").trim();
   const briefSubject = extractBriefSubject(prompt, true);
   const domain = detectBriefDomain(prompt);
+  const videoCreationProduct = isVideoCreationProductBrief(prompt);
+  if (!chinese) {
+    const englishSubject = localizedBriefSubject(prompt, false);
+    const visualDirections = videoCreationProduct
+      ? [
+          `Macro cinematic product scene for ${englishSubject}: a creator's hands arrange blank storyboard frames, camera path tokens, waveform strips, and image thumbnails as physical objects on a premium studio table; foreground glass and metal detail, midground hands in action, background editing bay depth, ${profile.lighting}, ${profile.composition}, no readable text, no UI screenshot, no fake words.`,
+          `Overhead wide shot for ${englishSubject}: five distinct blank scene tiles form a clear production timeline using symbol-only icons, color tabs, and simple motion arrows; foreground lens marker, midground organized cards, background soft studio tools, ${profile.cameraLanguage}, cohesive ${profile.palette.join(", ")} palette, no labels, no dashboard text, no floating paragraph cards.`,
+          `Medium shot for ${englishSubject}: one visual concept becomes a finished cinematic frame on a large monitor while matching blank thumbnails around it keep the same palette and lighting; foreground reflected glass, midground creator reviewing the image, background layered studio depth, ${profile.materials}, no readable interface copy or logo text.`,
+          `Wide workspace scene for ${englishSubject}: a conversational editing moment shown through a chat bubble shape transforming into highlighted scene objects and camera path markers, all symbol-only; foreground tablet edge, midground creator pointing to the selected scene, background version wall with unlabeled cards, ${profile.artDirection}, no text inside the image.`,
+          `Close-up outcome scene for ${englishSubject}: a completed film reel, audio waveform, caption bars, and export-ready object stack align into one polished delivery package; foreground tactile material detail, midground finished frame glowing, background calm studio depth, ${profile.lighting}, consistent style, no readable text.`,
+          `Final hero frame for ${englishSubject}: the finished video plays as pure imagery on a premium monitor while blank thumbnail strips, motion paths, and version markers settle around it; foreground keyboard edge and soft reflections, midground screen as hero subject, background warm production space, ${profile.composition}, no words, no fake UI copy.`
+        ]
+      : [
+          `Macro opening frame for ${englishSubject}: one concrete object from the brief becomes the hero subject, foreground tactile material detail, midground hands beginning a clear action, background professional environment with depth, ${profile.lighting}, ${profile.composition}, no readable text.`,
+          `Overhead wide shot for ${englishSubject}: real materials from the brief form an ordered path from problem to next step, foreground tools, midground active hands, background softly layered workspace, ${profile.cameraLanguage}, cohesive ${profile.palette.join(", ")} palette, no labels or UI cards.`,
+          `Medium shot for ${englishSubject}: a person uses the product or service in a believable environment, foreground natural occlusion, midground clear subject action, background spatial depth, ${profile.materials}, no presentation layout or visible text.`,
+          `Wide proof scene for ${englishSubject}: the promised improvement is visible through a concrete before-after condition, real objects, and human reaction, foreground guide lines, midground result, background context, ${profile.artDirection}, no abstract dashboard.`,
+          `Close-up outcome scene for ${englishSubject}: the customer's final benefit appears as a tangible completed action or calm human moment, foreground detail, midground sharp subject, background soft depth, ${profile.lighting}, no readable signage.`,
+          `Final resolved hero frame for ${englishSubject}: one concrete result becomes the center of the composition, foreground stable base, midground completed outcome, background environment closing naturally, ${profile.composition}, no words or fake interface copy.`
+        ];
+    const motionDirections = [
+      "The camera slowly pushes from the foreground detail into the first active gesture, with small parallax between table objects and the background; a continuous light direction carries the eye into the next shot.",
+      "The camera glides laterally above the arranged path as individual objects slide into order; foreground and background layers move at different speeds for depth.",
+      "The camera arcs gently around the creator and screen while the central visual brightens; foreground reflections and background tools create controlled parallax.",
+      "The camera moves from the workspace edge toward the selected object, then tracks the transformation into the next visual state with a clean motivated transition.",
+      "The camera eases toward the finished package as small physical elements settle into alignment; focus shifts from detail to complete outcome.",
+      "The camera slowly pulls back into a balanced final composition, environmental motion becomes subtle, and the finished result holds clearly."
+    ];
+    const directionIndex = Math.min(index, visualDirections.length - 1);
+    return {
+      ...scene,
+      visualPrompt: visualDirections[directionIndex],
+      motionPrompt: motionDirections[directionIndex],
+      style: {
+        ...scene.style,
+        theme: `${profile.label}: ${profile.artDirection}`,
+        palette: profile.palette,
+        mood: index === 0 ? "focused and anticipatory" : index === visualDirections.length - 1 ? "resolved and confident" : "clear and progressive",
+        visualStyleId: options?.visualStyleId,
+        visualStyleLabel: options?.visualStyleLabel,
+        visualStylePrompt: options?.visualStylePrompt
+      }
+    };
+  }
   const inventoryOperations = domain === "commerce"
     && /(?:跨境|库存|仓库|仓储|订单|物流|调拨|补货|缺货|积压|运营负责人|cross[- ]?border|inventory|warehouse|order|logistics|replenish|stock)/iu.test(prompt);
-  const visualDirections = domain === "gaming"
+  const visualDirections = videoCreationProduct
+    ? [
+        `微距特写，${briefSubject}的创作起点以无文字的分镜卡、镜头路径标记、音频波形条和空白画面缩略图作为实体物件展开；前景是${profile.materials}细节，中景创作者双手正在整理第一个镜头，背景是有纵深的专业工作室。${profile.lighting}，${profile.composition}，不出现可读文字、假字、网页截图或大段界面。`,
+        `俯拍广角镜头，五张空白分镜卡用图标、色块和箭头形成清晰时间线；前景有镜头标记，中景卡片按节奏排布，背景保留工作台工具和柔和景深。${profile.cameraLanguage}，${profile.palette.join("、")}色彩贯穿画面，不出现文字标签、数据看板或漂浮说明卡。`,
+        `中等景别，一个创意画面在大屏上变成完整影像，周围缩略图以相同光线和色彩保持统一；前景玻璃反射，中景创作者审核画面，背景工作室层次清楚。材质语言为${profile.materials}，画面只用图形和影像表达，不出现可读界面文字。`,
+        `宽幅工作室镜头，对话改片被表现为无文字气泡形状变成高亮分镜物件和镜头路径；前景是平板边缘，中景人物指向被选中的场景，背景版本墙由无字卡片组成。${profile.artDirection}，风格统一，避免假字、网页截图和说明文字。`,
+        `近景成果镜头，完成的视频卷轴、音频波形、字幕条和导出物件收束成一个精致交付包；前景保留高质量材质，中景完成画面发光，背景工作室安静有层次。${profile.lighting}，坚持${profile.label}，不出现任何可读文字。`,
+        `最终英雄镜头，完成影片以纯画面方式在高级显示器上播放，空白缩略条、镜头路径和版本标记在周围稳定排列；前景键盘边缘与柔和反射，中景屏幕为核心主体，背景是温暖制作空间。${profile.composition}，不出现品牌字样、假字或界面文案。`
+      ]
+    : domain === "gaming"
     ? [
         `微距特写，${briefSubject}中最有辨识度的玩家角色或核心道具成为画面主体；前景是可交互机关与材质细节，中景角色做出第一步明确操作，背景建立完整游戏世界。${profile.lighting}，${profile.composition}，不出现企业办公室、控制台或漂浮数据卡片。`,
         `俯拍广角镜头，一段真实可玩的关卡路径清楚展开；前景可拾取物与障碍形成节奏，中景玩家角色朝具体目标移动，背景揭示下一处挑战。${profile.cameraLanguage}，${profile.palette.join("、")}色彩贯穿游戏世界，规则通过动作与空间表达。`,
@@ -497,6 +541,12 @@ export function generateProjectFromPrompt(
   ];
   if (isVideoCreationProductBrief(prompt)) {
     const videoGenerationScenes = applyFallbackConstraints(videoGenerationBlueprints, options, chinese, prompt);
+    const videoPlatformSubject = localizedBriefSubject(prompt, chinese);
+    const videoPlatformTitle = chinese
+      ? videoPlatformSubject.includes("Know Video")
+        ? "Know Video 产品介绍"
+        : `${videoPlatformSubject}产品介绍`
+      : `${videoPlatformSubject.charAt(0).toUpperCase()}${videoPlatformSubject.slice(1)} Product Film`;
     return {
       ...(baseProject ?? {
         id: crypto.randomUUID(),
@@ -504,7 +554,7 @@ export function generateProjectFromPrompt(
         credits: 996,
         plan: "Free"
       }),
-      title: chinese ? "Know Video 产品介绍" : "Know Video Product Film",
+      title: videoPlatformTitle,
       currentVersion: {
         id: crypto.randomUUID(),
         label: "draft 1",

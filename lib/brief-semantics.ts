@@ -1,7 +1,7 @@
 const videoCreationProductPatterns = [
   /(?:AI\s*)?视频(?:生成|创作|制作)(?:平台|工具|软件|系统|工作室)/iu,
   /(?:文生视频|图生视频|对话改片|智能分镜)(?:平台|工具|软件|系统)?/iu,
-  /(?:video generation|video creation|text-to-video|image-to-video|storyboard)(?:\s+(?:platform|tool|software|system|studio|editor|generator))/iu,
+  /(?:video[\s-]*generation|video[\s-]*creation|text-to-video|image-to-video|storyboard)(?:\s+(?:platform|tool|software|system|studio|editor|generator))/iu,
   /(?:AI\s+video|video)(?:\s+(?:platform|generator|creator|maker|editor))/iu
 ];
 
@@ -89,6 +89,13 @@ export function isProductionInstructionClause(value: string) {
 }
 
 export function extractBriefSubject(prompt: string, chinese = true) {
+  const videoCreationProduct = prompt.match(
+    /\b((?:AI\s+)?video[\s-]*(?:generation|creation|editing|maker|editor|production)\s+(?:platform|tool|software|system|studio|generator|editor)|(?:text-to-video|image-to-video|storyboard)\s+(?:platform|tool|software|system|studio|generator|editor))\b/iu
+  )?.[1]?.replace(/\s+/g, " ").trim();
+  if (videoCreationProduct) {
+    return chinese && /\p{Script=Han}/u.test(prompt) ? "AI 视频生成平台" : videoCreationProduct;
+  }
+
   const latinCandidates = prompt.match(/\b[A-Z][A-Z0-9_-]{2,}\b/g) ?? [];
   const brand = latinCandidates.find((candidate) => !ignoredBrandTokens.has(candidate));
   if (brand) return brand;
