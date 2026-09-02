@@ -68,6 +68,12 @@ assert.ok(
   Math.abs(localMotionPlan(graphicScene).scaleTo - localMotionPlan(graphicScene).scaleFrom)
     > Math.abs(localMotionPlan(seeded).scaleTo - localMotionPlan(seeded).scaleFrom)
 );
+const dynamicGraphicSequence = localMotionSequence({
+  ...graphicScene,
+  durationSeconds: 10,
+  style: { ...graphicScene.style, motion: { mode: "local", preset: "auto", intensity: "dynamic", seed: 7 } }
+}, 300, 30);
+assert.ok(Math.max(...dynamicGraphicSequence.flatMap((beat) => [beat.plan.scaleFrom, beat.plan.scaleTo])) <= 1.16);
 assert.equal(sceneUsesAiMotionClip(seeded), false);
 assert.equal(sceneUsesAiMotionClip(scene("Move", {
   style: { motion: { mode: "ai", preset: "auto", intensity: "standard", seed: 1 } },

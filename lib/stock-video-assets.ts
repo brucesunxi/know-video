@@ -105,12 +105,15 @@ async function searchPexels(query: string, deadlineMs?: number): Promise<StockVi
   };
   return (body.videos ?? []).flatMap((video) => {
     const files = (video.video_files ?? [])
-      .filter((file) => file.file_type === "video/mp4" && (file.width ?? 0) >= 960 && (file.height ?? 0) >= 540)
-      .sort((left, right) => Math.abs((left.width ?? 0) - 1280) - Math.abs((right.width ?? 0) - 1280));
+      .filter((file) => file.file_type === "video/mp4" && (file.width ?? 0) >= 1920 && (file.height ?? 0) >= 1080)
+      .sort((left, right) => (
+        Math.abs((left.width ?? 0) - 1920) + Math.abs((left.height ?? 0) - 1080)
+        - Math.abs((right.width ?? 0) - 1920) - Math.abs((right.height ?? 0) - 1080)
+      ));
     const file = files[0];
     return file ? [{
       id: String(video.id), provider: "pexels" as const, downloadUrl: file.link, pageUrl: video.url,
-      width: file.width ?? 1280, height: file.height ?? 720, durationSeconds: video.duration,
+      width: file.width ?? 1920, height: file.height ?? 1080, durationSeconds: video.duration,
       attribution: video.user?.name, query, tags: video.tags
     }] : [];
   });
@@ -141,12 +144,15 @@ async function searchPixabay(query: string, deadlineMs?: number): Promise<StockV
   };
   return (body.hits ?? []).flatMap((video) => {
     const files = Object.values(video.videos ?? {})
-      .filter((file) => file.url && (file.width ?? 0) >= 960 && (file.height ?? 0) >= 540)
-      .sort((left, right) => Math.abs((left.width ?? 0) - 1280) - Math.abs((right.width ?? 0) - 1280));
+      .filter((file) => file.url && (file.width ?? 0) >= 1920 && (file.height ?? 0) >= 1080)
+      .sort((left, right) => (
+        Math.abs((left.width ?? 0) - 1920) + Math.abs((left.height ?? 0) - 1080)
+        - Math.abs((right.width ?? 0) - 1920) - Math.abs((right.height ?? 0) - 1080)
+      ));
     const file = files[0];
     return file?.url ? [{
       id: String(video.id), provider: "pixabay" as const, downloadUrl: file.url, pageUrl: video.pageURL,
-      width: file.width ?? 1280, height: file.height ?? 720, durationSeconds: video.duration,
+      width: file.width ?? 1920, height: file.height ?? 1080, durationSeconds: video.duration,
       attribution: video.user, query, tags: video.tags?.split(",").map((tag) => tag.trim()).filter(Boolean)
     }] : [];
   });

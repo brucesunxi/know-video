@@ -1,7 +1,9 @@
 import sharp from "sharp";
 
-const TARGET_WIDTH = 1280;
-const TARGET_HEIGHT = 720;
+export const GENERATED_IMAGE_WIDTH = 1920;
+export const GENERATED_IMAGE_HEIGHT = 1080;
+const MIN_SOURCE_WIDTH = 1280;
+const MIN_SOURCE_HEIGHT = 720;
 
 export type GeneratedImageQualityErrorCode =
   | "file_too_small"
@@ -39,7 +41,12 @@ export async function normalizeGeneratedImage(body: Buffer) {
   } catch (error) {
     throw new GeneratedImageQualityError("图片服务返回了无法解析的文件。", "invalid_image", { cause: error });
   }
-  if (!metadata.width || !metadata.height || metadata.width < 512 || metadata.height < 288) {
+  if (
+    !metadata.width
+    || !metadata.height
+    || metadata.width < MIN_SOURCE_WIDTH
+    || metadata.height < MIN_SOURCE_HEIGHT
+  ) {
     throw new GeneratedImageQualityError("生成图片分辨率过低。", "low_resolution");
   }
   if (!metadata.format || !["jpeg", "png", "webp", "avif"].includes(metadata.format)) {
@@ -48,7 +55,12 @@ export async function normalizeGeneratedImage(body: Buffer) {
 
   const normalized = await sharp(body, { failOn: "warning" })
     .rotate()
-    .resize(TARGET_WIDTH, TARGET_HEIGHT, { fit: "cover", position: "attention" })
+    .resize(GENERATED_IMAGE_WIDTH, GENERATED_IMAGE_HEIGHT, {
+      fit: "cover",
+      position: "attention",
+      kernel: sharp.kernel.lanczos3
+    })
+    .sharpen()
     .png({ compressionLevel: 8, adaptiveFiltering: true })
     .toBuffer();
   const stats = await sharp(normalized)
@@ -67,8 +79,8 @@ export async function normalizeGeneratedImage(body: Buffer) {
       sourceFormat: metadata.format,
       sourceWidth: metadata.width,
       sourceHeight: metadata.height,
-      width: TARGET_WIDTH,
-      height: TARGET_HEIGHT,
+      width: GENERATED_IMAGE_WIDTH,
+      height: GENERATED_IMAGE_HEIGHT,
       entropy: Number(entropy.toFixed(3)),
       standardDeviation: Number(standardDeviation.toFixed(3))
     }

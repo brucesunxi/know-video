@@ -2,6 +2,7 @@ import sharp from "sharp";
 import { getOptionalEnv } from "@/lib/env";
 import { stockSearchTerms } from "@/lib/stock-video-assets";
 import { rankStockCandidates } from "@/lib/stock-candidate-policy";
+import { GENERATED_IMAGE_HEIGHT, GENERATED_IMAGE_WIDTH } from "@/lib/image-quality";
 import type { Scene } from "@/lib/types";
 
 type StockImageGuideCandidate = {
@@ -32,6 +33,9 @@ export type StockImageGuide = {
   descriptor: string;
   relevanceScore: number;
   locallyTrusted: boolean;
+  deliveryEligible: boolean;
+  sourceWidth: number;
+  sourceHeight: number;
 };
 
 export function hasFreeStockImageGuideProvider() {
@@ -55,7 +59,7 @@ async function searchPexelsImages(query: string): Promise<StockImageGuideCandida
     }>;
   };
   return (body.photos ?? []).flatMap((photo) => {
-    const imageUrl = photo.src?.landscape || photo.src?.large || photo.src?.large2x;
+    const imageUrl = photo.src?.large2x || photo.src?.landscape || photo.src?.large;
     return imageUrl ? [{
       id: String(photo.id),
       provider: "pexels" as const,
@@ -140,6 +144,10 @@ export async function loadFreeStockImageGuides(
       if (source.byteLength < 5_000 || source.byteLength > 15_000_000) {
         throw new Error("Free stock image has an invalid file size");
       }
+      const sourceMetadata = await sharp(source, { failOn: "warning" }).rotate().metadata();
+      const sourceWidth = sourceMetadata.width ?? 0;
+      const sourceHeight = sourceMetadata.height ?? 0;
+      const deliveryEligible = sourceWidth >= 1600 && sourceHeight >= 900;
       const [body, deliveryBody] = await Promise.all([
         sharp(source, { failOn: "warning" })
           .rotate()
@@ -149,7 +157,12 @@ export async function loadFreeStockImageGuides(
           .toBuffer(),
         sharp(source, { failOn: "warning" })
           .rotate()
-          .resize(1280, 720, { fit: "cover", position: "attention" })
+          .resize(GENERATED_IMAGE_WIDTH, GENERATED_IMAGE_HEIGHT, {
+            fit: "cover",
+            position: "attention",
+            kernel: sharp.kernel.lanczos3
+          })
+          .sharpen()
           .png({ compressionLevel: 8, adaptiveFiltering: true })
           .toBuffer()
       ]);
@@ -164,7 +177,10 @@ export async function loadFreeStockImageGuides(
         query: candidate.query,
         descriptor: evaluation.descriptor,
         relevanceScore: evaluation.relevanceScore,
-        locallyTrusted: evaluation.locallyTrusted
+        locallyTrusted: evaluation.locallyTrusted,
+        deliveryEligible,
+        sourceWidth,
+        sourceHeight
       });
     } catch (error) {
       console.warn(`[stock-image-guides] Could not import ${candidate.provider}:${candidate.id}:`, error);

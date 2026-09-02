@@ -51,6 +51,32 @@ const project = (scenes) => ({ id: "project", currentVersion: { id: "version", s
 
 assert.equal(auditProjectMedia(project([scene(1)])).ready, true);
 
+const lowResolutionVisual = auditProjectMedia(project([scene(1, {
+  assets: [
+    { id: "image", type: "image", r2Key: "image", url: "/image", metadata: { source: "generated-image", width: 1280, height: 720 } },
+    { id: "audio", type: "audio", r2Key: "audio", url: "/audio", metadata: { actualDurationSeconds: 5.2 } }
+  ]
+})]));
+assert.equal(lowResolutionVisual.ready, false);
+assert.equal(lowResolutionVisual.errors[0].code, "visual-low-resolution");
+assert.deepEqual(Array.from(lowResolutionVisual.repairVisualSceneNumbers), [1]);
+
+const fullHdVisual = auditProjectMedia(project([scene(1, {
+  assets: [
+    { id: "image", type: "image", r2Key: "image", url: "/image", metadata: { source: "generated-image", width: 1920, height: 1080 } },
+    { id: "audio", type: "audio", r2Key: "audio", url: "/audio", metadata: { actualDurationSeconds: 5.2 } }
+  ]
+})]));
+assert.equal(fullHdVisual.ready, true);
+
+const lowResolutionStockClip = auditProjectMedia(project([scene(1, {
+  assets: [
+    { id: "clip", type: "clip", r2Key: "clip", url: "/clip", metadata: { source: "free-stock-video", width: 1280, height: 720, actualDurationSeconds: 6 } },
+    { id: "audio", type: "audio", r2Key: "audio", url: "/audio", metadata: { actualDurationSeconds: 5.2 } }
+  ]
+})]));
+assert.equal(lowResolutionStockClip.errors[0].code, "visual-low-resolution");
+
 const fallbackVisual = auditProjectMedia(project([scene(1, {
   assets: [
     { id: "fallback", type: "image", r2Key: "fallback", url: "/fallback", metadata: { source: "fallback-image", model: "local-svg-fallback" } },

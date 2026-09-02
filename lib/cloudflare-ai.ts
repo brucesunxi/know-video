@@ -19,6 +19,7 @@ import {
 import sharp from "sharp";
 import { boundedOperationTimeout } from "@/lib/operation-deadline";
 import { externalErrorStatus } from "@/lib/external-error";
+import { GENERATED_IMAGE_HEIGHT, GENERATED_IMAGE_WIDTH } from "@/lib/image-quality";
 
 const STANDARD_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const PREMIUM_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
@@ -109,8 +110,8 @@ export function estimateCloudflareImageRequestCost(input: {
   height?: number;
   steps?: number;
 }) {
-  const width = input.width ?? 1280;
-  const height = input.height ?? 720;
+  const width = input.width ?? GENERATED_IMAGE_WIDTH;
+  const height = input.height ?? GENERATED_IMAGE_HEIGHT;
   const inputImageCount = Math.max(0, Math.min(4, Math.floor(input.inputImageCount)));
   const outputTiles = Math.ceil(width / 512) * Math.ceil(height / 512);
   if (input.model.includes("flux-2-dev")) {
@@ -259,8 +260,8 @@ export async function generateCloudflareImage(
     try {
       const form = new FormData();
       form.append("prompt", prompt);
-      form.append("width", "1280");
-      form.append("height", "720");
+      form.append("width", String(GENERATED_IMAGE_WIDTH));
+      form.append("height", String(GENERATED_IMAGE_HEIGHT));
       // FLUX.2 Klein uses a fixed four-step process. FLUX.2 Dev exposes an
       // adjustable step count and is reserved for the final recovery attempt.
       if (model.includes("flux-2-dev")) form.append("steps", String(steps));
@@ -403,6 +404,7 @@ export async function evaluateCloudflareImageSemantics(
         "Answer SEMANTIC_MATCH only when the central subject, action, and setting or concrete visual metaphor are recognizable and materially connected to the expected scene.",
         "Answer SEMANTIC_MISMATCH when the image is mainly a color palette, pattern sheet, material swatch, decorative abstract geometry, generic background, unrelated subject, or merely matches the requested art style without depicting the scene content.",
         "For an ordinary business, sales, service, education, or promotional scene, also answer SEMANTIC_MISMATCH for ominous anonymous hands, disturbing macro textures, microscopic or organic-looking surfaces, smoke, particles, or dark material studies that do not directly depict the requested action.",
+        "Also answer SEMANTIC_MISMATCH for visibly malformed faces, fused or extra limbs, distorted hands, grotesque anatomy, threatening staging, or an unintended horror-like mood when the expected scene is ordinary promotional content.",
         "Do not require readable text. Judge visible meaning, not typography. Answer exactly SEMANTIC_MATCH or SEMANTIC_MISMATCH."
       ].join("\n"),
     maxTokens: 16,
@@ -485,6 +487,7 @@ export async function inspectCloudflareGeneratedImage(
         "Otherwise answer STYLE_MISMATCH if the visible rendering medium conflicts with the LOCKED VISUAL STYLE, including photography instead of illustration, line art instead of paper collage, 3D instead of 2D, or any other medium substitution.",
         "Otherwise answer SEMANTIC_MISMATCH if the central subject, action, and setting are unrelated or unrecognizable, or if the image is mainly a palette, pattern sheet, material swatch, decorative geometry, generic background, split-screen montage, contact sheet, storyboard sheet, style sample, browser window, website screenshot, application interface, dashboard, presentation slide, document, or mostly blank screen.",
         "For an ordinary business, sales, service, education, or promotional scene, ominous anonymous hands, disturbing macro textures, microscopic or organic-looking surfaces, smoke, particles, and dark material studies are also semantic mismatches unless the expected scene explicitly requires them.",
+        "Malformed faces, fused or extra limbs, distorted hands, grotesque anatomy, threatening staging, and unintended horror-like treatment are semantic mismatches unless explicitly required by the expected scene.",
         "A browser or app screenshot is never an acceptable substitute for a concrete film scene, even when the expected topic mentions software, a website, onboarding, or a welcome page.",
         "Answer IMAGE_PASS only when the image is text-free, uses the exact locked rendering medium, and its concrete visible meaning materially matches the expected scene.",
         "Answer exactly TEXT_PRESENT, STYLE_MISMATCH, SEMANTIC_MISMATCH, or IMAGE_PASS."

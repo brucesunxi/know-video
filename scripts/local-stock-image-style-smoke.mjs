@@ -13,7 +13,14 @@ const module = { exports: {} };
 vm.runInNewContext(output, {
   module,
   exports: module.exports,
-  require: (specifier) => specifier === "sharp" ? sharp : {}
+  require: (specifier) => {
+    if (specifier === "sharp") return sharp;
+    if (specifier === "@/lib/image-quality") return {
+      GENERATED_IMAGE_WIDTH: 1920,
+      GENERATED_IMAGE_HEIGHT: 1080
+    };
+    return {};
+  }
 });
 const { localStockImageStyleMode, normalizeFreeStockImageStyle } = module.exports;
 
@@ -52,8 +59,8 @@ for (const [index, visualStyleId] of styles.entries()) {
   assert.equal(result.mode, expectedModes[index]);
   const metadata = await sharp(result.body).metadata();
   assert.equal(metadata.format, "png");
-  assert.equal(metadata.width, 1280);
-  assert.equal(metadata.height, 720);
+  assert.equal(metadata.width, 1920);
+  assert.equal(metadata.height, 1080);
   assert.ok(result.body.byteLength > 8_000, `${result.mode} output was only ${result.body.byteLength} bytes`);
   const stats = await sharp(result.body).resize(160, 90).greyscale().stats();
   assert.ok((stats.entropy ?? 0) > 0.8, `${result.mode} lost too much scene detail`);

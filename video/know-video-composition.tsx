@@ -64,7 +64,7 @@ function beatTransitionOffset(beat: LocalMotionBeat, progress: number) {
   if (beat.transition === "slide-right") return { x: -9 * remaining, y: 0, scale: 1, opacity: progress };
   if (beat.transition === "slide-up") return { x: 0, y: 7 * remaining, scale: 1, opacity: progress };
   if (beat.transition === "slide-down") return { x: 0, y: -7 * remaining, scale: 1, opacity: progress };
-  if (beat.transition === "zoom") return { x: 0, y: 0, scale: 1.08 - progress * 0.08, opacity: progress };
+  if (beat.transition === "zoom") return { x: 0, y: 0, scale: 1.045 - progress * 0.045, opacity: progress };
   return { x: 0, y: 0, scale: 1, opacity: progress, rotate: 0 };
 }
 
@@ -102,15 +102,15 @@ function visualLayerStyle({
   }
 
   return {
-    height: "112%",
-    left: "-6%",
+    height: "108%",
+    left: "-4%",
     objectFit: "cover",
     position: "absolute",
-    top: "-6%",
+    top: "-4%",
     opacity,
     transform: `translate3d(${motion.x + transitionX}%, ${motion.y + transitionY}%, 0) scale(${motion.scale * transitionScale}) rotate(${transitionRotate}deg)`,
     transformOrigin: "center center",
-    width: "112%",
+    width: "108%",
     willChange: "transform"
   };
 }

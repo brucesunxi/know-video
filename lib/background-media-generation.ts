@@ -212,7 +212,6 @@ async function ensureSceneImage(
       maxQualityAttempts: attemptPlan.maxQualityAttempts,
       useStockContentGuide: attemptPlan.useStockContentGuide,
       maxStockContentGuides: completionRescue ? 3 : 1,
-      allowLocallyTrustedStockFallback: completionRescue,
       throwOnFailure: true,
       maxProviderAttempts: 1,
       deadlineMs

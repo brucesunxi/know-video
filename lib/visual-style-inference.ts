@@ -83,6 +83,10 @@ const EXPLICIT_STYLE_PATTERNS: Array<[string, RegExp]> = [
 ];
 
 const SAFETY_POSTER_AUTO_PATTERN = /(?:安全(?:培训|教育|操作|生产|施工|作业|规范|须知)|危险(?:作业|警示|告知)|事故预防|工地安全|职业健康|网络安全|信息安全|反诈|诈骗预警|钓鱼(?:邮件|网站|攻击)|合规培训|workplace safety|safety training|construction safety|hazard warning|cybersecurity|phishing|fraud prevention)/iu;
+const EXPLICIT_PRODUCT_UI_AUTO_PATTERN = /(?:界面|仪表盘|控制台|后台|屏幕录制|录屏|操作演示|功能演示|产品演示|dashboard|interface|console|screen(?:cast| recording)|ui demo|product demo|feature demo|walkthrough)/iu;
+const SOFTWARE_PRODUCT_AUTO_PATTERN = /(?:saas|软件|应用|平台|数字工具|app|software|platform|digital tool)/iu;
+const SOFTWARE_DEMO_AUTO_PATTERN = /(?:产品|功能|使用|操作|上手|教程|介绍|演示|product|feature|usage|onboarding|tutorial|demo)/iu;
+const PEOPLE_LED_BUSINESS_STORY_PATTERN = /(?:销售|业务团队|潜在客户|客户问题|客户痛点|客户沟通|问题到解决|销售介绍|sales|sales team|prospects?|customer problem|customer pain|problem.{0,24}solution)/iu;
 
 export function inferAutoVisualStyleId(value: string) {
   const text = value.toLocaleLowerCase();
@@ -99,7 +103,13 @@ export function inferAutoVisualStyleId(value: string) {
     return "cinematic-realism";
   }
 
-  if (/产品|saas|工具|界面|平台|软件|仪表盘|dashboard|app|software|platform|product|ui/iu.test(text)) return "product-ui";
+  if (PEOPLE_LED_BUSINESS_STORY_PATTERN.test(text) && !EXPLICIT_PRODUCT_UI_AUTO_PATTERN.test(text)) {
+    return "cinematic-realism";
+  }
+  if (
+    EXPLICIT_PRODUCT_UI_AUTO_PATTERN.test(text)
+    || (SOFTWARE_PRODUCT_AUTO_PATTERN.test(text) && SOFTWARE_DEMO_AUTO_PATTERN.test(text))
+  ) return "product-ui";
   if (/课程|教学|解释|概念|培训|课堂|education|lesson|training|explain/iu.test(text)) return "chalkboard";
   if (/客服|客户服务|情绪|沟通|support|customer service/iu.test(text)) return "simple-line";
   if (/社媒|短视频|爆点|营销|活动预热|social|tiktok|reels|campaign/iu.test(text)) return "comic-book";

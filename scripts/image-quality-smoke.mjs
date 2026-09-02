@@ -42,13 +42,18 @@ const noisy = await sharp(randomBytes(1280 * 720 * 3), {
   raw: { width: 1280, height: 720, channels: 3 }
 }).jpeg({ quality: 88 }).toBuffer();
 const normalized = await normalizeGeneratedImage(noisy);
-assert.equal(normalized.metadata.width, 1280);
-assert.equal(normalized.metadata.height, 720);
+assert.equal(normalized.metadata.width, 1920);
+assert.equal(normalized.metadata.height, 1080);
 assert.equal(normalized.metadata.sourceFormat, "jpeg");
 assert.ok(normalized.metadata.entropy > 0.8);
 const outputMetadata = await sharp(normalized.body).metadata();
 assert.equal(outputMetadata.format, "png");
-assert.equal(outputMetadata.width, 1280);
-assert.equal(outputMetadata.height, 720);
+assert.equal(outputMetadata.width, 1920);
+assert.equal(outputMetadata.height, 1080);
+
+const lowResolution = await sharp(randomBytes(1024 * 576 * 3), {
+  raw: { width: 1024, height: 576, channels: 3 }
+}).jpeg({ quality: 88 }).toBuffer();
+await assert.rejects(() => normalizeGeneratedImage(lowResolution), /分辨率过低/);
 
 console.log("Generated image quality smoke checks passed.");

@@ -36,7 +36,6 @@ import {
   POSSIBLE_SCENE_DUPLICATE_THRESHOLD
 } from "@/lib/image-similarity";
 import { isDeliverableVisualAsset, mediaAssetStatus } from "@/lib/generation-resume";
-import { normalizeFreeStockImageStyle } from "@/lib/local-stock-image-style";
 import { assetUrlForKey, getFromR2, uploadToR2 } from "@/lib/r2";
 import { loadFreeStockImageGuides } from "@/lib/stock-image-guides";
 import { styleAllowsFreeStockVideo } from "@/lib/style-motion-policy";
@@ -56,9 +55,7 @@ type ImageIndependentRecoveryReason =
   | "semantic_mismatch"
   | "semantic_check_failed"
   | "style_mismatch"
-  | "verified_stock_rescue"
-  | "local_style_normalized_stock_rescue"
-  | "locally_trusted_stock_rescue";
+  | "verified_stock_rescue";
 
 function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
   if (hasCloudflareAI()) return undefined;
@@ -560,8 +557,7 @@ async function generateSceneImage(
   allowCompletionFallback = false,
   maxQualityAttempts = MAX_IMAGE_QUALITY_ATTEMPTS,
   maxProviderAttempts = 2,
-  deadlineMs?: number,
-  allowLocallyTrustedStockFallback = false
+  deadlineMs?: number
 ): Promise<{ asset: SceneAsset } | undefined> {
   const effectiveQuality: ImageQuality = quality === "premium" || sceneRequiresPremiumImage(scene)
     ? "premium"
@@ -586,7 +582,6 @@ async function generateSceneImage(
   let textFreeVerified = false;
   let usedIndependentRecovery = false;
   let usedVerifiedStockRescue = false;
-  let usedLocalStyleNormalization = false;
   let completionFallbackReason: ImageIndependentRecoveryReason | undefined;
   let stockRescueMetadata: Record<string, unknown> | undefined;
   let providerRequestCount = 0;
@@ -750,13 +745,11 @@ async function generateSceneImage(
     ) return false;
     try {
       const directPhotographicStock = styleAllowsFreeStockVideo(lockedStyle);
-      const styled = directPhotographicStock
-        ? { body: reference.deliveryBody, mode: "photographic" as const }
-        : await normalizeFreeStockImageStyle(reference.deliveryBody, lockedStyle);
-      const normalized = await normalizeGeneratedImage(styled.body);
-      const semanticInspectionBody = directPhotographicStock
-        ? normalized.body
-        : (await normalizeGeneratedImage(reference.deliveryBody)).body;
+      // A photo processed with a local filter is not a real illustration, UI
+      // frame, collage, or line drawing. Keep stock photos as generation guides
+      // for those styles, but never ship the filtered photo as the final frame.
+      if (!directPhotographicStock || reference.metadata?.deliveryEligible !== true) return false;
+      const normalized = await normalizeGeneratedImage(reference.deliveryBody);
       const containsText = await trackedValidation(
         `${qualityAttempt}:stock-rescue:text`,
         () => generatedImageContainsAnyText(normalized.body, deadlineMs)
@@ -782,17 +775,16 @@ async function generateSceneImage(
       }
       if (compositionDuplicate) return false;
 
-      const locallyTrusted = allowLocallyTrustedStockFallback
-        && reference.metadata?.locallyTrusted === true;
-      const semanticMatches = locallyTrusted || (await trackedValidation(
+      const locallyTrusted = reference.metadata?.locallyTrusted === true;
+      const semanticMatches = (await trackedValidation(
         `${qualityAttempt}:stock-rescue:semantic`,
         () => evaluateCloudflareImageSemantics(
-          semanticInspectionBody,
+          normalized.body,
           essentialSceneSemantics(scene, project),
           visionDeadlineOptions(deadlineMs)
         )
       )).matches;
-      const styleMatches = !directPhotographicStock || (await trackedValidation(
+      const styleMatches = (await trackedValidation(
         `${qualityAttempt}:stock-rescue:style`,
         () => evaluateCloudflareImageStyle(
           normalized.body,
@@ -811,12 +803,7 @@ async function generateSceneImage(
       textFreeVerified = true;
       usedIndependentRecovery = true;
       usedVerifiedStockRescue = true;
-      usedLocalStyleNormalization = !directPhotographicStock;
-      completionFallbackReason = locallyTrusted
-        ? "locally_trusted_stock_rescue"
-        : directPhotographicStock
-          ? "verified_stock_rescue"
-          : "local_style_normalized_stock_rescue";
+      completionFallbackReason = "verified_stock_rescue";
       stockRescueMetadata = {
         stockProvider: reference.metadata?.provider,
         stockProviderId: reference.metadata?.providerId,
@@ -825,13 +812,14 @@ async function generateSceneImage(
         stockCandidateDescriptor: reference.metadata?.candidateDescriptor,
         localRelevanceScore: reference.metadata?.localRelevanceScore,
         locallyTrusted,
-        localStyleNormalized: !directPhotographicStock,
-        localStyleMode: styled.mode,
+        sourceWidth: reference.metadata?.sourceWidth,
+        sourceHeight: reference.metadata?.sourceHeight,
+        deliveryEligible: true,
         costUsd: 0
       };
       if (nearest) closestScene = nearest;
       console.warn(
-        `[image-assets] Scene ${scene.sceneNumber} completed with a ${locallyTrusted ? "locally trusted" : "independently verified"} free stock still${directPhotographicStock ? "" : ` normalized as ${styled.mode}`} after generated candidates were rejected.`
+        `[image-assets] Scene ${scene.sceneNumber} completed with an independently verified high-resolution photographic stock still after generated candidates were rejected.`
       );
       return true;
     } catch (error) {
@@ -1097,13 +1085,7 @@ async function generateSceneImage(
       candidateInstruction: visualInstruction || undefined,
       qualityGate: usedIndependentRecovery
         ? usedVerifiedStockRescue
-          ? completionFallbackReason === "locally_trusted_stock_rescue"
-            ? usedLocalStyleNormalization
-              ? "locally-trusted-local-style-stock-rescue"
-              : "locally-trusted-stock-rescue"
-            : usedLocalStyleNormalization
-              ? "local-style-normalized-stock-rescue"
-              : "verified-stock-rescue"
+          ? "verified-stock-rescue"
           : "independent-semantic-style-recovery"
         : "strict-semantic-style-pass",
       completionFallbackReason,
@@ -1133,7 +1115,6 @@ export async function generateProjectSceneImages(
     maxQualityAttempts?: number;
     useStockContentGuide?: boolean;
     maxStockContentGuides?: number;
-    allowLocallyTrustedStockFallback?: boolean;
     throwOnFailure?: boolean;
     maxProviderAttempts?: number;
     deadlineMs?: number;
@@ -1211,7 +1192,10 @@ export async function generateProjectSceneImages(
                   searchQuery: guide.query,
                   candidateDescriptor: guide.descriptor,
                   localRelevanceScore: guide.relevanceScore,
-                  locallyTrusted: guide.locallyTrusted
+                  locallyTrusted: guide.locallyTrusted,
+                  deliveryEligible: guide.deliveryEligible,
+                  sourceWidth: guide.sourceWidth,
+                  sourceHeight: guide.sourceHeight
                 },
                 deliveryBody: guide.deliveryBody
               }));
@@ -1237,8 +1221,7 @@ export async function generateProjectSceneImages(
           options.allowCompletionFallback,
           options.maxQualityAttempts,
           options.maxProviderAttempts,
-          options.deadlineMs,
-          options.allowLocallyTrustedStockFallback
+          options.deadlineMs
         );
         if (!generated) return;
 

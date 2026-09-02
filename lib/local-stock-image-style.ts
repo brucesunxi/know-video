@@ -1,8 +1,9 @@
 import sharp from "sharp";
 import type { Scene } from "@/lib/types";
+import { GENERATED_IMAGE_HEIGHT, GENERATED_IMAGE_WIDTH } from "@/lib/image-quality";
 
-const WIDTH = 1280;
-const HEIGHT = 720;
+const WIDTH = GENERATED_IMAGE_WIDTH;
+const HEIGHT = GENERATED_IMAGE_HEIGHT;
 
 export type LocalStockImageStyleMode =
   | "photographic"

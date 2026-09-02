@@ -50,7 +50,7 @@ assert.match(worker, /if \(result\.failures\.length > 0\) \{[\s\S]*return projec
 assert.match(worker, /allowCompletionFallback: completionRescue/);
 assert.match(worker, /useStockContentGuide: attemptPlan\.useStockContentGuide/);
 assert.match(worker, /maxStockContentGuides: completionRescue \? 3 : 1/);
-assert.match(worker, /allowLocallyTrustedStockFallback: completionRescue/);
+assert.doesNotMatch(worker, /allowLocallyTrustedStockFallback/);
 assert.match(worker, /shouldTryStockBeforeImage/);
 assert.match(worker, /projectAllowsFreeStockVideo\(project, message\.options\?\.motion\)/);
 assert.match(worker, /projectAllowsFreeStockVideo/);

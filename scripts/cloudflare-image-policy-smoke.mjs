@@ -47,6 +47,10 @@ vm.runInNewContext(output, {
     };
     if (name === "@/lib/operation-deadline") return deadlineModule.exports;
     if (name === "@/lib/external-error") return externalErrorModule.exports;
+    if (name === "@/lib/image-quality") return {
+      GENERATED_IMAGE_WIDTH: 1920,
+      GENERATED_IMAGE_HEIGHT: 1080
+    };
     if (name === "sharp") return () => ({});
     return {};
   }
@@ -58,16 +62,16 @@ const closeTo = (actual, expected) => assert.ok(Math.abs(actual - expected) < 0.
 closeTo(estimateCloudflareImageRequestCost({
   model: "@cf/black-forest-labs/flux-2-klein-4b",
   inputImageCount: 0
-}), 6 * 0.000287);
+}), 12 * 0.000287);
 closeTo(estimateCloudflareImageRequestCost({
   model: "@cf/black-forest-labs/flux-2-klein-9b",
   inputImageCount: 1
-}), 0.015 + ((480 * 270) / (1024 * 1024)) * 0.002);
+}), 0.015 + (((1920 * 1080) / (1024 * 1024)) - 1) * 0.002 + ((480 * 270) / (1024 * 1024)) * 0.002);
 closeTo(estimateCloudflareImageRequestCost({
   model: "@cf/black-forest-labs/flux-2-dev",
   inputImageCount: 2,
   steps: 8
-}), 6 * 8 * 0.00041 + 2 * 8 * 0.00021);
+}), 12 * 8 * 0.00041 + 2 * 8 * 0.00021);
 
 assert.match(source, /strategy\?: "default" \| "recovery"/);
 assert.match(source, /options\.strategy === "recovery"/);
@@ -114,7 +118,7 @@ fetchHandler = async () => {
 const recovered = await generateCloudflareImage("test prompt", "standard");
 assert.equal(recovered.providerAttempts, 2);
 assert.equal(requestCount, 2);
-closeTo(recovered.estimatedCostUsd, 2 * 6 * 0.000287);
+closeTo(recovered.estimatedCostUsd, 2 * 12 * 0.000287);
 
 requestCount = 0;
 fetchHandler = async () => {
@@ -130,7 +134,7 @@ await assert.rejects(
   (error) => {
     assert.equal(error.providerAttempts, 2);
     assert.equal(error.actualModel, "@cf/black-forest-labs/flux-2-klein-4b");
-    closeTo(error.estimatedCostUsd, 2 * 6 * 0.000287);
+    closeTo(error.estimatedCostUsd, 2 * 12 * 0.000287);
     return true;
   }
 );

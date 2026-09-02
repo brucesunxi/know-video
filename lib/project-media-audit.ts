@@ -15,6 +15,7 @@ export type ProjectMediaAuditIssue = {
     | "audio-silent-tail"
     | "audio-duration-unknown"
     | "narration-crowded"
+    | "visual-low-resolution"
     | "clip-duration-unknown"
     | "clip-freeze-tail";
   sceneNumber: number;
@@ -63,6 +64,32 @@ export function auditProjectMedia(project: Project) {
     }
     if (!audio) {
       issues.push({ code: "missing-audio", sceneNumber: scene.sceneNumber, media: "audio", severity: "error", message: `场景 ${scene.sceneNumber} 缺少配音。` });
+    }
+    if (visual?.type === "image" && ["generated-image", "free-stock-image"].includes(String(visual.metadata?.source))) {
+      const width = Number(visual.metadata?.width);
+      const height = Number(visual.metadata?.height);
+      if (Number.isFinite(width) && Number.isFinite(height) && (width < 1920 || height < 1080)) {
+        issues.push({
+          code: "visual-low-resolution",
+          sceneNumber: scene.sceneNumber,
+          media: "visual",
+          severity: "error",
+          message: `场景 ${scene.sceneNumber} 的自动画面只有 ${width}×${height}，需要重新生成 1080p 素材。`
+        });
+      }
+    }
+    if (visual?.type === "clip" && visual.metadata?.source === "free-stock-video") {
+      const width = Number(visual.metadata?.width);
+      const height = Number(visual.metadata?.height);
+      if (Number.isFinite(width) && Number.isFinite(height) && (width < 1920 || height < 1080)) {
+        issues.push({
+          code: "visual-low-resolution",
+          sceneNumber: scene.sceneNumber,
+          media: "visual",
+          severity: "error",
+          message: `场景 ${scene.sceneNumber} 的免费动态素材只有 ${width}×${height}，需要更换 1080p 素材。`
+        });
+      }
     }
     issues.push(...sourceBindingIssues(scene));
 

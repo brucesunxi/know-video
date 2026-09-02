@@ -42,6 +42,8 @@ assert.equal(inferAutoVisualStyleId("Create a cafe promotional film"), "cinemati
 assert.equal(inferAutoVisualStyleId("生成 AI SaaS 产品宣传视频"), "product-ui");
 assert.equal(inferAutoVisualStyleId("为企业风险治理平台制作产品介绍视频"), "product-ui");
 assert.equal(inferAutoVisualStyleId("说明销售团队如何降低客户流失风险"), "cinematic-realism");
+assert.equal(inferAutoVisualStyleId("Sales introduction video for prospects covering a common problem, then showing how the product solves it"), "cinematic-realism");
+assert.equal(inferAutoVisualStyleId("Create a dashboard walkthrough for the sales team"), "product-ui");
 assert.equal(inferAutoVisualStyleId("制作项目风险预警流程说明视频"), "isometric");
 assert.equal(inferAutoVisualStyleId("为工地制作安全操作培训视频"), "safety-poster");
 assert.equal(inferAutoVisualStyleId("制作网络钓鱼邮件识别培训"), "safety-poster");

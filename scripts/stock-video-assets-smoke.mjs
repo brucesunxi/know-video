@@ -80,5 +80,9 @@ assert.match(source, /localRelevanceScore/);
 assert.match(source, /deadlineMs\?: number/);
 assert.match(source, /operation: "Free stock video upload"/);
 assert.match(source, /maxTimeoutMs: 60_000/);
+assert.match(source, /\(file\.width \?\? 0\) >= 1920/);
+assert.match(source, /\(file\.height \?\? 0\) >= 1080/);
+assert.match(source, /Math\.abs\(\(left\.width \?\? 0\) - 1920\)/);
+assert.match(source, /Math\.abs\(\(left\.height \?\? 0\) - 1080\)/);
 
 console.log("Free stock video asset smoke checks passed.");
