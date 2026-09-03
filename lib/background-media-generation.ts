@@ -224,8 +224,9 @@ async function ensureSceneImage(
   }
   const generated = sceneAsset(updated, message.sceneNumber, "image");
   if (!generated) throw new Error(`Scene ${message.sceneNumber} image generation returned no deliverable asset.`);
-  const freeStockRescue = generated.metadata?.source === "free-stock-image";
-  if (!freeStockRescue) {
+  const zeroCostVisualRescue = generated.metadata?.source === "free-stock-image"
+    || generated.metadata?.source === "local-safe-visual";
+  if (!zeroCostVisualRescue) {
     const tagged = tagAssetForBackgroundBilling({
       ...generated,
       metadata: {
@@ -245,7 +246,7 @@ async function ensureSceneImage(
     replaceImages: true,
     sceneNumbers: [message.sceneNumber]
   });
-  if (!freeStockRescue) await settleBackgroundImageUsage(message, generated);
+  if (!zeroCostVisualRescue) await settleBackgroundImageUsage(message, generated);
   return updated;
 }
 

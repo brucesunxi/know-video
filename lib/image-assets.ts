@@ -56,7 +56,8 @@ type ImageIndependentRecoveryReason =
   | "semantic_mismatch"
   | "semantic_check_failed"
   | "style_mismatch"
-  | "verified_stock_rescue";
+  | "verified_stock_rescue"
+  | "local_safe_visual";
 
 function imageCredentialIssue(): "missing_key" | "invalid_key" | undefined {
   if (hasCloudflareAI()) return undefined;
@@ -266,6 +267,122 @@ function isTransientImageProviderFailure(error: unknown) {
     || (typeof status === "number" && status >= 500)
     || code === "3043"
     || /timeout|timed out|abort|temporarily unavailable|internal server error|fetch failed|network/i.test(`${name} ${message}`);
+}
+
+function safeSvgColor(value: string | undefined, fallback: string) {
+  return value && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+}
+
+function localFallbackPalette(scene: Scene) {
+  const palette = scene.style.palette ?? [];
+  return {
+    background: safeSvgColor(palette[0], "#edf4f2"),
+    surface: safeSvgColor(palette[1], "#ffffff"),
+    accent: safeSvgColor(palette[2], "#0f766e"),
+    secondary: safeSvgColor(palette[3], "#f59e0b"),
+    shadow: "#102033"
+  };
+}
+
+function localFallbackMotif(scene: Scene) {
+  const description = `${scene.title}\n${scene.voiceover}\n${scene.visualPrompt}`;
+  if (/(?:企业安全|公司安全|办公安全|安全培训|安全意识|员工培训|信息安全|网络安全|corporate security|security training|security awareness|employee training|workplace training|cybersecurity)/iu.test(description)) {
+    return "office-security";
+  }
+  if (/(?:图书馆|书店|阅览|阅读|书架|借阅|还书|library|bookstore|reading|bookshelf|borrowing books|returning books)/iu.test(description)) {
+    return "library";
+  }
+  if (/(?:工地|施工|安全帽|防护装备|入场检查|高空作业|作业安全|construction|job[- ]?site|worksite|site safety|safety briefing|pre[- ]?entry|protective equipment|hard hat|safety harness|\bppe\b)/iu.test(description)) {
+    return "worksite";
+  }
+  if (/(?:库存|仓库|物流|订单|跨境|inventory|warehouse|logistics|order)/iu.test(description)) {
+    return "logistics";
+  }
+  return "business";
+}
+
+function localFallbackSceneSvg(scene: Scene) {
+  const colors = localFallbackPalette(scene);
+  const sceneOffset = ((scene.sceneNumber - 1) % 5) * 70;
+  const motif = localFallbackMotif(scene);
+  const person = (x: number, y: number, scale = 1, accent = colors.accent) => `
+    <circle cx="${x}" cy="${y - 58 * scale}" r="${24 * scale}" fill="${accent}" opacity="0.9"/>
+    <path d="M ${x - 42 * scale} ${y + 58 * scale} Q ${x} ${y - 18 * scale} ${x + 42 * scale} ${y + 58 * scale} Z" fill="${accent}" opacity="0.78"/>
+    <rect x="${x - 50 * scale}" y="${y + 50 * scale}" width="${100 * scale}" height="${12 * scale}" rx="${6 * scale}" fill="${colors.shadow}" opacity="0.1"/>`;
+  const bookStack = (x: number, y: number) => `
+    <rect x="${x}" y="${y}" width="220" height="34" rx="8" fill="${colors.accent}" opacity="0.84"/>
+    <rect x="${x + 28}" y="${y - 42}" width="196" height="34" rx="8" fill="${colors.secondary}" opacity="0.72"/>
+    <rect x="${x + 8}" y="${y - 84}" width="214" height="34" rx="8" fill="${colors.shadow}" opacity="0.22"/>`;
+  const lock = (x: number, y: number) => `
+    <rect x="${x - 42}" y="${y}" width="84" height="68" rx="16" fill="${colors.accent}" opacity="0.92"/>
+    <path d="M ${x - 24} ${y + 4} v -22 a 24 24 0 0 1 48 0 v 22" fill="none" stroke="${colors.accent}" stroke-width="14" stroke-linecap="round" opacity="0.92"/>
+    <circle cx="${x}" cy="${y + 34}" r="8" fill="${colors.surface}" opacity="0.9"/>`;
+  const genericProps = `
+    <rect x="${1120 - sceneOffset}" y="430" width="320" height="190" rx="18" fill="${colors.surface}" opacity="0.72"/>
+    <circle cx="${1250 - sceneOffset}" cy="500" r="58" fill="${colors.secondary}" opacity="0.55"/>
+    <path d="M ${1060 - sceneOffset} 675 C 1200 610, 1330 615, 1480 690" fill="none" stroke="${colors.accent}" stroke-width="22" stroke-linecap="round" opacity="0.35"/>`;
+  const motifSvg = motif === "office-security"
+    ? `
+      <rect x="${1050 - sceneOffset}" y="435" width="430" height="160" rx="20" fill="${colors.surface}" opacity="0.82"/>
+      <rect x="${1100 - sceneOffset}" y="470" width="185" height="92" rx="12" fill="${colors.shadow}" opacity="0.14"/>
+      ${lock(1385 - sceneOffset, 470)}
+      ${person(910 - sceneOffset / 3, 650, 1.1, colors.secondary)}
+      ${person(730 - sceneOffset / 4, 675, 0.9, colors.accent)}`
+    : motif === "library"
+      ? `
+        <rect x="${980 - sceneOffset}" y="335" width="440" height="345" rx="24" fill="${colors.surface}" opacity="0.78"/>
+        ${Array.from({ length: 5 }, (_, index) => `<rect x="${1028 + index * 70 - sceneOffset}" y="${380 + (index % 2) * 18}" width="42" height="230" rx="8" fill="${index % 2 ? colors.secondary : colors.accent}" opacity="0.72"/>`).join("")}
+        ${bookStack(560 + sceneOffset / 3, 700)}
+        ${person(820 - sceneOffset / 4, 665, 0.82, colors.accent)}`
+      : motif === "worksite"
+        ? `
+          <path d="M ${965 - sceneOffset} 650 L ${1230 - sceneOffset} 390 L ${1485 - sceneOffset} 650 Z" fill="${colors.secondary}" opacity="0.24"/>
+          <rect x="${1015 - sceneOffset}" y="565" width="420" height="42" rx="12" fill="${colors.accent}" opacity="0.5"/>
+          ${person(800 - sceneOffset / 5, 675, 0.95, colors.secondary)}
+          ${person(965 - sceneOffset / 4, 690, 0.82, colors.accent)}`
+        : motif === "logistics"
+          ? `
+            <rect x="${980 - sceneOffset}" y="430" width="150" height="120" rx="14" fill="${colors.secondary}" opacity="0.75"/>
+            <rect x="${1180 - sceneOffset}" y="535" width="180" height="135" rx="14" fill="${colors.accent}" opacity="0.68"/>
+            <rect x="${1440 - sceneOffset}" y="425" width="132" height="112" rx="14" fill="${colors.surface}" opacity="0.78"/>
+            <path d="M ${1130 - sceneOffset} 490 C ${1230 - sceneOffset} 430, ${1330 - sceneOffset} 430, ${1438 - sceneOffset} 470" fill="none" stroke="${colors.shadow}" stroke-width="16" stroke-linecap="round" opacity="0.16"/>
+            ${person(760 - sceneOffset / 5, 680, 0.85, colors.accent)}`
+          : `
+            ${genericProps}
+            ${person(820 - sceneOffset / 5, 670, 0.95, colors.accent)}
+            ${person(995 - sceneOffset / 4, 690, 0.78, colors.secondary)}`;
+
+  return `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="${colors.background}"/>
+          <stop offset="1" stop-color="${colors.surface}"/>
+        </linearGradient>
+        <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="28" stdDeviation="30" flood-color="${colors.shadow}" flood-opacity="0.14"/>
+        </filter>
+      </defs>
+      <rect width="1920" height="1080" fill="url(#bg)"/>
+      <circle cx="${250 + sceneOffset}" cy="210" r="170" fill="${colors.accent}" opacity="0.12"/>
+      <circle cx="${1630 - sceneOffset}" cy="245" r="220" fill="${colors.secondary}" opacity="0.12"/>
+      <path d="M 0 835 C 300 725, 500 805, 760 700 C 1045 585, 1290 705, 1920 590 L 1920 1080 L 0 1080 Z" fill="${colors.accent}" opacity="0.1"/>
+      <g filter="url(#softShadow)">
+        <rect x="250" y="280" width="1420" height="540" rx="34" fill="${colors.surface}" opacity="0.54"/>
+        <rect x="330" y="365" width="380" height="315" rx="26" fill="${colors.shadow}" opacity="0.08"/>
+        <rect x="360" y="405" width="320" height="38" rx="19" fill="${colors.accent}" opacity="0.28"/>
+        <rect x="360" y="474" width="230" height="30" rx="15" fill="${colors.secondary}" opacity="0.28"/>
+        <rect x="360" y="535" width="285" height="30" rx="15" fill="${colors.shadow}" opacity="0.09"/>
+        ${motifSvg}
+      </g>
+      <rect x="0" y="0" width="1920" height="1080" fill="none"/>
+    </svg>`;
+}
+
+async function buildLocalSafeVisualFallback(scene: Scene) {
+  return sharp(Buffer.from(localFallbackSceneSvg(scene)))
+    .png()
+    .toBuffer();
 }
 
 type ImageQuality = "standard" | "premium";
@@ -623,6 +740,7 @@ async function generateSceneImage(
   let textFreeVerified = false;
   let usedIndependentRecovery = false;
   let usedVerifiedStockRescue = false;
+  let usedLocalSafeVisual = false;
   let completionFallbackReason: ImageIndependentRecoveryReason | undefined;
   let stockRescueMetadata: Record<string, unknown> | undefined;
   let providerRequestCount = 0;
@@ -882,6 +1000,35 @@ async function generateSceneImage(
       return false;
     }
   };
+  const acceptLocalSafeVisualFallback = async (reason: ImageIndependentRecoveryReason) => {
+    if (!allowCompletionFallback) return false;
+    try {
+      const localBody = await buildLocalSafeVisualFallback(scene);
+      const normalized = await normalizeGeneratedImage(localBody);
+      body = normalized.body;
+      qualityMetadata = normalized.metadata;
+      model = "local-safe-visual";
+      prompt = [
+        "Local deterministic safe visual fallback.",
+        semanticFallbackComposition(scene),
+        exactVisualStyleDirection(lockedStyle) || `${lockedStyle.theme}; ${lockedStyle.mood}`,
+        "No text, logos, readable screens, signs, badges, or writing-like marks."
+      ].join("\n");
+      seed = baseSeed;
+      acceptedReferences = [];
+      textFreeVerified = true;
+      usedIndependentRecovery = true;
+      usedLocalSafeVisual = true;
+      completionFallbackReason = reason;
+      console.warn(
+        `[image-assets] Scene ${scene.sceneNumber} completed with a local deterministic text-free fallback visual after generated and stock candidates were unavailable.`
+      );
+      return true;
+    } catch (error) {
+      console.warn(`[image-assets] Scene ${scene.sceneNumber} local safe visual fallback was unavailable:`, error);
+      return false;
+    }
+  };
   try {
     const stockRescueAttemptedBeforeGeneration = Boolean(allowCompletionFallback && completionStockGuides.length > 0);
     let completedFromStock = false;
@@ -1099,6 +1246,7 @@ async function generateSceneImage(
           completedFromStock = await acceptVerifiedStockRescue(completionStockGuide, qualityAttempt * 10 + guideIndex);
           if (completedFromStock) break;
         }
+        if (!completedFromStock && await acceptLocalSafeVisualFallback("local_safe_visual")) break;
         if (completedFromStock) break;
       }
       if (!(error instanceof GeneratedImageQualityError)) throw error;
@@ -1108,6 +1256,7 @@ async function generateSceneImage(
       if (qualityAttempt === qualityAttemptLimit - 1) {
         const stockGuide = attemptReferences.find((reference) => reference.role === "content-guide");
         if (!stockRescueAttemptedBeforeGeneration && await acceptVerifiedStockRescue(stockGuide, qualityAttempt)) break;
+        if (await acceptLocalSafeVisualFallback("local_safe_visual")) break;
         throw error;
       }
       console.warn(`[image-assets] Scene ${scene.sceneNumber} image failed quality validation (${error.code}); retrying:`, error.message);
@@ -1141,7 +1290,11 @@ async function generateSceneImage(
     r2Key: uploaded.key,
     url: assetUrlForKey(uploaded.key, uploaded.publicUrl),
     metadata: {
-      source: usedVerifiedStockRescue ? "free-stock-image" : "generated-image",
+      source: usedLocalSafeVisual
+        ? "local-safe-visual"
+        : usedVerifiedStockRescue
+          ? "free-stock-image"
+          : "generated-image",
       model,
       quality: effectiveQuality,
       prompt,
@@ -1165,6 +1318,7 @@ async function generateSceneImage(
       providerRequestCount,
       validationRequestCount,
       estimatedActualCostUsd: Number((providerCostUsd + validationCostUsd).toFixed(6)),
+      localSafeVisualFallback: usedLocalSafeVisual || undefined,
       ...stockRescueMetadata,
       sceneNumber: scene.sceneNumber
     }

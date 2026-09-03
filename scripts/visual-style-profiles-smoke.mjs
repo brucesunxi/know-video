@@ -131,7 +131,8 @@ assert.match(projectRoute, /resolveAutoVisualStyleOptions\(generationPrompt, bod
 assert.match(projectDetailRoute, /repairLegacyAutoVisualStyle\(snapshot\.project, originalPrompt, generation\.options\)/);
 assert.match(projectDetailRoute, /replaceImages: true, updateStyles: true/);
 assert.match(projectDetailRoute, /候选画面均未通过内容与风格质量检查/);
-assert.match(imageRoute, /metadata\?\.source !== "free-stock-image"/);
+assert.match(imageRoute, /source !== "free-stock-image" && source !== "local-safe-visual"/);
+assert.match(imageRoute, /zeroCostVisualRescueSceneNumbers/);
 assert.match(imageRoute, /quantity: billableCompletedScenes\.length/);
 assert.match(workspace, /visualStyleById\(inferAutoVisualStyleId\(value\)\)/);
 assert.match(workspace, /\?repairFailedAutoStyle=1/);

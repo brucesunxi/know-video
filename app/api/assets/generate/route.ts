@@ -124,10 +124,11 @@ export async function POST(request: Request) {
     failedTargets.map((scene) => scene.sceneNumber)
   );
   const completedScenes = persisted.currentVersion.scenes.filter((scene) => progress.completedSceneNumbers.includes(scene.sceneNumber));
-  const billableCompletedScenes = completedScenes.filter((scene) => (
-    scene.assets.find((asset) => asset.type === "image" && asset.url)?.metadata?.source !== "free-stock-image"
-  ));
-  const freeStockRescueSceneNumbers = completedScenes
+  const billableCompletedScenes = completedScenes.filter((scene) => {
+    const source = scene.assets.find((asset) => asset.type === "image" && asset.url)?.metadata?.source;
+    return source !== "free-stock-image" && source !== "local-safe-visual";
+  });
+  const zeroCostVisualRescueSceneNumbers = completedScenes
     .filter((scene) => !billableCompletedScenes.includes(scene))
     .map((scene) => scene.sceneNumber);
   if (billableCompletedScenes.length > 0) {
@@ -153,7 +154,7 @@ export async function POST(request: Request) {
         requestedSceneNumbers: processingSceneNumbers,
         completedSceneNumbers: progress.completedSceneNumbers,
         billedSceneNumbers: billableCompletedScenes.map((scene) => scene.sceneNumber),
-        freeStockRescueSceneNumbers,
+        zeroCostVisualRescueSceneNumbers,
         failedSceneNumbers: progress.failedSceneNumbers,
         requestedQuality: body.quality,
         effectiveQuality,

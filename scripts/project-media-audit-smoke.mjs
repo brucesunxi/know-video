@@ -61,6 +61,15 @@ assert.equal(lowResolutionVisual.ready, false);
 assert.equal(lowResolutionVisual.errors[0].code, "visual-low-resolution");
 assert.deepEqual(Array.from(lowResolutionVisual.repairVisualSceneNumbers), [1]);
 
+const lowResolutionLocalSafeVisual = auditProjectMedia(project([scene(1, {
+  assets: [
+    { id: "image", type: "image", r2Key: "image", url: "/image", metadata: { source: "local-safe-visual", width: 1280, height: 720 } },
+    { id: "audio", type: "audio", r2Key: "audio", url: "/audio", metadata: { actualDurationSeconds: 5.2 } }
+  ]
+})]));
+assert.equal(lowResolutionLocalSafeVisual.ready, false);
+assert.equal(lowResolutionLocalSafeVisual.errors[0].code, "visual-low-resolution");
+
 const fullHdVisual = auditProjectMedia(project([scene(1, {
   assets: [
     { id: "image", type: "image", r2Key: "image", url: "/image", metadata: { source: "generated-image", width: 1920, height: 1080 } },

@@ -65,7 +65,7 @@ export function auditProjectMedia(project: Project) {
     if (!audio) {
       issues.push({ code: "missing-audio", sceneNumber: scene.sceneNumber, media: "audio", severity: "error", message: `场景 ${scene.sceneNumber} 缺少配音。` });
     }
-    if (visual?.type === "image" && ["generated-image", "free-stock-image"].includes(String(visual.metadata?.source))) {
+    if (visual?.type === "image" && ["generated-image", "free-stock-image", "local-safe-visual"].includes(String(visual.metadata?.source))) {
       const width = Number(visual.metadata?.width);
       const height = Number(visual.metadata?.height);
       if (Number.isFinite(width) && Number.isFinite(height) && (width < 1920 || height < 1080)) {
