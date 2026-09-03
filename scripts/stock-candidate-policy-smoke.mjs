@@ -74,6 +74,20 @@ assert.equal(constructionSafety.safe, true);
 assert.equal(constructionSafety.locallyTrusted, true);
 assert.ok(constructionSafety.relevanceScore >= 10);
 
+const corporateSecurityTraining = evaluateStockCandidate({
+  title: "Corporate security training",
+  voiceover: "员工学习识别风险并遵守公司安全流程。",
+  visualPrompt: "A bright office training room with employees reviewing symbol-only security awareness steps.",
+  style: { theme: "cinematic documentary", mood: "calm and professional" }
+}, {
+  query: "corporate security awareness training employees office",
+  pageUrl: "https://www.pexels.com/photo/employees-attending-security-training-in-office-87654/",
+  description: "Corporate employees in an office training workshop learning security awareness"
+});
+assert.equal(corporateSecurityTraining.safe, true);
+assert.equal(corporateSecurityTraining.locallyTrusted, true);
+assert.ok(corporateSecurityTraining.relevanceScore >= 10);
+
 const salesContext = "Sales introduction for prospects. Help sales teams explain a customer problem and reach a successful business outcome.";
 const chineseSalesContext = "面向潜在客户的销售介绍，帮助销售团队解释客户问题并展示企业服务成果。";
 const contextualMeeting = evaluateStockCandidate(salesScene, {

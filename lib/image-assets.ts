@@ -11,7 +11,7 @@ import {
 } from "@/lib/cloudflare-ai";
 import { sceneReferenceAssets } from "@/lib/attachment-context";
 import { getOptionalEnv } from "@/lib/env";
-import { externalErrorCode, externalErrorName, externalErrorStatus } from "@/lib/external-error";
+import { externalErrorCode, externalErrorMessage, externalErrorName, externalErrorStatus } from "@/lib/external-error";
 import {
   enforceTextFreeImagePrompt,
   imageSafeSemanticText,
@@ -197,6 +197,17 @@ function semanticFallbackComposition(scene: Scene) {
     const beat = beats[Math.min(beats.length - 1, Math.max(0, scene.sceneNumber - 1) % beats.length)];
     return `Composition: ${beat}. Keep every person naturally proportioned and non-threatening; no isolated hands, injuries, danger spectacle, ominous shadows, smoke, sparks, night lighting, signs, badges, or writing.`;
   }
+  if (/(?:企业安全|公司安全|办公安全|安全培训|安全意识|员工培训|信息安全|网络安全|corporate security|security training|security awareness|employee training|workplace training|cybersecurity)/iu.test(description)) {
+    const beats = [
+      "a bright corporate training room where employees calmly face a facilitator and a blank symbol-only safety board",
+      "a medium side-angle desk scene showing an employee checking a laptop lock screen, ID badge, and clean workspace without readable text",
+      "a high three-quarter office workflow scene with anonymous employees reviewing symbol-only security steps around a table",
+      "an over-the-shoulder coaching moment where a facilitator points to plain icon cards about access, privacy, and reporting",
+      "a wide daylight office outcome where employees leave the training area confident and organized"
+    ];
+    const beat = beats[Math.min(beats.length - 1, Math.max(0, scene.sceneNumber - 1) % beats.length)];
+    return `Composition: ${beat}. Keep the mood calm, professional, and non-threatening; no horror lighting, isolated hands, masked intruders, crime scenes, weapons, emergency panic, readable screens, signs, badges, or writing.`;
+  }
   if (/(?:方块|沙盒|游戏|课程|编程|voxel|sandbox|game|course|programming)/iu.test(description)) {
     return "Composition: a different voxel-learning beat for this scene, such as a planning desk with unlabeled colored blocks, an abstract block-building workspace, a simple logic circuit made of cubes and light paths, or a finished voxel world display with no characters or logos.";
   }
@@ -243,6 +254,18 @@ function qualityRecoveryDirection(
 
 function isSafetyFiltered(error: unknown) {
   return externalErrorCode(error) === "3030";
+}
+
+function isTransientImageProviderFailure(error: unknown) {
+  const status = externalErrorStatus(error);
+  const code = externalErrorCode(error);
+  const name = externalErrorName(error);
+  const message = externalErrorMessage(error);
+  return status === 408
+    || status === 429
+    || (typeof status === "number" && status >= 500)
+    || code === "3043"
+    || /timeout|timed out|abort|temporarily unavailable|internal server error|fetch failed|network/i.test(`${name} ${message}`);
 }
 
 type ImageQuality = "standard" | "premium";
@@ -1071,6 +1094,13 @@ async function generateSceneImage(
       acceptCandidate(textFreeCandidate);
       break;
     } catch (error) {
+      if (isTransientImageProviderFailure(error)) {
+        for (const [guideIndex, completionStockGuide] of completionStockGuides.entries()) {
+          completedFromStock = await acceptVerifiedStockRescue(completionStockGuide, qualityAttempt * 10 + guideIndex);
+          if (completedFromStock) break;
+        }
+        if (completedFromStock) break;
+      }
       if (!(error instanceof GeneratedImageQualityError)) throw error;
       if (!isDefinitiveGeneratedImageQualityRejection(error)) throw error;
       lastQualityRejection = error.code;

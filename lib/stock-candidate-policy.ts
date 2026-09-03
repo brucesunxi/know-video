@@ -57,6 +57,7 @@ const UNSAFE_VISUAL_PATTERNS: Array<{ pattern: RegExp; reason: string; allowForD
 
 const SEMANTIC_GROUPS = [
   ["business", "company", "corporate", "enterprise", "professional", "work"],
+  ["awareness", "employee", "security", "training", "workplace", "workshop"],
   ["client", "consumer", "customer", "prospect", "shopper"],
   ["colleague", "employee", "people", "staff", "team", "worker"],
   ["conference", "discussion", "meeting", "presentation", "talking"],
@@ -79,6 +80,7 @@ const SEMANTIC_GROUPS = [
 
 const CHINESE_SEMANTIC_TOKENS: Array<[RegExp, string[]]> = [
   [/企业|公司|商业|业务|职场|治理|审批|合规|风险/u, ["business", "company", "professional"]],
+  [/企业安全|公司安全|办公安全|安全培训|安全意识|员工培训|信息安全|网络安全/u, ["corporate", "security", "training", "employee", "workplace"]],
   [/销售|营销|客户|消费者|潜在客户/u, ["sales", "customer", "prospect"]],
   [/团队|员工|同事|人员/u, ["team", "employee", "people"]],
   [/办公室|工作场所|办公/u, ["office", "workplace"]],
